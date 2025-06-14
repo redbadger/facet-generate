@@ -471,7 +471,75 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
 }
 
 fn format_list(list_def: ListDef, registry: &mut Registry) {
-    format(list_def.t(), registry);
+    // Get the inner type of the list
+    let inner_shape = list_def.t();
+
+    // Determine the format for the inner type
+    let inner_format = match inner_shape.def {
+        Def::Scalar(scalar_def) => match scalar_def.affinity {
+            ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
+                NumberBits::Integer { size, sign } => {
+                    let bits = match size {
+                        IntegerSize::Fixed(bits) => bits,
+                        IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
+                    };
+                    match sign {
+                        Signedness::Unsigned => match bits {
+                            8 => Format::U8,
+                            16 => Format::U16,
+                            32 => Format::U32,
+                            64 => Format::U64,
+                            128 => Format::U128,
+                            _ => unimplemented!(),
+                        },
+                        Signedness::Signed => match bits {
+                            8 => Format::I8,
+                            16 => Format::I16,
+                            32 => Format::I32,
+                            64 => Format::I64,
+                            128 => Format::I128,
+                            _ => unimplemented!(),
+                        },
+                    }
+                }
+                _ => Format::Unit,
+            },
+            ScalarAffinity::Boolean(_) => Format::Bool,
+            ScalarAffinity::String(_) => Format::Str,
+            _ => Format::Unit,
+        },
+        _ => {
+            // For user-defined types, use TypeName
+            Format::TypeName(inner_shape.type_identifier.to_string())
+        }
+    };
+
+    let seq_format = Format::Seq(Box::new(inner_format));
+
+    // Update the current container with the sequence format
+    if let Some(current_format) = registry.get_mut() {
+        match current_format {
+            ContainerFormat::NewTypeStruct(format) => {
+                *format = Box::new(seq_format);
+            }
+            ContainerFormat::TupleStruct(formats) => {
+                formats.push(seq_format);
+            }
+            ContainerFormat::Struct(nameds) => {
+                if let Some(last) = nameds.last_mut() {
+                    if last.value.is_unknown() {
+                        last.value = seq_format;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // If the inner type is a user-defined type, we need to process it too
+    if !matches!(inner_shape.def, Def::Scalar(_)) {
+        format(inner_shape, registry);
+    }
 }
 
 fn format_slice(slice_def: SliceDef, registry: &mut Registry) {

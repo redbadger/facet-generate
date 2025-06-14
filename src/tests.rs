@@ -160,6 +160,19 @@ fn nested_newtype() {
 }
 
 #[test]
+fn newtype_with_list() {
+    #[derive(Facet)]
+    struct MyNewType(Vec<i32>);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT:
+            SEQ: I32
+        ");
+}
+
+#[test]
 fn tuple_struct() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, i32, bool);
