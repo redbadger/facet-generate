@@ -22,6 +22,18 @@ fn newtype_bool() {
 }
 
 #[test]
+fn newtype_unit() {
+    #[derive(Facet)]
+    struct MyNewType(());
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT: UNIT
+        ");
+}
+
+#[test]
 fn newtype_u8() {
     #[derive(Facet)]
     struct MyNewType(u8);
@@ -277,6 +289,37 @@ fn tuple_struct() {
 }
 
 #[test]
+fn tuple_struct_with_unit() {
+    #[derive(Facet)]
+    struct MyTupleStruct(u8, (), i32);
+
+    let registry = dbg!(reflect::<MyTupleStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyTupleStruct:
+          TUPLESTRUCT:
+            - U8
+            - UNIT
+            - I32
+        ");
+}
+
+#[test]
+fn option_with_unit() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Option<()>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - a:
+                OPTION: UNIT
+        ");
+}
+
+#[test]
 fn nested_tuple_struct_1() {
     #[derive(Facet)]
     struct Inner(i32);
@@ -298,7 +341,7 @@ fn nested_tuple_struct_1() {
 #[test]
 fn nested_tuple_struct_2() {
     #[derive(Facet)]
-    struct Inner(i32, u8);
+    struct Inner(i32, u8, bool);
 
     #[derive(Facet)]
     struct MyTupleStruct(i32, Inner, u8);
@@ -309,6 +352,7 @@ fn nested_tuple_struct_2() {
           TUPLESTRUCT:
             - I32
             - U8
+            - BOOL
         MyTupleStruct:
           TUPLESTRUCT:
             - I32
@@ -324,6 +368,7 @@ fn struct_with_scalar_fields() {
         a: u8,
         b: i32,
         c: bool,
+        d: (),
     }
 
     let registry = dbg!(reflect::<MyStruct>());
@@ -333,6 +378,7 @@ fn struct_with_scalar_fields() {
             - a: U8
             - b: I32
             - c: BOOL
+            - d: UNIT
         ");
 }
 
@@ -448,6 +494,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
         Variant3(String),
         Variant4(bool),
+        Variant5(()),
     }
 
     let registry = dbg!(reflect::<MyEnum>());
@@ -466,6 +513,9 @@ fn enum_with_newtype_variants() {
         3:
           Variant4:
             NEWTYPE: BOOL
+        4:
+          Variant5:
+            NEWTYPE: UNIT
     ");
 }
 
@@ -601,8 +651,17 @@ fn enum_with_struct_variants_mixed_types() {
     #[repr(u8)]
     #[allow(dead_code)]
     enum MyEnum {
-        Variant1 { a: Inner, b: u8, c: String, d: bool },
-        Variant2 { x: i32, y: Inner },
+        Variant1 {
+            a: Inner,
+            b: u8,
+            c: String,
+            d: bool,
+            e: (),
+        },
+        Variant2 {
+            x: i32,
+            y: Inner,
+        },
     }
 
     let registry = dbg!(reflect::<MyEnum>());
@@ -619,6 +678,7 @@ fn enum_with_struct_variants_mixed_types() {
                   - b: U8
                   - c: STR
                   - d: BOOL
+                  - e: UNIT
             1:
               Variant2:
                 STRUCT:

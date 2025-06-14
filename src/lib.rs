@@ -56,20 +56,36 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                 match current_format {
                     ContainerFormat::NewTypeStruct(inner_format) => {
                         if inner_format.is_unknown() {
-                            // Update the NewTypeStruct format to reference the inner type
-                            **inner_format = Format::TypeName(shape.type_identifier.to_string());
+                            // Special case for unit type
+                            if shape.type_identifier == "()" {
+                                **inner_format = Format::Unit;
+                            } else {
+                                // Update the NewTypeStruct format to reference the inner type
+                                **inner_format =
+                                    Format::TypeName(shape.type_identifier.to_string());
+                            }
                         }
                     }
                     ContainerFormat::TupleStruct(formats) => {
-                        // Add TypeName format to the tuple
-                        formats.push(Format::TypeName(shape.type_identifier.to_string()));
+                        // Special case for unit type
+                        if shape.type_identifier == "()" {
+                            formats.push(Format::Unit);
+                        } else {
+                            // Add TypeName format to the tuple
+                            formats.push(Format::TypeName(shape.type_identifier.to_string()));
+                        }
                     }
                     ContainerFormat::Struct(nameds) => {
                         // Update the last named field with the TypeName format
                         if let Some(last_named) = nameds.last_mut() {
                             if last_named.value.is_unknown() {
-                                last_named.value =
-                                    Format::TypeName(shape.type_identifier.to_string());
+                                // Special case for unit type
+                                if shape.type_identifier == "()" {
+                                    last_named.value = Format::Unit;
+                                } else {
+                                    last_named.value =
+                                        Format::TypeName(shape.type_identifier.to_string());
+                                }
                             }
                         }
                     }
@@ -344,10 +360,15 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                                 _ => Format::Option(Box::new(Format::Unit)),
                             },
                             _ => {
-                                // For user-defined types, use TypeName
-                                Format::Option(Box::new(Format::TypeName(
-                                    inner_shape.type_identifier.to_string(),
-                                )))
+                                // Special case for unit type
+                                if inner_shape.type_identifier == "()" {
+                                    Format::Option(Box::new(Format::Unit))
+                                } else {
+                                    // For user-defined types, use TypeName
+                                    Format::Option(Box::new(Format::TypeName(
+                                        inner_shape.type_identifier.to_string(),
+                                    )))
+                                }
                             }
                         };
 
@@ -433,9 +454,14 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                         }
 
                         if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
+                            let tuple_format = if tuple_formats.is_empty() {
+                                Format::Unit
+                            } else {
+                                Format::Tuple(tuple_formats)
+                            };
                             nameds.push(Named {
                                 name: field.name.to_string(),
-                                value: Format::Tuple(tuple_formats),
+                                value: tuple_format,
                             });
                         }
                     } else {
@@ -510,8 +536,13 @@ fn get_inner_format(shape: &Shape) -> Format {
             Format::Seq(Box::new(get_inner_format(inner_shape)))
         }
         _ => {
-            // For user-defined types, use TypeName
-            Format::TypeName(shape.type_identifier.to_string())
+            // Special case for unit type
+            if shape.type_identifier == "()" {
+                Format::Unit
+            } else {
+                // For user-defined types, use TypeName
+                Format::TypeName(shape.type_identifier.to_string())
+            }
         }
     }
 }
@@ -698,13 +729,25 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
                     if let Type::User(UserType::Struct(_)) = &field_shape.ty {
                         // Add Named TypeName format to the struct
                         if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                            nameds.push(Named {
-                                name: field.name.to_string(),
-                                value: Format::TypeName(field_shape.type_identifier.to_string()),
-                            });
+                            // Special case for unit type
+                            if field_shape.type_identifier == "()" {
+                                nameds.push(Named {
+                                    name: field.name.to_string(),
+                                    value: Format::Unit,
+                                });
+                            } else {
+                                nameds.push(Named {
+                                    name: field.name.to_string(),
+                                    value: Format::TypeName(
+                                        field_shape.type_identifier.to_string(),
+                                    ),
+                                });
+                            }
                         }
-                        // Process the inner type to add it to the registry
-                        format(field_shape, registry);
+                        // Process the inner type to add it to the registry (skip for unit type)
+                        if field_shape.type_identifier != "()" {
+                            format(field_shape, registry);
+                        }
                     } else {
                         // For non-struct types, add unknown format and let format() fill it
                         if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
@@ -818,10 +861,15 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
             }
         }
         _ => {
-            // For user-defined types, use TypeName
-            Format::Option(Box::new(Format::TypeName(
-                inner_shape.type_identifier.to_string(),
-            )))
+            // Special case for unit type
+            if inner_shape.type_identifier == "()" {
+                Format::Option(Box::new(Format::Unit))
+            } else {
+                // For user-defined types, use TypeName
+                Format::Option(Box::new(Format::TypeName(
+                    inner_shape.type_identifier.to_string(),
+                )))
+            }
         }
     };
 
@@ -845,8 +893,8 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
         }
     }
 
-    // If the inner type is a user-defined type, we need to process it too
-    if !matches!(inner_shape.def, Def::Scalar(_)) {
+    // If the inner type is a user-defined type, we need to process it too (skip for unit type)
+    if !matches!(inner_shape.def, Def::Scalar(_)) && inner_shape.type_identifier != "()" {
         format(inner_shape, registry);
     }
 }
