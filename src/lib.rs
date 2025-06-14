@@ -359,6 +359,11 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                                 ScalarAffinity::String(_) => Format::Option(Box::new(Format::Str)),
                                 _ => Format::Option(Box::new(Format::Unit)),
                             },
+                            Def::List(_) => {
+                                // Handle Option<Vec<T>> -> OPTION: SEQ: T
+                                let inner_format = get_inner_format(inner_shape);
+                                Format::Option(Box::new(inner_format))
+                            }
                             _ => {
                                 // Special case for unit type
                                 if inner_shape.type_identifier == "()" {
@@ -859,6 +864,11 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
                 ScalarAffinity::String(_) => Format::Option(Box::new(Format::Str)),
                 _ => Format::Option(Box::new(Format::Unit)),
             }
+        }
+        Def::List(_) => {
+            // Handle Option<Vec<T>> -> OPTION: SEQ: T
+            let inner_format = get_inner_format(inner_shape);
+            Format::Option(Box::new(inner_format))
         }
         _ => {
             // Special case for unit type

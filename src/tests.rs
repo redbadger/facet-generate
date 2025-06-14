@@ -304,7 +304,7 @@ fn tuple_struct_with_unit() {
 }
 
 #[test]
-fn option_with_unit() {
+fn option_of_unit() {
     #[derive(Facet)]
     struct MyStruct {
         a: Option<()>,
@@ -316,6 +316,23 @@ fn option_with_unit() {
           STRUCT:
             - a:
                 OPTION: UNIT
+        ");
+}
+
+#[test]
+fn option_of_list() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Option<Vec<i32>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - a:
+                OPTION:
+                  SEQ: I32
         ");
 }
 
