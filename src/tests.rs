@@ -173,6 +173,21 @@ fn newtype_with_list() {
 }
 
 #[test]
+fn newtype_with_tuple_array() {
+    #[derive(Facet)]
+    struct MyNewType([i32; 3]);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT:
+            TUPLEARRAY:
+              CONTENT: I32
+              SIZE: 3
+        ");
+}
+
+#[test]
 fn tuple_struct() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, i32, bool);
