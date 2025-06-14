@@ -137,9 +137,9 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
             // For primitives, we can try to infer the type
             match &shape.ty {
                 Type::Primitive(primitive) => match primitive {
-                    PrimitiveType::Numeric(NumericType::Float) => {}
-                    PrimitiveType::Boolean => {}
-                    PrimitiveType::Textual(TextualType::Str) => {}
+                    PrimitiveType::Boolean
+                    | PrimitiveType::Numeric(NumericType::Float)
+                    | PrimitiveType::Textual(TextualType::Str) => {}
                     p => {
                         println!("Unknown primitive type: {p:?}");
                     }

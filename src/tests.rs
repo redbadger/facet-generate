@@ -16,7 +16,7 @@ fn newtype_bool() {
     #[derive(Facet)]
     struct MyNewType(bool);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: BOOL
@@ -28,7 +28,7 @@ fn newtype_unit() {
     #[derive(Facet)]
     struct MyNewType(());
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: UNIT
@@ -40,7 +40,7 @@ fn newtype_u8() {
     #[derive(Facet)]
     struct MyNewType(u8);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: U8
@@ -52,7 +52,7 @@ fn newtype_u16() {
     #[derive(Facet)]
     struct MyNewType(u16);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: U16
@@ -64,7 +64,7 @@ fn newtype_u32() {
     #[derive(Facet)]
     struct MyNewType(u32);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: U32
@@ -76,7 +76,7 @@ fn newtype_u64() {
     #[derive(Facet)]
     struct MyNewType(u64);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: U64
@@ -88,7 +88,7 @@ fn newtype_u128() {
     #[derive(Facet)]
     struct MyNewType(u128);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: U128
@@ -100,7 +100,7 @@ fn newtype_i8() {
     #[derive(Facet)]
     struct MyNewType(i8);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: I8
@@ -112,7 +112,7 @@ fn newtype_i16() {
     #[derive(Facet)]
     struct MyNewType(i16);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: I16
@@ -124,7 +124,7 @@ fn newtype_i32() {
     #[derive(Facet)]
     struct MyNewType(i32);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: I32
@@ -136,7 +136,7 @@ fn newtype_i64() {
     #[derive(Facet)]
     struct MyNewType(i64);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: I64
@@ -148,7 +148,7 @@ fn newtype_i128() {
     #[derive(Facet)]
     struct MyNewType(i128);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT: I128
@@ -163,7 +163,7 @@ fn nested_newtype() {
     #[derive(Facet)]
     struct MyNewType(Inner);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -178,7 +178,7 @@ fn newtype_with_list() {
     #[derive(Facet)]
     struct MyNewType(Vec<i32>);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT:
@@ -194,7 +194,7 @@ fn newtype_with_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Inner>);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -210,7 +210,7 @@ fn newtype_with_nested_list() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<i32>>);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT:
@@ -227,7 +227,7 @@ fn newtype_with_nested_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<Inner>>);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -247,7 +247,7 @@ fn newtype_with_triple_nested_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<Vec<Inner>>>);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -265,7 +265,7 @@ fn newtype_with_tuple_array() {
     #[derive(Facet)]
     struct MyNewType([i32; 3]);
 
-    let registry = dbg!(reflect::<MyNewType>());
+    let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyNewType:
           NEWTYPESTRUCT:
@@ -280,7 +280,7 @@ fn tuple_struct() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, i32, bool);
 
-    let registry = dbg!(reflect::<MyTupleStruct>());
+    let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyTupleStruct:
           TUPLESTRUCT:
@@ -295,7 +295,7 @@ fn tuple_struct_with_unit() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, (), i32);
 
-    let registry = dbg!(reflect::<MyTupleStruct>());
+    let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyTupleStruct:
           TUPLESTRUCT:
@@ -312,7 +312,7 @@ fn option_of_unit() {
         a: Option<()>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -328,7 +328,7 @@ fn option_of_list() {
         a: Option<Vec<i32>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -345,7 +345,7 @@ fn option_of_nested_list() {
         a: Option<Vec<Vec<i32>>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -366,7 +366,7 @@ fn option_of_list_of_named_type() {
         a: Option<Vec<Inner>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -386,7 +386,7 @@ fn list_of_options() {
         a: Vec<Option<i32>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -406,7 +406,7 @@ fn list_of_options_of_named_type() {
         a: Vec<Option<Inner>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -426,7 +426,7 @@ fn nested_list_with_options() {
         a: Vec<Vec<Option<i32>>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -445,7 +445,7 @@ fn nested_tuple_struct_1() {
     #[derive(Facet)]
     struct MyTupleStruct(Inner, u8);
 
-    let registry = dbg!(reflect::<MyTupleStruct>());
+    let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -464,7 +464,7 @@ fn nested_tuple_struct_2() {
     #[derive(Facet)]
     struct MyTupleStruct(i32, Inner, u8);
 
-    let registry = dbg!(reflect::<MyTupleStruct>());
+    let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           TUPLESTRUCT:
@@ -489,7 +489,7 @@ fn struct_with_scalar_fields() {
         d: (),
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -507,7 +507,7 @@ fn struct_with_tuple_field() {
         a: (u8, i32),
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     MyStruct:
       STRUCT:
@@ -532,7 +532,7 @@ fn struct_with_option_fields() {
         b: Option<u8>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     Inner:
       STRUCT:
@@ -564,7 +564,7 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
         b: Inner2,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     Inner1:
       NEWTYPESTRUCT: I32
@@ -591,7 +591,7 @@ fn enum_with_unit_variants() {
         Variant2,
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyEnum:
           ENUM:
@@ -615,7 +615,7 @@ fn enum_with_newtype_variants() {
         Variant5(()),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     MyEnum:
       ENUM:
@@ -650,7 +650,7 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
         Variant2(u8),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -676,7 +676,7 @@ fn enum_with_tuple_struct_variants() {
         Variant2(i8, u32),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyEnum:
           ENUM:
@@ -706,7 +706,7 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
         Variant2(i8, Inner),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -739,7 +739,7 @@ fn enum_with_inline_struct_variants() {
         Variant2(Inner),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           STRUCT:
@@ -782,7 +782,7 @@ fn enum_with_struct_variants_mixed_types() {
         },
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         Inner:
           NEWTYPESTRUCT: I32
@@ -815,7 +815,7 @@ fn map_of_string_and_bool() {
         Map(BTreeMap<String, bool>),
     }
 
-    let registry = dbg!(reflect::<MyEnum>());
+    let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyEnum:
           ENUM:
@@ -846,7 +846,7 @@ fn map_with_user_defined_types() {
         nested_map: BTreeMap<String, Option<u64>>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
         MyStruct:
           STRUCT:
@@ -888,7 +888,7 @@ fn struct_with_box_of_t() {
         boxed: Box<UserProfile>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     MyStruct:
       STRUCT:
@@ -914,7 +914,7 @@ fn struct_with_arc_of_t() {
         boxed: Arc<UserProfile>,
     }
 
-    let registry = dbg!(reflect::<MyStruct>());
+    let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
     MyStruct:
       STRUCT:
