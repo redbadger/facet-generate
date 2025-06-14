@@ -192,6 +192,61 @@ fn newtype_with_list_of_named_type() {
 }
 
 #[test]
+fn newtype_with_nested_list() {
+    #[derive(Facet)]
+    struct MyNewType(Vec<Vec<i32>>);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT:
+            SEQ:
+              SEQ: I32
+        ");
+}
+
+#[test]
+fn newtype_with_nested_list_of_named_type() {
+    #[derive(Facet)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyNewType(Vec<Vec<Inner>>);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        Inner:
+          NEWTYPESTRUCT: I32
+        MyNewType:
+          NEWTYPESTRUCT:
+            SEQ:
+              SEQ:
+                TYPENAME: Inner
+        ");
+}
+
+#[test]
+fn newtype_with_triple_nested_list_of_named_type() {
+    #[derive(Facet)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyNewType(Vec<Vec<Vec<Inner>>>);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        Inner:
+          NEWTYPESTRUCT: I32
+        MyNewType:
+          NEWTYPESTRUCT:
+            SEQ:
+              SEQ:
+                SEQ:
+                  TYPENAME: Inner
+        ");
+}
+
+#[test]
 fn newtype_with_tuple_array() {
     #[derive(Facet)]
     struct MyNewType([i32; 3]);

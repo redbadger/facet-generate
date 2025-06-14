@@ -470,12 +470,8 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
     }
 }
 
-fn format_list(list_def: ListDef, registry: &mut Registry) {
-    // Get the inner type of the list
-    let inner_shape = list_def.t();
-
-    // Determine the format for the inner type
-    let inner_format = match inner_shape.def {
+fn get_inner_format(shape: &Shape) -> Format {
+    match shape.def {
         Def::Scalar(scalar_def) => match scalar_def.affinity {
             ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
                 NumberBits::Integer { size, sign } => {
@@ -508,12 +504,41 @@ fn format_list(list_def: ListDef, registry: &mut Registry) {
             ScalarAffinity::String(_) => Format::Str,
             _ => Format::Unit,
         },
+        Def::List(inner_list_def) => {
+            // Recursively handle nested lists
+            let inner_shape = inner_list_def.t();
+            Format::Seq(Box::new(get_inner_format(inner_shape)))
+        }
         _ => {
             // For user-defined types, use TypeName
-            Format::TypeName(inner_shape.type_identifier.to_string())
+            Format::TypeName(shape.type_identifier.to_string())
         }
-    };
+    }
+}
 
+fn process_nested_types(shape: &Shape, registry: &mut Registry) {
+    match shape.def {
+        Def::Scalar(_) => {
+            // Scalar types don't need further processing
+        }
+        Def::List(inner_list_def) => {
+            // Recursively process nested lists
+            let inner_shape = inner_list_def.t();
+            process_nested_types(inner_shape, registry);
+        }
+        _ => {
+            // For other user-defined types, process them
+            format(shape, registry);
+        }
+    }
+}
+
+fn format_list(list_def: ListDef, registry: &mut Registry) {
+    // Get the inner type of the list
+    let inner_shape = list_def.t();
+
+    // Get the format for the inner type recursively
+    let inner_format = get_inner_format(inner_shape);
     let seq_format = Format::Seq(Box::new(inner_format));
 
     // Update the current container with the sequence format
@@ -536,10 +561,8 @@ fn format_list(list_def: ListDef, registry: &mut Registry) {
         }
     }
 
-    // If the inner type is a user-defined type, we need to process it too
-    if !matches!(inner_shape.def, Def::Scalar(_)) {
-        format(inner_shape, registry);
-    }
+    // Process any user-defined types in the nested structure
+    process_nested_types(inner_shape, registry);
 }
 
 fn format_slice(slice_def: SliceDef, registry: &mut Registry) {
