@@ -75,9 +75,9 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                             formats.push(Format::TypeName(shape.type_identifier.to_string()));
                         }
                     }
-                    ContainerFormat::Struct(nameds) => {
+                    ContainerFormat::Struct(named_formats) => {
                         // Update the last named field with the TypeName format
-                        if let Some(last_named) = nameds.last_mut() {
+                        if let Some(last_named) = named_formats.last_mut() {
                             if last_named.value.is_unknown() {
                                 // Special case for unit type
                                 if shape.type_identifier == "()" {
@@ -154,126 +154,71 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
     }
 }
 
-#[allow(clippy::too_many_lines)]
-fn format_scalar(scalar_def: ScalarDef, registry: &mut Registry) {
+fn scalar_def_to_format(scalar_def: ScalarDef) -> Format {
     match scalar_def.affinity {
-        ScalarAffinity::Number(number_affinity) => {
-            match number_affinity.bits {
-                NumberBits::Integer { size, sign } => {
-                    let bits = match size {
-                        IntegerSize::Fixed(bits) => bits,
-                        IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                    };
+        ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
+            NumberBits::Integer { size, sign } => {
+                let bits = match size {
+                    IntegerSize::Fixed(bits) => bits,
+                    IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
+                };
 
-                    match sign {
-                        Signedness::Unsigned => {
-                            let uint_format = match bits {
-                                8 => Format::U8,
-                                16 => Format::U16,
-                                32 => Format::U32,
-                                64 => Format::U64,
-                                128 => Format::U128,
-                                _ => unimplemented!(),
-                            };
-                            if let Some(format) = registry.get_mut() {
-                                match format {
-                                    ContainerFormat::UnitStruct => {}
-                                    ContainerFormat::NewTypeStruct(format) => {
-                                        *format = Box::new(uint_format);
-                                    }
-                                    ContainerFormat::TupleStruct(formats) => {
-                                        formats.push(uint_format);
-                                    }
-                                    ContainerFormat::Struct(nameds) => {
-                                        // Update the last field's value (it was added with Format::unknown())
-                                        if let Some(last) = nameds.last_mut() {
-                                            last.value = uint_format;
-                                        }
-                                    }
-                                    ContainerFormat::Enum(_btree_map) => todo!(),
-                                }
-                            }
-                        }
-                        Signedness::Signed => {
-                            let int_format = match bits {
-                                8 => Format::I8,
-                                16 => Format::I16,
-                                32 => Format::I32,
-                                64 => Format::I64,
-                                128 => Format::I128,
-                                _ => unimplemented!(),
-                            };
-                            if let Some(format) = registry.get_mut() {
-                                match format {
-                                    ContainerFormat::UnitStruct => {}
-                                    ContainerFormat::NewTypeStruct(format) => {
-                                        *format = Box::new(int_format);
-                                    }
-                                    ContainerFormat::TupleStruct(formats) => {
-                                        formats.push(int_format);
-                                    }
-                                    ContainerFormat::Struct(nameds) => {
-                                        // Update the last entry's value (which was added as unknown)
-                                        if let Some(last) = nameds.last_mut() {
-                                            if last.value.is_unknown() {
-                                                last.value = int_format;
-                                            }
-                                        }
-                                    }
-                                    ContainerFormat::Enum(_btree_map) => todo!(),
-                                }
-                            }
-                        }
-                    }
-                }
-                NumberBits::Float { .. } => {}
-                _ => unimplemented!(),
-            }
-        }
-        ScalarAffinity::String(_) => {
-            if let Some(format) = registry.get_mut() {
-                match format {
-                    ContainerFormat::UnitStruct => {}
-                    ContainerFormat::NewTypeStruct(format) => {
-                        *format = Box::new(Format::Str);
-                    }
-                    ContainerFormat::TupleStruct(formats) => {
-                        formats.push(Format::Str);
-                    }
-                    ContainerFormat::Struct(nameds) => {
-                        if let Some(last) = nameds.last_mut() {
-                            if last.value.is_unknown() {
-                                last.value = Format::Str;
-                            }
-                        }
-                    }
-                    ContainerFormat::Enum(_btree_map) => todo!(),
+                match sign {
+                    Signedness::Unsigned => match bits {
+                        8 => Format::U8,
+                        16 => Format::U16,
+                        32 => Format::U32,
+                        64 => Format::U64,
+                        128 => Format::U128,
+                        _ => unimplemented!(),
+                    },
+                    Signedness::Signed => match bits {
+                        8 => Format::I8,
+                        16 => Format::I16,
+                        32 => Format::I32,
+                        64 => Format::I64,
+                        128 => Format::I128,
+                        _ => unimplemented!(),
+                    },
                 }
             }
-        }
-        ScalarAffinity::Boolean(_) => {
-            if let Some(format) = registry.get_mut() {
-                match format {
-                    ContainerFormat::UnitStruct => {}
-                    ContainerFormat::NewTypeStruct(format) => {
-                        *format = Box::new(Format::Bool);
-                    }
-                    ContainerFormat::TupleStruct(formats) => {
-                        formats.push(Format::Bool);
-                    }
-                    ContainerFormat::Struct(nameds) => {
-                        if let Some(last) = nameds.last_mut() {
-                            if last.value.is_unknown() {
-                                last.value = Format::Bool;
-                            }
-                        }
-                    }
-                    ContainerFormat::Enum(_btree_map) => todo!(),
-                }
-            }
-        }
-        _ => {}
+            _ => Format::Unit,
+        },
+        ScalarAffinity::Boolean(_) => Format::Bool,
+        ScalarAffinity::String(_) => Format::Str,
+        _ => Format::Unit,
     }
+}
+
+fn update_container_format(format: Format, registry: &mut Registry) {
+    if let Some(container_format) = registry.get_mut() {
+        match container_format {
+            ContainerFormat::UnitStruct => {}
+            ContainerFormat::NewTypeStruct(inner_format) => {
+                *inner_format = Box::new(format);
+            }
+            ContainerFormat::TupleStruct(formats) => {
+                formats.push(format);
+            }
+            ContainerFormat::Struct(named_formats) => {
+                if let Some(last) = named_formats.last_mut() {
+                    if last.value.is_unknown() {
+                        last.value = format;
+                    }
+                }
+            }
+            ContainerFormat::Enum(_) => todo!(),
+        }
+    }
+}
+
+fn should_process_nested_type(shape: &Shape) -> bool {
+    !matches!(shape.def, Def::Scalar(_)) && shape.type_identifier != "()"
+}
+
+fn format_scalar(scalar_def: ScalarDef, registry: &mut Registry) {
+    let format = scalar_def_to_format(scalar_def);
+    update_container_format(format, registry);
 }
 
 #[allow(clippy::too_many_lines)]
@@ -320,65 +265,11 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                     if let Def::Option(option_def) = field_shape.def {
                         // Handle Option types directly
                         let inner_shape = option_def.t();
-                        let option_format = match inner_shape.def {
-                            Def::Scalar(scalar_def) => match scalar_def.affinity {
-                                ScalarAffinity::Number(number_affinity) => {
-                                    match number_affinity.bits {
-                                        NumberBits::Integer { size, sign } => {
-                                            let bits = match size {
-                                                IntegerSize::Fixed(bits) => bits,
-                                                IntegerSize::PointerSized => {
-                                                    core::mem::size_of::<usize>() * 8
-                                                }
-                                            };
-                                            match sign {
-                                                Signedness::Unsigned => match bits {
-                                                    8 => Format::Option(Box::new(Format::U8)),
-                                                    16 => Format::Option(Box::new(Format::U16)),
-                                                    32 => Format::Option(Box::new(Format::U32)),
-                                                    64 => Format::Option(Box::new(Format::U64)),
-                                                    128 => Format::Option(Box::new(Format::U128)),
-                                                    _ => unimplemented!(),
-                                                },
-                                                Signedness::Signed => match bits {
-                                                    8 => Format::Option(Box::new(Format::I8)),
-                                                    16 => Format::Option(Box::new(Format::I16)),
-                                                    32 => Format::Option(Box::new(Format::I32)),
-                                                    64 => Format::Option(Box::new(Format::I64)),
-                                                    128 => Format::Option(Box::new(Format::I128)),
-                                                    _ => unimplemented!(),
-                                                },
-                                            }
-                                        }
-                                        _ => Format::Option(Box::new(Format::Unit)),
-                                    }
-                                }
-                                ScalarAffinity::Boolean(_) => {
-                                    Format::Option(Box::new(Format::Bool))
-                                }
-                                ScalarAffinity::String(_) => Format::Option(Box::new(Format::Str)),
-                                _ => Format::Option(Box::new(Format::Unit)),
-                            },
-                            Def::List(_) => {
-                                // Handle Option<Vec<T>> -> OPTION: SEQ: T
-                                let inner_format = get_inner_format(inner_shape);
-                                Format::Option(Box::new(inner_format))
-                            }
-                            _ => {
-                                // Special case for unit type
-                                if inner_shape.type_identifier == "()" {
-                                    Format::Option(Box::new(Format::Unit))
-                                } else {
-                                    // For user-defined types, use TypeName
-                                    Format::Option(Box::new(Format::TypeName(
-                                        inner_shape.type_identifier.to_string(),
-                                    )))
-                                }
-                            }
-                        };
+                        let inner_format = get_inner_format(inner_shape);
+                        let option_format = Format::Option(Box::new(inner_format));
 
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                            nameds.push(Named {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                            named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: option_format,
                             });
@@ -390,8 +281,8 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                         }
                     } else {
                         // Fallback: add unknown format and let format() handle it
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                            nameds.push(Named {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                            named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: Format::unknown(),
                             });
@@ -406,73 +297,25 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                         let mut tuple_formats = vec![];
                         for tuple_field in inner_struct.fields {
                             let tuple_field_shape = tuple_field.shape();
-                            match tuple_field_shape.def {
-                                Def::Scalar(scalar_def) => match scalar_def.affinity {
-                                    ScalarAffinity::Number(number_affinity) => {
-                                        match number_affinity.bits {
-                                            NumberBits::Integer { size, sign } => {
-                                                let bits = match size {
-                                                    IntegerSize::Fixed(bits) => bits,
-                                                    IntegerSize::PointerSized => {
-                                                        core::mem::size_of::<usize>() * 8
-                                                    }
-                                                };
-                                                let format = match sign {
-                                                    Signedness::Unsigned => match bits {
-                                                        8 => Format::U8,
-                                                        16 => Format::U16,
-                                                        32 => Format::U32,
-                                                        64 => Format::U64,
-                                                        128 => Format::U128,
-                                                        _ => unimplemented!(),
-                                                    },
-                                                    Signedness::Signed => match bits {
-                                                        8 => Format::I8,
-                                                        16 => Format::I16,
-                                                        32 => Format::I32,
-                                                        64 => Format::I64,
-                                                        128 => Format::I128,
-                                                        _ => unimplemented!(),
-                                                    },
-                                                };
-                                                tuple_formats.push(format);
-                                            }
-                                            _ => {
-                                                tuple_formats.push(Format::Unit);
-                                            }
-                                        }
-                                    }
-                                    ScalarAffinity::Boolean(_) => {
-                                        tuple_formats.push(Format::Bool);
-                                    }
-                                    ScalarAffinity::String(_) => {
-                                        tuple_formats.push(Format::Str);
-                                    }
-                                    _ => {
-                                        tuple_formats.push(Format::Unit);
-                                    }
-                                },
-                                _ => {
-                                    tuple_formats.push(Format::Unit);
-                                }
-                            }
+                            let field_format = get_inner_format(tuple_field_shape);
+                            tuple_formats.push(field_format);
                         }
 
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
                             let tuple_format = if tuple_formats.is_empty() {
                                 Format::Unit
                             } else {
                                 Format::Tuple(tuple_formats)
                             };
-                            nameds.push(Named {
+                            named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: tuple_format,
                             });
                         }
                     } else {
                         // Regular user-defined struct
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                            nameds.push(Named {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                            named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: Format::TypeName(field_shape.type_identifier.to_string()),
                             });
@@ -482,8 +325,8 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                     }
                 } else {
                     // For non-struct types, add unknown format and let format() fill it
-                    if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                        nameds.push(Named {
+                    if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                        named_formats.push(Named {
                             name: field.name.to_string(),
                             value: Format::unknown(),
                         });
@@ -503,38 +346,7 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
 
 fn get_inner_format(shape: &Shape) -> Format {
     match shape.def {
-        Def::Scalar(scalar_def) => match scalar_def.affinity {
-            ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
-                NumberBits::Integer { size, sign } => {
-                    let bits = match size {
-                        IntegerSize::Fixed(bits) => bits,
-                        IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                    };
-                    match sign {
-                        Signedness::Unsigned => match bits {
-                            8 => Format::U8,
-                            16 => Format::U16,
-                            32 => Format::U32,
-                            64 => Format::U64,
-                            128 => Format::U128,
-                            _ => unimplemented!(),
-                        },
-                        Signedness::Signed => match bits {
-                            8 => Format::I8,
-                            16 => Format::I16,
-                            32 => Format::I32,
-                            64 => Format::I64,
-                            128 => Format::I128,
-                            _ => unimplemented!(),
-                        },
-                    }
-                }
-                _ => Format::Unit,
-            },
-            ScalarAffinity::Boolean(_) => Format::Bool,
-            ScalarAffinity::String(_) => Format::Str,
-            _ => Format::Unit,
-        },
+        Def::Scalar(scalar_def) => scalar_def_to_format(scalar_def),
         Def::List(inner_list_def) => {
             // Recursively handle nested lists
             let inner_shape = inner_list_def.t();
@@ -543,44 +355,7 @@ fn get_inner_format(shape: &Shape) -> Format {
         Def::Option(option_def) => {
             // Handle Option<T> -> OPTION: T
             let inner_shape = option_def.t();
-            let inner_format = match inner_shape.def {
-                Def::Scalar(scalar_def) => match scalar_def.affinity {
-                    ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
-                        NumberBits::Integer { size, sign } => {
-                            let bits = match size {
-                                IntegerSize::Fixed(bits) => bits,
-                                IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                            };
-                            match sign {
-                                Signedness::Unsigned => match bits {
-                                    8 => Format::U8,
-                                    16 => Format::U16,
-                                    32 => Format::U32,
-                                    64 => Format::U64,
-                                    128 => Format::U128,
-                                    _ => unimplemented!(),
-                                },
-                                Signedness::Signed => match bits {
-                                    8 => Format::I8,
-                                    16 => Format::I16,
-                                    32 => Format::I32,
-                                    64 => Format::I64,
-                                    128 => Format::I128,
-                                    _ => unimplemented!(),
-                                },
-                            }
-                        }
-                        _ => Format::Unit,
-                    },
-                    ScalarAffinity::Boolean(_) => Format::Bool,
-                    ScalarAffinity::String(_) => Format::Str,
-                    _ => Format::Unit,
-                },
-                _ => {
-                    // For nested types or user-defined types, recursively handle them
-                    get_inner_format(inner_shape)
-                }
-            };
+            let inner_format = get_inner_format(inner_shape);
             Format::Option(Box::new(inner_format))
         }
         _ => {
@@ -608,7 +383,7 @@ fn process_nested_types(shape: &Shape, registry: &mut Registry) {
         Def::Option(option_def) => {
             // Recursively process options
             let inner_shape = option_def.t();
-            if !matches!(inner_shape.def, Def::Scalar(_)) && inner_shape.type_identifier != "()" {
+            if should_process_nested_type(inner_shape) {
                 process_nested_types(inner_shape, registry);
             }
         }
@@ -628,24 +403,7 @@ fn format_list(list_def: ListDef, registry: &mut Registry) {
     let seq_format = Format::Seq(Box::new(inner_format));
 
     // Update the current container with the sequence format
-    if let Some(current_format) = registry.get_mut() {
-        match current_format {
-            ContainerFormat::NewTypeStruct(format) => {
-                *format = Box::new(seq_format);
-            }
-            ContainerFormat::TupleStruct(formats) => {
-                formats.push(seq_format);
-            }
-            ContainerFormat::Struct(nameds) => {
-                if let Some(last) = nameds.last_mut() {
-                    if last.value.is_unknown() {
-                        last.value = seq_format;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    update_container_format(seq_format, registry);
 
     // Process any user-defined types in the nested structure
     process_nested_types(inner_shape, registry);
@@ -661,44 +419,7 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
     let array_size = array_def.n;
 
     // Determine the format for the inner type
-    let inner_format = match inner_shape.def {
-        Def::Scalar(scalar_def) => match scalar_def.affinity {
-            ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
-                NumberBits::Integer { size, sign } => {
-                    let bits = match size {
-                        IntegerSize::Fixed(bits) => bits,
-                        IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                    };
-                    match sign {
-                        Signedness::Unsigned => match bits {
-                            8 => Format::U8,
-                            16 => Format::U16,
-                            32 => Format::U32,
-                            64 => Format::U64,
-                            128 => Format::U128,
-                            _ => unimplemented!(),
-                        },
-                        Signedness::Signed => match bits {
-                            8 => Format::I8,
-                            16 => Format::I16,
-                            32 => Format::I32,
-                            64 => Format::I64,
-                            128 => Format::I128,
-                            _ => unimplemented!(),
-                        },
-                    }
-                }
-                _ => Format::Unit,
-            },
-            ScalarAffinity::Boolean(_) => Format::Bool,
-            ScalarAffinity::String(_) => Format::Str,
-            _ => Format::Unit,
-        },
-        _ => {
-            // For user-defined types, use TypeName
-            Format::TypeName(inner_shape.type_identifier.to_string())
-        }
-    };
+    let inner_format = get_inner_format(inner_shape);
 
     let array_format = Format::TupleArray {
         content: Box::new(inner_format),
@@ -706,24 +427,7 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
     };
 
     // Update the current container with the array format
-    if let Some(current_format) = registry.get_mut() {
-        match current_format {
-            ContainerFormat::NewTypeStruct(format) => {
-                *format = Box::new(array_format);
-            }
-            ContainerFormat::TupleStruct(formats) => {
-                formats.push(array_format);
-            }
-            ContainerFormat::Struct(nameds) => {
-                if let Some(last) = nameds.last_mut() {
-                    if last.value.is_unknown() {
-                        last.value = array_format;
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+    update_container_format(array_format, registry);
 
     // If the inner type is a user-defined type, we need to process it too
     if !matches!(inner_shape.def, Def::Scalar(_)) {
@@ -731,6 +435,7 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
     let mut variants = BTreeMap::new();
 
@@ -783,21 +488,17 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
                     // Check if the field is a user-defined struct
                     if let Type::User(UserType::Struct(_)) = &field_shape.ty {
                         // Add Named TypeName format to the struct
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
                             // Special case for unit type
-                            if field_shape.type_identifier == "()" {
-                                nameds.push(Named {
-                                    name: field.name.to_string(),
-                                    value: Format::Unit,
-                                });
+                            let value = if field_shape.type_identifier == "()" {
+                                Format::Unit
                             } else {
-                                nameds.push(Named {
-                                    name: field.name.to_string(),
-                                    value: Format::TypeName(
-                                        field_shape.type_identifier.to_string(),
-                                    ),
-                                });
-                            }
+                                Format::TypeName(field_shape.type_identifier.to_string())
+                            };
+                            named_formats.push(Named {
+                                name: field.name.to_string(),
+                                value,
+                            });
                         }
                         // Process the inner type to add it to the registry (skip for unit type)
                         if field_shape.type_identifier != "()" {
@@ -805,8 +506,8 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
                         }
                     } else {
                         // For non-struct types, add unknown format and let format() fill it
-                        if let Some(ContainerFormat::Struct(nameds)) = registry.get_mut() {
-                            nameds.push(Named {
+                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                            named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: Format::unknown(),
                             });
@@ -816,10 +517,10 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
                 }
 
                 // Extract the formats from the temporary container
-                let variant_format = if let Some(ContainerFormat::Struct(nameds)) =
+                let variant_format = if let Some(ContainerFormat::Struct(named_formats)) =
                     registry.containers.get(&format!("temp_{}", variant.name))
                 {
-                    VariantFormat::Struct(nameds.clone())
+                    VariantFormat::Struct(named_formats.clone())
                 } else {
                     VariantFormat::Unit
                 };
@@ -879,82 +580,14 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
     let inner_shape = option_def.t();
 
     // We need to determine what format to use for the Option based on the inner type
-    let option_format = match inner_shape.def {
-        Def::Scalar(scalar_def) => {
-            // Handle scalar types like bool, u8, i32, etc.
-            match scalar_def.affinity {
-                ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
-                    NumberBits::Integer { size, sign } => {
-                        let bits = match size {
-                            IntegerSize::Fixed(bits) => bits,
-                            IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                        };
-                        match sign {
-                            Signedness::Unsigned => match bits {
-                                8 => Format::Option(Box::new(Format::U8)),
-                                16 => Format::Option(Box::new(Format::U16)),
-                                32 => Format::Option(Box::new(Format::U32)),
-                                64 => Format::Option(Box::new(Format::U64)),
-                                128 => Format::Option(Box::new(Format::U128)),
-                                _ => unimplemented!(),
-                            },
-                            Signedness::Signed => match bits {
-                                8 => Format::Option(Box::new(Format::I8)),
-                                16 => Format::Option(Box::new(Format::I16)),
-                                32 => Format::Option(Box::new(Format::I32)),
-                                64 => Format::Option(Box::new(Format::I64)),
-                                128 => Format::Option(Box::new(Format::I128)),
-                                _ => unimplemented!(),
-                            },
-                        }
-                    }
-                    _ => Format::Option(Box::new(Format::Unit)),
-                },
-                ScalarAffinity::Boolean(_) => Format::Option(Box::new(Format::Bool)),
-                ScalarAffinity::String(_) => Format::Option(Box::new(Format::Str)),
-                _ => Format::Option(Box::new(Format::Unit)),
-            }
-        }
-        Def::List(_) => {
-            // Handle Option<Vec<T>> -> OPTION: SEQ: T
-            let inner_format = get_inner_format(inner_shape);
-            Format::Option(Box::new(inner_format))
-        }
-        _ => {
-            // Special case for unit type
-            if inner_shape.type_identifier == "()" {
-                Format::Option(Box::new(Format::Unit))
-            } else {
-                // For user-defined types, use TypeName
-                Format::Option(Box::new(Format::TypeName(
-                    inner_shape.type_identifier.to_string(),
-                )))
-            }
-        }
-    };
+    let inner_format = get_inner_format(inner_shape);
+    let option_format = Format::Option(Box::new(inner_format));
 
     // Update the current container with the option format
-    if let Some(current_format) = registry.get_mut() {
-        match current_format {
-            ContainerFormat::Struct(nameds) => {
-                if let Some(last) = nameds.last_mut() {
-                    if last.value.is_unknown() {
-                        last.value = option_format;
-                    }
-                }
-            }
-            ContainerFormat::TupleStruct(formats) => {
-                formats.push(option_format);
-            }
-            ContainerFormat::NewTypeStruct(format) => {
-                *format = Box::new(option_format);
-            }
-            _ => {}
-        }
-    }
+    update_container_format(option_format, registry);
 
     // If the inner type is a user-defined type, we need to process it too (skip for unit type)
-    if !matches!(inner_shape.def, Def::Scalar(_)) && inner_shape.type_identifier != "()" {
+    if should_process_nested_type(inner_shape) {
         format(inner_shape, registry);
     }
 }
