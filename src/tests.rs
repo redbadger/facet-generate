@@ -173,6 +173,25 @@ fn newtype_with_list() {
 }
 
 #[test]
+fn newtype_with_list_of_named_type() {
+    #[derive(Facet)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyNewType(Vec<Inner>);
+
+    let registry = dbg!(reflect::<MyNewType>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        Inner:
+          NEWTYPESTRUCT: I32
+        MyNewType:
+          NEWTYPESTRUCT:
+            SEQ:
+              TYPENAME: Inner
+        ");
+}
+
+#[test]
 fn newtype_with_tuple_array() {
     #[derive(Facet)]
     struct MyNewType([i32; 3]);
