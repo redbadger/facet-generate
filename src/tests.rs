@@ -337,6 +337,105 @@ fn option_of_list() {
 }
 
 #[test]
+fn option_of_nested_list() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Option<Vec<Vec<i32>>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - a:
+                OPTION:
+                  SEQ:
+                    SEQ: I32
+        ");
+}
+
+#[test]
+fn option_of_list_of_named_type() {
+    #[derive(Facet)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Option<Vec<Inner>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        Inner:
+          NEWTYPESTRUCT: I32
+        MyStruct:
+          STRUCT:
+            - a:
+                OPTION:
+                  SEQ:
+                    TYPENAME: Inner
+        ");
+}
+
+#[test]
+fn list_of_options() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Vec<Option<i32>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - a:
+                SEQ:
+                  OPTION: I32
+        ");
+}
+
+#[test]
+fn list_of_options_of_named_type() {
+    #[derive(Facet)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Vec<Option<Inner>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        Inner:
+          NEWTYPESTRUCT: I32
+        MyStruct:
+          STRUCT:
+            - a:
+                SEQ:
+                  OPTION:
+                    TYPENAME: Inner
+        ");
+}
+
+#[test]
+fn nested_list_with_options() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Vec<Vec<Option<i32>>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - a:
+                SEQ:
+                  SEQ:
+                    OPTION: I32
+        ");
+}
+
+#[test]
 fn nested_tuple_struct_1() {
     #[derive(Facet)]
     struct Inner(i32);

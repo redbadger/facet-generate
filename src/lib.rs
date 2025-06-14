@@ -540,6 +540,49 @@ fn get_inner_format(shape: &Shape) -> Format {
             let inner_shape = inner_list_def.t();
             Format::Seq(Box::new(get_inner_format(inner_shape)))
         }
+        Def::Option(option_def) => {
+            // Handle Option<T> -> OPTION: T
+            let inner_shape = option_def.t();
+            let inner_format = match inner_shape.def {
+                Def::Scalar(scalar_def) => match scalar_def.affinity {
+                    ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
+                        NumberBits::Integer { size, sign } => {
+                            let bits = match size {
+                                IntegerSize::Fixed(bits) => bits,
+                                IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
+                            };
+                            match sign {
+                                Signedness::Unsigned => match bits {
+                                    8 => Format::U8,
+                                    16 => Format::U16,
+                                    32 => Format::U32,
+                                    64 => Format::U64,
+                                    128 => Format::U128,
+                                    _ => unimplemented!(),
+                                },
+                                Signedness::Signed => match bits {
+                                    8 => Format::I8,
+                                    16 => Format::I16,
+                                    32 => Format::I32,
+                                    64 => Format::I64,
+                                    128 => Format::I128,
+                                    _ => unimplemented!(),
+                                },
+                            }
+                        }
+                        _ => Format::Unit,
+                    },
+                    ScalarAffinity::Boolean(_) => Format::Bool,
+                    ScalarAffinity::String(_) => Format::Str,
+                    _ => Format::Unit,
+                },
+                _ => {
+                    // For nested types or user-defined types, recursively handle them
+                    get_inner_format(inner_shape)
+                }
+            };
+            Format::Option(Box::new(inner_format))
+        }
         _ => {
             // Special case for unit type
             if shape.type_identifier == "()" {
@@ -561,6 +604,13 @@ fn process_nested_types(shape: &Shape, registry: &mut Registry) {
             // Recursively process nested lists
             let inner_shape = inner_list_def.t();
             process_nested_types(inner_shape, registry);
+        }
+        Def::Option(option_def) => {
+            // Recursively process options
+            let inner_shape = option_def.t();
+            if !matches!(inner_shape.def, Def::Scalar(_)) && inner_shape.type_identifier != "()" {
+                process_nested_types(inner_shape, registry);
+            }
         }
         _ => {
             // For other user-defined types, process them
