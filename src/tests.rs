@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::*;
 
 #[test]
@@ -871,4 +873,56 @@ fn map_with_user_defined_types() {
             - name: STR
             - active: BOOL
         ");
+}
+
+#[test]
+fn struct_with_box_of_t() {
+    #[derive(Facet)]
+    struct UserProfile {
+        name: String,
+        active: bool,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        boxed: Box<UserProfile>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyStruct:
+      STRUCT:
+        - boxed:
+            TYPENAME: UserProfile
+    UserProfile:
+      STRUCT:
+        - name: STR
+        - active: BOOL
+    ");
+}
+
+#[test]
+fn struct_with_arc_of_t() {
+    #[derive(Facet)]
+    struct UserProfile {
+        name: String,
+        active: bool,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        boxed: Arc<UserProfile>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyStruct:
+      STRUCT:
+        - boxed:
+            TYPENAME: UserProfile
+    UserProfile:
+      STRUCT:
+        - name: STR
+        - active: BOOL
+    ");
 }
