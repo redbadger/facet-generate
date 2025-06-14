@@ -803,3 +803,72 @@ fn enum_with_struct_variants_mixed_types() {
                       TYPENAME: Inner
         ");
 }
+
+#[test]
+fn map_of_string_and_bool() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Map(BTreeMap<String, bool>),
+    }
+
+    let registry = dbg!(reflect::<MyEnum>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyEnum:
+          ENUM:
+            0:
+              Map:
+                NEWTYPE:
+                  MAP:
+                    KEY: STR
+                    VALUE: BOOL
+        ");
+}
+
+#[test]
+fn map_with_user_defined_types() {
+    #[derive(Facet, Ord, PartialOrd, Eq, PartialEq)]
+    struct UserId(u32);
+
+    #[derive(Facet)]
+    struct UserProfile {
+        name: String,
+        active: bool,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        user_map: BTreeMap<UserId, UserProfile>,
+        id_to_count: BTreeMap<i32, Vec<String>>,
+        nested_map: BTreeMap<String, Option<u64>>,
+    }
+
+    let registry = dbg!(reflect::<MyStruct>());
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyStruct:
+          STRUCT:
+            - user_map:
+                MAP:
+                  KEY:
+                    TYPENAME: UserId
+                  VALUE:
+                    TYPENAME: UserProfile
+            - id_to_count:
+                MAP:
+                  KEY: I32
+                  VALUE:
+                    SEQ: STR
+            - nested_map:
+                MAP:
+                  KEY: STR
+                  VALUE:
+                    OPTION: U64
+        UserId:
+          NEWTYPESTRUCT: U32
+        UserProfile:
+          STRUCT:
+            - name: STR
+            - active: BOOL
+        ");
+}

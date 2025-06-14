@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use facet::{
-    ArrayDef, Def, EnumType, Facet, IntegerSize, ListDef, NumberBits, NumericType, OptionDef,
-    PointerType, PrimitiveType, ScalarAffinity, ScalarDef, SequenceType, Shape, Signedness,
-    SliceDef, SmartPointerDef, StructKind, StructType, TextualType, Type, UserType,
+    ArrayDef, Def, EnumType, Facet, IntegerSize, ListDef, MapDef, NumberBits, NumericType,
+    OptionDef, PointerType, PrimitiveType, ScalarAffinity, ScalarDef, SequenceType, Shape,
+    Signedness, SliceDef, SmartPointerDef, StructKind, StructType, TextualType, Type, UserType,
 };
 use serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 
@@ -123,7 +123,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
     // Then check the def system (Def)
     match shape.def {
         Def::Scalar(scalar_def) => format_scalar(scalar_def, registry),
-        Def::Map(_map_def) => todo!("Map"),
+        Def::Map(map_def) => format_map(map_def, registry),
         Def::List(list_def) => format_list(list_def, registry),
         Def::Slice(slice_def) => format_slice(slice_def, registry),
         Def::Array(array_def) => format_array(array_def, registry),
@@ -358,6 +358,17 @@ fn get_inner_format(shape: &Shape) -> Format {
             let inner_format = get_inner_format(inner_shape);
             Format::Option(Box::new(inner_format))
         }
+        Def::Map(map_def) => {
+            // Handle Map<K, V> -> MAP: { KEY: K, VALUE: V }
+            let key_shape = map_def.k();
+            let value_shape = map_def.v();
+            let key_format = get_inner_format(key_shape);
+            let value_format = get_inner_format(value_shape);
+            Format::Map {
+                key: Box::new(key_format),
+                value: Box::new(value_format),
+            }
+        }
         _ => {
             // Special case for unit type
             if shape.type_identifier == "()" {
@@ -387,6 +398,17 @@ fn process_nested_types(shape: &Shape, registry: &mut Registry) {
                 process_nested_types(inner_shape, registry);
             }
         }
+        Def::Map(map_def) => {
+            // Recursively process maps
+            let key_shape = map_def.k();
+            let value_shape = map_def.v();
+            if should_process_nested_type(key_shape) {
+                process_nested_types(key_shape, registry);
+            }
+            if should_process_nested_type(value_shape) {
+                process_nested_types(value_shape, registry);
+            }
+        }
         _ => {
             // For other user-defined types, process them
             format(shape, registry);
@@ -407,6 +429,28 @@ fn format_list(list_def: ListDef, registry: &mut Registry) {
 
     // Process any user-defined types in the nested structure
     process_nested_types(inner_shape, registry);
+}
+
+fn format_map(map_def: MapDef, registry: &mut Registry) {
+    // Get the key and value types of the map
+    let key_shape = map_def.k();
+    let value_shape = map_def.v();
+
+    // Get the formats for key and value types
+    let key_format = get_inner_format(key_shape);
+    let value_format = get_inner_format(value_shape);
+
+    let map_format = Format::Map {
+        key: Box::new(key_format),
+        value: Box::new(value_format),
+    };
+
+    // Update the current container with the map format
+    update_container_format(map_format, registry);
+
+    // Process any user-defined types in the nested structure
+    process_nested_types(key_shape, registry);
+    process_nested_types(value_shape, registry);
 }
 
 fn format_slice(slice_def: SliceDef, registry: &mut Registry) {
