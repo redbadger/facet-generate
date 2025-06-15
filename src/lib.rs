@@ -170,7 +170,7 @@ fn scalar_def_to_format(scalar_def: ScalarDef) -> Format {
                         32 => Format::U32,
                         64 => Format::U64,
                         128 => Format::U128,
-                        _ => unimplemented!(),
+                        _ => unimplemented!("Unsupported integer size: {}", bits),
                     },
                     Signedness::Signed => match bits {
                         8 => Format::I8,
@@ -178,15 +178,56 @@ fn scalar_def_to_format(scalar_def: ScalarDef) -> Format {
                         32 => Format::I32,
                         64 => Format::I64,
                         128 => Format::I128,
-                        _ => unimplemented!(),
+                        _ => unimplemented!("Unsupported integer size: {}", bits),
                     },
                 }
             }
-            _ => Format::Unit,
+            NumberBits::Float {
+                sign_bits: _,
+                exponent_bits,
+                mantissa_bits,
+                has_explicit_first_mantissa_bit: _,
+            } => {
+                // IEEE 754 standard:
+                // f32: 8 exponent bits, 23 mantissa bits
+                // f64: 11 exponent bits, 52 mantissa bits
+                match (exponent_bits, mantissa_bits) {
+                    (8, 23) => Format::F32,
+                    (11, 52) => Format::F64,
+                    _ => unimplemented!(
+                        "Unsupported float format: {} exponent bits, {} mantissa bits",
+                        exponent_bits,
+                        mantissa_bits
+                    ),
+                }
+            }
+            NumberBits::Fixed {
+                sign_bits: _,
+                integer_bits: _,
+                fraction_bits: _,
+            } => todo!(),
+            NumberBits::Decimal {
+                sign_bits: _,
+                integer_bits: _,
+                scale_bits: _,
+            } => todo!(),
+            _ => todo!(),
         },
         ScalarAffinity::Boolean(_) => Format::Bool,
         ScalarAffinity::String(_) => Format::Str,
-        _ => Format::Unit,
+        ScalarAffinity::ComplexNumber(_complex_number_affinity) => todo!(),
+        ScalarAffinity::Empty(_empty_affinity) => todo!(),
+        ScalarAffinity::SocketAddr(_socket_addr_affinity) => todo!(),
+        ScalarAffinity::IpAddr(_ip_addr_affinity) => todo!(),
+        ScalarAffinity::Url(_url_affinity) => todo!(),
+        ScalarAffinity::UUID(_uuid_affinity) => todo!(),
+        ScalarAffinity::ULID(_ulid_affinity) => todo!(),
+        ScalarAffinity::Time(_time_affinity) => todo!(),
+        ScalarAffinity::Opaque(_opaque_affinity) => todo!(),
+        ScalarAffinity::Other(_other_affinity) => todo!(),
+        ScalarAffinity::Char(_char_affinity) => Format::Char,
+        ScalarAffinity::Path(_path_affinity) => todo!(),
+        _ => todo!(),
     }
 }
 

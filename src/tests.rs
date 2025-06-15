@@ -156,6 +156,42 @@ fn newtype_i128() {
 }
 
 #[test]
+fn newtype_f32() {
+    #[derive(Facet)]
+    struct MyNewType(f32);
+
+    let registry = reflect::<MyNewType>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT: F32
+        ");
+}
+
+#[test]
+fn newtype_f64() {
+    #[derive(Facet)]
+    struct MyNewType(f64);
+
+    let registry = reflect::<MyNewType>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT: F64
+        ");
+}
+
+#[test]
+fn newtype_char() {
+    #[derive(Facet)]
+    struct MyNewType(char);
+
+    let registry = reflect::<MyNewType>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+        MyNewType:
+          NEWTYPESTRUCT: CHAR
+        ");
+}
+
+#[test]
 fn nested_newtype() {
     #[derive(Facet)]
     struct Inner(i32);
@@ -610,9 +646,11 @@ fn enum_with_newtype_variants() {
     enum MyEnum {
         Variant1(u8),
         Variant2(i32),
-        Variant3(String),
-        Variant4(bool),
-        Variant5(()),
+        Variant3(f64),
+        Variant4(char),
+        Variant5(String),
+        Variant6(bool),
+        Variant7(()),
     }
 
     let registry = reflect::<MyEnum>();
@@ -627,12 +665,18 @@ fn enum_with_newtype_variants() {
             NEWTYPE: I32
         2:
           Variant3:
-            NEWTYPE: STR
+            NEWTYPE: F64
         3:
           Variant4:
-            NEWTYPE: BOOL
+            NEWTYPE: CHAR
         4:
           Variant5:
+            NEWTYPE: STR
+        5:
+          Variant6:
+            NEWTYPE: BOOL
+        6:
+          Variant7:
             NEWTYPE: UNIT
     ");
 }
@@ -672,25 +716,30 @@ fn enum_with_tuple_struct_variants() {
     #[repr(u8)]
     #[allow(dead_code)]
     enum MyEnum {
-        Variant1(u8, i32),
+        Variant1(u8, i32, f64, char, String, bool, ()),
         Variant2(i8, u32),
     }
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        MyEnum:
-          ENUM:
-            0:
-              Variant1:
-                TUPLE:
-                  - U8
-                  - I32
-            1:
-              Variant2:
-                TUPLE:
-                  - I8
-                  - U32
-        ");
+    MyEnum:
+      ENUM:
+        0:
+          Variant1:
+            TUPLE:
+              - U8
+              - I32
+              - F64
+              - CHAR
+              - STR
+              - BOOL
+              - UNIT
+        1:
+          Variant2:
+            TUPLE:
+              - I8
+              - U32
+    ");
 }
 
 #[test]
@@ -772,9 +821,11 @@ fn enum_with_struct_variants_mixed_types() {
         Variant1 {
             a: Inner,
             b: u8,
-            c: String,
-            d: bool,
-            e: (),
+            c: f32,
+            d: String,
+            e: char,
+            f: bool,
+            g: (),
         },
         Variant2 {
             x: i32,
@@ -784,26 +835,28 @@ fn enum_with_struct_variants_mixed_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyEnum:
-          ENUM:
-            0:
-              Variant1:
-                STRUCT:
-                  - a:
-                      TYPENAME: Inner
-                  - b: U8
-                  - c: STR
-                  - d: BOOL
-                  - e: UNIT
-            1:
-              Variant2:
-                STRUCT:
-                  - x: I32
-                  - y:
-                      TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyEnum:
+      ENUM:
+        0:
+          Variant1:
+            STRUCT:
+              - a:
+                  TYPENAME: Inner
+              - b: U8
+              - c: F32
+              - d: STR
+              - e: CHAR
+              - f: BOOL
+              - g: UNIT
+        1:
+          Variant2:
+            STRUCT:
+              - x: I32
+              - y:
+                  TYPENAME: Inner
+    ");
 }
 
 #[test]
