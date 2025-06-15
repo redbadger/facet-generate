@@ -410,7 +410,30 @@ fn get_inner_format(shape: &Shape) -> Format {
                 value: Box::new(value_format),
             }
         }
-        _ => {
+        Def::Array(array_def) => {
+            // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
+            let inner_shape = array_def.t();
+            let inner_format = get_inner_format(inner_shape);
+            Format::TupleArray {
+                content: Box::new(inner_format),
+                size: array_def.n,
+            }
+        }
+        Def::Undefined => {
+            // Check if this is a tuple type by examining the type structure
+            if let Type::User(UserType::Struct(struct_type)) = &shape.ty {
+                if struct_type.kind == StructKind::Tuple && !struct_type.fields.is_empty() {
+                    // Handle tuple types -> TUPLE: [field1, field2, ...]
+                    let mut tuple_formats = vec![];
+                    for field in struct_type.fields {
+                        let field_shape = field.shape();
+                        let field_format = get_inner_format(field_shape);
+                        tuple_formats.push(field_format);
+                    }
+                    return Format::Tuple(tuple_formats);
+                }
+            }
+
             // Special case for unit type
             if shape.type_identifier == "()" {
                 Format::Unit
@@ -418,6 +441,13 @@ fn get_inner_format(shape: &Shape) -> Format {
                 // For user-defined types, use TypeName
                 Format::TypeName(shape.type_identifier.to_string())
             }
+        }
+        Def::Set(_set_def) => todo!(),
+        Def::Slice(_slice_def) => todo!(),
+        Def::SmartPointer(_smart_pointer_def) => todo!(),
+        _ => {
+            // For other types, use TypeName
+            Format::TypeName(shape.type_identifier.to_string())
         }
     }
 }

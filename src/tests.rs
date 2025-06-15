@@ -929,6 +929,36 @@ fn map_with_user_defined_types() {
 }
 
 #[test]
+fn complex_map() {
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum ComplexMap {
+        #[allow(clippy::zero_sized_map_values)]
+        Map(BTreeMap<([u32; 2], [u8; 4]), ()>),
+    }
+
+    let registry = reflect::<ComplexMap>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    ComplexMap:
+      ENUM:
+        0:
+          Map:
+            NEWTYPE:
+              MAP:
+                KEY:
+                  TUPLE:
+                    - TUPLEARRAY:
+                        CONTENT: U32
+                        SIZE: 2
+                    - TUPLEARRAY:
+                        CONTENT: U8
+                        SIZE: 4
+                VALUE: UNIT
+    ");
+}
+
+#[test]
 fn struct_with_box_of_t() {
     #[derive(Facet)]
     struct UserProfile {
