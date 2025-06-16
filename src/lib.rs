@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 
 use facet::{
-    ArrayDef, Def, EnumType, Facet, Field, IntegerSize, ListDef, MapDef, NumberBits, NumericType,
-    OptionDef, PointerType, PrimitiveType, ScalarAffinity, ScalarDef, SequenceType, Shape,
-    ShapeAttribute, Signedness, SliceDef, SmartPointerDef, StructKind, StructType, TextualType,
-    Type, UserType, VariantAttribute,
+    ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, IntegerSize, ListDef, MapDef,
+    NumberBits, NumericType, OptionDef, PointerType, PrimitiveType, ScalarAffinity, ScalarDef,
+    SequenceType, Shape, ShapeAttribute, Signedness, SliceDef, SmartPointerDef, StructKind,
+    StructType, TextualType, Type, UserType, VariantAttribute,
 };
 use serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 
@@ -276,9 +276,106 @@ fn is_transparent_struct(shape: &Shape) -> bool {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Registry) {
-    // Check if the referenced struct is transparent
+    // Check for field-level attributes first
+    let has_bytes_attribute = field.attributes.iter().any(|attr| match attr {
+        FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
+        _ => false,
+    });
+
+    // Handle bytes attribute for Vec<u8>
+    if has_bytes_attribute && field_shape.type_identifier == "Vec" {
+        // Check if it's actually Vec<u8> by examining the definition
+        if let Def::List(list_def) = field_shape.def {
+            let inner_shape = list_def.t();
+            if inner_shape.type_identifier == "u8" {
+                if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                    named_formats.push(Named {
+                        name: field.name.to_string(),
+                        value: Format::Bytes,
+                    });
+                }
+                return;
+            }
+        }
+    }
+
+    // Handle bytes attribute for &[u8] slices
+    if has_bytes_attribute && field_shape.type_identifier == "&_" {
+        // Check if it's a wide pointer (slice) to u8
+        if let Type::Pointer(PointerType::Reference(ref_type)) = &field_shape.ty {
+            if ref_type.wide {
+                let target_shape = (ref_type.target)();
+                // Check if target is a slice and get its element type
+                if target_shape.type_identifier == "[_]" {
+                    if let Def::Slice(slice_def) = target_shape.def {
+                        let element_shape = slice_def.t();
+                        if element_shape.type_identifier == "u8" {
+                            if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut()
+                            {
+                                named_formats.push(Named {
+                                    name: field.name.to_string(),
+                                    value: Format::Bytes,
+                                });
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Check if the field is an Option
+    if field_shape.type_identifier == "Option" {
+        if let Def::Option(option_def) = field_shape.def {
+            // Handle Option types directly
+            let inner_shape = option_def.t();
+            let inner_format = get_inner_format(inner_shape);
+            let option_format = Format::Option(Box::new(inner_format));
+
+            if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                named_formats.push(Named {
+                    name: field.name.to_string(),
+                    value: option_format,
+                });
+            }
+
+            // If the inner type is a user-defined type, we need to process it too
+            if !matches!(inner_shape.def, Def::Scalar(_)) {
+                format(inner_shape, registry);
+            }
+            return;
+        }
+    }
+
+    // Check if the field is a tuple struct
     if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
+        if inner_struct.kind == StructKind::Tuple {
+            // Handle tuple field specially
+            let mut tuple_formats = vec![];
+            for tuple_field in inner_struct.fields {
+                let tuple_field_shape = tuple_field.shape();
+                let field_format = get_inner_format(tuple_field_shape);
+                tuple_formats.push(field_format);
+            }
+
+            if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                let tuple_format = if tuple_formats.is_empty() {
+                    Format::Unit
+                } else {
+                    Format::Tuple(tuple_formats)
+                };
+                named_formats.push(Named {
+                    name: field.name.to_string(),
+                    value: tuple_format,
+                });
+            }
+            return;
+        }
+
+        // Check if the referenced struct is transparent
         let is_referenced_transparent = inner_struct.kind == StructKind::TupleStruct
             && inner_struct.fields.len() == 1
             && is_transparent_struct(field_shape);
@@ -299,11 +396,11 @@ fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Regist
         }
     }
 
-    // Default behavior: add TypeName reference and process the type
+    // Default behavior: determine the proper format and add it
     if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
         named_formats.push(Named {
             name: field.name.to_string(),
-            value: Format::TypeName(field_shape.type_identifier.to_string()),
+            value: Format::unknown(),
         });
     }
     format(field_shape, registry);
@@ -358,73 +455,7 @@ fn format_struct_with_shape(
             registry.push(name.to_string(), container);
             for field in struct_type.fields {
                 let field_shape = field.shape();
-
-                // Check if the field is an Option first
-                if field_shape.type_identifier == "Option" {
-                    if let Def::Option(option_def) = field_shape.def {
-                        // Handle Option types directly
-                        let inner_shape = option_def.t();
-                        let inner_format = get_inner_format(inner_shape);
-                        let option_format = Format::Option(Box::new(inner_format));
-
-                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                            named_formats.push(Named {
-                                name: field.name.to_string(),
-                                value: option_format,
-                            });
-                        }
-
-                        // If the inner type is a user-defined type, we need to process it too
-                        if !matches!(inner_shape.def, Def::Scalar(_)) {
-                            format(inner_shape, registry);
-                        }
-                    } else {
-                        // Fallback: add unknown format and let format() handle it
-                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                            named_formats.push(Named {
-                                name: field.name.to_string(),
-                                value: Format::unknown(),
-                            });
-                        }
-                        format(field_shape, registry);
-                    }
-                }
-                // Check if the field is a tuple
-                else if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
-                    if inner_struct.kind == StructKind::Tuple {
-                        // Handle tuple field specially
-                        let mut tuple_formats = vec![];
-                        for tuple_field in inner_struct.fields {
-                            let tuple_field_shape = tuple_field.shape();
-                            let field_format = get_inner_format(tuple_field_shape);
-                            tuple_formats.push(field_format);
-                        }
-
-                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                            let tuple_format = if tuple_formats.is_empty() {
-                                Format::Unit
-                            } else {
-                                Format::Tuple(tuple_formats)
-                            };
-                            named_formats.push(Named {
-                                name: field.name.to_string(),
-                                value: tuple_format,
-                            });
-                        }
-                    } else {
-                        // Regular user-defined struct
-                        handle_struct_field(field, field_shape, registry);
-                    }
-                } else {
-                    // For non-struct types, add unknown format and let format() fill it
-                    if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                        named_formats.push(Named {
-                            name: field.name.to_string(),
-                            value: Format::unknown(),
-                        });
-                    }
-                    format(field_shape, registry);
-                }
+                handle_struct_field(field, field_shape, registry);
             }
             registry.pop();
         }

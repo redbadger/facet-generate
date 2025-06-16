@@ -516,6 +516,38 @@ fn nested_tuple_struct_2() {
 }
 
 #[test]
+fn struct_with_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct {
+        #[facet(bytes)]
+        a: Vec<u8>,
+    }
+
+    let registry = reflect::<MyStruct>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyStruct:
+      STRUCT:
+        - a: BYTES
+    ");
+}
+
+#[test]
+fn struct_with_slice_of_u8_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        #[facet(bytes)]
+        a: &'a [u8],
+    }
+
+    let registry = reflect::<MyStruct>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyStruct:
+      STRUCT:
+        - a: BYTES
+    ");
+}
+
+#[test]
 fn struct_with_scalar_fields() {
     #[derive(Facet)]
     struct MyStruct {
