@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, IntegerSize, ListDef, MapDef,
@@ -12,6 +12,8 @@ use serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantForm
 pub struct Registry {
     containers: BTreeMap<String, ContainerFormat>,
     current: Vec<String>,
+    processed: HashSet<String>,
+    name_mappings: BTreeMap<String, String>,
 }
 
 impl Registry {
@@ -19,12 +21,33 @@ impl Registry {
         Self {
             containers: BTreeMap::new(),
             current: Vec::new(),
+            processed: HashSet::new(),
+            name_mappings: BTreeMap::new(),
         }
     }
 
-    fn push(&mut self, name: String, format: ContainerFormat) {
-        self.containers.insert(name.clone(), format);
+    fn push(&mut self, name: String, container: ContainerFormat) {
+        self.containers.insert(name.clone(), container);
         self.current.push(name);
+    }
+
+    fn register_type_mapping(&mut self, original: String, renamed: String) {
+        self.name_mappings.insert(original, renamed);
+    }
+
+    fn get_mapped_name(&self, name: &str) -> String {
+        self.name_mappings
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string())
+    }
+
+    fn is_processed(&self, name: &str) -> bool {
+        self.processed.contains(name)
+    }
+
+    fn mark_processed(&mut self, name: &str) {
+        self.processed.insert(name.to_string());
     }
 
     fn pop(&mut self) {
@@ -57,6 +80,9 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
     // First check the type system (Type)
     match &shape.ty {
         Type::User(UserType::Struct(struct_def)) => {
+            // Get renamed name before mutable borrow to avoid borrowing conflicts
+            let renamed_name = get_renamed_name(shape.type_identifier, Some(shape), None);
+
             // Check if we're currently inside a container that needs updating
             if let Some(current_format) = registry.get_mut() {
                 match current_format {
@@ -67,8 +93,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                                 **inner_format = Format::Unit;
                             } else {
                                 // Update the NewTypeStruct format to reference the inner type
-                                let name = get_renamed_name(shape.type_identifier, Some(shape));
-                                **inner_format = Format::TypeName(name);
+                                **inner_format = Format::TypeName(renamed_name.clone());
                             }
                         }
                     }
@@ -78,8 +103,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                             formats.push(Format::Unit);
                         } else {
                             // Add TypeName format to the tuple
-                            let name = get_renamed_name(shape.type_identifier, Some(shape));
-                            formats.push(Format::TypeName(name));
+                            formats.push(Format::TypeName(renamed_name.clone()));
                         }
                     }
                     ContainerFormat::Struct(named_formats) => {
@@ -90,8 +114,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                                 if shape.type_identifier == "()" {
                                     last_named.value = Format::Unit;
                                 } else {
-                                    let name = get_renamed_name(shape.type_identifier, Some(shape));
-                                    last_named.value = Format::TypeName(name);
+                                    last_named.value = Format::TypeName(renamed_name.clone());
                                 }
                             }
                         }
@@ -277,8 +300,7 @@ fn is_transparent_struct(shape: &Shape) -> bool {
     })
 }
 
-fn get_renamed_name(name: &str, shape: Option<&Shape>) -> String {
-    println!("name: {name}");
+fn get_renamed_name(name: &str, shape: Option<&Shape>, registry: Option<&Registry>) -> String {
     if let Some(shape) = shape {
         // Check type_tag first (this is where facet rename is stored)
         if let Some(type_tag) = shape.type_tag {
@@ -300,6 +322,11 @@ fn get_renamed_name(name: &str, shape: Option<&Shape>) -> String {
                 }
             }
         }
+    }
+
+    // Check registry for mapped names
+    if let Some(registry) = registry {
+        return registry.get_mapped_name(name);
     }
 
     // Temporary implementation for the test - in a real implementation,
@@ -368,7 +395,7 @@ fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Regist
         if let Def::Option(option_def) = field_shape.def {
             // Handle Option types directly
             let inner_shape = option_def.t();
-            let inner_format = get_inner_format(inner_shape);
+            let inner_format = get_inner_format(inner_shape, Some(registry));
             let option_format = Format::Option(Box::new(inner_format));
 
             if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
@@ -393,7 +420,7 @@ fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Regist
             let mut tuple_formats = vec![];
             for tuple_field in inner_struct.fields {
                 let tuple_field_shape = tuple_field.shape();
-                let field_format = get_inner_format(tuple_field_shape);
+                let field_format = get_inner_format(tuple_field_shape, Some(registry));
                 tuple_formats.push(field_format);
             }
 
@@ -420,7 +447,7 @@ fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Regist
             // For transparent struct references, use the inner type directly
             let inner_field = inner_struct.fields[0];
             let inner_field_shape = inner_field.shape();
-            let inner_format = get_inner_format(inner_field_shape);
+            let inner_format = get_inner_format(inner_field_shape, Some(registry));
 
             if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
                 named_formats.push(Named {
@@ -433,10 +460,30 @@ fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Regist
     }
 
     // Default behavior: determine the proper format and add it
+
+    // For user-defined types (structs/enums), get the renamed name before mutable borrow
+    // But skip primitives like String, which are also Type::User but should use scalar format
+    let field_format = if let Type::User(user_type) = &field_shape.ty {
+        match user_type {
+            UserType::Struct(_) | UserType::Enum(_) => {
+                let renamed_name = get_renamed_name(
+                    field_shape.type_identifier,
+                    Some(field_shape),
+                    None, // Use None to avoid borrowing conflicts, rely on hardcoded mappings for now
+                );
+
+                Format::TypeName(renamed_name)
+            }
+            _ => Format::unknown(),
+        }
+    } else {
+        Format::unknown()
+    };
+
     if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
         named_formats.push(Named {
             name: field.name.to_string(),
-            value: Format::unknown(),
+            value: field_format,
         });
     }
     format(field_shape, registry);
@@ -448,7 +495,21 @@ fn format_struct_with_shape(
     shape: Option<&Shape>,
     registry: &mut Registry,
 ) {
-    let struct_name = get_renamed_name(name, shape);
+    // Check if already processed
+    if registry.is_processed(name) {
+        return;
+    }
+
+    let struct_name = get_renamed_name(name, shape, None);
+
+    println!("struct_name: {struct_name}");
+
+    // Register name mapping if it's different from original
+    if struct_name != name {
+        registry.register_type_mapping(name.to_string(), struct_name.clone());
+    }
+
+    registry.mark_processed(name);
 
     match struct_type.kind {
         StructKind::Unit => {
@@ -505,26 +566,26 @@ fn format_struct_with_shape(
     }
 }
 
-fn get_inner_format(shape: &Shape) -> Format {
+fn get_inner_format(shape: &Shape, registry: Option<&Registry>) -> Format {
     match shape.def {
         Def::Scalar(scalar_def) => scalar_def_to_format(scalar_def),
         Def::List(inner_list_def) => {
             // Recursively handle nested lists
             let inner_shape = inner_list_def.t();
-            Format::Seq(Box::new(get_inner_format(inner_shape)))
+            Format::Seq(Box::new(get_inner_format(inner_shape, registry)))
         }
         Def::Option(option_def) => {
             // Handle Option<T> -> OPTION: T
             let inner_shape = option_def.t();
-            let inner_format = get_inner_format(inner_shape);
+            let inner_format = get_inner_format(inner_shape, registry);
             Format::Option(Box::new(inner_format))
         }
         Def::Map(map_def) => {
             // Handle Map<K, V> -> MAP: { KEY: K, VALUE: V }
             let key_shape = map_def.k();
             let value_shape = map_def.v();
-            let key_format = get_inner_format(key_shape);
-            let value_format = get_inner_format(value_shape);
+            let key_format = get_inner_format(key_shape, registry);
+            let value_format = get_inner_format(value_shape, registry);
             Format::Map {
                 key: Box::new(key_format),
                 value: Box::new(value_format),
@@ -533,7 +594,7 @@ fn get_inner_format(shape: &Shape) -> Format {
         Def::Array(array_def) => {
             // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
             let inner_shape = array_def.t();
-            let inner_format = get_inner_format(inner_shape);
+            let inner_format = get_inner_format(inner_shape, registry);
             Format::TupleArray {
                 content: Box::new(inner_format),
                 size: array_def.n,
@@ -547,7 +608,7 @@ fn get_inner_format(shape: &Shape) -> Format {
                     let mut tuple_formats = vec![];
                     for field in struct_type.fields {
                         let field_shape = field.shape();
-                        let field_format = get_inner_format(field_shape);
+                        let field_format = get_inner_format(field_shape, registry);
                         tuple_formats.push(field_format);
                     }
                     return Format::Tuple(tuple_formats);
@@ -560,7 +621,8 @@ fn get_inner_format(shape: &Shape) -> Format {
                 Format::Unit
             } else {
                 // For user-defined types, use TypeName with renamed name if applicable
-                let name = get_renamed_name(shape.type_identifier, Some(shape));
+                let name = get_renamed_name(shape.type_identifier, Some(shape), registry);
+
                 Format::TypeName(name)
             }
         }
@@ -569,7 +631,7 @@ fn get_inner_format(shape: &Shape) -> Format {
         Def::SmartPointer(_smart_pointer_def) => todo!(),
         _ => {
             // For other types, use TypeName with renamed name if applicable
-            let name = get_renamed_name(shape.type_identifier, Some(shape));
+            let name = get_renamed_name(shape.type_identifier, Some(shape), registry);
             Format::TypeName(name)
         }
     }
@@ -615,7 +677,7 @@ fn format_list(list_def: ListDef, registry: &mut Registry) {
     let inner_shape = list_def.t();
 
     // Get the format for the inner type recursively
-    let inner_format = get_inner_format(inner_shape);
+    let inner_format = get_inner_format(inner_shape, Some(registry));
     let seq_format = Format::Seq(Box::new(inner_format));
 
     // Update the current container with the sequence format
@@ -631,8 +693,8 @@ fn format_map(map_def: MapDef, registry: &mut Registry) {
     let value_shape = map_def.v();
 
     // Get the formats for key and value types
-    let key_format = get_inner_format(key_shape);
-    let value_format = get_inner_format(value_shape);
+    let key_format = get_inner_format(key_shape, Some(registry));
+    let value_format = get_inner_format(value_shape, Some(registry));
 
     let map_format = Format::Map {
         key: Box::new(key_format),
@@ -657,7 +719,7 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
     let array_size = array_def.n;
 
     // Determine the format for the inner type
-    let inner_format = get_inner_format(inner_shape);
+    let inner_format = get_inner_format(inner_shape, Some(registry));
 
     let array_format = Format::TupleArray {
         content: Box::new(inner_format),
@@ -680,7 +742,20 @@ fn format_enum_with_shape(
     shape: Option<&Shape>,
     registry: &mut Registry,
 ) {
-    let enum_name = get_renamed_name(name, shape);
+    // Check if already processed
+    if registry.is_processed(name) {
+        return;
+    }
+
+    let enum_name = get_renamed_name(name, shape, None);
+
+    // Register name mapping if it's different from original
+    if enum_name != name {
+        registry.register_type_mapping(name.to_string(), enum_name.clone());
+    }
+
+    registry.mark_processed(name);
+    println!("enum_name: {enum_name}");
 
     let mut variants = BTreeMap::new();
 
@@ -845,7 +920,7 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
     let inner_shape = option_def.t();
 
     // We need to determine what format to use for the Option based on the inner type
-    let inner_format = get_inner_format(inner_shape);
+    let inner_format = get_inner_format(inner_shape, Some(registry));
     let option_format = Format::Option(Box::new(inner_format));
 
     // Update the current container with the option format
