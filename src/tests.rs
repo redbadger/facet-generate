@@ -1160,3 +1160,70 @@ fn own_result_enum() {
               TYPENAME: HttpError
     ");
 }
+
+#[test]
+fn struct_rename() {
+    #[derive(Facet)]
+    #[facet(rename = "Effect")]
+    struct EffectFfi {
+        name: String,
+        active: bool,
+    }
+
+    let registry = reflect::<EffectFfi>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    Effect:
+      STRUCT:
+        - name: STR
+        - active: BOOL
+    ");
+}
+
+#[test]
+fn enum_rename() {
+    #[derive(Facet)]
+    #[facet(rename = "Effect")]
+    #[repr(C)]
+    #[allow(unused)]
+    enum EffectFfi {
+        One,
+        Two,
+    }
+
+    let registry = reflect::<EffectFfi>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    Effect:
+      ENUM:
+        0:
+          One: UNIT
+        1:
+          Two: UNIT
+    ");
+}
+
+#[test]
+fn struct_rename_with_named_type() {
+    #[derive(Facet)]
+    #[facet(rename = "Effect")]
+    struct EffectFfi {
+        inner: String,
+    }
+
+    #[derive(Facet)]
+    struct Request {
+        id: u32,
+        effect: EffectFfi,
+    }
+
+    let registry = reflect::<Request>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    Effect:
+      STRUCT:
+        - inner: STR
+    Request:
+      STRUCT:
+        - id: U32
+        - effect:
+            TYPENAME: Effect
+    ");
+}
