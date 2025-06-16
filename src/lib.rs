@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use facet::{
-    ArrayDef, Def, EnumType, Facet, IntegerSize, ListDef, MapDef, NumberBits, NumericType,
+    ArrayDef, Def, EnumType, Facet, Field, IntegerSize, ListDef, MapDef, NumberBits, NumericType,
     OptionDef, PointerType, PrimitiveType, ScalarAffinity, ScalarDef, SequenceType, Shape,
-    Signedness, SliceDef, SmartPointerDef, StructKind, StructType, TextualType, Type, UserType,
+    ShapeAttribute, Signedness, SliceDef, SmartPointerDef, StructKind, StructType, TextualType,
+    Type, UserType, VariantAttribute,
 };
 use serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 
@@ -36,6 +37,11 @@ impl Registry {
         } else {
             None
         }
+    }
+
+    #[must_use]
+    pub fn consume(self) -> BTreeMap<String, ContainerFormat> {
+        self.containers
     }
 }
 
@@ -92,7 +98,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                     _ => {}
                 }
             }
-            format_struct(shape.type_identifier, struct_def, registry);
+            format_struct_with_shape(shape.type_identifier, struct_def, Some(shape), registry);
             return;
         }
         Type::User(UserType::Enum(enum_def)) => {
@@ -215,18 +221,18 @@ fn scalar_def_to_format(scalar_def: ScalarDef) -> Format {
         },
         ScalarAffinity::Boolean(_) => Format::Bool,
         ScalarAffinity::String(_) => Format::Str,
-        ScalarAffinity::ComplexNumber(_complex_number_affinity) => todo!(),
-        ScalarAffinity::Empty(_empty_affinity) => todo!(),
-        ScalarAffinity::SocketAddr(_socket_addr_affinity) => todo!(),
-        ScalarAffinity::IpAddr(_ip_addr_affinity) => todo!(),
-        ScalarAffinity::Url(_url_affinity) => todo!(),
-        ScalarAffinity::UUID(_uuid_affinity) => todo!(),
-        ScalarAffinity::ULID(_ulid_affinity) => todo!(),
-        ScalarAffinity::Time(_time_affinity) => todo!(),
-        ScalarAffinity::Opaque(_opaque_affinity) => todo!(),
-        ScalarAffinity::Other(_other_affinity) => todo!(),
+        ScalarAffinity::ComplexNumber(_complex_number_affinity) => todo!("ComplexNumber"),
+        ScalarAffinity::Empty(_empty_affinity) => todo!("Empty"),
+        ScalarAffinity::SocketAddr(_socket_addr_affinity) => todo!("SocketAddr"),
+        ScalarAffinity::IpAddr(_ip_addr_affinity) => todo!("IpAddr"),
+        ScalarAffinity::Url(_url_affinity) => todo!("Url"),
+        ScalarAffinity::UUID(_uuid_affinity) => todo!("UUID"),
+        ScalarAffinity::ULID(_ulid_affinity) => todo!("ULID"),
+        ScalarAffinity::Time(_time_affinity) => todo!("Time"),
+        ScalarAffinity::Opaque(_opaque_affinity) => todo!("Opaque"),
+        ScalarAffinity::Other(_other_affinity) => todo!("Other"),
         ScalarAffinity::Char(_char_affinity) => Format::Char,
-        ScalarAffinity::Path(_path_affinity) => todo!(),
+        ScalarAffinity::Path(_path_affinity) => todo!("Path"),
         _ => todo!(),
     }
 }
@@ -262,22 +268,74 @@ fn format_scalar(scalar_def: ScalarDef, registry: &mut Registry) {
     update_container_format(format, registry);
 }
 
-#[allow(clippy::too_many_lines)]
-fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) {
-    println!("Struct {name}");
+fn is_transparent_struct(shape: &Shape) -> bool {
+    shape.attributes.iter().any(|attr| match attr {
+        ShapeAttribute::Transparent => true,
+        ShapeAttribute::Arbitrary(attr_str) => *attr_str == "transparent",
+        _ => false,
+    })
+}
+
+fn handle_struct_field(field: &Field, field_shape: &Shape, registry: &mut Registry) {
+    // Check if the referenced struct is transparent
+    if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
+        let is_referenced_transparent = inner_struct.kind == StructKind::TupleStruct
+            && inner_struct.fields.len() == 1
+            && is_transparent_struct(field_shape);
+
+        if is_referenced_transparent {
+            // For transparent struct references, use the inner type directly
+            let inner_field = inner_struct.fields[0];
+            let inner_field_shape = inner_field.shape();
+            let inner_format = get_inner_format(inner_field_shape);
+
+            if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                named_formats.push(Named {
+                    name: field.name.to_string(),
+                    value: inner_format,
+                });
+            }
+            return;
+        }
+    }
+
+    // Default behavior: add TypeName reference and process the type
+    if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+        named_formats.push(Named {
+            name: field.name.to_string(),
+            value: Format::TypeName(field_shape.type_identifier.to_string()),
+        });
+    }
+    format(field_shape, registry);
+}
+
+fn format_struct_with_shape(
+    name: &str,
+    struct_type: &StructType,
+    shape: Option<&Shape>,
+    registry: &mut Registry,
+) {
     match struct_type.kind {
         StructKind::Unit => {
             registry.push(name.to_string(), ContainerFormat::UnitStruct);
             registry.pop();
         }
         StructKind::TupleStruct => {
-            println!("TupleStruct {struct_type:?}");
             if struct_type.fields.len() == 1 {
-                // Handle newtype struct
                 let field = struct_type.fields[0];
                 let field_shape = field.shape();
 
-                // Create the newtype container
+                // Check if this is a transparent struct
+                let is_transparent = shape.is_some_and(is_transparent_struct);
+
+                if is_transparent {
+                    // For transparent structs, don't create a container - just process the inner type
+                    // This will register the transparent struct's name with its inner type's format
+                    format(field_shape, registry);
+                    return;
+                }
+
+                // Handle regular newtype struct
                 let container = ContainerFormat::NewTypeStruct(Box::new(Format::unknown()));
                 registry.push(name.to_string(), container);
 
@@ -355,14 +413,7 @@ fn format_struct(name: &str, struct_type: &StructType, registry: &mut Registry) 
                         }
                     } else {
                         // Regular user-defined struct
-                        if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                            named_formats.push(Named {
-                                name: field.name.to_string(),
-                                value: Format::TypeName(field_shape.type_identifier.to_string()),
-                            });
-                        }
-                        // Process the inner type to add it to the registry
-                        format(field_shape, registry);
+                        handle_struct_field(field, field_shape, registry);
                     }
                 } else {
                     // For non-struct types, add unknown format and let format() fill it
@@ -554,7 +605,16 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
 fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
     let mut variants = BTreeMap::new();
 
+    let mut skipped = 0;
     for (variant, index) in enum_type.variants.iter().zip(0u32..) {
+        let skip = variant.attributes.iter().any(|attr| match attr {
+            VariantAttribute::Arbitrary(attr_str) => *attr_str == "arbitrary",
+            _ => false,
+        });
+        if skip {
+            skipped += 1;
+            continue;
+        }
         let variant_format = if variant.data.fields.is_empty() {
             // Unit variant
             VariantFormat::Unit
@@ -677,7 +737,7 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
         };
 
         variants.insert(
-            index,
+            index - skipped,
             Named {
                 name: variant.name.to_string(),
                 value: variant_format,

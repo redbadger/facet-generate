@@ -1,12 +1,12 @@
 [package]
-name = "facet-generate"
+name = "facet_generate"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0.98"
-facet = "0.27.12"
-serde-reflection = "0.5.0"
+facet = "0.27.13"
+serde-reflection = "=0.4.0"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml"] }

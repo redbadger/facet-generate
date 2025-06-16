@@ -860,6 +860,48 @@ fn enum_with_struct_variants_mixed_types() {
 }
 
 #[test]
+fn enum_with_skip_serializing() {
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum MyEnum {
+        Variant1,
+        #[facet(arbitrary)]
+        Variant2,
+        Variant3,
+    }
+
+    let registry = reflect::<MyEnum>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyEnum:
+      ENUM:
+        0:
+          Variant1: UNIT
+        1:
+          Variant3: UNIT
+    ");
+}
+
+#[test]
+fn transparent() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        inner: Inner,
+    }
+
+    let registry = reflect::<MyStruct>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyStruct:
+      STRUCT:
+        - inner: I32
+    ");
+}
+
+#[test]
 fn map_of_string_and_bool() {
     #[derive(Facet)]
     #[repr(C)]
