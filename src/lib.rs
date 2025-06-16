@@ -636,47 +636,57 @@ fn format_array(array_def: ArrayDef, registry: &mut Registry) {
 fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
     let mut variants = BTreeMap::new();
 
-    let mut skipped = 0;
-    for (variant, index) in enum_type.variants.iter().zip(0u32..) {
+    let mut variant_index = 0u32;
+    for variant in enum_type.variants {
         let skip = variant.attributes.iter().any(|attr| match attr {
-            VariantAttribute::Arbitrary(attr_str) => *attr_str == "arbitrary",
+            VariantAttribute::Arbitrary(attr_str) => *attr_str == "skip",
             _ => false,
         });
         if skip {
-            skipped += 1;
             continue;
         }
         let variant_format = if variant.data.fields.is_empty() {
             // Unit variant
             VariantFormat::Unit
         } else if variant.data.fields.len() == 1 {
-            // Newtype variant - create a temporary container to process the field
+            // Newtype variant - handle user-defined types explicitly
             let field = variant.data.fields[0];
             let field_shape = field.shape();
 
-            // Create a temporary NewTypeStruct container to determine the format
-            let temp_container = ContainerFormat::NewTypeStruct(Box::new(Format::unknown()));
-            registry.push(format!("temp_{}", variant.name), temp_container);
-
-            // Process the field to determine its format
-            format(field_shape, registry);
-
-            // Extract the format from the temporary container
-            let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format)) =
-                registry.containers.get(&format!("temp_{}", variant.name))
-            {
-                VariantFormat::NewType(inner_format.clone())
+            if field_shape.type_identifier == "()" {
+                VariantFormat::NewType(Box::new(Format::Unit))
+            } else if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty {
+                // For user-defined struct/enum types,
+                // create a TypeName reference and process the type
+                format(field_shape, registry);
+                VariantFormat::NewType(Box::new(Format::TypeName(
+                    field_shape.type_identifier.to_string(),
+                )))
             } else {
-                VariantFormat::Unit
-            };
+                // For other types, use the temporary container approach
+                let temp_container = ContainerFormat::NewTypeStruct(Box::new(Format::unknown()));
+                registry.push(format!("temp_{}", variant.name), temp_container);
 
-            // Clean up the temporary container
-            registry
-                .containers
-                .remove(&format!("temp_{}", variant.name));
-            registry.pop();
+                // Process the field to determine its format
+                format(field_shape, registry);
 
-            variant_format
+                // Extract the format from the temporary container
+                let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format)) =
+                    registry.containers.get(&format!("temp_{}", variant.name))
+                {
+                    VariantFormat::NewType(inner_format.clone())
+                } else {
+                    VariantFormat::Unit
+                };
+
+                // Clean up the temporary container
+                registry
+                    .containers
+                    .remove(&format!("temp_{}", variant.name));
+                registry.pop();
+
+                variant_format
+            }
         } else {
             // Multiple fields - check if it's a struct variant (named fields) or tuple variant
             let first_field = variant.data.fields[0];
@@ -768,12 +778,13 @@ fn format_enum(name: &str, enum_type: &EnumType, registry: &mut Registry) {
         };
 
         variants.insert(
-            index - skipped,
+            variant_index,
             Named {
                 name: variant.name.to_string(),
                 value: variant_format,
             },
         );
+        variant_index += 1;
     }
 
     let container = ContainerFormat::Enum(variants);

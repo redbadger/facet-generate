@@ -10,3 +10,4 @@ serde-reflection = "=0.4.0"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml"] }
+thiserror = "2.0.12"

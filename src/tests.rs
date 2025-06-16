@@ -898,7 +898,7 @@ fn enum_with_skip_serializing() {
     #[allow(dead_code)]
     enum MyEnum {
         Variant1,
-        #[facet(arbitrary)]
+        #[facet(skip)]
         Variant2,
         Variant3,
     }
@@ -1081,5 +1081,82 @@ fn struct_with_arc_of_t() {
       STRUCT:
         - name: STR
         - active: BOOL
+    ");
+}
+
+#[test]
+fn own_result_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    pub enum HttpResult {
+        Ok(HttpResponse),
+        Err(HttpError),
+    }
+
+    #[derive(Facet)]
+    pub struct HttpResponse {
+        pub status: u16,
+        pub headers: Vec<HttpHeader>,
+        #[facet(bytes)]
+        pub body: Vec<u8>,
+    }
+
+    #[derive(Facet)]
+    pub struct HttpHeader {
+        pub name: String,
+        pub value: String,
+    }
+
+    #[derive(facet::Facet, PartialEq, Eq, Clone, Debug)]
+    #[repr(C)]
+    #[allow(unused)]
+    pub enum HttpError {
+        #[facet(skip)]
+        Http {
+            status: u16,
+            message: String,
+            body: Option<Vec<u8>>,
+        },
+        #[facet(skip)]
+        Json(String),
+        Url(String),
+        Io(String),
+        Timeout,
+    }
+
+    let registry = reflect::<HttpResult>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    HttpError:
+      ENUM:
+        0:
+          Url:
+            NEWTYPE: STR
+        1:
+          Io:
+            NEWTYPE: STR
+        2:
+          Timeout: UNIT
+    HttpHeader:
+      STRUCT:
+        - name: STR
+        - value: STR
+    HttpResponse:
+      STRUCT:
+        - status: U16
+        - headers:
+            SEQ:
+              TYPENAME: HttpHeader
+        - body: BYTES
+    HttpResult:
+      ENUM:
+        0:
+          Ok:
+            NEWTYPE:
+              TYPENAME: HttpResponse
+        1:
+          Err:
+            NEWTYPE:
+              TYPENAME: HttpError
     ");
 }
