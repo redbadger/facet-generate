@@ -1,12 +1,13 @@
 [package]
 name = "facet_generate"
+description = "Generate IR for `serde-generate` from types annotated with `#[Facet]`"
 version = "0.1.0"
-edition = "2024"
 authors = ["Red Badger Consulting Limited"]
-rust-version = "1.87"
-repository = "https://github.com/redbadger/crux/"
+repository = "https://github.com/redbadger/facet-generate"
 license = "Apache-2.0"
 keywords = ["codegen", "ffi", "facet"]
+edition = "2024"
+rust-version = "1.87"
 
 [dependencies]
 anyhow = "1.0.98"
