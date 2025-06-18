@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUSTFLAGS: "-D warnings"
+  RUST_BACKTRACE: short
+  NEXTEST_PROFILE: ci
+  CI: 1
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    if: |
+      ${{ github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name !=
+      github.event.pull_request.base.repo.full_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Format check
+        shell: bash
+        run: cargo fmt --all --check
+
+      - name: Clippy (pedantic)
+        shell: bash
+        run: cargo clippy -- --no-deps -Dclippy::pedantic -Dwarnings
+
+      - name: Build
+        shell: bash
+        run: cargo build --all-features
+
+      - name: Install latest nextest release
+        uses: taiki-e/install-action@nextest
+
+      - name: Test with latest nextest release
+        shell: bash
+        run: cargo nextest run --all-features
