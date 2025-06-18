@@ -1,4 +1,4 @@
-# `facet-generate`
+# `facet-generate` &middot; [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet-generate.svg)](https://crates.io/crates/facet-generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet-generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
 An adapter to reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into the Intermediate Representation (IR) used by [`serde-generate`](https://crates.io/crates/serde-generate) (which generates code for C++, Java, Python, Rust, Go, C#, Swift, OCaml, and Dart).
 
