@@ -654,7 +654,6 @@ fn enum_with_unit_variants() {
     #[derive(Facet)]
     #[repr(u8)]
     #[allow(dead_code)]
-    #[facet(namespace = "my_namespace")]
     enum MyEnum {
         Variant1,
         Variant2,

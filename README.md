@@ -87,3 +87,28 @@ HttpResult:
           TYPENAME: HttpError
 ");
 ```
+
+#### Arbitrary facet attributes
+
+Struct and Enum renaming doesn't use `#[facet(rename = "Effect")]`, as facet doesn't seem to pass it through (yet?). So instead, for now, we use an arbitrary `ShapeAttribute` (`name` instead of `rename`), like this:
+
+```rust
+#[derive(Facet)]
+#[facet(name = "Effect")]
+struct EffectFfi {
+    name: String,
+    active: bool,
+}
+```
+
+In order to specify `BYTES` in the IR (for `Vec<u8>` and `&'a [u8]`), we can use the `#[facet(bytes)]` attribute:
+
+```rust
+#[derive(Facet)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub headers: Vec<HttpHeader>,
+    #[facet(bytes)]
+    pub body: Vec<u8>,
+}
+```
