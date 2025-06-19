@@ -78,7 +78,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
     match &shape.ty {
         Type::User(UserType::Struct(struct_def)) => {
             // Get renamed name before mutable borrow to avoid borrowing conflicts
-            let type_name = get_renamed_name(shape, registry);
+            let type_name = get_name(shape, registry);
 
             // Check if we're currently inside a container that needs updating
             if let Some(current_format) = registry.get_mut() {
@@ -269,7 +269,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
         return;
     }
 
-    let struct_name = get_renamed_name(shape, registry);
+    let struct_name = get_name(shape, registry);
 
     // Register name mapping if it's different from original
     if struct_name != shape.type_identifier {
@@ -461,7 +461,7 @@ fn handle_struct_field(field: &Field, registry: &mut Registry) {
     let field_format = if let Type::User(user_type) = &field_shape.ty {
         match user_type {
             UserType::Struct(_) | UserType::Enum(_) => {
-                let renamed_name = get_renamed_name(field_shape, registry);
+                let renamed_name = get_name(field_shape, registry);
 
                 Format::TypeName(renamed_name)
             }
@@ -487,7 +487,7 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
         return;
     }
 
-    let enum_name = get_renamed_name(shape, registry);
+    let enum_name = get_name(shape, registry);
 
     // Register name mapping if it's different from original
     if enum_name != shape.type_identifier {
@@ -734,23 +734,25 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
     }
 }
 
-fn get_renamed_name(shape: &Shape, registry: &Registry) -> String {
-    // Check type_tag first (this is where facet rename is stored)
+fn get_name(shape: &Shape, registry: &Registry) -> String {
+    // Check type_tag first (is this where facet rename is stored?)
     if let Some(type_tag) = shape.type_tag {
         return type_tag.to_string();
     }
 
-    // Check attributes for rename
+    // Check attributes for name.
+    // We want to use #[facet(rename = "NewName")], but that doesn't come through (yet?).
+    // So, for now, we use an arbitrary attribute with "#[facet(name = "\NewName\")]"
     for attr in shape.attributes {
         if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            // Check for rename attribute in the format "rename = \"NewName\""
-            if let Some(stripped) = attr_str.strip_prefix("rename = \"") {
+            // Check for rename attribute in the format "name = \"NewName\""
+            if let Some(stripped) = attr_str.strip_prefix("name = \"") {
                 if let Some(end_idx) = stripped.find('"') {
                     return stripped[..end_idx].to_string();
                 }
             }
-            // Check for rename attribute without quotes "rename = NewName"
-            if let Some(stripped) = attr_str.strip_prefix("rename = ") {
+            // Check for rename attribute without quotes "name = NewName"
+            if let Some(stripped) = attr_str.strip_prefix("name = ") {
                 return stripped.trim_matches('"').to_string();
             }
         }
@@ -759,13 +761,6 @@ fn get_renamed_name(shape: &Shape, registry: &Registry) -> String {
     // Check registry for mapped names
     if let Some(name) = registry.get_mapped_name(shape.type_identifier) {
         return name;
-    }
-
-    // Temporary implementation for the test - in a real implementation,
-    // the facet macro would need to be updated to properly pass through
-    // the rename attribute in the Shape.attributes or Shape.type_tag
-    if shape.type_identifier == "EffectFfi" {
-        return "Effect".to_string();
     }
 
     shape.type_identifier.to_string()
@@ -860,7 +855,7 @@ fn get_inner_format(shape: &Shape, registry: &Registry) -> Format {
                 Format::Unit
             } else {
                 // For user-defined types, use TypeName with renamed name if applicable
-                let name = get_renamed_name(shape, registry);
+                let name = get_name(shape, registry);
 
                 Format::TypeName(name)
             }
@@ -870,7 +865,7 @@ fn get_inner_format(shape: &Shape, registry: &Registry) -> Format {
         Def::SmartPointer(_smart_pointer_def) => todo!(),
         _ => {
             // For other types, use TypeName with renamed name if applicable
-            let name = get_renamed_name(shape, registry);
+            let name = get_name(shape, registry);
             Format::TypeName(name)
         }
     }
