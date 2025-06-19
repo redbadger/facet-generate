@@ -654,6 +654,7 @@ fn enum_with_unit_variants() {
     #[derive(Facet)]
     #[repr(u8)]
     #[allow(dead_code)]
+    #[facet(namespace = "my_namespace")]
     enum MyEnum {
         Variant1,
         Variant2,
@@ -1164,7 +1165,7 @@ fn own_result_enum() {
 #[test]
 fn struct_rename() {
     #[derive(Facet)]
-    #[facet(rename = "Effect")]
+    #[facet(name = "Effect")]
     struct EffectFfi {
         name: String,
         active: bool,
@@ -1182,7 +1183,7 @@ fn struct_rename() {
 #[test]
 fn enum_rename() {
     #[derive(Facet)]
-    #[facet(rename = "Effect")]
+    #[facet(name = "Effect")]
     #[repr(C)]
     #[allow(unused)]
     enum EffectFfi {
@@ -1204,7 +1205,7 @@ fn enum_rename() {
 #[test]
 fn struct_rename_with_named_type() {
     #[derive(Facet)]
-    #[facet(rename = "Effect")]
+    #[facet(name = "Effect")]
     struct EffectFfi {
         inner: String,
     }
