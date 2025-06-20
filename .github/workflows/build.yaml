@@ -49,6 +49,14 @@ jobs:
         shell: bash
         run: cargo build --all-features
 
+      - name: Setup Additional Languages for codegen tests (denon)
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Setup Additional Languages for codegen tests (swift)
+        uses: swift-actions/setup-swift@v2
+
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest
 
