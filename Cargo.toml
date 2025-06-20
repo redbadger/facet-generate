@@ -11,8 +11,40 @@ rust-version = "1.87"
 
 [dependencies]
 anyhow = "1.0.98"
+erased-discriminant = "1"
 facet = "0.27.14"
-serde-reflection = "0.5.0"
+heck = "=0.3.3"
+include_dir = { version = "0.7.4", optional = true }
+once_cell = "1.21.3"
+phf = { version = "0.12.1", features = ["macros"], optional = true }
+serde = { version = "1.0.219", features = ["derive"] }
+textwrap = "0.16.2"
+thiserror = "2.0.12"
+typeid = "1"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml"] }
+alloy-sol-types = "1.2.0"
+bcs = "0.1.6"
+bincode = "=1"
+hex = "0.4.3"
+lazy_static = "1.5.0"
+maplit = "1.0.2"
+regex = "1.11.1"
+revm = "26.0.0"
+serde_bytes = "0.11.17"
+serde_json = "1.0.140"
+serde_yaml = "=0.8"
+tempfile = "3.20.0"
+which = "8.0.0"
+
+[features]
+default = ["java", "swift", "typescript"]
+java = ["include_dir"]
+swift = ["include_dir"]
+typescript = ["include_dir"]
+
+[[test]]
+name = "integration_tests"
+path = "src/serde_generate/tests/lib.rs"
+harness = true
