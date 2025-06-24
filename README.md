@@ -1,10 +1,11 @@
 # `facet-generate` &middot; [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet-generate.svg)](https://crates.io/crates/facet-generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet-generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
-An adapter to reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into the Intermediate Representation (IR) used by [`serde-generate`](https://crates.io/crates/serde-generate) (which generates code for C++, Java, Python, Rust, Go, C#, Swift, OCaml, and Dart).
+Reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into Java, Swift, and TypeScript.
 
-### Note:
-Currently, struct and enum renaming is not fully implemented and probably requires an upstream PR to facet.
-
+### Notes:
+1. Currently, struct and enum renaming is not fully implemented and probably requires an upstream PR to facet.
+2. Vendors [`serde-reflect`](https://crates.io/crates/serde-reflect) and [`serde-generate`](https://crates.io/crates/serde-generate), which we are evolving to support additional features and more idiomatic foreign type generation with additional extension points.
+3. One way to generate code is to install `serde-generate-bin` (`cargo install serde-generate-bin`), and run that on the yaml generated (e.g. `serdegen --language swift --with-runtimes serde bincode --module-name Test test.yaml`).
 
 ### Usage
 
