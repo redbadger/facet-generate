@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashSet},
+    string::ToString,
+};
 
 use crate::serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 use facet::{
@@ -74,6 +77,14 @@ pub fn reflect<'a, T: Facet<'a>>() -> Registry {
 }
 
 fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
+    format_with_namespace(shape, None, registry);
+}
+
+fn format_with_namespace<'shape>(
+    shape: &'shape Shape<'shape>,
+    namespace: Option<&str>,
+    registry: &mut Registry,
+) {
     // First check the type system (Type)
     match &shape.ty {
         Type::User(UserType::Struct(struct_def)) => {
@@ -119,11 +130,11 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                     _ => {}
                 }
             }
-            format_struct(struct_def, shape, registry);
+            format_struct(struct_def, shape, namespace, registry);
             return;
         }
         Type::User(UserType::Enum(enum_def)) => {
-            format_enum(enum_def, shape, registry);
+            format_enum(enum_def, shape, namespace, registry);
             return;
         }
         Type::Sequence(sequence_type) => {
@@ -158,7 +169,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
         Def::SmartPointer(SmartPointerDef {
             pointee: Some(inner_shape),
             ..
-        }) => format(inner_shape(), registry),
+        }) => format_with_namespace(inner_shape(), namespace, registry),
         Def::Undefined => {
             // Handle the case when not yet migrated to the Type enum
             // For primitives, we can try to infer the type
@@ -172,7 +183,7 @@ fn format<'shape>(shape: &'shape Shape<'shape>, registry: &mut Registry) {
                     }
                 },
                 Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                    format((pt.target)(), registry);
+                    format_with_namespace((pt.target)(), namespace, registry);
                 }
                 _ => {}
             }
@@ -263,20 +274,28 @@ fn format_scalar(scalar_def: ScalarDef, registry: &mut Registry) {
     update_container_format(format, registry);
 }
 
-fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registry) {
-    // Check if already processed
-    if registry.is_processed(shape.type_identifier) {
+fn format_struct(
+    struct_type: &StructType,
+    shape: &Shape,
+    parent_namespace: Option<&str>,
+    registry: &mut Registry,
+) {
+    let struct_name = get_name_with_namespace(shape, parent_namespace, registry);
+
+    // Check if already processed using the full namespaced name
+    if registry.is_processed(&struct_name) {
         return;
     }
-
-    let struct_name = get_name(shape, registry);
 
     // Register name mapping if it's different from original
     if struct_name != shape.type_identifier {
         registry.register_type_mapping(shape.type_identifier.to_string(), struct_name.clone());
     }
 
-    registry.mark_processed(shape.type_identifier);
+    // Extract namespace from this struct if it has one
+    let current_namespace = extract_namespace_from_shape(shape);
+
+    registry.mark_processed(&struct_name);
 
     match struct_type.kind {
         StructKind::Unit => {
@@ -294,7 +313,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
                 if is_transparent {
                     // For transparent structs, don't create a container - just process the inner type
                     // This will register the transparent struct's name with its inner type's format
-                    format(field_shape, registry);
+                    format_with_namespace(field_shape, current_namespace.as_deref(), registry);
                     return;
                 }
 
@@ -303,7 +322,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
                 registry.push(struct_name, container);
 
                 // Process the inner field
-                format(field_shape, registry);
+                format_with_namespace(field_shape, current_namespace.as_deref(), registry);
 
                 registry.pop();
             } else {
@@ -311,7 +330,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
                 let container = ContainerFormat::TupleStruct(vec![]);
                 registry.push(struct_name, container);
                 for field in struct_type.fields {
-                    format(field.shape(), registry);
+                    format_with_namespace(field.shape(), current_namespace.as_deref(), registry);
                 }
                 registry.pop();
             }
@@ -320,7 +339,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
             let container = ContainerFormat::Struct(vec![]);
             registry.push(struct_name, container);
             for field in struct_type.fields {
-                handle_struct_field(field, registry);
+                handle_struct_field(field, current_namespace.as_deref(), registry);
             }
             registry.pop();
         }
@@ -333,7 +352,7 @@ fn format_struct(struct_type: &StructType, shape: &Shape, registry: &mut Registr
 }
 
 #[allow(clippy::too_many_lines)]
-fn handle_struct_field(field: &Field, registry: &mut Registry) {
+fn handle_struct_field(field: &Field, namespace: Option<&str>, registry: &mut Registry) {
     let field_shape = field.shape();
 
     // Check for field-level attributes first
@@ -461,7 +480,7 @@ fn handle_struct_field(field: &Field, registry: &mut Registry) {
     let field_format = if let Type::User(user_type) = &field_shape.ty {
         match user_type {
             UserType::Struct(_) | UserType::Enum(_) => {
-                let renamed_name = get_name(field_shape, registry);
+                let renamed_name = get_name_with_namespace(field_shape, namespace, registry);
 
                 Format::TypeName(renamed_name)
             }
@@ -477,24 +496,29 @@ fn handle_struct_field(field: &Field, registry: &mut Registry) {
             value: field_format,
         });
     }
-    format(field_shape, registry);
+    format_with_namespace(field_shape, namespace, registry);
 }
 
 #[allow(clippy::too_many_lines)]
-fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
-    // Check if already processed
-    if registry.is_processed(shape.type_identifier) {
+fn format_enum(
+    enum_type: &EnumType,
+    shape: &Shape,
+    parent_namespace: Option<&str>,
+    registry: &mut Registry,
+) {
+    let enum_name = get_name_with_namespace(shape, parent_namespace, registry);
+
+    // Check if already processed using the full namespaced name
+    if registry.is_processed(&enum_name) {
         return;
     }
-
-    let enum_name = get_name(shape, registry);
 
     // Register name mapping if it's different from original
     if enum_name != shape.type_identifier {
         registry.register_type_mapping(shape.type_identifier.to_string(), enum_name.clone());
     }
 
-    registry.mark_processed(shape.type_identifier);
+    registry.mark_processed(&enum_name);
 
     let mut variants = BTreeMap::new();
 
@@ -520,17 +544,21 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
             } else if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty {
                 // For user-defined struct/enum types,
                 // create a TypeName reference and process the type
-                format(field_shape, registry);
-                VariantFormat::NewType(Box::new(Format::TypeName(
-                    field_shape.type_identifier.to_string(),
-                )))
+                let current_namespace = extract_namespace_from_shape(shape)
+                    .or_else(|| parent_namespace.map(ToString::to_string));
+                format_with_namespace(field_shape, current_namespace.as_deref(), registry);
+                let namespaced_name =
+                    get_name_with_namespace(field_shape, current_namespace.as_deref(), registry);
+                VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
             } else {
                 // For other types, use the temporary container approach
                 let temp_container = ContainerFormat::NewTypeStruct(Box::default());
                 registry.push(format!("temp_{}", variant.name), temp_container);
 
                 // Process the field to determine its format
-                format(field_shape, registry);
+                let current_namespace = extract_namespace_from_shape(shape)
+                    .or_else(|| parent_namespace.map(ToString::to_string));
+                format_with_namespace(field_shape, current_namespace.as_deref(), registry);
 
                 // Extract the format from the temporary container
                 let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format)) =
@@ -565,14 +593,22 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
 
                     // Check if the field is a user-defined struct
                     if let Type::User(UserType::Struct(_)) = &field_shape.ty {
+                        // Compute the value before the mutable borrow
+                        let value = if field_shape.type_identifier == "()" {
+                            Format::Unit
+                        } else {
+                            let current_namespace = extract_namespace_from_shape(shape)
+                                .or_else(|| parent_namespace.map(ToString::to_string));
+                            let namespaced_name = get_name_with_namespace(
+                                field_shape,
+                                current_namespace.as_deref(),
+                                registry,
+                            );
+                            Format::TypeName(namespaced_name)
+                        };
+
                         // Add Named TypeName format to the struct
                         if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
-                            // Special case for unit type
-                            let value = if field_shape.type_identifier == "()" {
-                                Format::Unit
-                            } else {
-                                Format::TypeName(field_shape.type_identifier.to_string())
-                            };
                             named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value,
@@ -580,7 +616,13 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
                         }
                         // Process the inner type to add it to the registry (skip for unit type)
                         if field_shape.type_identifier != "()" {
-                            format(field_shape, registry);
+                            let current_namespace = extract_namespace_from_shape(shape)
+                                .or_else(|| parent_namespace.map(ToString::to_string));
+                            format_with_namespace(
+                                field_shape,
+                                current_namespace.as_deref(),
+                                registry,
+                            );
                         }
                     } else {
                         // For non-struct types, add unknown format and let format() fill it
@@ -590,7 +632,9 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
                                 value: Format::unknown(),
                             });
                         }
-                        format(field_shape, registry);
+                        let current_namespace = extract_namespace_from_shape(shape)
+                            .or_else(|| parent_namespace.map(ToString::to_string));
+                        format_with_namespace(field_shape, current_namespace.as_deref(), registry);
                     }
                 }
 
@@ -617,7 +661,10 @@ fn format_enum(enum_type: &EnumType, shape: &Shape, registry: &mut Registry) {
 
                 // Process all fields
                 for field in variant.data.fields {
-                    format(field.shape(), registry);
+                    // Use the current enum's namespace context for its variant fields
+                    let current_namespace = extract_namespace_from_shape(shape)
+                        .or_else(|| parent_namespace.map(ToString::to_string));
+                    format_with_namespace(field.shape(), current_namespace.as_deref(), registry);
                 }
 
                 // Extract the formats from the temporary container
@@ -735,35 +782,82 @@ fn format_option(option_def: OptionDef, registry: &mut Registry) {
 }
 
 fn get_name(shape: &Shape, registry: &Registry) -> String {
+    get_name_with_namespace(shape, None, registry)
+}
+
+fn get_name_with_namespace(
+    shape: &Shape,
+    parent_namespace: Option<&str>,
+    registry: &Registry,
+) -> String {
     // Check type_tag first (is this where facet rename is stored?)
     if let Some(type_tag) = shape.type_tag {
         return type_tag.to_string();
     }
 
-    // Check attributes for name.
-    // We want to use #[facet(rename = "NewName")], but that doesn't come through (yet?).
-    // So, for now, we use an arbitrary attribute with "#[facet(name = "\NewName\")]"
+    // Check attributes for namespace and name
+    let mut shape_namespace = None;
+    let mut name = None;
+
     for attr in shape.attributes {
         if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            // Check for rename attribute in the format "name = \"NewName\""
-            if let Some(stripped) = attr_str.strip_prefix("name = \"") {
+            // Check for namespace attribute
+            if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
                 if let Some(end_idx) = stripped.find('"') {
-                    return stripped[..end_idx].to_string();
+                    shape_namespace = Some(stripped[..end_idx].to_string());
+                }
+            } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
+                shape_namespace = Some(stripped.trim_matches('"').to_string());
+            }
+            // Check for rename attribute in the format "name = \"NewName\""
+            else if let Some(stripped) = attr_str.strip_prefix("name = \"") {
+                if let Some(end_idx) = stripped.find('"') {
+                    name = Some(stripped[..end_idx].to_string());
                 }
             }
             // Check for rename attribute without quotes "name = NewName"
-            if let Some(stripped) = attr_str.strip_prefix("name = ") {
-                return stripped.trim_matches('"').to_string();
+            else if let Some(stripped) = attr_str.strip_prefix("name = ") {
+                name = Some(stripped.trim_matches('"').to_string());
             }
         }
     }
 
-    // Check registry for mapped names
-    if let Some(name) = registry.get_mapped_name(shape.type_identifier) {
-        return name;
-    }
+    // Determine the base name - don't use name mappings when namespaces are involved
+    // to avoid conflicts with different types having the same identifier
+    let base_name = if let Some(custom_name) = name {
+        custom_name
+    } else if shape_namespace.is_some() || parent_namespace.is_some() {
+        // When namespaces are involved, use the raw type identifier
+        shape.type_identifier.to_string()
+    } else if let Some(mapped_name) = registry.get_mapped_name(shape.type_identifier) {
+        mapped_name
+    } else {
+        shape.type_identifier.to_string()
+    };
 
-    shape.type_identifier.to_string()
+    // Apply namespace - shape's own namespace takes precedence over parent namespace
+    if let Some(ns) = shape_namespace {
+        format!("{ns}.{base_name}")
+    } else if let Some(parent_ns) = parent_namespace {
+        format!("{parent_ns}.{base_name}")
+    } else {
+        base_name
+    }
+}
+
+fn extract_namespace_from_shape(shape: &Shape) -> Option<String> {
+    for attr in shape.attributes {
+        if let ShapeAttribute::Arbitrary(attr_str) = attr {
+            if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
+                if let Some(end_idx) = stripped.find('"') {
+                    return Some(stripped[..end_idx].to_string());
+                }
+            } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
+                return Some(stripped.trim_matches('"').to_string());
+            }
+        }
+    }
+    None
 }
 
 fn is_transparent_struct(shape: &Shape) -> bool {
@@ -908,3 +1002,7 @@ fn process_nested_types(shape: &Shape, registry: &mut Registry) {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "namespace_tests.rs"]
+mod namespace_tests;

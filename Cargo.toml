@@ -24,14 +24,14 @@ typeid = "1"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml"] }
-alloy-sol-types = "1.2.0"
+alloy-sol-types = "1.2.1"
 bcs = "0.1.6"
 bincode = "=1"
 hex = "0.4.3"
 lazy_static = "1.5.0"
 maplit = "1.0.2"
 regex = "1.11.1"
-revm = "26.0.0"
+revm = "26.0.1"
 serde_bytes = "0.11.17"
 serde_json = "1.0.140"
 serde_yaml = "=0.8"
