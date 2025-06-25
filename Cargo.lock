@@ -1100,7 +1100,6 @@ dependencies = [
  "hex",
  "include_dir",
  "insta",
- "lazy_static",
  "maplit",
  "once_cell",
  "phf 0.12.1",
