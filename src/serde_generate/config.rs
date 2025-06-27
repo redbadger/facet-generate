@@ -3,10 +3,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
+
 use crate::serde_reflection::Registry;
 
 /// Code generation options meant to be supported by all languages.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
     pub serialization: bool,
@@ -18,7 +20,7 @@ pub struct CodeGeneratorConfig {
     pub package_manifest: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
 pub enum Encoding {
     Bincode,
     Bcs,
@@ -44,7 +46,7 @@ pub trait SourceInstaller {
 
     /// Create a module exposing the container types contained in the registry.
     fn install_module(
-        &self,
+        &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error>;
@@ -57,6 +59,14 @@ pub trait SourceInstaller {
 
     /// Install the Libra Canonical Serialization (BCS) runtime.
     fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error>;
+
+    /// Install a package manifest.
+    fn install_manifest(
+        &self,
+        _module_name: &str,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
 }
 
 impl CodeGeneratorConfig {

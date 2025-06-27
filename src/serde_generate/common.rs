@@ -5,11 +5,12 @@ use crate::serde_reflection::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
     use Format::{
-        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-        TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName, Seq,
+        Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
     };
     match format {
         TypeName(x) => x.to_string(),
+        QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
         Unit => "unit".into(),
         Bool => "bool".into(),
         I8 => "i8".into(),

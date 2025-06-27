@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: cargo build --all-features
 
-      - name: Setup Additional Languages for codegen tests (denon)
+      - name: Setup Additional Languages for codegen tests (deno)
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x

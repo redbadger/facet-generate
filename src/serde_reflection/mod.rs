@@ -362,7 +362,10 @@ mod trace;
 mod value;
 
 pub use error::{Error, Result};
-pub use format::{ContainerFormat, Format, FormatHolder, Named, Variable, VariantFormat};
+pub use format::{
+    ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, Variable,
+    VariantFormat,
+};
 pub use trace::{Registry, Samples, Tracer, TracerConfig};
 pub use value::Value;
 

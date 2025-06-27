@@ -13,10 +13,24 @@ use crate::serde_reflection::{
 use heck::{CamelCase, MixedCase};
 use include_dir::include_dir as include_directory;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     io::{Result, Write},
     path::PathBuf,
 };
+
+const PACKAGE_TEMPLATE: &str = r#"// swift-tools-version: 5.8
+import PackageDescription
+
+let package = Package(
+    name: "{{PACKAGE}}",
+    products: [
+        .library(
+            name: "{{PACKAGE}}",
+            targets: ["{{PACKAGE}}"])
+    ],
+    targets: [{{TARGETS}}]
+)
+"#;
 
 /// Main configuration object for code-generation in Swift.
 pub struct CodeGenerator<'a> {
@@ -97,6 +111,17 @@ where
 {
     fn output_preamble(&mut self) -> Result<()> {
         writeln!(self.out, "import Serde\n")?;
+
+        for import in self
+            .generator
+            .config
+            .external_definitions
+            .keys()
+            .collect::<Vec<_>>()
+        {
+            writeln!(self.out, "import {import}")?;
+        }
+
         Ok(())
     }
 
@@ -130,11 +155,12 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
+            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
             TypeName(x) => self.quote_qualified_name(x),
+            QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),
@@ -220,11 +246,13 @@ where
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
-            TypeName(_) => format!("try {value}.serialize(serializer: serializer)"),
+            TypeName(_) | QualifiedTypeName(_) => {
+                format!("try {value}.serialize(serializer: serializer)")
+            }
             Unit => format!("try serializer.serialize_unit(value: {value})"),
             Bool => format!("try serializer.serialize_bool(value: {value})"),
             I8 => format!("try serializer.serialize_i8(value: {value})"),
@@ -252,13 +280,17 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
             TypeName(name) => format!(
                 "try {}.deserialize(deserializer: deserializer)",
                 self.quote_qualified_name(name)
+            ),
+            QualifiedTypeName(name) => format!(
+                "try {}.deserialize(deserializer: deserializer)",
+                self.quote_qualified_name(&name.to_legacy_string())
             ),
             Unit => "try deserializer.deserialize_unit()".to_string(),
             Bool => "try deserializer.deserialize_bool()".to_string(),
@@ -836,13 +868,21 @@ switch index {{",
 
 /// Installer for generated source files in Swift.
 pub struct Installer {
+    package_name: String,
     install_dir: PathBuf,
+    targets: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Installer {
     #[must_use]
-    pub fn new(install_dir: PathBuf) -> Self {
-        Installer { install_dir }
+    pub fn new(package_name: String, install_dir: PathBuf) -> Self {
+        let mut targets = BTreeMap::new();
+        targets.insert("Serde".to_string(), BTreeSet::new());
+        Installer {
+            package_name,
+            install_dir,
+            targets,
+        }
     }
 
     fn install_runtime(
@@ -858,19 +898,62 @@ impl Installer {
         }
         Ok(())
     }
+
+    fn make_manifest(&self, package_name: &str) -> String {
+        let mut all_targets = self.targets.clone();
+
+        let mut package_targets = BTreeSet::new();
+        package_targets.insert("Serde".to_string());
+        for targets in all_targets.values() {
+            for target in targets {
+                package_targets.insert(target.to_string());
+            }
+        }
+        all_targets.insert(package_name.to_string(), package_targets);
+
+        let targets: Vec<String> = all_targets
+            .iter()
+            .map(|(name, dependencies)| {
+                format!(
+                    ".target(name: \"{name}\", dependencies: [{}]),",
+                    dependencies
+                        .iter()
+                        .map(|dep| format!("\"{dep}\""))
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            })
+            .collect();
+
+        PACKAGE_TEMPLATE
+            .replace("{{PACKAGE}}", &self.package_name)
+            .replace(
+                "{{TARGETS}}",
+                &format!("\n\t\t{}\n\t", &targets.join("\n\t\t")),
+            )
+    }
 }
 
 impl super::SourceInstaller for Installer {
     type Error = Box<dyn std::error::Error>;
 
     fn install_module(
-        &self,
+        &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let dir_path = self.install_dir.join("Sources").join(&config.module_name);
+        let targets = self
+            .targets
+            .entry(config.module_name().to_string())
+            .or_default();
+        targets.insert("Serde".to_string());
+        for target in config.external_definitions.keys() {
+            targets.insert(target.clone());
+        }
+
+        let dir_path = self.install_dir.join("Sources").join(config.module_name());
         std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join(format!("{}.swift", config.module_name.to_camel_case()));
+        let source_path = dir_path.join(format!("{}.swift", config.module_name().to_camel_case()));
         let mut file = std::fs::File::create(source_path)?;
         let generator = CodeGenerator::new(config);
         generator.output(&mut file, registry)?;
@@ -892,5 +975,49 @@ impl super::SourceInstaller for Installer {
     fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
         // Ignored. Currently always installed with Serde.
         Ok(())
+    }
+
+    fn install_manifest(
+        &self,
+        package_name: &str,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let manifest = self.make_manifest(package_name);
+
+        let manifest_path = self.install_dir.join("Package.swift");
+        let mut file = std::fs::File::create(manifest_path)?;
+        file.write_all(manifest.as_bytes())?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_manifest() {
+        let package_name = "MyPackage";
+        let install_dir = std::path::PathBuf::from("/tmp");
+        let installer = Installer::new(package_name.to_string(), install_dir);
+
+        let manifest = installer.make_manifest(package_name);
+        insta::assert_snapshot!(manifest, @r#"
+        // swift-tools-version: 5.8
+        import PackageDescription
+
+        let package = Package(
+            name: "MyPackage",
+            products: [
+                .library(
+                    name: "MyPackage",
+                    targets: ["MyPackage"])
+            ],
+            targets: [
+        		.target(name: "MyPackage", dependencies: ["Serde"]),
+        		.target(name: "Serde", dependencies: []),
+        	]
+        )
+        "#);
     }
 }

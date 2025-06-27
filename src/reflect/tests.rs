@@ -201,12 +201,14 @@ fn nested_newtype() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyNewType:
-          NEWTYPESTRUCT:
-            TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyNewType:
+      NEWTYPESTRUCT:
+        QUALIFIEDTYPENAME:
+          namespace: ROOT
+          name: Inner
+    ");
 }
 
 #[test]
@@ -232,13 +234,15 @@ fn newtype_with_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyNewType:
-          NEWTYPESTRUCT:
-            SEQ:
-              TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyNewType:
+      NEWTYPESTRUCT:
+        SEQ:
+          QUALIFIEDTYPENAME:
+            namespace: ROOT
+            name: Inner
+    ");
 }
 
 #[test]
@@ -265,14 +269,16 @@ fn newtype_with_nested_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyNewType:
-          NEWTYPESTRUCT:
-            SEQ:
-              SEQ:
-                TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyNewType:
+      NEWTYPESTRUCT:
+        SEQ:
+          SEQ:
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: Inner
+    ");
 }
 
 #[test]
@@ -285,15 +291,17 @@ fn newtype_with_triple_nested_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyNewType:
-          NEWTYPESTRUCT:
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyNewType:
+      NEWTYPESTRUCT:
+        SEQ:
+          SEQ:
             SEQ:
-              SEQ:
-                SEQ:
-                  TYPENAME: Inner
-        ");
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: Inner
+    ");
 }
 
 #[test]
@@ -404,15 +412,17 @@ fn option_of_list_of_named_type() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyStruct:
-          STRUCT:
-            - a:
-                OPTION:
-                  SEQ:
-                    TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyStruct:
+      STRUCT:
+        - a:
+            OPTION:
+              SEQ:
+                QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: Inner
+    ");
 }
 
 #[test]
@@ -444,15 +454,17 @@ fn list_of_options_of_named_type() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyStruct:
-          STRUCT:
-            - a:
-                SEQ:
-                  OPTION:
-                    TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyStruct:
+      STRUCT:
+        - a:
+            SEQ:
+              OPTION:
+                QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: Inner
+    ");
 }
 
 #[test]
@@ -483,13 +495,15 @@ fn nested_tuple_struct_1() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyTupleStruct:
-          TUPLESTRUCT:
-            - TYPENAME: Inner
-            - U8
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyTupleStruct:
+      TUPLESTRUCT:
+        - QUALIFIEDTYPENAME:
+            namespace: ROOT
+            name: Inner
+        - U8
+    ");
 }
 
 #[test]
@@ -502,17 +516,19 @@ fn nested_tuple_struct_2() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          TUPLESTRUCT:
-            - I32
-            - U8
-            - BOOL
-        MyTupleStruct:
-          TUPLESTRUCT:
-            - I32
-            - TYPENAME: Inner
-            - U8
-        ");
+    Inner:
+      TUPLESTRUCT:
+        - I32
+        - U8
+        - BOOL
+    MyTupleStruct:
+      TUPLESTRUCT:
+        - I32
+        - QUALIFIEDTYPENAME:
+            namespace: ROOT
+            name: Inner
+        - U8
+    ");
 }
 
 #[test]
@@ -612,7 +628,9 @@ fn struct_with_option_fields() {
       STRUCT:
         - a:
             OPTION:
-              TYPENAME: Inner
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: Inner
         - b:
             OPTION: U8
     ");
@@ -643,9 +661,13 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
     MyStruct:
       STRUCT:
         - a:
-            TYPENAME: Inner1
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: Inner1
         - b:
-            TYPENAME: Inner2
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: Inner2
     ");
 }
 
@@ -728,18 +750,20 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyEnum:
-          ENUM:
-            0:
-              Variant1:
-                NEWTYPE:
-                  TYPENAME: Inner
-            1:
-              Variant2:
-                NEWTYPE: U8
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyEnum:
+      ENUM:
+        0:
+          Variant1:
+            NEWTYPE:
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: Inner
+        1:
+          Variant2:
+            NEWTYPE: U8
+    ");
 }
 
 #[test]
@@ -789,21 +813,25 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          NEWTYPESTRUCT: I32
-        MyEnum:
-          ENUM:
-            0:
-              Variant1:
-                TUPLE:
-                  - TYPENAME: Inner
-                  - U8
-            1:
-              Variant2:
-                TUPLE:
-                  - I8
-                  - TYPENAME: Inner
-        ");
+    Inner:
+      NEWTYPESTRUCT: I32
+    MyEnum:
+      ENUM:
+        0:
+          Variant1:
+            TUPLE:
+              - QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: Inner
+              - U8
+        1:
+          Variant2:
+            TUPLE:
+              - I8
+              - QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: Inner
+    ");
 }
 
 #[test]
@@ -822,23 +850,27 @@ fn enum_with_inline_struct_variants() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        Inner:
-          STRUCT:
-            - a: STR
-        MyEnum:
-          ENUM:
-            0:
-              Variant1:
-                STRUCT:
-                  - a:
-                      TYPENAME: Inner
-                  - b: U8
-                  - c: BOOL
-            1:
-              Variant2:
-                NEWTYPE:
-                  TYPENAME: Inner
-        ");
+    Inner:
+      STRUCT:
+        - a: STR
+    MyEnum:
+      ENUM:
+        0:
+          Variant1:
+            STRUCT:
+              - a:
+                  QUALIFIEDTYPENAME:
+                    namespace: ROOT
+                    name: Inner
+              - b: U8
+              - c: BOOL
+        1:
+          Variant2:
+            NEWTYPE:
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: Inner
+    ");
 }
 
 #[test]
@@ -875,7 +907,9 @@ fn enum_with_struct_variants_mixed_types() {
           Variant1:
             STRUCT:
               - a:
-                  TYPENAME: Inner
+                  QUALIFIEDTYPENAME:
+                    namespace: ROOT
+                    name: Inner
               - b: U8
               - c: F32
               - d: STR
@@ -887,7 +921,9 @@ fn enum_with_struct_variants_mixed_types() {
             STRUCT:
               - x: I32
               - y:
-                  TYPENAME: Inner
+                  QUALIFIEDTYPENAME:
+                    namespace: ROOT
+                    name: Inner
     ");
 }
 
@@ -975,31 +1011,35 @@ fn map_with_user_defined_types() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry.containers, @r"
-        MyStruct:
-          STRUCT:
-            - user_map:
-                MAP:
-                  KEY:
-                    TYPENAME: UserId
-                  VALUE:
-                    TYPENAME: UserProfile
-            - id_to_count:
-                MAP:
-                  KEY: I32
-                  VALUE:
-                    SEQ: STR
-            - nested_map:
-                MAP:
-                  KEY: STR
-                  VALUE:
-                    OPTION: U64
-        UserId:
-          NEWTYPESTRUCT: U32
-        UserProfile:
-          STRUCT:
-            - name: STR
-            - active: BOOL
-        ");
+    MyStruct:
+      STRUCT:
+        - user_map:
+            MAP:
+              KEY:
+                QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: UserId
+              VALUE:
+                QUALIFIEDTYPENAME:
+                  namespace: ROOT
+                  name: UserProfile
+        - id_to_count:
+            MAP:
+              KEY: I32
+              VALUE:
+                SEQ: STR
+        - nested_map:
+            MAP:
+              KEY: STR
+              VALUE:
+                OPTION: U64
+    UserId:
+      NEWTYPESTRUCT: U32
+    UserProfile:
+      STRUCT:
+        - name: STR
+        - active: BOOL
+    ");
 }
 
 #[test]
@@ -1050,7 +1090,9 @@ fn struct_with_box_of_t() {
     MyStruct:
       STRUCT:
         - boxed:
-            TYPENAME: UserProfile
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: UserProfile
     UserProfile:
       STRUCT:
         - name: STR
@@ -1076,7 +1118,9 @@ fn struct_with_arc_of_t() {
     MyStruct:
       STRUCT:
         - boxed:
-            TYPENAME: UserProfile
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: UserProfile
     UserProfile:
       STRUCT:
         - name: STR
@@ -1146,18 +1190,24 @@ fn own_result_enum() {
         - status: U16
         - headers:
             SEQ:
-              TYPENAME: HttpHeader
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: HttpHeader
         - body: BYTES
     HttpResult:
       ENUM:
         0:
           Ok:
             NEWTYPE:
-              TYPENAME: HttpResponse
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: HttpResponse
         1:
           Err:
             NEWTYPE:
-              TYPENAME: HttpError
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: HttpError
     ");
 }
 
@@ -1224,6 +1274,8 @@ fn struct_rename_with_named_type() {
       STRUCT:
         - id: U32
         - effect:
-            TYPENAME: Effect
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: Effect
     ");
 }
