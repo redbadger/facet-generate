@@ -35,13 +35,22 @@ fn nested_namespaced_structs() {
     Parent:
       STRUCT:
         - one:
-            TYPENAME: one.Child
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: one
+              name: Child
         - two:
-            TYPENAME: two.Child
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: two
+              name: Child
     one.Child:
       STRUCT:
         - child:
-            TYPENAME: one.GrandChild
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: one
+              name: GrandChild
     one.GrandChild:
       STRUCT:
         - field: STR
@@ -93,17 +102,26 @@ fn nested_namespaced_enums() {
         0:
           One:
             NEWTYPE:
-              TYPENAME: one.Child
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: one
+                name: Child
         1:
           Two:
             NEWTYPE:
-              TYPENAME: two.Child
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: two
+                name: Child
     one.Child:
       ENUM:
         0:
           Data:
             NEWTYPE:
-              TYPENAME: one.GrandChild
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: one
+                name: GrandChild
     one.GrandChild:
       ENUM:
         0:
@@ -153,16 +171,25 @@ fn nested_namespaced_renamed_structs() {
     Pop:
       STRUCT:
         - one:
-            TYPENAME: one.Kid
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: one
+              name: Kid
         - two:
-            TYPENAME: two.Kid
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: two
+              name: Kid
     one.GrandKid:
       STRUCT:
         - field: STR
     one.Kid:
       STRUCT:
         - child:
-            TYPENAME: one.GrandKid
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: one
+              name: GrandKid
     two.Kid:
       STRUCT:
         - field: STR
@@ -198,23 +225,38 @@ fn namespaced_collections() {
       STRUCT:
         - users:
             SEQ:
-              TYPENAME: api.User
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: User
         - user_arrays:
             TUPLEARRAY:
               CONTENT:
-                TYPENAME: api.User
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: User
               SIZE: 3
         - optional_user:
             OPTION:
-              TYPENAME: api.User
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: User
         - groups:
             SEQ:
-              TYPENAME: api.Group
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: Group
     api.Group:
       STRUCT:
         - users:
             SEQ:
-              TYPENAME: api.User
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: User
     api.User:
       STRUCT:
         - id: STR
@@ -250,14 +292,23 @@ fn namespaced_maps() {
         - user_profiles:
             MAP:
               KEY:
-                TYPENAME: models.UserId
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: models
+                  name: UserId
               VALUE:
-                TYPENAME: models.UserProfile
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: models
+                  name: UserProfile
         - user_counts:
             MAP:
               KEY: STR
               VALUE:
-                TYPENAME: models.UserId
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: models
+                  name: UserId
     models.UserId:
       NEWTYPESTRUCT: STR
     models.UserProfile:
@@ -306,24 +357,39 @@ fn complex_namespaced_enums() {
       STRUCT:
         - events:
             SEQ:
-              TYPENAME: events.Event
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: events
+                name: Event
     events.Event:
       ENUM:
         0:
           UserCreated:
             NEWTYPE:
-              TYPENAME: events.UserData
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: events
+                name: UserData
         1:
           UserUpdated:
             STRUCT:
               - old:
-                  TYPENAME: events.UserData
+                  QUALIFIEDTYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: UserData
               - new:
-                  TYPENAME: events.UserData
+                  QUALIFIEDTYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: UserData
         2:
           SystemEvent:
             TUPLE:
-              - TYPENAME: events.SystemData
+              - QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: SystemData
               - STR
         3:
           Simple: UNIT
@@ -361,9 +427,15 @@ fn namespaced_transparent_structs() {
     Container:
       STRUCT:
         - direct_id:
-            TYPENAME: wrappers.UserId
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: wrappers
+              name: UserId
         - wrapped_id:
-            TYPENAME: wrappers.UserId
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: wrappers
+              name: UserId
     wrappers.UserId:
       NEWTYPESTRUCT: STR
     ");
@@ -402,18 +474,30 @@ fn cross_namespace_references() {
       STRUCT:
         - records:
             SEQ:
-              TYPENAME: db.Record
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: db
+                name: Record
     api.Request:
       STRUCT:
         - entity:
-            TYPENAME: entities.Entity
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: entities
+              name: Entity
         - metadata: STR
     db.Record:
       STRUCT:
         - entity:
-            TYPENAME: entities.Entity
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: entities
+              name: Entity
         - request:
-            TYPENAME: api.Request
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: api
+              name: Request
     entities.Entity:
       STRUCT:
         - id: STR
@@ -444,7 +528,10 @@ fn namespace_with_byte_attributes() {
     Document:
       STRUCT:
         - binary:
-            TYPENAME: data.BinaryData
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: data
+              name: BinaryData
     data.BinaryData:
       STRUCT:
         - content: BYTES
@@ -482,13 +569,22 @@ fn deeply_nested_namespaces() {
     RootStruct:
       STRUCT:
         - middle:
-            TYPENAME: level1.MiddleStruct
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: level1
+              name: MiddleStruct
         - deep_direct:
-            TYPENAME: level1.level2.DeepStruct
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: level1.level2
+              name: DeepStruct
     level1.MiddleStruct:
       STRUCT:
         - deep:
-            TYPENAME: level1.level2.DeepStruct
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: level1.level2
+              name: DeepStruct
     level1.level2.DeepStruct:
       STRUCT:
         - value: STR
@@ -518,7 +614,10 @@ fn transparent_struct_namespace_behavior() {
     Container:
       STRUCT:
         - wrapped_id:
-            TYPENAME: wrappers.UserId
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: wrappers
+              name: UserId
     wrappers.UserId:
       NEWTYPESTRUCT: STR
     ");
@@ -556,7 +655,10 @@ fn debug_transparent_struct_step_by_step() {
     TestContainer:
       STRUCT:
         - wrapped:
-            TYPENAME: debug.SimpleStruct
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: debug
+              name: SimpleStruct
     debug.SimpleStruct:
       STRUCT:
         - value: STR
@@ -648,16 +750,28 @@ fn redundant_namespace_declarations() {
     TestContainer:
       STRUCT:
         - api_data:
-            TYPENAME: api.Group
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: api
+              name: Group
         - event:
-            TYPENAME: events.Event
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: events
+              name: Event
         - efficient:
-            TYPENAME: efficient.ApiContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: efficient
+              name: ApiContainer
     api.Group:
       STRUCT:
         - users:
             SEQ:
-              TYPENAME: api.User
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: User
     api.User:
       STRUCT:
         - id: STR
@@ -665,14 +779,23 @@ fn redundant_namespace_declarations() {
     efficient.ApiContainer:
       STRUCT:
         - user:
-            TYPENAME: efficient.InheritedUser
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: efficient
+              name: InheritedUser
         - group:
-            TYPENAME: efficient.InheritedGroup
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: efficient
+              name: InheritedGroup
     efficient.InheritedGroup:
       STRUCT:
         - users:
             SEQ:
-              TYPENAME: efficient.InheritedUser
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: efficient
+                name: InheritedUser
     efficient.InheritedUser:
       STRUCT:
         - id: STR
@@ -682,11 +805,17 @@ fn redundant_namespace_declarations() {
         0:
           UserCreated:
             NEWTYPE:
-              TYPENAME: events.UserData
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: events
+                name: UserData
         1:
           SystemEvent:
             NEWTYPE:
-              TYPENAME: events.SystemData
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: events
+                name: SystemData
     events.SystemData:
       STRUCT:
         - timestamp: U64
@@ -737,24 +866,39 @@ fn comprehensive_inheritance_proof_collections() {
       STRUCT:
         - users:
             SEQ:
-              TYPENAME: system.UnnamedUser
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: system
+                name: UnnamedUser
         - admins:
             TUPLEARRAY:
               CONTENT:
-                TYPENAME: system.UnnamedUser
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: system
+                  name: UnnamedUser
               SIZE: 2
         - optional_user:
             OPTION:
-              TYPENAME: system.UnnamedUser
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: system
+                name: UnnamedUser
         - role_map:
             MAP:
               KEY: STR
               VALUE:
-                TYPENAME: system.UnnamedRole
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: system
+                  name: UnnamedRole
         - nested_lists:
             SEQ:
               SEQ:
-                TYPENAME: system.UnnamedUser
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: system
+                  name: UnnamedUser
     ");
 }
 
@@ -804,29 +948,50 @@ fn comprehensive_inheritance_proof_enums() {
       STRUCT:
         - progress: F32
         - estimate:
-            TYPENAME: api.ErrorData
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: api
+              name: ErrorData
     api.Response:
       ENUM:
         0:
           Success:
             NEWTYPE:
-              TYPENAME: api.SuccessData
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: SuccessData
         1:
           Error:
             NEWTYPE:
-              TYPENAME: api.ErrorData
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: api
+                name: ErrorData
         2:
           Processing:
             STRUCT:
               - data:
-                  TYPENAME: api.ProcessingData
+                  QUALIFIEDTYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: ProcessingData
               - extra:
-                  TYPENAME: api.SuccessData
+                  QUALIFIEDTYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: SuccessData
         3:
           Multipart:
             TUPLE:
-              - TYPENAME: api.ErrorData
-              - TYPENAME: api.SuccessData
+              - QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: ErrorData
+              - QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: SuccessData
         4:
           Empty: UNIT
     api.SuccessData:
@@ -869,27 +1034,48 @@ fn comprehensive_inheritance_proof_nested_structs() {
     nested.Container:
       STRUCT:
         - top:
-            TYPENAME: nested.TopLayer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: TopLayer
         - middle_direct:
-            TYPENAME: nested.MiddleLayer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: MiddleLayer
         - inner_direct:
-            TYPENAME: nested.DeepInner
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: DeepInner
     nested.DeepInner:
       STRUCT:
         - value: I32
     nested.MiddleLayer:
       STRUCT:
         - inner:
-            TYPENAME: nested.DeepInner
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: DeepInner
         - inner_list:
             SEQ:
-              TYPENAME: nested.DeepInner
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: nested
+                name: DeepInner
     nested.TopLayer:
       STRUCT:
         - middle:
-            TYPENAME: nested.MiddleLayer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: MiddleLayer
         - direct_inner:
-            TYPENAME: nested.DeepInner
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: nested
+              name: DeepInner
     ");
 }
 
@@ -923,7 +1109,10 @@ fn comprehensive_inheritance_proof_transparent_chains() {
     IdContainer:
       STRUCT:
         - id:
-            TYPENAME: identity.DoubleWrapperId
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: identity
+              name: DoubleWrapperId
     identity.CoreId:
       NEWTYPESTRUCT: STR
     ");
@@ -959,33 +1148,54 @@ fn comprehensive_inheritance_proof_mixed_containers() {
     storage.MixedContainer:
       STRUCT:
         - single:
-            TYPENAME: storage.Item
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: storage
+              name: Item
         - vector:
             SEQ:
-              TYPENAME: storage.Item
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: storage
+                name: Item
         - array:
             TUPLEARRAY:
               CONTENT:
-                TYPENAME: storage.Item
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: storage
+                  name: Item
               SIZE: 3
         - option:
             OPTION:
-              TYPENAME: storage.Item
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: storage
+                name: Item
         - tuple:
             TUPLE:
-              - TYPENAME: storage.Item
+              - QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: storage
+                  name: Item
               - STR
         - nested_option:
             OPTION:
               SEQ:
-                TYPENAME: storage.Item
+                QUALIFIEDTYPENAME:
+                  namespace:
+                    NAMED: storage
+                  name: Item
         - complex_map:
             MAP:
               KEY: STR
               VALUE:
                 SEQ:
                   OPTION:
-                    TYPENAME: storage.Item
+                    QUALIFIEDTYPENAME:
+                      namespace:
+                        NAMED: storage
+                      name: Item
     ");
 }
 
@@ -1022,25 +1232,39 @@ fn comprehensive_inheritance_proof_no_pollution() {
     RootContainer:
       STRUCT:
         - alpha:
-            TYPENAME: alpha.AlphaContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: alpha
+              name: AlphaContainer
         - beta:
-            TYPENAME: beta.BetaContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: beta
+              name: BetaContainer
         - unnamespaced:
-            TYPENAME: SharedType
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: SharedType
     SharedType:
       STRUCT:
         - value: STR
     alpha.AlphaContainer:
       STRUCT:
         - shared:
-            TYPENAME: alpha.SharedType
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: alpha
+              name: SharedType
     alpha.SharedType:
       STRUCT:
         - value: STR
     beta.BetaContainer:
       STRUCT:
         - shared:
-            TYPENAME: beta.SharedType
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: beta
+              name: SharedType
     beta.SharedType:
       STRUCT:
         - value: STR
@@ -1084,25 +1308,39 @@ fn namespace_inheritance_behavior_summary() {
     Root:
       STRUCT:
         - first:
-            TYPENAME: first.FirstContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: first
+              name: FirstContainer
         - second:
-            TYPENAME: second.SecondContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: second
+              name: SecondContainer
         - direct:
-            TYPENAME: BaseType
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: BaseType
     first.BaseType:
       STRUCT:
         - value: STR
     first.FirstContainer:
       STRUCT:
         - item:
-            TYPENAME: first.BaseType
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: first
+              name: BaseType
     second.BaseType:
       STRUCT:
         - value: STR
     second.SecondContainer:
       STRUCT:
         - item:
-            TYPENAME: second.BaseType
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: second
+              name: BaseType
     ");
 
     // KEY BEHAVIORS DOCUMENTED:
@@ -1146,15 +1384,23 @@ fn namespace_pollution_isolation() {
     SimpleRoot:
       STRUCT:
         - namespaced:
-            TYPENAME: test.NamespacedContainer
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: test
+              name: NamespacedContainer
         - direct:
-            TYPENAME: IsolatedType
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: IsolatedType
     test.IsolatedType:
       STRUCT:
         - data: STR
     test.NamespacedContainer:
       STRUCT:
         - item:
-            TYPENAME: test.IsolatedType
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: test
+              name: IsolatedType
     ");
 }

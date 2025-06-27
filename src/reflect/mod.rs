@@ -3,7 +3,9 @@ use std::{
     string::ToString,
 };
 
-use crate::serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
+use crate::serde_reflection::{
+    ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat,
+};
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
     PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef, SmartPointerDef,
@@ -96,7 +98,7 @@ fn format_with_namespace<'shape>(
                                 **inner_format = Format::Unit;
                             } else {
                                 // Update the NewTypeStruct format to reference the inner type
-                                **inner_format = Format::TypeName(type_name.clone());
+                                **inner_format = Format::QualifiedTypeName(type_name.clone());
                             }
                         }
                     }
@@ -106,18 +108,17 @@ fn format_with_namespace<'shape>(
                             formats.push(Format::Unit);
                         } else {
                             // Add TypeName format to the tuple
-                            formats.push(Format::TypeName(type_name.clone()));
+                            formats.push(Format::QualifiedTypeName(type_name.clone()));
                         }
                     }
-                    ContainerFormat::Struct(named_formats) => {
-                        // Update the last named field with the TypeName format
-                        if let Some(last_named) = named_formats.last_mut() {
+                    ContainerFormat::Struct(fields) => {
+                        // For structs, update the last field format
+                        if let Some(last_named) = fields.last_mut() {
                             if last_named.value.is_unknown() {
-                                // Special case for unit type
                                 if shape.type_identifier == "()" {
                                     last_named.value = Format::Unit;
                                 } else {
-                                    last_named.value = Format::TypeName(type_name.clone());
+                                    last_named.value = Format::QualifiedTypeName(type_name.clone());
                                 }
                             }
                         }
@@ -257,25 +258,26 @@ fn format_struct(
     registry: &mut Registry,
 ) {
     let struct_name = get_name(shape, parent_namespace, registry);
+    let struct_name_str = struct_name.to_legacy_string();
 
     // Check if already processed using the full namespaced name
-    if registry.is_processed(&struct_name) {
+    if registry.is_processed(&struct_name_str) {
         return;
     }
 
     // Register name mapping if it's different from original
-    if struct_name != shape.type_identifier {
-        registry.register_type_mapping(shape.type_identifier.to_string(), struct_name.clone());
+    if struct_name_str != shape.type_identifier {
+        registry.register_type_mapping(shape.type_identifier.to_string(), struct_name_str.clone());
     }
 
     // Extract namespace from this struct if it has one
     let current_namespace = get_current_namespace(shape, parent_namespace);
 
-    registry.mark_processed(&struct_name);
+    registry.mark_processed(&struct_name_str);
 
     match struct_type.kind {
         StructKind::Unit => {
-            registry.push(struct_name, ContainerFormat::UnitStruct);
+            registry.push(struct_name_str, ContainerFormat::UnitStruct);
             registry.pop();
         }
         StructKind::TupleStruct => {
@@ -295,7 +297,7 @@ fn format_struct(
 
                 // Handle regular newtype struct
                 let container = ContainerFormat::NewTypeStruct(Box::default());
-                registry.push(struct_name, container);
+                registry.push(struct_name_str, container);
 
                 // Process the inner field
                 format_with_namespace(field_shape, current_namespace.as_deref(), registry);
@@ -304,7 +306,7 @@ fn format_struct(
             } else {
                 // Handle tuple struct with multiple fields
                 let container = ContainerFormat::TupleStruct(vec![]);
-                registry.push(struct_name, container);
+                registry.push(struct_name_str, container);
                 for field in struct_type.fields {
                     format_with_namespace(field.shape(), current_namespace.as_deref(), registry);
                 }
@@ -313,7 +315,7 @@ fn format_struct(
         }
         StructKind::Struct => {
             let container = ContainerFormat::Struct(vec![]);
-            registry.push(struct_name, container);
+            registry.push(struct_name_str, container);
             for field in struct_type.fields {
                 handle_struct_field(field, current_namespace.as_deref(), registry);
             }
@@ -355,7 +357,7 @@ fn handle_struct_field(field: &Field, namespace: Option<&str>, registry: &mut Re
             UserType::Struct(_) | UserType::Enum(_) => {
                 let renamed_name = get_name(field_shape, namespace, registry);
 
-                Format::TypeName(renamed_name)
+                Format::QualifiedTypeName(renamed_name)
             }
             _ => Format::unknown(),
         }
@@ -503,7 +505,7 @@ fn try_handle_tuple_struct_field(
                     transparent_namespace.as_deref(),
                     registry,
                 );
-                Format::TypeName(namespaced_name)
+                Format::QualifiedTypeName(namespaced_name)
             } else {
                 get_inner_format(inner_field_shape, namespace, registry)
             };
@@ -536,23 +538,24 @@ fn format_enum(
     registry: &mut Registry,
 ) {
     let enum_name = get_name(shape, parent_namespace, registry);
+    let enum_name_str = enum_name.to_legacy_string();
 
     // Check if already processed using the full namespaced name
-    if registry.is_processed(&enum_name) {
+    if registry.is_processed(&enum_name_str) {
         return;
     }
 
     // Register name mapping if it's different from original
-    if enum_name != shape.type_identifier {
-        registry.register_type_mapping(shape.type_identifier.to_string(), enum_name.clone());
+    if enum_name_str != shape.type_identifier {
+        registry.register_type_mapping(shape.type_identifier.to_string(), enum_name_str.clone());
     }
 
-    registry.mark_processed(&enum_name);
+    registry.mark_processed(&enum_name_str);
 
     let variants = process_enum_variants(enum_type, shape, parent_namespace, registry);
 
     let container = ContainerFormat::Enum(variants);
-    registry.push(enum_name, container);
+    registry.push(enum_name_str, container);
     registry.pop();
 }
 
@@ -620,7 +623,7 @@ fn process_newtype_variant(
         let current_namespace = get_current_namespace(shape, parent_namespace);
         format_with_namespace(field_shape, current_namespace.as_deref(), registry);
         let namespaced_name = get_name(field_shape, current_namespace.as_deref(), registry);
-        VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
+        VariantFormat::NewType(Box::new(Format::QualifiedTypeName(namespaced_name)))
     } else {
         // For other types, use the temporary container approach
         process_newtype_variant_with_temp_container(
@@ -703,7 +706,7 @@ fn process_struct_variant(
             } else {
                 let current_namespace = get_current_namespace(shape, parent_namespace);
                 let namespaced_name = get_name(field_shape, current_namespace.as_deref(), registry);
-                Format::TypeName(namespaced_name)
+                Format::QualifiedTypeName(namespaced_name)
             };
 
             // Add Named TypeName format to the struct
@@ -863,10 +866,10 @@ fn format_option(option_def: OptionDef, namespace: Option<&str>, registry: &mut 
     }
 }
 
-fn get_name(shape: &Shape, parent_namespace: Option<&str>, _registry: &Registry) -> String {
+fn get_name(shape: &Shape, namespace: Option<&str>, _registry: &Registry) -> QualifiedTypeName {
     // Check type_tag first (is this where facet rename is stored?)
     if let Some(type_tag) = shape.type_tag {
-        return type_tag.to_string();
+        return QualifiedTypeName::root(type_tag.to_string());
     }
 
     // Check attributes for namespace and name
@@ -900,7 +903,7 @@ fn get_name(shape: &Shape, parent_namespace: Option<&str>, _registry: &Registry)
     // to avoid namespace pollution where unnamespaced references pick up mappings
     let base_name = if let Some(custom_name) = name {
         custom_name
-    } else if shape_namespace.is_some() || parent_namespace.is_some() {
+    } else if shape_namespace.is_some() || namespace.is_some() {
         // When namespaces are involved, use the raw type identifier
         shape.type_identifier.to_string()
     } else {
@@ -912,11 +915,11 @@ fn get_name(shape: &Shape, parent_namespace: Option<&str>, _registry: &Registry)
 
     // Apply namespace - shape's own namespace takes precedence over parent namespace
     if let Some(ns) = shape_namespace {
-        format!("{ns}.{base_name}")
-    } else if let Some(parent_ns) = parent_namespace {
-        format!("{parent_ns}.{base_name}")
+        QualifiedTypeName::namespaced(ns, base_name)
+    } else if let Some(parent_ns) = namespace {
+        QualifiedTypeName::namespaced(parent_ns.to_string(), base_name)
     } else {
-        base_name
+        QualifiedTypeName::root(base_name)
     }
 }
 
@@ -1030,7 +1033,7 @@ fn get_inner_format(shape: &Shape, namespace: Option<&str>, registry: &Registry)
                 // For user-defined types, use TypeName with renamed name if applicable
                 let name = get_name(shape, namespace, registry);
 
-                Format::TypeName(name)
+                Format::QualifiedTypeName(name)
             }
         }
         Def::Set(_set_def) => todo!(),

@@ -13,7 +13,7 @@ use crate::serde_reflection::{
 use heck::{CamelCase, MixedCase};
 use include_dir::include_dir as include_directory;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     io::{Result, Write},
     path::PathBuf,
 };
@@ -155,11 +155,12 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
+            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
             TypeName(x) => self.quote_qualified_name(x),
+            QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),
@@ -245,11 +246,13 @@ where
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
-            TypeName(_) => format!("try {value}.serialize(serializer: serializer)"),
+            TypeName(_) | QualifiedTypeName(_) => {
+                format!("try {value}.serialize(serializer: serializer)")
+            }
             Unit => format!("try serializer.serialize_unit(value: {value})"),
             Bool => format!("try serializer.serialize_bool(value: {value})"),
             I8 => format!("try serializer.serialize_i8(value: {value})"),
@@ -277,13 +280,17 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
             TypeName(name) => format!(
                 "try {}.deserialize(deserializer: deserializer)",
                 self.quote_qualified_name(name)
+            ),
+            QualifiedTypeName(name) => format!(
+                "try {}.deserialize(deserializer: deserializer)",
+                self.quote_qualified_name(&name.to_legacy_string())
             ),
             Unit => "try deserializer.deserialize_unit()".to_string(),
             Bool => "try deserializer.deserialize_bool()".to_string(),
@@ -863,14 +870,14 @@ switch index {{",
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
-    targets: HashMap<String, HashSet<String>>,
+    targets: BTreeMap<String, BTreeSet<String>>,
 }
 
 impl Installer {
     #[must_use]
     pub fn new(package_name: String, install_dir: PathBuf) -> Self {
-        let mut targets = HashMap::new();
-        targets.insert("Serde".to_string(), HashSet::new());
+        let mut targets = BTreeMap::new();
+        targets.insert("Serde".to_string(), BTreeSet::new());
         Installer {
             package_name,
             install_dir,
@@ -895,7 +902,7 @@ impl Installer {
     fn make_manifest(&self, package_name: &str) -> String {
         let mut all_targets = self.targets.clone();
 
-        let mut package_targets = HashSet::new();
+        let mut package_targets = BTreeSet::new();
         package_targets.insert("Serde".to_string());
         for targets in all_targets.values() {
             for target in targets {
@@ -1007,8 +1014,8 @@ mod tests {
                     targets: ["MyPackage"])
             ],
             targets: [
-        		.target(name: "Serde", dependencies: []),
         		.target(name: "MyPackage", dependencies: ["Serde"]),
+        		.target(name: "Serde", dependencies: []),
         	]
         )
         "#);
