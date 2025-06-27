@@ -1007,8 +1007,8 @@ mod tests {
                     targets: ["MyPackage"])
             ],
             targets: [
-        		.target(name: "MyPackage", dependencies: ["Serde"]),
         		.target(name: "Serde", dependencies: []),
+        		.target(name: "MyPackage", dependencies: ["Serde"]),
         	]
         )
         "#);

@@ -5,10 +5,9 @@ use std::{
 
 use crate::serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 use facet::{
-    ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, IntegerSize, ListDef, MapDef,
-    NumberBits, NumericType, OptionDef, PointerType, PrimitiveType, ScalarAffinity, ScalarDef,
-    SequenceType, Shape, ShapeAttribute, Signedness, SliceDef, SmartPointerDef, StructKind,
-    StructType, TextualType, Type, UserType, Variant, VariantAttribute,
+    ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
+    PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef, SmartPointerDef,
+    StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
 };
 
 #[derive(Debug)]
@@ -156,7 +155,7 @@ fn format_with_namespace<'shape>(
 
     // Then check the def system (Def)
     match shape.def {
-        Def::Scalar(scalar_def) => format_scalar(scalar_def, registry),
+        Def::Scalar => format_scalar(shape, registry),
         Def::Map(map_def) => format_map(map_def, namespace, registry),
         Def::List(list_def) => format_list(list_def, namespace, registry),
         Def::Slice(slice_def) => format_slice(slice_def, namespace, registry),
@@ -188,85 +187,66 @@ fn format_with_namespace<'shape>(
     }
 }
 
-fn scalar_def_to_format(scalar_def: ScalarDef) -> Format {
-    match scalar_def.affinity {
-        ScalarAffinity::Number(number_affinity) => match number_affinity.bits {
-            NumberBits::Integer { size, sign } => {
-                let bits = match size {
-                    IntegerSize::Fixed(bits) => bits,
-                    IntegerSize::PointerSized => core::mem::size_of::<usize>() * 8,
-                };
+fn type_to_format(shape: &Shape) -> Format {
+    match &shape.ty {
+        Type::Primitive(primitive) => match primitive {
+            PrimitiveType::Boolean => Format::Bool,
+            PrimitiveType::Numeric(numeric_type) => match numeric_type {
+                NumericType::Float => {
+                    // Determine float type based on size or type identifier
+                    match shape.type_identifier {
+                        "f32" => Format::F32,
+                        "f64" => Format::F64,
+                        _ => unimplemented!("Unsupported float type: {}", shape.type_identifier),
+                    }
+                }
+                NumericType::Integer { signed } => {
+                    // Get the size from the layout
+                    let size_bytes = shape
+                        .layout
+                        .sized_layout()
+                        .expect("Layout must be sized")
+                        .size();
+                    let size_bits = size_bytes * 8;
 
-                match sign {
-                    Signedness::Unsigned => match bits {
-                        8 => Format::U8,
-                        16 => Format::U16,
-                        32 => Format::U32,
-                        64 => Format::U64,
-                        128 => Format::U128,
-                        _ => unimplemented!("Unsupported integer size: {}", bits),
-                    },
-                    Signedness::Signed => match bits {
-                        8 => Format::I8,
-                        16 => Format::I16,
-                        32 => Format::I32,
-                        64 => Format::I64,
-                        128 => Format::I128,
-                        _ => unimplemented!("Unsupported integer size: {}", bits),
-                    },
+                    match (*signed, size_bits) {
+                        (false, 8) => Format::U8,
+                        (false, 16) => Format::U16,
+                        (false, 32) => Format::U32,
+                        (false, 64) => Format::U64,
+                        (false, 128) => Format::U128,
+                        (true, 8) => Format::I8,
+                        (true, 16) => Format::I16,
+                        (true, 32) => Format::I32,
+                        (true, 64) => Format::I64,
+                        (true, 128) => Format::I128,
+                        _ => unimplemented!(
+                            "Unsupported integer type: {} bits, signed: {}",
+                            size_bits,
+                            signed
+                        ),
+                    }
                 }
-            }
-            NumberBits::Float {
-                sign_bits: _,
-                exponent_bits,
-                mantissa_bits,
-                has_explicit_first_mantissa_bit: _,
-            } => {
-                // IEEE 754 standard:
-                // f32: 8 exponent bits, 23 mantissa bits
-                // f64: 11 exponent bits, 52 mantissa bits
-                match (exponent_bits, mantissa_bits) {
-                    (8, 23) => Format::F32,
-                    (11, 52) => Format::F64,
-                    _ => unimplemented!(
-                        "Unsupported float format: {} exponent bits, {} mantissa bits",
-                        exponent_bits,
-                        mantissa_bits
-                    ),
-                }
-            }
-            NumberBits::Fixed {
-                sign_bits: _,
-                integer_bits: _,
-                fraction_bits: _,
-            } => todo!(),
-            NumberBits::Decimal {
-                sign_bits: _,
-                integer_bits: _,
-                scale_bits: _,
-            } => todo!(),
-            _ => todo!(),
+            },
+            PrimitiveType::Textual(textual_type) => match textual_type {
+                TextualType::Str => Format::Str,
+                TextualType::Char => Format::Char,
+            },
+            PrimitiveType::Never => unimplemented!("Never type not supported"),
         },
-        ScalarAffinity::Boolean(_) => Format::Bool,
-        ScalarAffinity::String(_) => Format::Str,
-        ScalarAffinity::ComplexNumber(_complex_number_affinity) => todo!("ComplexNumber"),
-        ScalarAffinity::Empty(_empty_affinity) => todo!("Empty"),
-        ScalarAffinity::SocketAddr(_socket_addr_affinity) => todo!("SocketAddr"),
-        ScalarAffinity::IpAddr(_ip_addr_affinity) => todo!("IpAddr"),
-        ScalarAffinity::Url(_url_affinity) => todo!("Url"),
-        ScalarAffinity::UUID(_uuid_affinity) => todo!("UUID"),
-        ScalarAffinity::ULID(_ulid_affinity) => todo!("ULID"),
-        ScalarAffinity::Time(_time_affinity) => todo!("Time"),
-        ScalarAffinity::Opaque(_opaque_affinity) => todo!("Opaque"),
-        ScalarAffinity::Other(_other_affinity) => todo!("Other"),
-        ScalarAffinity::Char(_char_affinity) => Format::Char,
-        ScalarAffinity::Path(_path_affinity) => todo!("Path"),
-        _ => todo!(),
+        Type::User(UserType::Opaque) => {
+            // Handle opaque types like String based on type identifier
+            match shape.type_identifier {
+                "String" => Format::Str,
+                _ => unimplemented!("Unsupported opaque type: {}", shape.type_identifier),
+            }
+        }
+        _ => unimplemented!("Unsupported type for scalar format: {:?}", shape.ty),
     }
 }
 
-fn format_scalar(scalar_def: ScalarDef, registry: &mut Registry) {
-    let format = scalar_def_to_format(scalar_def);
+fn format_scalar(shape: &Shape, registry: &mut Registry) {
+    let format = type_to_format(shape);
     update_container_format(format, registry);
 }
 
@@ -343,7 +323,6 @@ fn format_struct(
             // This handles standalone tuple types, but for tuple fields in structs,
             // they are handled in the StructKind::Struct case above
         }
-        _ => todo!(),
     }
 }
 
@@ -353,7 +332,6 @@ fn handle_struct_field(field: &Field, namespace: Option<&str>, registry: &mut Re
     // Check for field-level attributes first
     let has_bytes_attribute = field.attributes.iter().any(|attr| match attr {
         FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
-        _ => false,
     });
 
     if has_bytes_attribute && try_handle_bytes_attribute(field, field_shape, registry) {
@@ -463,7 +441,7 @@ fn try_handle_option_field(
             }
 
             // If the inner type is a user-defined type, we need to process it too
-            if !matches!(inner_shape.def, Def::Scalar(_)) {
+            if !matches!(inner_shape.def, Def::Scalar) {
                 format_with_namespace(inner_shape, namespace, registry);
             }
             return true;
@@ -590,7 +568,6 @@ fn process_enum_variants(
     for variant in enum_type.variants {
         let skip = variant.attributes.iter().any(|attr| match attr {
             VariantAttribute::Arbitrary(attr_str) => *attr_str == "skip",
-            _ => false,
         });
         if skip {
             continue;
@@ -864,7 +841,7 @@ fn format_array(array_def: ArrayDef, namespace: Option<&str>, registry: &mut Reg
     update_container_format(array_format, registry);
 
     // If the inner type is a user-defined type, we need to process it too
-    if !matches!(inner_shape.def, Def::Scalar(_)) {
+    if !matches!(inner_shape.def, Def::Scalar) {
         format_with_namespace(inner_shape, namespace, registry);
     }
 }
@@ -993,12 +970,12 @@ fn update_container_format(format: Format, registry: &mut Registry) {
 }
 
 fn should_process_nested_type(shape: &Shape) -> bool {
-    !matches!(shape.def, Def::Scalar(_)) && shape.type_identifier != "()"
+    !matches!(shape.def, Def::Scalar) && shape.type_identifier != "()"
 }
 
 fn get_inner_format(shape: &Shape, namespace: Option<&str>, registry: &Registry) -> Format {
     match shape.def {
-        Def::Scalar(scalar_def) => scalar_def_to_format(scalar_def),
+        Def::Scalar => type_to_format(shape),
         Def::List(inner_list_def) => {
             // Recursively handle nested lists
             let inner_shape = inner_list_def.t();
@@ -1059,17 +1036,12 @@ fn get_inner_format(shape: &Shape, namespace: Option<&str>, registry: &Registry)
         Def::Set(_set_def) => todo!(),
         Def::Slice(_slice_def) => todo!(),
         Def::SmartPointer(_smart_pointer_def) => todo!(),
-        _ => {
-            // For other types, use TypeName with renamed name if applicable
-            let name = get_name(shape, namespace, registry);
-            Format::TypeName(name)
-        }
     }
 }
 
 fn process_nested_types(shape: &Shape, namespace: Option<&str>, registry: &mut Registry) {
     match shape.def {
-        Def::Scalar(_) => {
+        Def::Scalar => {
             // Scalar types don't need further processing
         }
         Def::List(inner_list_def) => {
