@@ -23,10 +23,17 @@ fn single_namespace() {
     ",
     )
     .unwrap();
-    let result = split(&registry);
+    let result = split("Root", registry).unwrap();
     insta::assert_yaml_snapshot!(result, @r"
-    Root:
-      ChildOne:
+    ? module_name: Root
+      serialization: true
+      encodings: []
+      external_definitions: {}
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+    : ChildOne:
         STRUCT:
           - child:
               TYPENAME: GrandChild
@@ -52,41 +59,68 @@ fn root_namespace_with_two_child_namespaces() {
     Parent:
       STRUCT:
         - one:
-            TYPENAME: one.Child
+            TYPENAME: one.ChildOne
         - two:
-            TYPENAME: two.Child
-    one.Child:
+            TYPENAME: two.ChildTwo
+    one.ChildOne:
       STRUCT:
         - child:
             TYPENAME: one.GrandChild
     one.GrandChild:
       STRUCT:
         - field: STR
-    two.Child:
+    two.ChildTwo:
       STRUCT:
         - field: STR
     ",
     )
     .unwrap();
-    let result = split(&registry);
+    let result = split("Root", registry).unwrap();
     insta::assert_yaml_snapshot!(result, @r"
-    Root:
-      Parent:
+    ? module_name: Root
+      serialization: true
+      encodings: []
+      external_definitions:
+        one:
+          - ChildOne
+        two:
+          - ChildTwo
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+    : Parent:
         STRUCT:
           - one:
-              TYPENAME: one.Child
+              TYPENAME: ChildOne
           - two:
-              TYPENAME: two.Child
-    ? Child: one
-    : Child:
+              TYPENAME: ChildTwo
+    ? module_name: one
+      serialization: true
+      encodings: []
+      external_definitions:
+        one:
+          - GrandChild
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+    : ChildOne:
         STRUCT:
           - child:
-              TYPENAME: one.GrandChild
+              TYPENAME: GrandChild
       GrandChild:
         STRUCT:
           - field: STR
-    ? Child: two
-    : Child:
+    ? module_name: two
+      serialization: true
+      encodings: []
+      external_definitions: {}
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+    : ChildTwo:
         STRUCT:
           - field: STR
     ");

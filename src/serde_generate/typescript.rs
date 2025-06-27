@@ -718,7 +718,7 @@ impl super::SourceInstaller for Installer {
     type Error = Box<dyn std::error::Error>;
 
     fn install_module(
-        &self,
+        &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {

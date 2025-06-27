@@ -1067,9 +1067,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros-emit"
-version = "0.27.14"
+version = "0.27.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e2f94862f6354bd7ac3082fce4fe33c7ac5303c9539351b913a7b9bcb7683f3"
+checksum = "e390d85bbdd57eb8ef7f7b10254feaf9727f77cf4312722cd8f030a8c182491e"
 dependencies = [
  "facet-macros-parse",
  "quote",
@@ -1077,9 +1077,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros-parse"
-version = "0.27.14"
+version = "0.27.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "698d3cf9a0046f7e5ab01545bce3dfefcf24dd8012316503a35be7f8e1b73e24"
+checksum = "76290ce9f9701d81b4c2d4b819a64caea9334056d2fb5c5f8c88b24afd9b6dc1"
 dependencies = [
  "proc-macro2",
  "quote",
