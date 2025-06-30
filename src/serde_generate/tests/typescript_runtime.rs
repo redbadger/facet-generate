@@ -4,7 +4,7 @@
 use crate::test_utils;
 use crate::test_utils::{Choice, Runtime, Test};
 use facet_generate::serde_generate::{CodeGeneratorConfig, SourceInstaller, typescript};
-use heck::CamelCase;
+use heck::ToUpperCamelCase;
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
@@ -63,7 +63,7 @@ Deno.test("{1} serialization matches deserialization", () => {{
             .collect::<Vec<_>>()
             .join(", "),
         runtime.name().to_lowercase(),
-        runtime.name().to_camel_case(),
+        runtime.name().to_upper_camel_case(),
     )
     .unwrap();
 

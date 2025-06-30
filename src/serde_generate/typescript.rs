@@ -8,7 +8,7 @@ use super::{
 use crate::serde_reflection::{
     ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
 };
-use heck::CamelCase;
+use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -49,7 +49,7 @@ impl<'a> CodeGenerator<'a> {
             for name in names {
                 external_qualified_names.insert(
                     name.to_string(),
-                    format!("{}.{}", namespace.to_camel_case(), name),
+                    format!("{}.{}", namespace.to_upper_camel_case(), name),
                 );
             }
         }
@@ -102,7 +102,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             writeln!(
                 self.out,
                 "import * as {} from '../{}/mod.ts';\n",
-                namespace.to_camel_case(),
+                namespace.to_upper_camel_case(),
                 namespace
             )?;
         }
@@ -238,7 +238,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             Bytes => format!("serializer.serializeBytes({this_str}{value});"),
             _ => format!(
                 "Helpers.serialize{}({}{}, serializer);",
-                common::mangle_type(format).to_camel_case(),
+                common::mangle_type(format).to_upper_camel_case(),
                 this_str,
                 value
             ),
@@ -278,7 +278,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             Bytes => "deserializer.deserializeBytes()".to_string(),
             _ => format!(
                 "Helpers.deserialize{}(deserializer)",
-                common::mangle_type(format).to_camel_case(),
+                common::mangle_type(format).to_upper_camel_case(),
             ),
         }
     }
@@ -289,7 +289,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         write!(
             self.out,
             "static serialize{}(value: {}, serializer: Serializer): void {{",
-            name.to_camel_case(),
+            name.to_upper_camel_case(),
             self.quote_type(format0)
         )?;
         self.out.indent();
@@ -381,7 +381,7 @@ value.forEach((item) =>{{
         write!(
             self.out,
             "static deserialize{}(deserializer: Deserializer): {} {{",
-            name.to_camel_case(),
+            name.to_upper_camel_case(),
             self.quote_type(format0),
         )?;
         self.out.indent();

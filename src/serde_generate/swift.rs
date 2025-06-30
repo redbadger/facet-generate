@@ -10,7 +10,7 @@ use super::{
 use crate::serde_reflection::{
     ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
 };
-use heck::{CamelCase, MixedCase};
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -509,7 +509,7 @@ return obj
     fn output_variant(&mut self, name: &str, variant: &VariantFormat) -> Result<()> {
         use VariantFormat::{NewType, Struct, Tuple, Unit, Variable};
         self.output_comment(name)?;
-        let name = common::lowercase_first_letter(name).to_mixed_case();
+        let name = common::lowercase_first_letter(name).to_lower_camel_case();
         match variant {
             Unit => {
                 writeln!(self.out, "case {name}")?;
@@ -672,7 +672,7 @@ public func {0}Serialize() throws -> [UInt8] {{
     return serializer.get_bytes()
 }}",
             encoding.name(),
-            encoding.name().to_camel_case()
+            encoding.name().to_upper_camel_case()
         )
     }
 
@@ -694,7 +694,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
 }}"#,
             name,
             encoding.name(),
-            encoding.name().to_camel_case(),
+            encoding.name().to_upper_camel_case(),
         )
     }
 
@@ -725,7 +725,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
             for (index, variant) in variants {
                 let fields = Self::variant_fields(&variant.value);
                 let formatted_variant_name =
-                    common::lowercase_first_letter(&variant.name).to_mixed_case();
+                    common::lowercase_first_letter(&variant.name).to_lower_camel_case();
                 if fields.is_empty() {
                     writeln!(self.out, "case .{formatted_variant_name}:")?;
                 } else {
@@ -781,7 +781,7 @@ switch index {{",
                 writeln!(self.out, "case {index}:")?;
                 self.out.indent();
                 let formatted_variant_name =
-                    common::lowercase_first_letter(&variant.name).to_mixed_case();
+                    common::lowercase_first_letter(&variant.name).to_lower_camel_case();
                 let fields = Self::variant_fields(&variant.value);
                 if fields.is_empty() {
                     writeln!(self.out, "try deserializer.decrease_container_depth()")?;
@@ -853,7 +853,7 @@ switch index {{",
             Struct(fields) => fields
                 .iter()
                 .map(|f| Named {
-                    name: f.name.to_mixed_case(),
+                    name: f.name.to_lower_camel_case(),
                     value: f.value.clone(),
                 })
                 .collect(),
@@ -953,7 +953,10 @@ impl super::SourceInstaller for Installer {
 
         let dir_path = self.install_dir.join("Sources").join(config.module_name());
         std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join(format!("{}.swift", config.module_name().to_camel_case()));
+        let source_path = dir_path.join(format!(
+            "{}.swift",
+            config.module_name().to_upper_camel_case()
+        ));
         let mut file = std::fs::File::create(source_path)?;
         let generator = CodeGenerator::new(config);
         generator.output(&mut file, registry)?;

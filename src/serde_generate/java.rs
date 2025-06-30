@@ -8,7 +8,7 @@ use super::{
 use crate::serde_reflection::{
     ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
 };
-use heck::CamelCase;
+use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -892,7 +892,7 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
     return serializer.get_bytes();
 }}",
             encoding.name(),
-            encoding.name().to_camel_case()
+            encoding.name().to_upper_camel_case()
         )
     }
 
@@ -917,7 +917,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
 }}"#,
             name,
             encoding.name(),
-            encoding.name().to_camel_case()
+            encoding.name().to_upper_camel_case()
         )
     }
 
