@@ -332,7 +332,7 @@
 //!
 //! Whenever we traverse the graph of type declarations using deserialization callbacks, the type
 //! system requires us to return valid Rust values of type `V::Value`, where `V` is the type of
-//! a given `visitor`. This contraint limits the way we can stop graph traversal to only a few cases.
+//! a given `visitor`. This constraint limits the way we can stop graph traversal to only a few cases.
 //!
 //! The first 4 cases are what we have called *possible recursion points* above:
 //!

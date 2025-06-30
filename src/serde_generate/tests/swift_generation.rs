@@ -166,7 +166,7 @@ fn test_swift_code_with_external_definitions() {
 
     // References were updated.
     let content = std::fs::read_to_string(source_path).unwrap();
-    assert!(content.contains("foo.Tree"));
+    assert!(content.contains("Foo.Tree"));
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_that_swift_code_follow_case_convention() {
     // Enum variants are `lowerCamelCase`.
     assert!(content.contains(r"case primitiveTypes"));
     assert!(!content.contains(r"case PrimitiveTypes"));
-    assert!(!content.contains(r"case primitive_ypes"));
+    assert!(!content.contains(r"case primitive_types"));
     // Field names are `lowerCamelCase`.
     assert!(content.contains(r"@Indirect public var fBool: Bool"));
     assert!(!content.contains(r"@Indirect public var f_bool: Bool"));

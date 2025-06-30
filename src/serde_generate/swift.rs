@@ -10,7 +10,7 @@ use super::{
 use crate::serde_reflection::{
     ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
 };
-use heck::{ToLowerCamelCase, ToUpperCamelCase};
+use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -64,7 +64,8 @@ impl<'a> CodeGenerator<'a> {
             let package_name = {
                 let path = namespace.rsplitn(2, '/').collect::<Vec<_>>();
                 if path.len() <= 1 { namespace } else { path[0] }
-            };
+            }
+            .to_upper_camel_case();
             for name in names {
                 external_qualified_names.insert(name.to_string(), format!("{package_name}.{name}"));
             }
@@ -81,8 +82,9 @@ impl<'a> CodeGenerator<'a> {
             .config
             .module_name
             .split('.')
-            .map(String::from)
-            .collect::<Vec<_>>();
+            .map(AsUpperCamelCase)
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
 
         let mut emitter = SwiftEmitter {
             out: IndentedWriter::new(out, IndentConfig::Space(4)),
@@ -509,7 +511,7 @@ return obj
     fn output_variant(&mut self, name: &str, variant: &VariantFormat) -> Result<()> {
         use VariantFormat::{NewType, Struct, Tuple, Unit, Variable};
         self.output_comment(name)?;
-        let name = common::lowercase_first_letter(name).to_lower_camel_case();
+        let name = name.to_lower_camel_case();
         match variant {
             Unit => {
                 writeln!(self.out, "case {name}")?;
@@ -724,8 +726,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
             writeln!(self.out, "switch self {{")?;
             for (index, variant) in variants {
                 let fields = Self::variant_fields(&variant.value);
-                let formatted_variant_name =
-                    common::lowercase_first_letter(&variant.name).to_lower_camel_case();
+                let formatted_variant_name = &variant.name.to_lower_camel_case();
                 if fields.is_empty() {
                     writeln!(self.out, "case .{formatted_variant_name}:")?;
                 } else {
@@ -780,8 +781,7 @@ switch index {{",
             for (index, variant) in variants {
                 writeln!(self.out, "case {index}:")?;
                 self.out.indent();
-                let formatted_variant_name =
-                    common::lowercase_first_letter(&variant.name).to_lower_camel_case();
+                let formatted_variant_name = &variant.name.to_lower_camel_case();
                 let fields = Self::variant_fields(&variant.value);
                 if fields.is_empty() {
                     writeln!(self.out, "try deserializer.decrease_container_depth()")?;
@@ -906,10 +906,10 @@ impl Installer {
         package_targets.insert("Serde".to_string());
         for targets in all_targets.values() {
             for target in targets {
-                package_targets.insert(target.to_string());
+                package_targets.insert(target.to_upper_camel_case());
             }
         }
-        all_targets.insert(package_name.to_string(), package_targets);
+        all_targets.insert(package_name.to_upper_camel_case(), package_targets);
 
         let targets: Vec<String> = all_targets
             .iter()
@@ -942,21 +942,16 @@ impl super::SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let targets = self
-            .targets
-            .entry(config.module_name().to_string())
-            .or_default();
+        let module_name = config.module_name().to_upper_camel_case();
+        let targets = self.targets.entry(module_name.clone()).or_default();
         targets.insert("Serde".to_string());
         for target in config.external_definitions.keys() {
             targets.insert(target.clone());
         }
 
-        let dir_path = self.install_dir.join("Sources").join(config.module_name());
+        let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join(format!(
-            "{}.swift",
-            config.module_name().to_upper_camel_case()
-        ));
+        let source_path = dir_path.join(format!("{module_name}.swift"));
         let mut file = std::fs::File::create(source_path)?;
         let generator = CodeGenerator::new(config);
         generator.output(&mut file, registry)?;
