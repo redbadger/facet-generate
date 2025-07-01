@@ -134,7 +134,9 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         };
         match format {
             TypeName(x) => self.quote_qualified_name(x),
-            QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
+            QualifiedTypeName(qualified_name) => {
+                self.quote_qualified_name(&qualified_name.to_legacy_string())
+            }
             Unit => "unit".into(),
             Bool => "bool".into(),
             I8 => "int8".into(),

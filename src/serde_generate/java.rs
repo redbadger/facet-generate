@@ -346,7 +346,10 @@ where
                 self.quote_qualified_name(name)
             ),
             QualifiedTypeName(qualified_name) => {
-                self.quote_qualified_name(&qualified_name.to_legacy_string())
+                format!(
+                    "{}.deserialize(deserializer)",
+                    self.quote_qualified_name(&qualified_name.to_legacy_string())
+                )
             }
             Unit => "deserializer.deserialize_unit()".to_string(),
             Bool => "deserializer.deserialize_bool()".to_string(),
