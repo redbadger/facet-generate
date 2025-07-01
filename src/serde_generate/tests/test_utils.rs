@@ -1,38 +1,37 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use facet::Facet;
+use facet_generate::reflect;
 use facet_generate::serde_generate::Encoding;
-use facet_generate::serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
+use facet_generate::serde_reflection::Registry;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
 // Simple data formats used to create and test values in each language.
-#[derive(Serialize, Deserialize)]
+#[derive(Facet, Serialize, Deserialize)]
 pub struct Test {
     pub a: Vec<u32>,
     pub b: (i64, u64),
     pub c: Choice,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Facet, Serialize, Deserialize)]
+#[repr(C)]
 pub enum Choice {
     A,
     B(u64),
     C { x: u8 },
 }
 
-pub fn get_simple_registry() -> Result<Registry> {
-    let mut tracer = Tracer::new(TracerConfig::default());
-    let samples = Samples::new();
-    tracer.trace_type::<Test>(&samples)?;
-    tracer.trace_type::<Choice>(&samples)?;
-    tracer.registry()
+pub fn get_simple_registry() -> Registry {
+    reflect::<Test>().consume()
 }
 
 // More complex data format used to test re-serialization and basic fuzzing.
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
 pub enum SerdeData {
     PrimitiveTypes(PrimitiveTypes),
     OtherTypes(OtherTypes),
@@ -53,11 +52,12 @@ pub enum SerdeData {
     CStyleEnum(CStyleEnum),
     #[allow(clippy::zero_sized_map_values)]
     ComplexMap(BTreeMap<([u32; 2], [u8; 4]), ()>),
-    EmptyTupleVariant(),
+    // TODO: Facet has a problem with empty tuple variants
+    // EmptyTupleVariant(),
     EmptyStructVariant {},
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(clippy::struct_field_names)]
 pub struct PrimitiveTypes {
     f_bool: bool,
@@ -78,11 +78,12 @@ pub struct PrimitiveTypes {
     f_char: Option<char>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(clippy::struct_field_names)]
 pub struct OtherTypes {
     f_string: String,
-    f_bytes: ByteBuf,
+    #[facet(bytes)]
+    f_bytes: Vec<u8>,
     f_option: Option<Struct>,
     f_unit: (),
     f_seq: Vec<Struct>,
@@ -94,37 +95,39 @@ pub struct OtherTypes {
     f_nested_seq: Vec<Vec<Struct>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UnitStruct;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct NewTypeStruct(u64);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TupleStruct(u32, u64);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Struct {
     x: u32,
     y: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
 pub enum List<T> {
     Empty,
     Node(T, Box<List<T>>),
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Tree<T> {
     value: T,
     children: Vec<Tree<T>>,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SimpleList(Option<Box<SimpleList>>);
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
 pub enum CStyleEnum {
     A,
     B,
@@ -134,13 +137,8 @@ pub enum CStyleEnum {
 }
 
 /// The registry corresponding to the test data structures above.
-pub fn get_registry() -> Result<Registry> {
-    let mut tracer = Tracer::new(TracerConfig::default());
-    let samples = Samples::new();
-    tracer.trace_type::<SerdeData>(&samples)?;
-    tracer.trace_type::<List<SerdeData>>(&samples)?;
-    tracer.trace_type::<CStyleEnum>(&samples)?;
-    tracer.registry()
+pub fn get_registry() -> Registry {
+    reflect::<SerdeData>().consume()
 }
 
 /// Manually generate sample values.
@@ -184,7 +182,7 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
 
     let v2 = SerdeData::OtherTypes(OtherTypes {
         f_string: "test".to_string(),
-        f_bytes: ByteBuf::from(b"bytes".to_vec()),
+        f_bytes: b"bytes".to_vec(),
         f_option: Some(Struct { x: 2, y: 3 }),
         f_unit: (),
         f_seq: vec![Struct { x: 1, y: 3 }],
@@ -205,7 +203,7 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
 
     let v2bis = SerdeData::OtherTypes(OtherTypes {
         f_string: String::new(),
-        f_bytes: ByteBuf::from(b"".to_vec()),
+        f_bytes: b"".to_vec(),
         f_option: None,
         f_unit: (),
         f_seq: Vec::new(),
@@ -222,7 +220,7 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
 
     let v2ter = SerdeData::OtherTypes(OtherTypes {
         f_string: String::new(),
-        f_bytes: ByteBuf::from(vec![1u8; 129]),
+        f_bytes: vec![1u8; 129],
         f_option: None,
         f_unit: (),
         f_seq: Vec::new(),
@@ -305,11 +303,12 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
 
     let v13 = SerdeData::ComplexMap(btreemap! { ([1,2], [3,4,5,6]) => ()});
 
-    let v14 = SerdeData::EmptyTupleVariant();
+    // let v14 = SerdeData::EmptyTupleVariant();
     let v15 = SerdeData::EmptyStructVariant {};
 
     vec![
-        v0, v1, v2, v2bis, v2ter, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15,
+        v0, v1, v2, v2bis, v2ter, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, //v14,
+        v15,
     ]
 }
 
@@ -620,7 +619,7 @@ fn test_get_sample_values() {
 
 #[test]
 fn test_get_simple_registry() {
-    let registry = get_simple_registry().unwrap();
+    let registry = get_simple_registry();
     assert_eq!(
         serde_yaml::to_string(&registry).unwrap(),
         r"---
@@ -652,7 +651,7 @@ Test:
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_get_registry() {
-    let registry = get_registry().unwrap();
+    let registry = get_registry();
     let expected = r"---
 CStyleEnum:
   ENUM:

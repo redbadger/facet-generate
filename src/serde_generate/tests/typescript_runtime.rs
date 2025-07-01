@@ -10,7 +10,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_typescript_runtime_bcs_serialization() {
-    let registry = test_utils::get_simple_registry().unwrap();
+    let registry = test_utils::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path.join("tests")).unwrap();

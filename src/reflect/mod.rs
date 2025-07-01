@@ -14,7 +14,7 @@ use facet::{
 
 #[derive(Debug)]
 pub struct Registry {
-    containers: BTreeMap<String, ContainerFormat>,
+    pub(crate) containers: BTreeMap<String, ContainerFormat>,
     current: Vec<String>,
     processed: HashSet<String>,
     name_mappings: BTreeMap<String, String>,

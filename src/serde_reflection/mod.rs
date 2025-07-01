@@ -354,20 +354,19 @@
 //! other than the parameter `T` of the main call `trace_type<T>`. As a consequence, each enum type must be
 //! traced separately.
 
-mod de;
 mod error;
 mod format;
-mod ser;
-mod trace;
-mod value;
+
+use std::collections::BTreeMap;
 
 pub use error::{Error, Result};
 pub use format::{
     ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, Variable,
     VariantFormat,
 };
-pub use trace::{Registry, Samples, Tracer, TracerConfig};
-pub use value::Value;
+
+/// A map of container formats.
+pub type Registry = BTreeMap<String, ContainerFormat>;
 
 #[cfg(test)]
 mod tests;

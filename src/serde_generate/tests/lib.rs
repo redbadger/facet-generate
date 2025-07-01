@@ -1,4 +1,3 @@
-mod analyzer;
 #[cfg(feature = "java")]
 mod java_generation;
 #[cfg(feature = "java")]

@@ -2,8 +2,6 @@
 // Copyright (c) Zefchain Labs, Inc.
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-/// Dependency analysis and topological sort for Serde formats.
-pub mod analyzer;
 /// Utility function to generate indented text
 pub mod indent;
 

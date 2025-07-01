@@ -43,7 +43,7 @@ fn test_swift_runtime_on_simple_data(runtime: Runtime) {
     let dir = tempfile::tempdir().unwrap();
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_encodings(vec![runtime.into()]);
-    let registry = test_utils::get_simple_registry().unwrap();
+    let registry = test_utils::get_simple_registry();
     let mut installer = swift::Installer::new(config.module_name.clone(), dir.path().to_path_buf());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
@@ -165,7 +165,7 @@ fn test_swift_runtime_on_supported_types(runtime: Runtime) {
     let dir = tempfile::tempdir().unwrap();
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_encodings(vec![runtime.into()]);
-    let registry = test_utils::get_registry().unwrap();
+    let registry = test_utils::get_registry();
     let mut installer = swift::Installer::new(config.module_name.clone(), dir.path().to_path_buf());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
