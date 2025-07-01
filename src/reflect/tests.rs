@@ -1133,29 +1133,29 @@ fn own_result_enum() {
     #[derive(Facet)]
     #[repr(C)]
     #[allow(unused)]
-    pub enum HttpResult {
+    enum HttpResult {
         Ok(HttpResponse),
         Err(HttpError),
     }
 
     #[derive(Facet)]
-    pub struct HttpResponse {
-        pub status: u16,
-        pub headers: Vec<HttpHeader>,
+    struct HttpResponse {
+        status: u16,
+        headers: Vec<HttpHeader>,
         #[facet(bytes)]
-        pub body: Vec<u8>,
+        body: Vec<u8>,
     }
 
     #[derive(Facet)]
-    pub struct HttpHeader {
-        pub name: String,
-        pub value: String,
+    struct HttpHeader {
+        name: String,
+        value: String,
     }
 
     #[derive(facet::Facet, PartialEq, Eq, Clone, Debug)]
     #[repr(C)]
     #[allow(unused)]
-    pub enum HttpError {
+    enum HttpError {
         #[facet(skip)]
         Http {
             status: u16,
@@ -1283,7 +1283,7 @@ fn struct_rename_with_named_type() {
 #[test]
 fn self_referencing_type() {
     #[derive(Facet)]
-    pub struct SimpleList(Option<Box<SimpleList>>);
+    struct SimpleList(Option<Box<SimpleList>>);
 
     let registry = reflect::<SimpleList>();
 
@@ -1307,7 +1307,7 @@ fn self_referencing_type() {
 fn complex_self_referencing_type() {
     #[derive(Facet)]
     #[allow(clippy::vec_box)]
-    pub struct Node {
+    struct Node {
         value: i32,
         children: Option<Vec<Box<Node>>>,
     }
@@ -1336,6 +1336,118 @@ fn complex_self_referencing_type() {
                     ),
                 },
             ],
+        ),
+    }
+    "#);
+}
+
+#[test]
+fn tree_struct_with_mutual_recursion() {
+    #[derive(Facet)]
+    struct Tree<T> {
+        value: T,
+        children: Vec<Tree<T>>,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Test {
+        TreeWithMutualRecursion(Tree<Box<Test>>),
+    }
+
+    let registry = reflect::<Test>();
+
+    insta::assert_debug_snapshot!(registry.containers, @r#"
+    {
+        "Test": Enum(
+            {
+                0: Named {
+                    name: "TreeWithMutualRecursion",
+                    value: NewType(
+                        QualifiedTypeName(
+                            QualifiedTypeName {
+                                namespace: Root,
+                                name: "Tree",
+                            },
+                        ),
+                    ),
+                },
+            },
+        ),
+        "Tree": Struct(
+            [
+                Named {
+                    name: "value",
+                    value: QualifiedTypeName(
+                        QualifiedTypeName {
+                            namespace: Root,
+                            name: "Test",
+                        },
+                    ),
+                },
+                Named {
+                    name: "children",
+                    value: Seq(
+                        QualifiedTypeName(
+                            QualifiedTypeName {
+                                namespace: Root,
+                                name: "Tree",
+                            },
+                        ),
+                    ),
+                },
+            ],
+        ),
+    }
+    "#);
+}
+
+#[test]
+fn tree_enum_with_mutual_recursion() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Tree<T> {
+        Value(T),
+    }
+
+    #[derive(Facet)]
+    struct Test {
+        tree_with_mutual_recursion: Tree<Box<Test>>,
+    }
+
+    let registry = reflect::<Test>();
+
+    insta::assert_debug_snapshot!(registry.containers, @r#"
+    {
+        "Test": Struct(
+            [
+                Named {
+                    name: "tree_with_mutual_recursion",
+                    value: QualifiedTypeName(
+                        QualifiedTypeName {
+                            namespace: Root,
+                            name: "Tree",
+                        },
+                    ),
+                },
+            ],
+        ),
+        "Tree": Enum(
+            {
+                0: Named {
+                    name: "Value",
+                    value: NewType(
+                        QualifiedTypeName(
+                            QualifiedTypeName {
+                                namespace: Root,
+                                name: "Test",
+                            },
+                        ),
+                    ),
+                },
+            },
         ),
     }
     "#);

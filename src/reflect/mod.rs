@@ -88,79 +88,83 @@ fn format_with_namespace<'shape>(
         return;
     }
 
-    // Then check the type system (Type)
+    // Try type system first
+    if try_format_from_type_system(shape, namespace, registry) {
+        return;
+    }
+
+    // Fall back to def system
+    format_from_def_system(shape, namespace, registry);
+}
+
+fn try_format_from_type_system(
+    shape: &Shape,
+    namespace: Option<&str>,
+    registry: &mut Registry,
+) -> bool {
     match &shape.ty {
         Type::User(UserType::Struct(struct_def)) => {
-            // Get renamed name before mutable borrow to avoid borrowing conflicts
-            let type_name = get_name(shape, namespace, registry);
-
-            // Check if we're currently inside a container that needs updating
-            if let Some(current_format) = registry.get_mut() {
-                match current_format {
-                    ContainerFormat::NewTypeStruct(inner_format) => {
-                        if inner_format.is_unknown() {
-                            // Special case for unit type
-                            if shape.type_identifier == "()" {
-                                **inner_format = Format::Unit;
-                            } else {
-                                // Update the NewTypeStruct format to reference the inner type
-                                **inner_format = Format::QualifiedTypeName(type_name.clone());
-                            }
-                        }
-                    }
-                    ContainerFormat::TupleStruct(formats) => {
-                        // Special case for unit type
-                        if shape.type_identifier == "()" {
-                            formats.push(Format::Unit);
-                        } else {
-                            // Add TypeName format to the tuple
-                            formats.push(Format::QualifiedTypeName(type_name.clone()));
-                        }
-                    }
-                    ContainerFormat::Struct(fields) => {
-                        // For structs, update the last field format
-                        if let Some(last_named) = fields.last_mut() {
-                            if last_named.value.is_unknown() {
-                                if shape.type_identifier == "()" {
-                                    last_named.value = Format::Unit;
-                                } else {
-                                    last_named.value = Format::QualifiedTypeName(type_name.clone());
-                                }
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            format_struct(struct_def, shape, namespace, registry);
-            return;
+            handle_user_struct(shape, struct_def, namespace, registry);
+            true
         }
         Type::User(UserType::Enum(enum_def)) => {
             format_enum(enum_def, shape, namespace, registry);
-            return;
+            true
         }
         Type::Sequence(sequence_type) => {
-            match sequence_type {
-                SequenceType::Slice(_slice_type) => {
-                    // For slices, use the Def::Slice if available
-                    if let Def::Slice(slice_def) = shape.def {
-                        format_slice(slice_def, namespace, registry);
-                        return;
-                    }
-                }
-                SequenceType::Array(_array_type) => {
-                    // For arrays, use the Def::Array if available
-                    if let Def::Array(array_def) = shape.def {
-                        format_array(array_def, namespace, registry);
-                        return;
-                    }
-                }
+            handle_sequence_type(shape, sequence_type, namespace, registry)
+        }
+        _ => false,
+    }
+}
+
+fn handle_user_struct(
+    shape: &Shape,
+    struct_def: &StructType,
+    namespace: Option<&str>,
+    registry: &mut Registry,
+) {
+    let type_name = get_name(shape, namespace, registry);
+
+    // Update container with the struct format
+    let format = if shape.type_identifier == "()" {
+        Format::Unit
+    } else {
+        Format::QualifiedTypeName(type_name.clone())
+    };
+    update_container_format_if_unknown(format, registry);
+    format_struct(struct_def, shape, namespace, registry);
+}
+
+fn handle_sequence_type(
+    shape: &Shape,
+    sequence_type: &SequenceType,
+    namespace: Option<&str>,
+    registry: &mut Registry,
+) -> bool {
+    match sequence_type {
+        SequenceType::Slice(_slice_type) => {
+            // For slices, use the Def::Slice if available
+            if let Def::Slice(slice_def) = shape.def {
+                format_slice(slice_def, namespace, registry);
+                true
+            } else {
+                false
             }
         }
-        _ => {} // Continue to check the def system
+        SequenceType::Array(_array_type) => {
+            // For arrays, use the Def::Array if available
+            if let Def::Array(array_def) = shape.def {
+                format_array(array_def, namespace, registry);
+                true
+            } else {
+                false
+            }
+        }
     }
+}
 
-    // Then check the def system (Def)
+fn format_from_def_system(shape: &Shape, namespace: Option<&str>, registry: &mut Registry) {
     match shape.def {
         Def::Scalar => format_scalar(shape, registry),
         Def::Map(map_def) => format_map(map_def, namespace, registry),
@@ -171,24 +175,41 @@ fn format_with_namespace<'shape>(
         Def::SmartPointer(SmartPointerDef {
             pointee: Some(inner_shape),
             ..
-        }) => format_with_namespace(inner_shape(), namespace, registry),
+        }) => {
+            handle_smart_pointer(inner_shape(), namespace, registry);
+        }
         Def::Undefined => {
-            // Handle the case when not yet migrated to the Type enum
-            // For primitives, we can try to infer the type
-            match &shape.ty {
-                Type::Primitive(primitive) => match primitive {
-                    PrimitiveType::Boolean
-                    | PrimitiveType::Numeric(NumericType::Float)
-                    | PrimitiveType::Textual(TextualType::Str) => {}
-                    p => {
-                        unimplemented!("Unknown primitive type: {p:?}");
-                    }
-                },
-                Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                    format_with_namespace((pt.target)(), namespace, registry);
-                }
-                _ => {}
+            handle_undefined_def(shape, namespace, registry);
+        }
+        _ => {}
+    }
+}
+
+fn handle_smart_pointer(inner_shape: &Shape, namespace: Option<&str>, registry: &mut Registry) {
+    // For SmartPointer, we need to update the current container with the inner type's format
+    let inner_format = get_inner_format(inner_shape, namespace, registry);
+
+    // Update the current container with the SmartPointer's inner format
+    update_container_format_if_unknown(inner_format, registry);
+
+    // Also process the inner type if it's a user-defined type
+    process_nested_types(inner_shape, namespace, registry);
+}
+
+fn handle_undefined_def(shape: &Shape, namespace: Option<&str>, registry: &mut Registry) {
+    // Handle the case when not yet migrated to the Type enum
+    // For primitives, we can try to infer the type
+    match &shape.ty {
+        Type::Primitive(primitive) => match primitive {
+            PrimitiveType::Boolean
+            | PrimitiveType::Numeric(NumericType::Float)
+            | PrimitiveType::Textual(TextualType::Str) => {}
+            p => {
+                unimplemented!("Unknown primitive type: {p:?}");
             }
+        },
+        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
+            format_with_namespace((pt.target)(), namespace, registry);
         }
         _ => {}
     }
@@ -268,6 +289,9 @@ fn format_struct(
 
     // Check if already processed using the full namespaced name
     if registry.is_processed(&struct_name_str) {
+        // This is a mutual recursion case - only update if there's an unknown format that needs updating
+        let format = Format::QualifiedTypeName(struct_name.clone());
+        update_container_format_for_mutual_recursion(format, registry);
         return;
     }
 
@@ -365,10 +389,10 @@ fn handle_struct_field(field: &Field, namespace: Option<&str>, registry: &mut Re
 
                 Format::QualifiedTypeName(renamed_name)
             }
-            _ => Format::unknown(),
+            _ => get_inner_format(field_shape, namespace, registry),
         }
     } else {
-        Format::unknown()
+        get_inner_format(field_shape, namespace, registry)
     };
 
     if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
@@ -954,24 +978,77 @@ fn is_transparent_struct(shape: &Shape) -> bool {
     })
 }
 
+#[derive(Clone, Copy)]
+enum UpdateMode {
+    /// Unconditionally update the container format
+    Force,
+    /// Only update if the current format is unknown
+    IfUnknown,
+    /// Only update unknown formats, but don't add to `TupleStruct` (for mutual recursion)
+    MutualRecursion,
+}
+
 fn update_container_format(format: Format, registry: &mut Registry) {
+    update_container_format_with_mode(format, registry, UpdateMode::Force);
+}
+
+fn update_container_format_if_unknown(format: Format, registry: &mut Registry) {
+    update_container_format_with_mode(format, registry, UpdateMode::IfUnknown);
+}
+
+fn update_container_format_for_mutual_recursion(format: Format, registry: &mut Registry) {
+    update_container_format_with_mode(format, registry, UpdateMode::MutualRecursion);
+}
+
+fn update_container_format_with_mode(format: Format, registry: &mut Registry, mode: UpdateMode) {
     if let Some(container_format) = registry.get_mut() {
         match container_format {
             ContainerFormat::UnitStruct => {}
-            ContainerFormat::NewTypeStruct(inner_format) => {
-                *inner_format = Box::new(format);
-            }
+            ContainerFormat::NewTypeStruct(inner_format) => match mode {
+                UpdateMode::Force => {
+                    **inner_format = format;
+                }
+                UpdateMode::IfUnknown | UpdateMode::MutualRecursion => {
+                    if inner_format.is_unknown() {
+                        **inner_format = format;
+                    }
+                }
+            },
             ContainerFormat::TupleStruct(formats) => {
-                formats.push(format);
-            }
-            ContainerFormat::Struct(named_formats) => {
-                if let Some(last) = named_formats.last_mut() {
-                    if last.value.is_unknown() {
-                        last.value = format;
+                match mode {
+                    UpdateMode::Force | UpdateMode::IfUnknown => {
+                        formats.push(format);
+                    }
+                    UpdateMode::MutualRecursion => {
+                        // For mutual recursion, don't add duplicate entries to TupleStruct
+                        // They should already have the proper format from initial processing
                     }
                 }
             }
-            ContainerFormat::Enum(_) => todo!(),
+            ContainerFormat::Struct(fields) => {
+                if let Some(last_named) = fields.last_mut() {
+                    match mode {
+                        UpdateMode::Force => {
+                            // Even in Force mode, struct fields are only updated if unknown
+                            // This preserves the original behavior where struct fields are set
+                            // when first processed and shouldn't be overwritten later
+                            if last_named.value.is_unknown() {
+                                last_named.value = format;
+                            }
+                        }
+                        UpdateMode::IfUnknown | UpdateMode::MutualRecursion => {
+                            if last_named.value.is_unknown() {
+                                last_named.value = format;
+                            }
+                        }
+                    }
+                }
+            }
+            ContainerFormat::Enum(_) => {
+                if matches!(mode, UpdateMode::Force) {
+                    todo!("Enum container format update not implemented");
+                }
+            }
         }
     }
 }
