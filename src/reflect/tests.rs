@@ -1279,3 +1279,64 @@ fn struct_rename_with_named_type() {
               name: Effect
     ");
 }
+
+#[test]
+fn self_referencing_type() {
+    #[derive(Facet)]
+    pub struct SimpleList(Option<Box<SimpleList>>);
+
+    let registry = reflect::<SimpleList>();
+
+    insta::assert_debug_snapshot!(registry.containers, @r#"
+    {
+        "SimpleList": NewTypeStruct(
+            Option(
+                QualifiedTypeName(
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "SimpleList",
+                    },
+                ),
+            ),
+        ),
+    }
+    "#);
+}
+
+#[test]
+fn complex_self_referencing_type() {
+    #[derive(Facet)]
+    #[allow(clippy::vec_box)]
+    pub struct Node {
+        value: i32,
+        children: Option<Vec<Box<Node>>>,
+    }
+
+    let registry = reflect::<Node>();
+
+    insta::assert_debug_snapshot!(registry.containers, @r#"
+    {
+        "Node": Struct(
+            [
+                Named {
+                    name: "value",
+                    value: I32,
+                },
+                Named {
+                    name: "children",
+                    value: Option(
+                        Seq(
+                            QualifiedTypeName(
+                                QualifiedTypeName {
+                                    namespace: Root,
+                                    name: "Node",
+                                },
+                            ),
+                        ),
+                    ),
+                },
+            ],
+        ),
+    }
+    "#);
+}

@@ -82,7 +82,13 @@ fn format_with_namespace<'shape>(
     namespace: Option<&str>,
     registry: &mut Registry,
 ) {
-    // First check the type system (Type)
+    // First check for special cases in the def system (like Option)
+    if let Def::Option(option_def) = shape.def {
+        format_option(option_def, namespace, registry);
+        return;
+    }
+
+    // Then check the type system (Type)
     match &shape.ty {
         Type::User(UserType::Struct(struct_def)) => {
             // Get renamed name before mutable borrow to avoid borrowing conflicts
@@ -860,10 +866,8 @@ fn format_option(option_def: OptionDef, namespace: Option<&str>, registry: &mut 
     // Update the current container with the option format
     update_container_format(option_format, registry);
 
-    // If the inner type is a user-defined type, we need to process it too (skip for unit type)
-    if should_process_nested_type(inner_shape) {
-        format_with_namespace(inner_shape, namespace, registry);
-    }
+    // Also process nested types
+    process_nested_types(inner_shape, namespace, registry);
 }
 
 fn get_name(shape: &Shape, namespace: Option<&str>, _registry: &Registry) -> QualifiedTypeName {
@@ -1038,7 +1042,15 @@ fn get_inner_format(shape: &Shape, namespace: Option<&str>, registry: &Registry)
         }
         Def::Set(_set_def) => todo!(),
         Def::Slice(_slice_def) => todo!(),
-        Def::SmartPointer(_smart_pointer_def) => todo!(),
+        Def::SmartPointer(smart_pointer_def) => {
+            // Handle SmartPointer (Box, Arc, etc.) by recursively processing the inner type
+            if let Some(inner_shape) = smart_pointer_def.pointee {
+                get_inner_format(inner_shape(), namespace, registry)
+            } else {
+                // If no pointee, treat as unit
+                Format::Unit
+            }
+        }
     }
 }
 
