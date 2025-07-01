@@ -928,6 +928,33 @@ fn enum_with_struct_variants_mixed_types() {
 }
 
 #[test]
+fn enum_with_struct_variant() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    pub enum MyEnum {
+        A,
+        B(u64),
+        C { x: u8 },
+    }
+
+    let registry = reflect::<MyEnum>();
+    insta::assert_yaml_snapshot!(registry.containers, @r"
+    MyEnum:
+      ENUM:
+        0:
+          A: UNIT
+        1:
+          B:
+            NEWTYPE: U64
+        2:
+          C:
+            STRUCT:
+              - x: U8
+    ");
+}
+
+#[test]
 fn enum_with_skip_serializing() {
     #[derive(Facet)]
     #[repr(u8)]

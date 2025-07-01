@@ -631,7 +631,15 @@ fn process_single_variant(
         // Unit variant
         VariantFormat::Unit
     } else if variant.data.fields.len() == 1 {
-        process_newtype_variant(variant, shape, parent_namespace, registry)
+        // Check if it's a struct variant (named field) or tuple variant (numeric field name)
+        let field = variant.data.fields[0];
+        let is_struct_variant = !field.name.chars().all(|c| c.is_ascii_digit());
+
+        if is_struct_variant {
+            process_struct_variant(variant, shape, parent_namespace, registry)
+        } else {
+            process_newtype_variant(variant, shape, parent_namespace, registry)
+        }
     } else {
         process_multi_field_variant(variant, shape, parent_namespace, registry)
     }
