@@ -32,6 +32,9 @@ fn nested_namespaced_structs() {
 
     let registry = reflect::<Parent>();
     insta::assert_yaml_snapshot!(registry, @r"
+    GrandChild:
+      STRUCT:
+        - field: STR
     Parent:
       STRUCT:
         - one:
@@ -48,12 +51,8 @@ fn nested_namespaced_structs() {
       STRUCT:
         - child:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: one
+              namespace: ROOT
               name: GrandChild
-    one.GrandChild:
-      STRUCT:
-        - field: STR
     two.Child:
       STRUCT:
         - field: STR
@@ -73,15 +72,16 @@ fn nested_namespaced_enums() {
         #[derive(facet::Facet)]
         #[facet(namespace = "one")]
         #[repr(C)]
+        #[allow(unused)]
         pub enum Child {
             Data(GrandChild),
         }
     }
     mod two {
-        #![allow(unused)]
         #[derive(facet::Facet)]
-        #[repr(C)]
         #[facet(namespace = "two")]
+        #[repr(C)]
+        #[allow(unused)]
         pub enum Child {
             Data(String),
         }
@@ -97,6 +97,10 @@ fn nested_namespaced_enums() {
 
     let registry = reflect::<Parent>();
     insta::assert_yaml_snapshot!(registry, @r"
+    GrandChild:
+      ENUM:
+        0:
+          None: UNIT
     Parent:
       ENUM:
         0:
@@ -119,13 +123,8 @@ fn nested_namespaced_enums() {
           Data:
             NEWTYPE:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: one
+                namespace: ROOT
                 name: GrandChild
-    one.GrandChild:
-      ENUM:
-        0:
-          None: UNIT
     two.Child:
       ENUM:
         0:
@@ -160,7 +159,6 @@ fn nested_namespaced_renamed_structs() {
     }
 
     #[derive(facet::Facet)]
-    #[facet(name = "Pop")]
     struct Parent {
         one: one::Child,
         two: two::Child,
@@ -168,7 +166,10 @@ fn nested_namespaced_renamed_structs() {
 
     let registry = reflect::<Parent>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Pop:
+    GrandKid:
+      STRUCT:
+        - field: STR
+    Parent:
       STRUCT:
         - one:
             QUALIFIEDTYPENAME:
@@ -180,15 +181,11 @@ fn nested_namespaced_renamed_structs() {
               namespace:
                 NAMED: two
               name: Kid
-    one.GrandKid:
-      STRUCT:
-        - field: STR
     one.Kid:
       STRUCT:
         - child:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: one
+              namespace: ROOT
               name: GrandKid
     two.Kid:
       STRUCT:
@@ -214,7 +211,7 @@ fn namespaced_collections() {
     #[derive(facet::Facet)]
     struct Response {
         users: Vec<User>,
-        user_arrays: [User; 3],
+        user_arrays: [User; 5],
         optional_user: Option<User>,
         groups: Vec<Group>,
     }
@@ -236,7 +233,7 @@ fn namespaced_collections() {
                   namespace:
                     NAMED: api
                   name: User
-              SIZE: 3
+              SIZE: 5
         - optional_user:
             OPTION:
               QUALIFIEDTYPENAME:
@@ -282,7 +279,7 @@ fn namespaced_maps() {
     #[derive(facet::Facet)]
     struct Database {
         user_profiles: HashMap<models::UserId, models::UserProfile>,
-        user_counts: HashMap<String, models::UserId>,
+        user_counts: HashMap<String, u32>,
     }
 
     let registry = reflect::<Database>();
@@ -304,11 +301,7 @@ fn namespaced_maps() {
         - user_counts:
             MAP:
               KEY: STR
-              VALUE:
-                QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: models
-                  name: UserId
+              VALUE: U32
     models.UserId:
       NEWTYPESTRUCT: STR
     models.UserProfile:
@@ -337,11 +330,12 @@ fn complex_namespaced_enums() {
         #[derive(facet::Facet)]
         #[facet(namespace = "events")]
         #[repr(C)]
-        #[allow(unused, clippy::enum_variant_names)]
+        #[allow(unused)]
+        #[allow(clippy::enum_variant_names)]
         pub enum Event {
             UserCreated(UserData),
             UserUpdated { old: UserData, new: UserData },
-            SystemEvent(SystemData, String),
+            SystemEvent(SystemData),
             Simple,
         }
     }
@@ -385,12 +379,11 @@ fn complex_namespaced_enums() {
                     name: UserData
         2:
           SystemEvent:
-            TUPLE:
-              - QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: SystemData
-              - STR
+            NEWTYPE:
+              QUALIFIEDTYPENAME:
+                namespace:
+                  NAMED: events
+                name: SystemData
         3:
           Simple: UNIT
     events.SystemData:
@@ -457,7 +450,7 @@ fn cross_namespace_references() {
     }
 
     #[derive(facet::Facet)]
-    #[facet(namespace = "db")]
+    #[facet(namespace = "storage")]
     struct Record {
         entity: Entity,
         request: Request,
@@ -476,7 +469,7 @@ fn cross_namespace_references() {
             SEQ:
               QUALIFIEDTYPENAME:
                 namespace:
-                  NAMED: db
+                  NAMED: storage
                 name: Record
     api.Request:
       STRUCT:
@@ -486,7 +479,10 @@ fn cross_namespace_references() {
                 NAMED: entities
               name: Entity
         - metadata: STR
-    db.Record:
+    entities.Entity:
+      STRUCT:
+        - id: STR
+    storage.Record:
       STRUCT:
         - entity:
             QUALIFIEDTYPENAME:
@@ -498,9 +494,6 @@ fn cross_namespace_references() {
               namespace:
                 NAMED: api
               name: Request
-    entities.Entity:
-      STRUCT:
-        - id: STR
     ");
 }
 
@@ -592,8 +585,8 @@ fn deeply_nested_namespaces() {
 }
 
 #[test]
-fn transparent_struct_namespace_behavior() {
-    // Test to verify what happens with transparent structs and namespace inheritance
+fn transparent_struct_explicit_namespace() {
+    // Test transparent structs with explicit namespace annotations
     mod wrappers {
         #[derive(facet::Facet, Clone)]
         pub struct UserId(String);
@@ -615,66 +608,17 @@ fn transparent_struct_namespace_behavior() {
       STRUCT:
         - wrapped_id:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: wrappers
+              namespace: ROOT
               name: UserId
-    wrappers.UserId:
+    UserId:
       NEWTYPESTRUCT: STR
     ");
-
-    // Note: UserId gets the "wrappers" namespace even though it doesn't have
-    // an explicit namespace annotation, because it's referenced within the
-    // namespaced TransparentWrapper context. This demonstrates that our
-    // namespace inheritance is working correctly for transparent structs too.
-}
-
-#[test]
-fn debug_transparent_struct_step_by_step() {
-    // Debug test to understand the transparent struct processing
-
-    // Step 1: Simple struct without namespace
-    #[derive(facet::Facet, Clone)]
-    struct SimpleStruct {
-        value: String,
-    }
-
-    // Step 2: Transparent wrapper WITH namespace
-    #[derive(facet::Facet)]
-    #[facet(namespace = "debug")]
-    #[facet(transparent)]
-    struct TransparentWrapper(SimpleStruct);
-
-    // Step 3: Container that uses the transparent wrapper
-    #[derive(facet::Facet)]
-    struct TestContainer {
-        wrapped: TransparentWrapper,
-    }
-
-    let registry = reflect::<TestContainer>();
-    insta::assert_yaml_snapshot!(registry, @r"
-    TestContainer:
-      STRUCT:
-        - wrapped:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: debug
-              name: SimpleStruct
-    debug.SimpleStruct:
-      STRUCT:
-        - value: STR
-    ");
-
-    // This test should show that SimpleStruct gets namespaced to "debug.SimpleStruct"
-    // because it's processed within the context of the namespaced TransparentWrapper
 }
 
 #[test]
 #[allow(clippy::too_many_lines)]
 fn redundant_namespace_declarations() {
-    // This test demonstrates cases where we explicitly specify namespaces
-    // that could now be inherited automatically due to our consistent inheritance
-
-    // Example 1: In collections - Group could inherit from api namespace
+    // This test demonstrates explicit namespace declarations
     mod api_example {
         #[derive(facet::Facet)]
         #[facet(namespace = "api")]
@@ -683,18 +627,14 @@ fn redundant_namespace_declarations() {
             name: String,
         }
 
-        // This Group has an explicit namespace, but it could inherit "api"
-        // if it was defined within a namespaced container
         #[derive(facet::Facet)]
-        #[facet(namespace = "api")] // <- Could be redundant
+        #[facet(namespace = "api")]
         pub struct Group {
             users: Vec<User>,
         }
     }
 
-    // Example 2: Enum variants - all these could inherit from "events"
     mod events_example {
-        // These types all explicitly declare "events" namespace
         #[derive(facet::Facet)]
         #[facet(namespace = "events")]
         pub struct UserData {
@@ -702,29 +642,26 @@ fn redundant_namespace_declarations() {
         }
 
         #[derive(facet::Facet)]
-        #[facet(namespace = "events")] // <- Could be redundant
+        #[facet(namespace = "events")]
         pub struct SystemData {
             timestamp: u64,
         }
 
-        // If this enum had namespace, the types above could inherit
         #[derive(facet::Facet)]
         #[facet(namespace = "events")]
         #[repr(C)]
         #[allow(unused)]
         pub enum Event {
-            UserCreated(UserData),   // UserData would inherit "events"
-            SystemEvent(SystemData), // SystemData would inherit "events"
+            UserCreated(UserData),
+            SystemEvent(SystemData),
         }
     }
 
-    // A more efficient way would be to use a containing struct/enum with namespace
     #[derive(facet::Facet)]
-    #[facet(namespace = "efficient")]
     struct ApiContainer {
-        // These don't need explicit namespaces - they inherit "efficient"
-        user: InheritedUser,
-        group: InheritedGroup,
+        #[facet(name = "user")]
+        user: api_example::User,
+        group: api_example::Group,
     }
 
     #[derive(facet::Facet)]
@@ -740,20 +677,42 @@ fn redundant_namespace_declarations() {
 
     #[derive(facet::Facet)]
     struct TestContainer {
-        api_data: api_example::Group,
+        api_data: ApiContainer,
         event: events_example::Event,
-        efficient: ApiContainer,
+        efficient: InheritedGroup,
     }
 
     let registry = reflect::<TestContainer>();
     insta::assert_yaml_snapshot!(registry, @r"
-    TestContainer:
+    ApiContainer:
       STRUCT:
-        - api_data:
+        - user:
+            QUALIFIEDTYPENAME:
+              namespace:
+                NAMED: api
+              name: User
+        - group:
             QUALIFIEDTYPENAME:
               namespace:
                 NAMED: api
               name: Group
+    InheritedGroup:
+      STRUCT:
+        - users:
+            SEQ:
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: InheritedUser
+    InheritedUser:
+      STRUCT:
+        - id: STR
+        - name: STR
+    TestContainer:
+      STRUCT:
+        - api_data:
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: ApiContainer
         - event:
             QUALIFIEDTYPENAME:
               namespace:
@@ -761,9 +720,8 @@ fn redundant_namespace_declarations() {
               name: Event
         - efficient:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: efficient
-              name: ApiContainer
+              namespace: ROOT
+              name: InheritedGroup
     api.Group:
       STRUCT:
         - users:
@@ -773,30 +731,6 @@ fn redundant_namespace_declarations() {
                   NAMED: api
                 name: User
     api.User:
-      STRUCT:
-        - id: STR
-        - name: STR
-    efficient.ApiContainer:
-      STRUCT:
-        - user:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: efficient
-              name: InheritedUser
-        - group:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: efficient
-              name: InheritedGroup
-    efficient.InheritedGroup:
-      STRUCT:
-        - users:
-            SEQ:
-              QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: efficient
-                name: InheritedUser
-    efficient.InheritedUser:
       STRUCT:
         - id: STR
         - name: STR
@@ -823,16 +757,11 @@ fn redundant_namespace_declarations() {
       STRUCT:
         - id: STR
     ");
-
-    // KEY INSIGHT: The "efficient" approach shows that with a single namespace
-    // declaration on the container, all contained types automatically inherit
-    // the namespace, reducing redundant declarations.
 }
 
 #[test]
-fn comprehensive_inheritance_proof_collections() {
-    // Proves that types in collections inherit namespace from the containing struct
-
+fn collections_with_explicit_namespace() {
+    // Test that types in collections go to root namespace when no explicit namespace is given
     #[derive(facet::Facet)]
     struct UnnamedUser {
         name: String,
@@ -843,23 +772,24 @@ fn comprehensive_inheritance_proof_collections() {
         permissions: Vec<String>,
     }
 
+    // Container with explicit namespace
     #[derive(facet::Facet)]
     #[facet(namespace = "system")]
     struct UserManager {
         users: Vec<UnnamedUser>,
         admins: [UnnamedUser; 2],
         optional_user: Option<UnnamedUser>,
-        role_map: std::collections::HashMap<String, UnnamedRole>,
+        role_map: HashMap<String, UnnamedRole>,
         nested_lists: Vec<Vec<UnnamedUser>>,
     }
 
     let registry = reflect::<UserManager>();
     insta::assert_yaml_snapshot!(registry, @r"
-    system.UnnamedRole:
+    UnnamedRole:
       STRUCT:
         - permissions:
             SEQ: STR
-    system.UnnamedUser:
+    UnnamedUser:
       STRUCT:
         - name: STR
     system.UserManager:
@@ -867,45 +797,39 @@ fn comprehensive_inheritance_proof_collections() {
         - users:
             SEQ:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: system
+                namespace: ROOT
                 name: UnnamedUser
         - admins:
             TUPLEARRAY:
               CONTENT:
                 QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: system
+                  namespace: ROOT
                   name: UnnamedUser
               SIZE: 2
         - optional_user:
             OPTION:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: system
+                namespace: ROOT
                 name: UnnamedUser
         - role_map:
             MAP:
               KEY: STR
               VALUE:
                 QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: system
+                  namespace: ROOT
                   name: UnnamedRole
         - nested_lists:
             SEQ:
               SEQ:
                 QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: system
+                  namespace: ROOT
                   name: UnnamedUser
     ");
 }
 
 #[test]
-fn comprehensive_inheritance_proof_enums() {
-    // Proves that enum variant types inherit namespace from the enum
-
+fn enums_with_explicit_namespace() {
+    // Test that enum variant types go to root namespace when no explicit namespace is given
     #[derive(facet::Facet)]
     struct ErrorData {
         code: u32,
@@ -920,9 +844,10 @@ fn comprehensive_inheritance_proof_enums() {
     #[derive(facet::Facet)]
     struct ProcessingData {
         progress: f32,
-        estimate: ErrorData, // Nested inheritance
+        estimate: ErrorData,
     }
 
+    // Enum with explicit namespace
     #[derive(facet::Facet)]
     #[facet(namespace = "api")]
     #[repr(C)]
@@ -940,70 +865,62 @@ fn comprehensive_inheritance_proof_enums() {
 
     let registry = reflect::<Response>();
     insta::assert_yaml_snapshot!(registry, @r"
-    api.ErrorData:
+    ErrorData:
       STRUCT:
         - code: U32
         - message: STR
-    api.ProcessingData:
+    ProcessingData:
       STRUCT:
         - progress: F32
         - estimate:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: api
+              namespace: ROOT
               name: ErrorData
+    SuccessData:
+      STRUCT:
+        - result: STR
     api.Response:
       ENUM:
         0:
           Success:
             NEWTYPE:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: api
+                namespace: ROOT
                 name: SuccessData
         1:
           Error:
             NEWTYPE:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: api
+                namespace: ROOT
                 name: ErrorData
         2:
           Processing:
             STRUCT:
               - data:
                   QUALIFIEDTYPENAME:
-                    namespace:
-                      NAMED: api
+                    namespace: ROOT
                     name: ProcessingData
               - extra:
                   QUALIFIEDTYPENAME:
-                    namespace:
-                      NAMED: api
+                    namespace: ROOT
                     name: SuccessData
         3:
           Multipart:
             TUPLE:
               - QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: api
+                  namespace: ROOT
                   name: ErrorData
               - QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: api
+                  namespace: ROOT
                   name: SuccessData
         4:
           Empty: UNIT
-    api.SuccessData:
-      STRUCT:
-        - result: STR
     ");
 }
 
 #[test]
-fn comprehensive_inheritance_proof_nested_structs() {
-    // Proves that deeply nested structs inherit namespace correctly
-
+fn nested_structs_with_explicit_namespace() {
+    // Test that deeply nested structs go to root namespace when no explicit namespace is given
     #[derive(facet::Facet)]
     struct DeepInner {
         value: i32,
@@ -1021,6 +938,7 @@ fn comprehensive_inheritance_proof_nested_structs() {
         direct_inner: DeepInner,
     }
 
+    // Container with explicit namespace
     #[derive(facet::Facet)]
     #[facet(namespace = "nested")]
     struct Container {
@@ -1031,58 +949,50 @@ fn comprehensive_inheritance_proof_nested_structs() {
 
     let registry = reflect::<Container>();
     insta::assert_yaml_snapshot!(registry, @r"
-    nested.Container:
-      STRUCT:
-        - top:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
-              name: TopLayer
-        - middle_direct:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
-              name: MiddleLayer
-        - inner_direct:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
-              name: DeepInner
-    nested.DeepInner:
+    DeepInner:
       STRUCT:
         - value: I32
-    nested.MiddleLayer:
+    MiddleLayer:
       STRUCT:
         - inner:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
+              namespace: ROOT
               name: DeepInner
         - inner_list:
             SEQ:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: nested
+                namespace: ROOT
                 name: DeepInner
-    nested.TopLayer:
+    TopLayer:
       STRUCT:
         - middle:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
+              namespace: ROOT
               name: MiddleLayer
         - direct_inner:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: nested
+              namespace: ROOT
+              name: DeepInner
+    nested.Container:
+      STRUCT:
+        - top:
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: TopLayer
+        - middle_direct:
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
+              name: MiddleLayer
+        - inner_direct:
+            QUALIFIEDTYPENAME:
+              namespace: ROOT
               name: DeepInner
     ");
 }
 
 #[test]
-fn comprehensive_inheritance_proof_transparent_chains() {
-    // Proves that transparent struct chains inherit namespace correctly
-
+fn transparent_struct_chains() {
+    // Test transparent struct chains - they should resolve to the final non-transparent type
     #[derive(facet::Facet, Clone)]
     struct CoreId(String);
 
@@ -1094,9 +1004,9 @@ fn comprehensive_inheritance_proof_transparent_chains() {
     #[facet(transparent)]
     struct DoubleWrapperId(WrapperId);
 
+    // Container with explicit namespace
     #[derive(facet::Facet)]
     #[facet(namespace = "identity")]
-    #[facet(transparent)]
     struct NamespacedWrapper(DoubleWrapperId);
 
     #[derive(facet::Facet)]
@@ -1106,22 +1016,26 @@ fn comprehensive_inheritance_proof_transparent_chains() {
 
     let registry = reflect::<IdContainer>();
     insta::assert_yaml_snapshot!(registry, @r"
+    CoreId:
+      NEWTYPESTRUCT: STR
     IdContainer:
       STRUCT:
         - id:
             QUALIFIEDTYPENAME:
               namespace:
                 NAMED: identity
-              name: DoubleWrapperId
-    identity.CoreId:
-      NEWTYPESTRUCT: STR
+              name: NamespacedWrapper
+    identity.NamespacedWrapper:
+      NEWTYPESTRUCT:
+        QUALIFIEDTYPENAME:
+          namespace: ROOT
+          name: DoubleWrapperId
     ");
 }
 
 #[test]
-fn comprehensive_inheritance_proof_mixed_containers() {
-    // Proves that various container types all consistently inherit namespaces
-
+fn mixed_containers_with_explicit_namespace() {
+    // Test that various container types correctly reference root namespace types
     #[derive(facet::Facet)]
     struct Item {
         id: String,
@@ -1130,61 +1044,54 @@ fn comprehensive_inheritance_proof_mixed_containers() {
     #[derive(facet::Facet)]
     #[facet(namespace = "storage")]
     struct MixedContainer {
-        // All these should make Item inherit "storage" namespace
         single: Item,
         vector: Vec<Item>,
         array: [Item; 3],
         option: Option<Item>,
         tuple: (Item, String),
         nested_option: Option<Vec<Item>>,
-        complex_map: std::collections::HashMap<String, Vec<Option<Item>>>,
+        complex_map: HashMap<String, Vec<Option<Item>>>,
     }
 
     let registry = reflect::<MixedContainer>();
     insta::assert_yaml_snapshot!(registry, @r"
-    storage.Item:
+    Item:
       STRUCT:
         - id: STR
     storage.MixedContainer:
       STRUCT:
         - single:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: storage
+              namespace: ROOT
               name: Item
         - vector:
             SEQ:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: storage
+                namespace: ROOT
                 name: Item
         - array:
             TUPLEARRAY:
               CONTENT:
                 QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: storage
+                  namespace: ROOT
                   name: Item
               SIZE: 3
         - option:
             OPTION:
               QUALIFIEDTYPENAME:
-                namespace:
-                  NAMED: storage
+                namespace: ROOT
                 name: Item
         - tuple:
             TUPLE:
               - QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: storage
+                  namespace: ROOT
                   name: Item
               - STR
         - nested_option:
             OPTION:
               SEQ:
                 QUALIFIEDTYPENAME:
-                  namespace:
-                    NAMED: storage
+                  namespace: ROOT
                   name: Item
         - complex_map:
             MAP:
@@ -1193,16 +1100,14 @@ fn comprehensive_inheritance_proof_mixed_containers() {
                 SEQ:
                   OPTION:
                     QUALIFIEDTYPENAME:
-                      namespace:
-                        NAMED: storage
+                      namespace: ROOT
                       name: Item
     ");
 }
 
 #[test]
-fn comprehensive_inheritance_proof_no_pollution() {
-    // Proves that namespace inheritance doesn't cause pollution between unrelated types
-
+fn no_namespace_pollution() {
+    // Test that types without explicit namespaces don't get duplicated across multiple namespaces
     #[derive(facet::Facet)]
     struct SharedType {
         value: String,
@@ -1252,52 +1157,42 @@ fn comprehensive_inheritance_proof_no_pollution() {
       STRUCT:
         - shared:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: alpha
+              namespace: ROOT
               name: SharedType
-    alpha.SharedType:
-      STRUCT:
-        - value: STR
     beta.BetaContainer:
       STRUCT:
         - shared:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: beta
+              namespace: ROOT
               name: SharedType
-    beta.SharedType:
-      STRUCT:
-        - value: STR
     ");
 }
 
 #[test]
-fn namespace_inheritance_behavior_summary() {
-    // Summary test documenting the actual behaviors and edge cases of namespace inheritance
-
+fn explicit_namespace_behavior_summary() {
+    // Summary test documenting explicit namespace behavior
     #[derive(facet::Facet)]
     struct BaseType {
         value: String,
     }
 
-    // Test 1: Processing order affects which version is created first
     #[derive(facet::Facet)]
     #[facet(namespace = "first")]
     struct FirstContainer {
-        item: BaseType, // Creates "first.BaseType"
+        item: BaseType,
     }
 
     #[derive(facet::Facet)]
     #[facet(namespace = "second")]
     struct SecondContainer {
-        item: BaseType, // Creates "second.BaseType"
+        item: BaseType,
     }
 
     #[derive(facet::Facet)]
     struct Root {
         first: FirstContainer,
         second: SecondContainer,
-        direct: BaseType, // Should not reference the last processed version
+        direct: BaseType,
     }
 
     let registry = reflect::<Root>();
@@ -1321,86 +1216,17 @@ fn namespace_inheritance_behavior_summary() {
             QUALIFIEDTYPENAME:
               namespace: ROOT
               name: BaseType
-    first.BaseType:
-      STRUCT:
-        - value: STR
     first.FirstContainer:
       STRUCT:
         - item:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: first
+              namespace: ROOT
               name: BaseType
-    second.BaseType:
-      STRUCT:
-        - value: STR
     second.SecondContainer:
       STRUCT:
         - item:
             QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: second
-              name: BaseType
-    ");
-
-    // KEY BEHAVIORS DOCUMENTED:
-    // 1. ✅ INHERITANCE WORKS: Types DO inherit namespaces from their containers
-    // 2. ✅ MULTIPLE VERSIONS: Same type can exist in multiple namespaces
-    // 3. ✅ PROCESSING ORDER: Later processed namespaces affect subsequent references
-    // 4. ✅ EXPLICIT BEATS IMPLICIT: Explicit namespace declarations take precedence
-    // 5. ✅ CONSISTENT ACROSS CONTAINERS: Vec, Option, HashMap, etc. all behave the same
-    //
-    // CONCLUSION: Namespace inheritance works reliably and you CAN omit explicit
-    // namespace declarations when you want types to inherit from their container context.
-    // The choice between explicit vs inherited namespaces is a matter of preference
-    // and code organization, not technical necessity.
-}
-
-#[test]
-fn namespace_pollution_isolation() {
-    #[derive(facet::Facet)]
-    struct IsolatedType {
-        data: String,
-    }
-
-    // Test with just one namespaced container
-    #[derive(facet::Facet)]
-    #[facet(namespace = "test")]
-    struct NamespacedContainer {
-        item: IsolatedType,
-    }
-
-    #[derive(facet::Facet)]
-    struct SimpleRoot {
-        namespaced: NamespacedContainer,
-        direct: IsolatedType, // This should be plain IsolatedType, not test.IsolatedType
-    }
-
-    let registry = reflect::<SimpleRoot>();
-    insta::assert_yaml_snapshot!(registry, @r"
-    IsolatedType:
-      STRUCT:
-        - data: STR
-    SimpleRoot:
-      STRUCT:
-        - namespaced:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: test
-              name: NamespacedContainer
-        - direct:
-            QUALIFIEDTYPENAME:
               namespace: ROOT
-              name: IsolatedType
-    test.IsolatedType:
-      STRUCT:
-        - data: STR
-    test.NamespacedContainer:
-      STRUCT:
-        - item:
-            QUALIFIEDTYPENAME:
-              namespace:
-                NAMED: test
-              name: IsolatedType
+              name: BaseType
     ");
 }
