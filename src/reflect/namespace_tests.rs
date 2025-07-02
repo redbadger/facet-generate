@@ -31,7 +31,7 @@ fn nested_namespaced_structs() {
     }
 
     let registry = reflect::<Parent>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Parent:
       STRUCT:
         - one:
@@ -96,7 +96,7 @@ fn nested_namespaced_enums() {
     }
 
     let registry = reflect::<Parent>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Parent:
       ENUM:
         0:
@@ -167,7 +167,7 @@ fn nested_namespaced_renamed_structs() {
     }
 
     let registry = reflect::<Parent>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Pop:
       STRUCT:
         - one:
@@ -220,7 +220,7 @@ fn namespaced_collections() {
     }
 
     let registry = reflect::<Response>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Response:
       STRUCT:
         - users:
@@ -286,7 +286,7 @@ fn namespaced_maps() {
     }
 
     let registry = reflect::<Database>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Database:
       STRUCT:
         - user_profiles:
@@ -352,7 +352,7 @@ fn complex_namespaced_enums() {
     }
 
     let registry = reflect::<EventLog>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     EventLog:
       STRUCT:
         - events:
@@ -423,7 +423,7 @@ fn namespaced_transparent_structs() {
     }
 
     let registry = reflect::<Container>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Container:
       STRUCT:
         - direct_id:
@@ -469,7 +469,7 @@ fn cross_namespace_references() {
     }
 
     let registry = reflect::<System>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     System:
       STRUCT:
         - records:
@@ -524,7 +524,7 @@ fn namespace_with_byte_attributes() {
     }
 
     let registry = reflect::<Document>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Document:
       STRUCT:
         - binary:
@@ -565,7 +565,7 @@ fn deeply_nested_namespaces() {
     }
 
     let registry = reflect::<RootStruct>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     RootStruct:
       STRUCT:
         - middle:
@@ -610,7 +610,7 @@ fn transparent_struct_namespace_behavior() {
     }
 
     let registry = reflect::<Container>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     Container:
       STRUCT:
         - wrapped_id:
@@ -651,7 +651,7 @@ fn debug_transparent_struct_step_by_step() {
     }
 
     let registry = reflect::<TestContainer>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     TestContainer:
       STRUCT:
         - wrapped:
@@ -746,7 +746,7 @@ fn redundant_namespace_declarations() {
     }
 
     let registry = reflect::<TestContainer>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     TestContainer:
       STRUCT:
         - api_data:
@@ -854,7 +854,7 @@ fn comprehensive_inheritance_proof_collections() {
     }
 
     let registry = reflect::<UserManager>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     system.UnnamedRole:
       STRUCT:
         - permissions:
@@ -939,7 +939,7 @@ fn comprehensive_inheritance_proof_enums() {
     }
 
     let registry = reflect::<Response>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     api.ErrorData:
       STRUCT:
         - code: U32
@@ -1030,7 +1030,7 @@ fn comprehensive_inheritance_proof_nested_structs() {
     }
 
     let registry = reflect::<Container>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     nested.Container:
       STRUCT:
         - top:
@@ -1105,7 +1105,7 @@ fn comprehensive_inheritance_proof_transparent_chains() {
     }
 
     let registry = reflect::<IdContainer>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     IdContainer:
       STRUCT:
         - id:
@@ -1141,7 +1141,7 @@ fn comprehensive_inheritance_proof_mixed_containers() {
     }
 
     let registry = reflect::<MixedContainer>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     storage.Item:
       STRUCT:
         - id: STR
@@ -1228,7 +1228,7 @@ fn comprehensive_inheritance_proof_no_pollution() {
     }
 
     let registry = reflect::<RootContainer>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     RootContainer:
       STRUCT:
         - alpha:
@@ -1301,7 +1301,7 @@ fn namespace_inheritance_behavior_summary() {
     }
 
     let registry = reflect::<Root>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     BaseType:
       STRUCT:
         - value: STR
@@ -1377,7 +1377,7 @@ fn namespace_pollution_isolation() {
     }
 
     let registry = reflect::<SimpleRoot>();
-    insta::assert_yaml_snapshot!(registry.containers, @r"
+    insta::assert_yaml_snapshot!(registry, @r"
     IsolatedType:
       STRUCT:
         - data: STR

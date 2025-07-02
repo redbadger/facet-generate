@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use facet::Facet;
-use facet_generate::reflect;
-use facet_generate::serde_generate::Encoding;
-use facet_generate::serde_reflection::Registry;
+use facet_generate::{Registry, reflect, serde_generate::Encoding};
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -26,7 +24,7 @@ pub enum Choice {
 }
 
 pub fn get_simple_registry() -> Registry {
-    reflect::<Test>().consume()
+    reflect::<Test>()
 }
 
 // More complex data format used to test re-serialization and basic fuzzing.
@@ -138,7 +136,7 @@ pub enum CStyleEnum {
 
 /// The registry corresponding to the test data structures above.
 pub fn get_registry() -> Registry {
-    reflect::<SerdeData>().consume()
+    reflect::<SerdeData>()
 }
 
 /// Manually generate sample values.

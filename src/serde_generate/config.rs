@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use crate::serde_reflection::Registry;
+use crate::Registry;
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]

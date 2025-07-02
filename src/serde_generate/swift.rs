@@ -7,8 +7,9 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::serde_reflection::{
-    ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
+use crate::{
+    Registry,
+    serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;

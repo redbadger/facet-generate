@@ -55,7 +55,7 @@ jobs:
           deno-version: v2.x
 
       - name: Setup Additional Languages for codegen tests (swift)
-        uses: swift-actions/setup-swift@v2
+        uses: SwiftyLab/setup-swift@latest
 
       - name: Install latest nextest release
         uses: taiki-e/install-action@nextest

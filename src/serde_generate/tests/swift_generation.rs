@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::test_utils;
-use facet_generate::serde_generate::{CodeGeneratorConfig, Encoding, swift};
-use facet_generate::serde_reflection::Registry;
+use facet_generate::{
+    Registry,
+    serde_generate::{CodeGeneratorConfig, Encoding, swift},
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, io::Write, process::Command, sync::Mutex};
 use tempfile::{TempDir, tempdir};

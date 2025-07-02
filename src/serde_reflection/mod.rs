@@ -14,8 +14,5 @@ pub use format::{
     VariantFormat,
 };
 
-/// A map of container formats.
-pub type Registry = BTreeMap<String, ContainerFormat>;
-
 #[cfg(test)]
 mod tests;

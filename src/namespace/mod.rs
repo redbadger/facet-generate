@@ -3,8 +3,9 @@ use std::{cmp::Ordering, collections::BTreeMap};
 use serde::Serialize;
 
 use crate::{
+    Registry,
     serde_generate::CodeGeneratorConfig,
-    serde_reflection::{ContainerFormat, Format, FormatHolder, Registry, Result},
+    serde_reflection::{ContainerFormat, Format, FormatHolder, Result},
 };
 
 #[derive(Debug, Clone, Serialize)]
