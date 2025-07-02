@@ -102,7 +102,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         for namespace in &self.generator.namespaces_to_import {
             writeln!(
                 self.out,
-                "import * as {} from '../{}/mod.ts';\n",
+                "import * as {} from './{}';\n",
                 namespace.to_upper_camel_case(),
                 namespace
             )?;

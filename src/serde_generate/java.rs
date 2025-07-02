@@ -51,9 +51,13 @@ impl<'a> CodeGenerator<'a> {
             "Java does not support generating c-style enums"
         );
         let mut external_qualified_names = HashMap::new();
+        let root_module = config.module_name();
         for (namespace, names) in &config.external_definitions {
             for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{namespace}.{name}"));
+                external_qualified_names.insert(
+                    name.to_string(),
+                    format!("{root_module}.{namespace}.{name}"),
+                );
             }
         }
         Self {
@@ -136,6 +140,7 @@ where
 {
     fn output_preamble(&mut self) -> Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
+
         Ok(())
     }
 
