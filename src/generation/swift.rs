@@ -120,6 +120,7 @@ where
             .config
             .external_definitions
             .keys()
+            .map(AsUpperCamelCase)
             .collect::<Vec<_>>()
         {
             writeln!(self.out, "import {import}")?;
@@ -992,6 +993,13 @@ impl super::SourceInstaller for Installer {
 
 #[cfg(test)]
 mod tests {
+    use facet::Facet;
+
+    use crate::{
+        generation::SourceInstaller as _,
+        reflection::{namespace::split, reflect},
+    };
+
     use super::*;
 
     #[test]
@@ -1014,6 +1022,52 @@ mod tests {
             ],
             targets: [
         		.target(name: "MyPackage", dependencies: ["Serde"]),
+        		.target(name: "Serde", dependencies: []),
+        	]
+        )
+        "#);
+    }
+
+    #[test]
+    fn manifest_with_namespaces() {
+        #[derive(Facet)]
+        #[facet(namespace = "my_namespace")]
+        struct Child {
+            name: String,
+        }
+
+        #[derive(Facet)]
+        struct Root {
+            child: Child,
+        }
+
+        let registry = reflect::<Root>();
+
+        let package_name = "MyPackage";
+        let install_dir = std::path::PathBuf::from("/tmp");
+        let mut installer = Installer::new(package_name.to_string(), install_dir);
+
+        for (module, registry) in split(package_name, registry) {
+            installer
+                .install_module(module.config(), &registry)
+                .unwrap();
+        }
+
+        let manifest = installer.make_manifest(package_name);
+        insta::assert_snapshot!(manifest, @r#"
+        // swift-tools-version: 5.8
+        import PackageDescription
+
+        let package = Package(
+            name: "MyPackage",
+            products: [
+                .library(
+                    name: "MyPackage",
+                    targets: ["MyPackage"])
+            ],
+            targets: [
+        		.target(name: "MyNamespace", dependencies: ["Serde"]),
+        		.target(name: "MyPackage", dependencies: ["MyNamespace", "Serde"]),
         		.target(name: "Serde", dependencies: []),
         	]
         )
