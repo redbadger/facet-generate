@@ -18,7 +18,6 @@ use facet::Facet;
 
 #[derive(Facet)]
 #[repr(C)]
-#[allow(unused)]
 enum HttpResult {
     Ok(HttpResponse),
     Err(HttpError),
@@ -40,7 +39,6 @@ struct HttpHeader {
 
 #[derive(Facet)]
 #[repr(C)]
-#[allow(unused)]
 enum HttpError {
     #[facet(skip)]
     Http {
