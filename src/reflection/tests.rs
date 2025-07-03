@@ -532,6 +532,22 @@ fn nested_tuple_struct_2() {
 }
 
 #[test]
+fn struct_with_vec_of_u8() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Vec<u8>,
+    }
+
+    let registry = reflect::<MyStruct>();
+    insta::assert_yaml_snapshot!(registry, @r"
+    MyStruct:
+      STRUCT:
+        - a:
+            SEQ: U8
+    ");
+}
+
+#[test]
 fn struct_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct {
@@ -544,6 +560,22 @@ fn struct_with_vec_of_u8_to_bytes() {
     MyStruct:
       STRUCT:
         - a: BYTES
+    ");
+}
+
+#[test]
+fn struct_with_slice_of_u8() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a [u8],
+    }
+
+    let registry = reflect::<MyStruct>();
+    insta::assert_yaml_snapshot!(registry, @r"
+    MyStruct:
+      STRUCT:
+        - a:
+            SEQ: U8
     ");
 }
 

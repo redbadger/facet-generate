@@ -9,7 +9,7 @@ use std::{
 
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
-    PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef, SmartPointerDef,
+    PointerDef, PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef,
     StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
 };
 use format::{ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat};
@@ -177,7 +177,7 @@ fn format_from_def_system(shape: &Shape, namespace: Option<&str>, registry: &mut
         Def::Slice(slice_def) => format_slice(slice_def, namespace, registry),
         Def::Array(array_def) => format_array(array_def, namespace, registry),
         Def::Option(option_def) => format_option(option_def, namespace, registry),
-        Def::SmartPointer(SmartPointerDef {
+        Def::Pointer(PointerDef {
             pointee: Some(inner_shape),
             ..
         }) => {
@@ -428,26 +428,24 @@ fn try_handle_bytes_attribute(field: &Field, field_shape: &Shape, registry: &mut
     }
 
     // Handle bytes attribute for &[u8] slices
-    if field_shape.type_identifier == "&_" {
-        // Check if it's a wide pointer (slice) to u8
-        if let Type::Pointer(PointerType::Reference(ref_type)) = &field_shape.ty {
-            if ref_type.wide {
-                let target_shape = (ref_type.target)();
-                // Check if target is a slice and get its element type
-                if target_shape.type_identifier == "[_]" {
-                    if let Def::Slice(slice_def) = target_shape.def {
-                        let element_shape = slice_def.t();
-                        if element_shape.type_identifier == "u8" {
-                            if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut()
-                            {
-                                named_formats.push(Named {
-                                    name: field.name.to_string(),
-                                    value: Format::Bytes,
-                                });
-                            }
-                            return true;
-                        }
+    if field_shape.type_identifier == "&[_]" {
+        // Check if it's a smart pointer to a slice of u8
+        if let Def::Pointer(PointerDef {
+            pointee: Some(target_shape_fn),
+            ..
+        }) = field_shape.def
+        {
+            let target_shape = target_shape_fn();
+            if let Def::Slice(slice_def) = target_shape.def {
+                let element_shape = slice_def.t();
+                if element_shape.type_identifier == "u8" {
+                    if let Some(ContainerFormat::Struct(named_formats)) = registry.get_mut() {
+                        named_formats.push(Named {
+                            name: field.name.to_string(),
+                            value: Format::Bytes,
+                        });
                     }
+                    return true;
                 }
             }
         }
@@ -1114,10 +1112,14 @@ fn get_inner_format(shape: &Shape) -> Format {
             }
         }
         Def::Set(_set_def) => todo!(),
-        Def::Slice(_slice_def) => todo!(),
-        Def::SmartPointer(smart_pointer_def) => {
-            // Handle SmartPointer (Box, Arc, etc.) by recursively processing the inner type
-            if let Some(inner_shape) = smart_pointer_def.pointee {
+        Def::Slice(slice_def) => {
+            // Handle Slice<T> -> SEQ: T
+            let inner_shape = slice_def.t();
+            Format::Seq(Box::new(get_inner_format(inner_shape)))
+        }
+        Def::Pointer(pointer_def) => {
+            // Handle Pointer (Box, Arc, etc.) by recursively processing the inner type
+            if let Some(inner_shape) = pointer_def.pointee {
                 get_inner_format(inner_shape())
             } else {
                 // If no pointee, treat as unit

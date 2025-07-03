@@ -1036,9 +1036,9 @@ dependencies = [
 
 [[package]]
 name = "facet"
-version = "0.27.15"
+version = "0.27.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a219b97d2f75648ed5470f9efaed7fac98b0f5218d701e305444578cfbb33d3b"
+checksum = "0be4cf803e7c34ab73217e3c05b6c382b8a70a5948a9282ed9d64f62c2a03a90"
 dependencies = [
  "facet-core",
  "facet-macros",
@@ -1047,9 +1047,9 @@ dependencies = [
 
 [[package]]
 name = "facet-core"
-version = "0.27.15"
+version = "0.27.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea8f4f44d3904eb16187e3c0d93c1f6eed2d5f5e5532fb3cbf60a0849fdae726"
+checksum = "bc0dfc311334e2fad887baaebdc3773c05bbbddc286bef7c9c87cfb3fb4235fb"
 dependencies = [
  "bitflags",
  "impls",
@@ -1057,9 +1057,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros"
-version = "0.27.15"
+version = "0.27.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41934d083cf0dab2dc480d9c69240448478f06455c69a738833dbe8ef244efbe"
+checksum = "c10707410fd2c4f6b779fa04eac1a25d2907322dfb31039f16829c7996236768"
 dependencies = [
  "facet-core",
  "facet-macros-emit",
