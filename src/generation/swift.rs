@@ -159,12 +159,11 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
-            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
+            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(x) => self.quote_qualified_name(x),
-            QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
+            TypeName(qualified_name) => qualified_name.to_legacy_string(),
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),
@@ -250,11 +249,11 @@ where
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
-            TypeName(_) | QualifiedTypeName(_) => {
+            TypeName(_) => {
                 format!("try {value}.serialize(serializer: serializer)")
             }
             Unit => format!("try serializer.serialize_unit(value: {value})"),
@@ -284,15 +283,11 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
             TypeName(name) => format!(
-                "try {}.deserialize(deserializer: deserializer)",
-                self.quote_qualified_name(name)
-            ),
-            QualifiedTypeName(name) => format!(
                 "try {}.deserialize(deserializer: deserializer)",
                 self.quote_qualified_name(&name.to_legacy_string())
             ),

@@ -32,7 +32,7 @@ fn test_format_visiting() {
         .visit(&mut |f| {
             if let TypeName(x) = f {
                 // Insert a &str borrowed from `format`.
-                names.insert(x.as_str());
+                names.insert(x.to_legacy_string());
             }
             Ok(())
         })

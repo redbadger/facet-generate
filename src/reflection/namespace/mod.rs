@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use crate::{
     generation::CodeGeneratorConfig,
-    reflection::{ContainerFormat, Format, FormatHolder, Registry},
+    reflection::{ContainerFormat, Format, FormatHolder, Registry, format},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,33 +77,13 @@ pub fn split(root: &str, registry: Registry) -> BTreeMap<Namespace, Registry> {
 fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> super::Result<Namespace> {
     let mut external_definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
     format.visit_mut(&mut |format| {
-        match format {
-            Format::TypeName(name) => {
-                if let Some((namespace, name)) = name.split_once('.') {
-                    external_definitions
-                        .entry(namespace.to_string())
-                        .or_default()
-                        .push(name.to_string());
-                    *format = Format::TypeName(name.to_string());
-                }
+        if let Format::TypeName(qualified_name) = format {
+            if let format::Namespace::Named(ns) = &qualified_name.namespace {
+                external_definitions
+                    .entry(ns.to_string())
+                    .or_default()
+                    .push(qualified_name.name.clone());
             }
-            Format::QualifiedTypeName(qualified_name) => {
-                match &qualified_name.namespace {
-                    crate::reflection::format::Namespace::Named(ns) => {
-                        external_definitions
-                            .entry(ns.to_string())
-                            .or_default()
-                            .push(qualified_name.name.clone());
-                        // Convert to simple TypeName for this namespace
-                        *format = Format::TypeName(qualified_name.name.clone());
-                    }
-                    crate::reflection::format::Namespace::Root => {
-                        // Already in root namespace, just convert to TypeName
-                        *format = Format::TypeName(qualified_name.name.clone());
-                    }
-                }
-            }
-            _ => {}
         }
         Ok(())
     })?;
