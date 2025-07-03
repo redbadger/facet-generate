@@ -11,8 +11,12 @@
 //! * `Named<VariantFormat>`: the format of a variant in a enum, together with its name,
 //! * `Variable<Format>`: a variable holding an initially unknown value format,
 //! * `Variable<VariantFormat>`: a variable holding an initially unknown variant format.
+#![allow(clippy::missing_errors_doc)]
 
-use super::error::{Error, Result};
+#[cfg(test)]
+mod tests;
+
+use super::{Result, error::Error};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -23,6 +27,64 @@ use std::{
     rc::Rc,
 };
 
+/// Represents a namespace in the type system.
+#[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum Namespace {
+    /// The root namespace (no namespace prefix).
+    Root,
+    /// A named namespace.
+    Named(String),
+}
+
+/// A qualified type name with namespace information.
+#[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq, Hash, PartialOrd, Ord)]
+pub struct QualifiedTypeName {
+    /// The namespace containing this type.
+    pub namespace: Namespace,
+    /// The simple name of the type.
+    pub name: String,
+}
+
+impl QualifiedTypeName {
+    /// Create a new qualified type name in the root namespace.
+    #[must_use]
+    pub fn root(name: String) -> Self {
+        Self {
+            namespace: Namespace::Root,
+            name,
+        }
+    }
+
+    /// Create a new qualified type name in a named namespace.
+    #[must_use]
+    pub fn namespaced(namespace: String, name: String) -> Self {
+        Self {
+            namespace: Namespace::Named(namespace),
+            name,
+        }
+    }
+
+    /// Convert to the legacy dot-separated string format for compatibility.
+    #[must_use]
+    pub fn to_legacy_string(&self) -> String {
+        match &self.namespace {
+            Namespace::Root => self.name.clone(),
+            Namespace::Named(ns) => format!("{}.{}", ns, self.name),
+        }
+    }
+
+    /// Parse from the legacy dot-separated string format.
+    #[must_use]
+    pub fn from_legacy_string(s: &str) -> Self {
+        if let Some((namespace, name)) = s.split_once('.') {
+            Self::namespaced(namespace.to_string(), name.to_string())
+        } else {
+            Self::root(s.to_string())
+        }
+    }
+}
+
 /// Serde-based serialization format for anonymous "value" types.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -31,6 +93,8 @@ pub enum Format {
     Variable(#[serde(with = "not_implemented")] Variable<Format>),
     /// The name of a container.
     TypeName(String),
+    /// A qualified type name with namespace information.
+    QualifiedTypeName(QualifiedTypeName),
 
     // The formats of primitive types
     Unit,
@@ -506,6 +570,7 @@ impl FormatHolder for Format {
         match self {
             Self::Variable(variable) => variable.visit(f)?,
             Self::TypeName(_)
+            | Self::QualifiedTypeName(_)
             | Self::Unit
             | Self::Bool
             | Self::I8
@@ -557,6 +622,7 @@ impl FormatHolder for Format {
                     .expect("variable is known");
             }
             Self::TypeName(_)
+            | Self::QualifiedTypeName(_)
             | Self::Unit
             | Self::Bool
             | Self::I8
@@ -646,6 +712,8 @@ impl FormatHolder for Format {
             | (Self::Bytes, Self::Bytes) => (),
 
             (Self::TypeName(name1), Self::TypeName(name2)) if *name1 == name2 => (),
+            (Self::QualifiedTypeName(name1), Self::QualifiedTypeName(name2)) if *name1 == name2 => {
+            }
 
             (Self::Option(format1), Self::Option(format2))
             | (Self::Seq(format1), Self::Seq(format2)) => {
@@ -684,26 +752,6 @@ impl FormatHolder for Format {
             return v.is_unknown();
         }
         false
-    }
-}
-
-/// Helper trait to update formats in maps.
-pub(crate) trait ContainerFormatEntry {
-    fn unify(self, format: ContainerFormat) -> Result<()>;
-}
-
-impl<K> ContainerFormatEntry for Entry<'_, K, ContainerFormat>
-where
-    K: std::cmp::Ord,
-{
-    fn unify(self, format: ContainerFormat) -> Result<()> {
-        match self {
-            Entry::Vacant(e) => {
-                e.insert(format);
-                Ok(())
-            }
-            Entry::Occupied(e) => e.into_mut().unify(format),
-        }
     }
 }
 

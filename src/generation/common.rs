@@ -1,15 +1,16 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::serde_reflection::Format;
+use crate::reflection::format::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
     use Format::{
-        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-        TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName, Seq,
+        Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
     };
     match format {
         TypeName(x) => x.to_string(),
+        QualifiedTypeName(qualified_name) => qualified_name.to_legacy_string(),
         Unit => "unit".into(),
         Bool => "bool".into(),
         I8 => "i8".into(),
@@ -42,23 +43,5 @@ pub(crate) fn mangle_type(format: &Format) -> String {
         ),
         TupleArray { content, size } => format!("array{}_{}_array", size, mangle_type(content)),
         Variable(_) => panic!("unexpected value"),
-    }
-}
-
-#[allow(unused)]
-pub(crate) fn uppercase_first_letter(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-    }
-}
-
-#[allow(unused)]
-pub(crate) fn lowercase_first_letter(s: &str) -> String {
-    let mut c = s.chars();
-    match c.next() {
-        None => String::new(),
-        Some(f) => f.to_lowercase().collect::<String>() + c.as_str(),
     }
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::test_utils;
 use crate::test_utils::{Choice, Runtime, Test};
-use facet_generate::serde_generate::{CodeGeneratorConfig, java};
+use facet_generate::generation::{CodeGeneratorConfig, java};
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
@@ -18,7 +18,7 @@ fn test_java_bincode_runtime_on_simple_data() {
 
 #[allow(clippy::cast_possible_wrap)]
 fn test_java_runtime_on_simple_data(runtime: Runtime) {
-    let registry = test_utils::get_simple_registry().unwrap();
+    let registry = test_utils::get_simple_registry();
     let dir = tempdir().unwrap();
 
     let config =
@@ -140,7 +140,7 @@ fn quote_bytes(bytes: &[u8]) -> String {
 }
 
 fn test_java_runtime_on_supported_types(runtime: Runtime) {
-    let registry = test_utils::get_registry().unwrap();
+    let registry = test_utils::get_registry();
     let dir = tempdir().unwrap();
 
     let config =

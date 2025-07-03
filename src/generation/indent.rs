@@ -13,7 +13,7 @@ pub struct IndentedWriter<T> {
     out: T,
     indentation: Vec<u8>,
     config: IndentConfig,
-    at_begining_of_line: bool,
+    at_beginning_of_line: bool,
 }
 
 impl<T> IndentedWriter<T> {
@@ -22,7 +22,7 @@ impl<T> IndentedWriter<T> {
             out,
             indentation: Vec::new(),
             config,
-            at_begining_of_line: true,
+            at_beginning_of_line: true,
         }
     }
 
@@ -62,9 +62,9 @@ impl<T: Write> Write for IndentedWriter<T> {
                     (buf, false, &buf[buf.len()..])
                 };
 
-            if self.at_begining_of_line && !before_newline.is_empty() {
+            if self.at_beginning_of_line && !before_newline.is_empty() {
                 self.out.write_all(&self.indentation)?;
-                self.at_begining_of_line = false;
+                self.at_beginning_of_line = false;
             }
 
             self.out.write_all(before_newline)?;
@@ -73,7 +73,7 @@ impl<T: Write> Write for IndentedWriter<T> {
             if has_newline {
                 self.out.write_all(b"\n")?;
                 bytes_written += 1;
-                self.at_begining_of_line = true;
+                self.at_beginning_of_line = true;
             }
 
             buf = after_newline;

@@ -1,14 +1,16 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
+#![allow(clippy::missing_errors_doc)]
 
 use super::{
     CodeGeneratorConfig, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::serde_reflection::{
-    ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
+use crate::reflection::{
+    Registry,
+    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
-use heck::CamelCase;
+use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -49,7 +51,7 @@ impl<'a> CodeGenerator<'a> {
             for name in names {
                 external_qualified_names.insert(
                     name.to_string(),
-                    format!("{}.{}", namespace.to_camel_case(), name),
+                    format!("{}.{}", namespace.to_upper_camel_case(), name),
                 );
             }
         }
@@ -101,8 +103,8 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         for namespace in &self.generator.namespaces_to_import {
             writeln!(
                 self.out,
-                "import * as {} from '../{}/mod.ts';\n",
-                namespace.to_camel_case(),
+                "import * as {} from './{}';\n",
+                namespace.to_upper_camel_case(),
                 namespace
             )?;
         }
@@ -129,11 +131,14 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
+            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
             TypeName(x) => self.quote_qualified_name(x),
+            QualifiedTypeName(qualified_name) => {
+                self.quote_qualified_name(&qualified_name.to_legacy_string())
+            }
             Unit => "unit".into(),
             Bool => "bool".into(),
             I8 => "int8".into(),
@@ -209,13 +214,15 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format, use_this: bool) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         let this_str = if use_this { "this." } else { "" };
 
         match format {
-            TypeName(_) => format!("{this_str}{value}.serialize(serializer);"),
+            TypeName(_) | QualifiedTypeName(_) => {
+                format!("{this_str}{value}.serialize(serializer);")
+            }
             Unit => format!("serializer.serializeUnit({this_str}{value});"),
             Bool => format!("serializer.serializeBool({this_str}{value});"),
             I8 => format!("serializer.serializeI8({this_str}{value});"),
@@ -235,7 +242,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             Bytes => format!("serializer.serializeBytes({this_str}{value});"),
             _ => format!(
                 "Helpers.serialize{}({}{}, serializer);",
-                common::mangle_type(format).to_camel_case(),
+                common::mangle_type(format).to_upper_camel_case(),
                 this_str,
                 value
             ),
@@ -244,13 +251,17 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
             TypeName(name) => format!(
                 "{}.deserialize(deserializer)",
                 self.quote_qualified_name(name)
+            ),
+            QualifiedTypeName(name) => format!(
+                "{}.deserialize(deserializer)",
+                self.quote_qualified_name(&name.to_legacy_string())
             ),
             Unit => "deserializer.deserializeUnit()".to_string(),
             Bool => "deserializer.deserializeBool()".to_string(),
@@ -271,7 +282,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             Bytes => "deserializer.deserializeBytes()".to_string(),
             _ => format!(
                 "Helpers.deserialize{}(deserializer)",
-                common::mangle_type(format).to_camel_case(),
+                common::mangle_type(format).to_upper_camel_case(),
             ),
         }
     }
@@ -282,7 +293,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         write!(
             self.out,
             "static serialize{}(value: {}, serializer: Serializer): void {{",
-            name.to_camel_case(),
+            name.to_upper_camel_case(),
             self.quote_type(format0)
         )?;
         self.out.indent();
@@ -374,7 +385,7 @@ value.forEach((item) =>{{
         write!(
             self.out,
             "static deserialize{}(deserializer: Deserializer): {} {{",
-            name.to_camel_case(),
+            name.to_upper_camel_case(),
             self.quote_type(format0),
         )?;
         self.out.indent();
@@ -718,7 +729,7 @@ impl super::SourceInstaller for Installer {
     type Error = Box<dyn std::error::Error>;
 
     fn install_module(
-        &self,
+        &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {

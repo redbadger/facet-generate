@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::test_utils;
-use facet_generate::serde_generate::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
 use regex::Regex;
 use std::{
     collections::BTreeMap,
@@ -16,7 +16,7 @@ fn test_typescript_code_compiles_with_config(
     dir_path: &Path,
     config: &CodeGeneratorConfig,
 ) -> std::path::PathBuf {
-    let registry = test_utils::get_registry().unwrap();
+    let registry = test_utils::get_registry();
     make_output_file(dir_path);
 
     let installer = typescript::Installer::new(dir_path.to_path_buf());

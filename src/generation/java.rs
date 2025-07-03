@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc)]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
@@ -5,10 +6,11 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::serde_reflection::{
-    ContainerFormat, Format, FormatHolder, Named, Registry, VariantFormat,
+use crate::reflection::{
+    Registry,
+    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
-use heck::CamelCase;
+use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -50,9 +52,13 @@ impl<'a> CodeGenerator<'a> {
             "Java does not support generating c-style enums"
         );
         let mut external_qualified_names = HashMap::new();
+        let root_module = config.module_name();
         for (namespace, names) in &config.external_definitions {
             for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{namespace}.{name}"));
+                external_qualified_names.insert(
+                    name.to_string(),
+                    format!("{root_module}.{namespace}.{name}"),
+                );
             }
         }
         Self {
@@ -135,6 +141,7 @@ where
 {
     fn output_preamble(&mut self) -> Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
+
         Ok(())
     }
 
@@ -192,11 +199,14 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
+            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
             TypeName(x) => self.quote_qualified_name(x),
+            QualifiedTypeName(qualified_name) => {
+                self.quote_qualified_name(&qualified_name.to_legacy_string())
+            }
             Unit => "com.novi.serde.Unit".into(),
             Bool => "Boolean".into(),
             I8 => "Byte".into(),
@@ -301,11 +311,11 @@ where
 
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
-            TypeName(_) => format!("{value}.serialize(serializer);"),
+            TypeName(_) | QualifiedTypeName(_) => format!("{value}.serialize(serializer);"),
             Unit => format!("serializer.serialize_unit({value});"),
             Bool => format!("serializer.serialize_bool({value});"),
             I8 => format!("serializer.serialize_i8({value});"),
@@ -334,14 +344,20 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
+            U8, U16, U32, U64, U128, Unit,
         };
         match format {
             TypeName(name) => format!(
                 "{}.deserialize(deserializer)",
                 self.quote_qualified_name(name)
             ),
+            QualifiedTypeName(qualified_name) => {
+                format!(
+                    "{}.deserialize(deserializer)",
+                    self.quote_qualified_name(&qualified_name.to_legacy_string())
+                )
+            }
             Unit => "deserializer.deserialize_unit()".to_string(),
             Bool => "deserializer.deserialize_bool()".to_string(),
             I8 => "deserializer.deserialize_i8()".to_string(),
@@ -886,7 +902,7 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
     return serializer.get_bytes();
 }}",
             encoding.name(),
-            encoding.name().to_camel_case()
+            encoding.name().to_upper_camel_case()
         )
     }
 
@@ -911,7 +927,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
 }}"#,
             name,
             encoding.name(),
-            encoding.name().to_camel_case()
+            encoding.name().to_upper_camel_case()
         )
     }
 
@@ -971,7 +987,7 @@ impl super::SourceInstaller for Installer {
     type Error = Box<dyn std::error::Error>;
 
     fn install_module(
-        &self,
+        &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {

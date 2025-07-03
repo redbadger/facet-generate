@@ -3,14 +3,14 @@
 
 use crate::test_utils;
 use crate::test_utils::{Choice, Runtime, Test};
-use facet_generate::serde_generate::{CodeGeneratorConfig, SourceInstaller, typescript};
-use heck::CamelCase;
+use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, typescript};
+use heck::ToUpperCamelCase;
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
 #[test]
 fn test_typescript_runtime_bcs_serialization() {
-    let registry = test_utils::get_simple_registry().unwrap();
+    let registry = test_utils::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path.join("tests")).unwrap();
@@ -63,7 +63,7 @@ Deno.test("{1} serialization matches deserialization", () => {{
             .collect::<Vec<_>>()
             .join(", "),
         runtime.name().to_lowercase(),
-        runtime.name().to_camel_case(),
+        runtime.name().to_upper_camel_case(),
     )
     .unwrap();
 

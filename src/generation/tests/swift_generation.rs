@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::test_utils;
-use facet_generate::serde_generate::{CodeGeneratorConfig, Encoding, swift};
-use facet_generate::serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
+use facet_generate::{
+    generation::{CodeGeneratorConfig, Encoding, swift},
+    reflection::Registry,
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, io::Write, process::Command, sync::Mutex};
 use tempfile::{TempDir, tempdir};
@@ -16,21 +18,10 @@ struct Test {
     a: Vec<u32>,
 }
 
-fn get_small_registry() -> Result<Registry> {
-    let mut tracer = Tracer::new(TracerConfig::default());
-    let samples = Samples::new();
-    tracer.trace_type::<Test>(&samples)?;
-    tracer.registry()
-}
-
 fn test_that_swift_code_compiles_with_config(
     config: &CodeGeneratorConfig,
 ) -> (TempDir, std::path::PathBuf) {
-    test_that_swift_code_compiles_with_config_and_registry(config, &get_small_registry().unwrap());
-    test_that_swift_code_compiles_with_config_and_registry(
-        config,
-        &test_utils::get_registry().unwrap(),
-    )
+    test_that_swift_code_compiles_with_config_and_registry(config, &test_utils::get_registry())
 }
 
 fn test_that_swift_code_compiles_with_config_and_registry(
@@ -151,7 +142,7 @@ fn test_that_swift_code_compiles_with_comments() {
 
 #[test]
 fn test_swift_code_with_external_definitions() {
-    let registry = test_utils::get_registry().unwrap();
+    let registry = test_utils::get_registry();
     let dir = tempdir().unwrap();
     let source_path = dir.path().join("Testing.swift");
     let mut source = File::create(&source_path).unwrap();
@@ -166,7 +157,7 @@ fn test_swift_code_with_external_definitions() {
 
     // References were updated.
     let content = std::fs::read_to_string(source_path).unwrap();
-    assert!(content.contains("foo.Tree"));
+    assert!(content.contains("Foo.Tree"));
 }
 
 #[test]
@@ -196,7 +187,7 @@ fn test_that_swift_code_follow_case_convention() {
     // Enum variants are `lowerCamelCase`.
     assert!(content.contains(r"case primitiveTypes"));
     assert!(!content.contains(r"case PrimitiveTypes"));
-    assert!(!content.contains(r"case primitive_ypes"));
+    assert!(!content.contains(r"case primitive_types"));
     // Field names are `lowerCamelCase`.
     assert!(content.contains(r"@Indirect public var fBool: Bool"));
     assert!(!content.contains(r"@Indirect public var f_bool: Bool"));
