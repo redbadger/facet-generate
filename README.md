@@ -18,28 +18,30 @@ use facet::Facet;
 
 #[derive(Facet)]
 #[repr(C)]
-pub enum HttpResult {
+#[allow(unused)]
+enum HttpResult {
     Ok(HttpResponse),
     Err(HttpError),
 }
 
 #[derive(Facet)]
-pub struct HttpResponse {
-    pub status: u16,
-    pub headers: Vec<HttpHeader>,
+struct HttpResponse {
+    status: u16,
+    headers: Vec<HttpHeader>,
     #[facet(bytes)]
-    pub body: Vec<u8>,
+    body: Vec<u8>,
 }
 
 #[derive(Facet)]
-pub struct HttpHeader {
-    pub name: String,
-    pub value: String,
+struct HttpHeader {
+    name: String,
+    value: String,
 }
 
 #[derive(Facet)]
 #[repr(C)]
-pub enum HttpError {
+#[allow(unused)]
+enum HttpError {
     #[facet(skip)]
     Http {
         status: u16,
@@ -53,8 +55,8 @@ pub enum HttpError {
     Timeout,
 }
 
-let registry = facet_generate::reflect::<HttpResult>();
-insta::assert_yaml_snapshot!(registry.containers, @r"
+let registry = reflect::<HttpResult>();
+insta::assert_yaml_snapshot!(registry, @r"
 HttpError:
   ENUM:
     0:
@@ -74,18 +76,24 @@ HttpResponse:
     - status: U16
     - headers:
         SEQ:
-          TYPENAME: HttpHeader
+          TYPENAME:
+            namespace: ROOT
+            name: HttpHeader
     - body: BYTES
 HttpResult:
   ENUM:
     0:
       Ok:
         NEWTYPE:
-          TYPENAME: HttpResponse
+          TYPENAME:
+            namespace: ROOT
+            name: HttpResponse
     1:
       Err:
         NEWTYPE:
-          TYPENAME: HttpError
+          TYPENAME:
+            namespace: ROOT
+            name: HttpError
 ");
 ```
 

@@ -1211,7 +1211,7 @@ fn own_result_enum() {
         value: String,
     }
 
-    #[derive(facet::Facet, PartialEq, Eq, Clone, Debug)]
+    #[derive(Facet)]
     #[repr(C)]
     #[allow(unused)]
     enum HttpError {
