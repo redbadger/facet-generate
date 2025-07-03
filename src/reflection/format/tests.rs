@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, ops::Deref};
 
-use crate::serde_reflection::{
+use crate::reflection::{
     error::Error,
     format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };

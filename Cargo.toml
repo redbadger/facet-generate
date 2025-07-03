@@ -42,5 +42,5 @@ typescript = ["include_dir"]
 
 [[test]]
 name = "integration_tests"
-path = "src/serde_generate/tests/lib.rs"
+path = "src/generation/tests/lib.rs"
 harness = true

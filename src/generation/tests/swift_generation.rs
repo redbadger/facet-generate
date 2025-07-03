@@ -3,8 +3,8 @@
 
 use crate::test_utils;
 use facet_generate::{
-    Registry,
-    serde_generate::{CodeGeneratorConfig, Encoding, swift},
+    generation::{CodeGeneratorConfig, Encoding, swift},
+    reflection::Registry,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, io::Write, process::Command, sync::Mutex};

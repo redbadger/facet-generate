@@ -1,16 +1,23 @@
+pub mod error;
+pub mod format;
+pub mod namespace;
+
 use std::{
     collections::{BTreeMap, HashSet},
     string::ToString,
 };
 
-use crate::serde_reflection::{
-    ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat,
-};
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
     PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef, SmartPointerDef,
     StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
 };
+use format::{ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat};
+
+use crate::reflection::error::Error;
+
+/// Result type used in this crate.
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// A map of container formats.
 pub type Registry = BTreeMap<String, ContainerFormat>;
@@ -26,7 +33,7 @@ struct State {
 impl State {
     fn new() -> Self {
         Self {
-            containers: BTreeMap::new(),
+            containers: Registry::new(),
             current: Vec::new(),
             processed: HashSet::new(),
             name_mappings: BTreeMap::new(),

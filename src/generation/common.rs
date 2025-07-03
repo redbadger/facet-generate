@@ -1,7 +1,7 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::serde_reflection::Format;
+use crate::reflection::format::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
     use Format::{

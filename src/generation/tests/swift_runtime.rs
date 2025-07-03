@@ -3,7 +3,7 @@
 
 use crate::test_utils;
 use crate::test_utils::{Choice, Runtime, Test};
-use facet_generate::serde_generate::{CodeGeneratorConfig, SourceInstaller, swift};
+use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
 use std::{fs::File, io::Write, process::Command, sync::Mutex};
 
 // Avoid interleaving compiler calls because the output gets very messy.

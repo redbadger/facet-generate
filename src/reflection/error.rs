@@ -5,10 +5,7 @@ use serde::{de, ser};
 use std::fmt;
 use thiserror::Error;
 
-use crate::serde_reflection::format::ContainerFormat;
-
-/// Result type used in this crate.
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+use super::format::ContainerFormat;
 
 /// Error type used in this crate.
 #[derive(Clone, Debug, Error, PartialEq)]

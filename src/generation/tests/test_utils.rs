@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use facet::Facet;
-use facet_generate::{Registry, reflect, serde_generate::Encoding};
+use facet_generate::{
+    generation::Encoding,
+    reflection::{Registry, reflect},
+};
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

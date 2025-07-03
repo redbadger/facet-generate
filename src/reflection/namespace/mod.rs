@@ -3,9 +3,8 @@ use std::{cmp::Ordering, collections::BTreeMap};
 use serde::Serialize;
 
 use crate::{
-    Registry,
-    serde_generate::CodeGeneratorConfig,
-    serde_reflection::{ContainerFormat, Format, FormatHolder, Result},
+    generation::CodeGeneratorConfig,
+    reflection::{ContainerFormat, Format, FormatHolder, Registry},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -49,25 +48,33 @@ impl Ord for Namespace {
     }
 }
 
-pub fn split(root: &str, registry: Registry) -> Result<BTreeMap<Namespace, Registry>> {
+/// Splits a registry by namespace.
+#[must_use]
+pub fn split(root: &str, registry: Registry) -> BTreeMap<Namespace, Registry> {
     let mut registries = BTreeMap::<Namespace, Registry>::new();
     for (name, mut format) in registry {
         if let Some((namespace, name)) = name.split_once('.') {
             registries
-                .entry(make_namespace(&mut format, namespace)?)
+                .entry(
+                    make_namespace(&mut format, namespace)
+                        .expect("should not have any remaining placeholders"),
+                )
                 .or_default()
                 .insert(name.to_string(), format.clone());
         } else {
             registries
-                .entry(make_namespace(&mut format, root)?)
+                .entry(
+                    make_namespace(&mut format, root)
+                        .expect("should not have any remaining placeholders"),
+                )
                 .or_default()
                 .insert(name.to_string(), format.clone());
         }
     }
-    Ok(registries)
+    registries
 }
 
-fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> Result<Namespace> {
+fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> super::Result<Namespace> {
     let mut external_definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
     format.visit_mut(&mut |format| {
         match format {
@@ -82,7 +89,7 @@ fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> Result<Names
             }
             Format::QualifiedTypeName(qualified_name) => {
                 match &qualified_name.namespace {
-                    crate::serde_reflection::Namespace::Named(ns) => {
+                    crate::reflection::format::Namespace::Named(ns) => {
                         external_definitions
                             .entry(ns.to_string())
                             .or_default()
@@ -90,7 +97,7 @@ fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> Result<Names
                         // Convert to simple TypeName for this namespace
                         *format = Format::TypeName(qualified_name.name.clone());
                     }
-                    crate::serde_reflection::Namespace::Root => {
+                    crate::reflection::format::Namespace::Root => {
                         // Already in root namespace, just convert to TypeName
                         *format = Format::TypeName(qualified_name.name.clone());
                     }

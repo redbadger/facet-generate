@@ -3,7 +3,7 @@
 
 use crate::test_utils;
 use crate::test_utils::{Choice, Runtime, Test};
-use facet_generate::serde_generate::{CodeGeneratorConfig, SourceInstaller, typescript};
+use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, typescript};
 use heck::ToUpperCamelCase;
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;

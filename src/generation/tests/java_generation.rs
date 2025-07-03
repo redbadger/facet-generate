@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::test_utils;
-use facet_generate::serde_generate::{CodeGeneratorConfig, Encoding, java};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, java};
 use std::{collections::BTreeMap, process::Command};
 use tempfile::{TempDir, tempdir};
 

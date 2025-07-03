@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use crate::test_utils;
-use facet_generate::serde_generate::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
 use regex::Regex;
 use std::{
     collections::BTreeMap,

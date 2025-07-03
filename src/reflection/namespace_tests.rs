@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::reflect;
+use crate::reflection::reflect;
 
 #[test]
 fn nested_namespaced_structs() {
@@ -617,8 +617,7 @@ fn transparent_struct_explicit_namespace() {
 
 #[test]
 #[allow(clippy::too_many_lines)]
-fn redundant_namespace_declarations() {
-    // This test demonstrates explicit namespace declarations
+fn explicit_namespace_declarations() {
     mod api_example {
         #[derive(facet::Facet)]
         #[facet(namespace = "api")]
@@ -665,24 +664,24 @@ fn redundant_namespace_declarations() {
     }
 
     #[derive(facet::Facet)]
-    struct InheritedUser {
+    struct RootUser {
         id: String,
         name: String,
     }
 
     #[derive(facet::Facet)]
-    struct InheritedGroup {
-        users: Vec<InheritedUser>,
+    struct RootGroup {
+        users: Vec<RootUser>,
     }
 
     #[derive(facet::Facet)]
-    struct TestContainer {
+    struct RootContainer {
         api_data: ApiContainer,
         event: events_example::Event,
-        efficient: InheritedGroup,
+        efficient: RootGroup,
     }
 
-    let registry = reflect::<TestContainer>();
+    let registry = reflect::<RootContainer>();
     insta::assert_yaml_snapshot!(registry, @r"
     ApiContainer:
       STRUCT:
@@ -696,18 +695,7 @@ fn redundant_namespace_declarations() {
               namespace:
                 NAMED: api
               name: Group
-    InheritedGroup:
-      STRUCT:
-        - users:
-            SEQ:
-              QUALIFIEDTYPENAME:
-                namespace: ROOT
-                name: InheritedUser
-    InheritedUser:
-      STRUCT:
-        - id: STR
-        - name: STR
-    TestContainer:
+    RootContainer:
       STRUCT:
         - api_data:
             QUALIFIEDTYPENAME:
@@ -721,7 +709,18 @@ fn redundant_namespace_declarations() {
         - efficient:
             QUALIFIEDTYPENAME:
               namespace: ROOT
-              name: InheritedGroup
+              name: RootGroup
+    RootGroup:
+      STRUCT:
+        - users:
+            SEQ:
+              QUALIFIEDTYPENAME:
+                namespace: ROOT
+                name: RootUser
+    RootUser:
+      STRUCT:
+        - id: STR
+        - name: STR
     api.Group:
       STRUCT:
         - users:

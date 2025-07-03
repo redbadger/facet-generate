@@ -11,8 +11,12 @@
 //! * `Named<VariantFormat>`: the format of a variant in a enum, together with its name,
 //! * `Variable<Format>`: a variable holding an initially unknown value format,
 //! * `Variable<VariantFormat>`: a variable holding an initially unknown variant format.
+#![allow(clippy::missing_errors_doc)]
 
-use super::error::{Error, Result};
+#[cfg(test)]
+mod tests;
+
+use super::{Result, error::Error};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -748,26 +752,6 @@ impl FormatHolder for Format {
             return v.is_unknown();
         }
         false
-    }
-}
-
-/// Helper trait to update formats in maps.
-pub(crate) trait ContainerFormatEntry {
-    fn unify(self, format: ContainerFormat) -> Result<()>;
-}
-
-impl<K> ContainerFormatEntry for Entry<'_, K, ContainerFormat>
-where
-    K: std::cmp::Ord,
-{
-    fn unify(self, format: ContainerFormat) -> Result<()> {
-        match self {
-            Entry::Vacant(e) => {
-                e.insert(format);
-                Ok(())
-            }
-            Entry::Occupied(e) => e.into_mut().unify(format),
-        }
     }
 }
 

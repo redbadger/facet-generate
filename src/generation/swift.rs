@@ -1,15 +1,15 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
-
+#![allow(clippy::missing_errors_doc)]
 #![allow(dead_code)]
 
 use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::{
+use crate::reflection::{
     Registry,
-    serde_reflection::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;

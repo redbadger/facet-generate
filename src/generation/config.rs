@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc)]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
@@ -5,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use crate::Registry;
+use crate::reflection::Registry;
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]
