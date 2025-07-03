@@ -643,7 +643,7 @@ fn test_get_simple_registry() {
               - I64
               - U64
         - c:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Choice
     ");
@@ -673,10 +673,10 @@ fn test_get_registry() {
         1:
           Node:
             TUPLE:
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: SerdeData
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: List
     NewTypeStruct:
@@ -687,13 +687,13 @@ fn test_get_registry() {
         - f_bytes: BYTES
         - f_option:
             OPTION:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Struct
         - f_unit: UNIT
         - f_seq:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Struct
         - f_opt_seq:
@@ -714,7 +714,7 @@ fn test_get_registry() {
         - f_nested_seq:
             SEQ:
               SEQ:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: Struct
     PrimitiveTypes:
@@ -741,13 +741,13 @@ fn test_get_registry() {
         0:
           PrimitiveTypes:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: PrimitiveTypes
         1:
           OtherTypes:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: OtherTypes
         2:
@@ -764,31 +764,31 @@ fn test_get_registry() {
           StructVariant:
             STRUCT:
               - f0:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: UnitStruct
               - f1:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: NewTypeStruct
               - f2:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: TupleStruct
               - f3:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: Struct
         6:
           ListWithMutualRecursion:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: List
         7:
           TreeWithMutualRecursion:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Tree
         8:
@@ -804,13 +804,13 @@ fn test_get_registry() {
         10:
           SimpleList:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: SimpleList
         11:
           CStyleEnum:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: CStyleEnum
         12:
@@ -831,7 +831,7 @@ fn test_get_registry() {
     SimpleList:
       NEWTYPESTRUCT:
         OPTION:
-          QUALIFIEDTYPENAME:
+          TYPENAME:
             namespace: ROOT
             name: SimpleList
     Struct:
@@ -841,12 +841,12 @@ fn test_get_registry() {
     Tree:
       STRUCT:
         - value:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: SerdeData
         - children:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Tree
     TupleStruct:

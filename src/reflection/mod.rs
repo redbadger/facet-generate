@@ -135,7 +135,7 @@ fn handle_user_struct(
     let format = if shape.type_identifier == "()" {
         Format::Unit
     } else {
-        Format::QualifiedTypeName(type_name.clone())
+        Format::TypeName(type_name.clone())
     };
     update_container_format_if_unknown(format, registry);
     format_struct(struct_def, shape, namespace, registry);
@@ -181,7 +181,7 @@ fn format_from_def_system(shape: &Shape, namespace: Option<&str>, registry: &mut
             pointee: Some(inner_shape),
             ..
         }) => {
-            handle_smart_pointer(inner_shape(), namespace, registry);
+            handle_pointer(inner_shape(), namespace, registry);
         }
         Def::Undefined => {
             handle_undefined_def(shape, namespace, registry);
@@ -190,11 +190,11 @@ fn format_from_def_system(shape: &Shape, namespace: Option<&str>, registry: &mut
     }
 }
 
-fn handle_smart_pointer(inner_shape: &Shape, namespace: Option<&str>, registry: &mut State) {
-    // For SmartPointer, we need to update the current container with the inner type's format
+fn handle_pointer(inner_shape: &Shape, namespace: Option<&str>, registry: &mut State) {
+    // For Pointer, we need to update the current container with the inner type's format
     let inner_format = get_inner_format(inner_shape);
 
-    // Update the current container with the SmartPointer's inner format
+    // Update the current container with the Pointer's inner format
     update_container_format_if_unknown(inner_format, registry);
 
     // Also process the inner type if it's a user-defined type
@@ -295,7 +295,7 @@ fn format_struct(
     // Check if already processed using the full namespaced name
     if registry.is_processed(&struct_name_str) {
         // This is a mutual recursion case - only update if there's an unknown format that needs updating
-        let format = Format::QualifiedTypeName(struct_name.clone());
+        let format = Format::TypeName(struct_name.clone());
         update_container_format_for_mutual_recursion(format, registry);
         return;
     }
@@ -392,7 +392,7 @@ fn handle_struct_field(field: &Field, namespace: Option<&str>, registry: &mut St
             UserType::Struct(_) | UserType::Enum(_) => {
                 let renamed_name = get_name(field_shape);
 
-                Format::QualifiedTypeName(renamed_name)
+                Format::TypeName(renamed_name)
             }
             _ => get_inner_format(field_shape),
         }
@@ -536,7 +536,7 @@ fn try_handle_tuple_struct_field(
                 &inner_field_shape.ty
             {
                 let namespaced_name = get_name(inner_field_shape);
-                Format::QualifiedTypeName(namespaced_name)
+                Format::TypeName(namespaced_name)
             } else {
                 get_inner_format(inner_field_shape)
             };
@@ -662,7 +662,7 @@ fn process_newtype_variant(
         let current_namespace = extract_namespace_from_shape(shape);
         process_type(field_shape, current_namespace.as_deref(), registry);
         let namespaced_name = get_name(field_shape);
-        VariantFormat::NewType(Box::new(Format::QualifiedTypeName(namespaced_name)))
+        VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
     } else {
         // For other types, use the temporary container approach
         process_newtype_variant_with_temp_container(
@@ -745,7 +745,7 @@ fn process_struct_variant(
             } else {
                 let _current_namespace = extract_namespace_from_shape(shape);
                 let namespaced_name = get_name(field_shape);
-                Format::QualifiedTypeName(namespaced_name)
+                Format::TypeName(namespaced_name)
             };
 
             // Add Named TypeName format to the struct
@@ -1110,7 +1110,7 @@ fn get_inner_format(shape: &Shape) -> Format {
                 // For user-defined types, use TypeName with renamed name if applicable
                 let name = get_name(shape);
 
-                Format::QualifiedTypeName(name)
+                Format::TypeName(name)
             }
         }
         Def::Set(_set_def) => todo!(),

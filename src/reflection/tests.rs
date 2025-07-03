@@ -205,7 +205,7 @@ fn nested_newtype() {
       NEWTYPESTRUCT: I32
     MyNewType:
       NEWTYPESTRUCT:
-        QUALIFIEDTYPENAME:
+        TYPENAME:
           namespace: ROOT
           name: Inner
     ");
@@ -239,7 +239,7 @@ fn newtype_with_list_of_named_type() {
     MyNewType:
       NEWTYPESTRUCT:
         SEQ:
-          QUALIFIEDTYPENAME:
+          TYPENAME:
             namespace: ROOT
             name: Inner
     ");
@@ -275,7 +275,7 @@ fn newtype_with_nested_list_of_named_type() {
       NEWTYPESTRUCT:
         SEQ:
           SEQ:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Inner
     ");
@@ -298,7 +298,7 @@ fn newtype_with_triple_nested_list_of_named_type() {
         SEQ:
           SEQ:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Inner
     ");
@@ -419,7 +419,7 @@ fn option_of_list_of_named_type() {
         - a:
             OPTION:
               SEQ:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: Inner
     ");
@@ -461,7 +461,7 @@ fn list_of_options_of_named_type() {
         - a:
             SEQ:
               OPTION:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: Inner
     ");
@@ -499,7 +499,7 @@ fn nested_tuple_struct_1() {
       NEWTYPESTRUCT: I32
     MyTupleStruct:
       TUPLESTRUCT:
-        - QUALIFIEDTYPENAME:
+        - TYPENAME:
             namespace: ROOT
             name: Inner
         - U8
@@ -524,7 +524,7 @@ fn nested_tuple_struct_2() {
     MyTupleStruct:
       TUPLESTRUCT:
         - I32
-        - QUALIFIEDTYPENAME:
+        - TYPENAME:
             namespace: ROOT
             name: Inner
         - U8
@@ -628,7 +628,7 @@ fn struct_with_option_fields() {
       STRUCT:
         - a:
             OPTION:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Inner
         - b:
@@ -661,11 +661,11 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
     MyStruct:
       STRUCT:
         - a:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Inner1
         - b:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Inner2
     ");
@@ -757,7 +757,7 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
         0:
           Variant1:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Inner
         1:
@@ -820,7 +820,7 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
         0:
           Variant1:
             TUPLE:
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: Inner
               - U8
@@ -828,7 +828,7 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
           Variant2:
             TUPLE:
               - I8
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: Inner
     ");
@@ -859,7 +859,7 @@ fn enum_with_inline_struct_variants() {
           Variant1:
             STRUCT:
               - a:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: Inner
               - b: U8
@@ -867,7 +867,7 @@ fn enum_with_inline_struct_variants() {
         1:
           Variant2:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Inner
     ");
@@ -907,7 +907,7 @@ fn enum_with_struct_variants_mixed_types() {
           Variant1:
             STRUCT:
               - a:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: Inner
               - b: U8
@@ -921,7 +921,7 @@ fn enum_with_struct_variants_mixed_types() {
             STRUCT:
               - x: I32
               - y:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: Inner
     ");
@@ -1043,11 +1043,11 @@ fn map_with_user_defined_types() {
         - user_map:
             MAP:
               KEY:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: UserId
               VALUE:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: UserProfile
         - id_to_count:
@@ -1117,7 +1117,7 @@ fn struct_with_box_of_t() {
     MyStruct:
       STRUCT:
         - boxed:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: UserProfile
     UserProfile:
@@ -1145,7 +1145,7 @@ fn struct_with_arc_of_t() {
     MyStruct:
       STRUCT:
         - boxed:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: UserProfile
     UserProfile:
@@ -1217,7 +1217,7 @@ fn own_result_enum() {
         - status: U16
         - headers:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: HttpHeader
         - body: BYTES
@@ -1226,13 +1226,13 @@ fn own_result_enum() {
         0:
           Ok:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: HttpResponse
         1:
           Err:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: HttpError
     ");
@@ -1301,7 +1301,7 @@ fn struct_rename_with_named_type() {
       STRUCT:
         - id: U32
         - effect:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Effect
     ");
@@ -1318,7 +1318,7 @@ fn self_referencing_type() {
     {
         "SimpleList": NewTypeStruct(
             Option(
-                QualifiedTypeName(
+                TypeName(
                     QualifiedTypeName {
                         namespace: Root,
                         name: "SimpleList",
@@ -1353,7 +1353,7 @@ fn complex_self_referencing_type() {
                     name: "children",
                     value: Option(
                         Seq(
-                            QualifiedTypeName(
+                            TypeName(
                                 QualifiedTypeName {
                                     namespace: Root,
                                     name: "Node",
@@ -1392,7 +1392,7 @@ fn tree_struct_with_mutual_recursion() {
                 0: Named {
                     name: "TreeWithMutualRecursion",
                     value: NewType(
-                        QualifiedTypeName(
+                        TypeName(
                             QualifiedTypeName {
                                 namespace: Root,
                                 name: "Tree",
@@ -1406,7 +1406,7 @@ fn tree_struct_with_mutual_recursion() {
             [
                 Named {
                     name: "value",
-                    value: QualifiedTypeName(
+                    value: TypeName(
                         QualifiedTypeName {
                             namespace: Root,
                             name: "Test",
@@ -1416,7 +1416,7 @@ fn tree_struct_with_mutual_recursion() {
                 Named {
                     name: "children",
                     value: Seq(
-                        QualifiedTypeName(
+                        TypeName(
                             QualifiedTypeName {
                                 namespace: Root,
                                 name: "Tree",
@@ -1452,7 +1452,7 @@ fn tree_enum_with_mutual_recursion() {
             [
                 Named {
                     name: "tree_with_mutual_recursion",
-                    value: QualifiedTypeName(
+                    value: TypeName(
                         QualifiedTypeName {
                             namespace: Root,
                             name: "Tree",
@@ -1466,7 +1466,7 @@ fn tree_enum_with_mutual_recursion() {
                 0: Named {
                     name: "Value",
                     value: NewType(
-                        QualifiedTypeName(
+                        TypeName(
                             QualifiedTypeName {
                                 namespace: Root,
                                 name: "Test",

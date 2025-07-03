@@ -46,6 +46,12 @@ pub struct QualifiedTypeName {
     pub name: String,
 }
 
+impl From<&str> for QualifiedTypeName {
+    fn from(value: &str) -> Self {
+        Self::from_legacy_string(value)
+    }
+}
+
 impl QualifiedTypeName {
     /// Create a new qualified type name in the root namespace.
     #[must_use]
@@ -91,10 +97,9 @@ impl QualifiedTypeName {
 pub enum Format {
     /// A format whose value is initially unknown. Used internally for tracing. Not (de)serializable.
     Variable(#[serde(with = "not_implemented")] Variable<Format>),
+
     /// The name of a container.
-    TypeName(String),
-    /// A qualified type name with namespace information.
-    QualifiedTypeName(QualifiedTypeName),
+    TypeName(QualifiedTypeName),
 
     // The formats of primitive types
     Unit,
@@ -570,7 +575,6 @@ impl FormatHolder for Format {
         match self {
             Self::Variable(variable) => variable.visit(f)?,
             Self::TypeName(_)
-            | Self::QualifiedTypeName(_)
             | Self::Unit
             | Self::Bool
             | Self::I8
@@ -622,7 +626,6 @@ impl FormatHolder for Format {
                     .expect("variable is known");
             }
             Self::TypeName(_)
-            | Self::QualifiedTypeName(_)
             | Self::Unit
             | Self::Bool
             | Self::I8
@@ -712,8 +715,6 @@ impl FormatHolder for Format {
             | (Self::Bytes, Self::Bytes) => (),
 
             (Self::TypeName(name1), Self::TypeName(name2)) if *name1 == name2 => (),
-            (Self::QualifiedTypeName(name1), Self::QualifiedTypeName(name2)) if *name1 == name2 => {
-            }
 
             (Self::Option(format1), Self::Option(format2))
             | (Self::Seq(format1), Self::Seq(format2)) => {

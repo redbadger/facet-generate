@@ -38,19 +38,19 @@ fn nested_namespaced_structs() {
     Parent:
       STRUCT:
         - one:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: one
               name: Child
         - two:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: two
               name: Child
     one.Child:
       STRUCT:
         - child:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: GrandChild
     two.Child:
@@ -106,14 +106,14 @@ fn nested_namespaced_enums() {
         0:
           One:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: one
                 name: Child
         1:
           Two:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: two
                 name: Child
@@ -122,7 +122,7 @@ fn nested_namespaced_enums() {
         0:
           Data:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: GrandChild
     two.Child:
@@ -172,19 +172,19 @@ fn nested_namespaced_renamed_structs() {
     Parent:
       STRUCT:
         - one:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: one
               name: Kid
         - two:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: two
               name: Kid
     one.Kid:
       STRUCT:
         - child:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: GrandKid
     two.Kid:
@@ -222,27 +222,27 @@ fn namespaced_collections() {
       STRUCT:
         - users:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: api
                 name: User
         - user_arrays:
             TUPLEARRAY:
               CONTENT:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace:
                     NAMED: api
                   name: User
               SIZE: 5
         - optional_user:
             OPTION:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: api
                 name: User
         - groups:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: api
                 name: Group
@@ -250,7 +250,7 @@ fn namespaced_collections() {
       STRUCT:
         - users:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: api
                 name: User
@@ -289,12 +289,12 @@ fn namespaced_maps() {
         - user_profiles:
             MAP:
               KEY:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace:
                     NAMED: models
                   name: UserId
               VALUE:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace:
                     NAMED: models
                   name: UserProfile
@@ -351,7 +351,7 @@ fn complex_namespaced_enums() {
       STRUCT:
         - events:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: events
                 name: Event
@@ -360,7 +360,7 @@ fn complex_namespaced_enums() {
         0:
           UserCreated:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: events
                 name: UserData
@@ -368,19 +368,19 @@ fn complex_namespaced_enums() {
           UserUpdated:
             STRUCT:
               - old:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace:
                       NAMED: events
                     name: UserData
               - new:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace:
                       NAMED: events
                     name: UserData
         2:
           SystemEvent:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: events
                 name: SystemData
@@ -420,12 +420,12 @@ fn namespaced_transparent_structs() {
     Container:
       STRUCT:
         - direct_id:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: wrappers
               name: UserId
         - wrapped_id:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: wrappers
               name: UserId
@@ -467,14 +467,14 @@ fn cross_namespace_references() {
       STRUCT:
         - records:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: storage
                 name: Record
     api.Request:
       STRUCT:
         - entity:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: entities
               name: Entity
@@ -485,12 +485,12 @@ fn cross_namespace_references() {
     storage.Record:
       STRUCT:
         - entity:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: entities
               name: Entity
         - request:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: api
               name: Request
@@ -521,7 +521,7 @@ fn namespace_with_byte_attributes() {
     Document:
       STRUCT:
         - binary:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: data
               name: BinaryData
@@ -562,19 +562,19 @@ fn deeply_nested_namespaces() {
     RootStruct:
       STRUCT:
         - middle:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: level1
               name: MiddleStruct
         - deep_direct:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: level1.level2
               name: DeepStruct
     level1.MiddleStruct:
       STRUCT:
         - deep:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: level1.level2
               name: DeepStruct
@@ -607,7 +607,7 @@ fn transparent_struct_explicit_namespace() {
     Container:
       STRUCT:
         - wrapped_id:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: UserId
     UserId:
@@ -686,35 +686,35 @@ fn explicit_namespace_declarations() {
     ApiContainer:
       STRUCT:
         - user:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: api
               name: User
         - group:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: api
               name: Group
     RootContainer:
       STRUCT:
         - api_data:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: ApiContainer
         - event:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: events
               name: Event
         - efficient:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: RootGroup
     RootGroup:
       STRUCT:
         - users:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: RootUser
     RootUser:
@@ -725,7 +725,7 @@ fn explicit_namespace_declarations() {
       STRUCT:
         - users:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: api
                 name: User
@@ -738,14 +738,14 @@ fn explicit_namespace_declarations() {
         0:
           UserCreated:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: events
                 name: UserData
         1:
           SystemEvent:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace:
                   NAMED: events
                 name: SystemData
@@ -795,32 +795,32 @@ fn collections_with_explicit_namespace() {
       STRUCT:
         - users:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: UnnamedUser
         - admins:
             TUPLEARRAY:
               CONTENT:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: UnnamedUser
               SIZE: 2
         - optional_user:
             OPTION:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: UnnamedUser
         - role_map:
             MAP:
               KEY: STR
               VALUE:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: UnnamedRole
         - nested_lists:
             SEQ:
               SEQ:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: UnnamedUser
     ");
@@ -872,7 +872,7 @@ fn enums_with_explicit_namespace() {
       STRUCT:
         - progress: F32
         - estimate:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: ErrorData
     SuccessData:
@@ -883,33 +883,33 @@ fn enums_with_explicit_namespace() {
         0:
           Success:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: SuccessData
         1:
           Error:
             NEWTYPE:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: ErrorData
         2:
           Processing:
             STRUCT:
               - data:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: ProcessingData
               - extra:
-                  QUALIFIEDTYPENAME:
+                  TYPENAME:
                     namespace: ROOT
                     name: SuccessData
         3:
           Multipart:
             TUPLE:
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: ErrorData
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: SuccessData
         4:
@@ -954,36 +954,36 @@ fn nested_structs_with_explicit_namespace() {
     MiddleLayer:
       STRUCT:
         - inner:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: DeepInner
         - inner_list:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: DeepInner
     TopLayer:
       STRUCT:
         - middle:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: MiddleLayer
         - direct_inner:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: DeepInner
     nested.Container:
       STRUCT:
         - top:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: TopLayer
         - middle_direct:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: MiddleLayer
         - inner_direct:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: DeepInner
     ");
@@ -1020,13 +1020,13 @@ fn transparent_struct_chains() {
     IdContainer:
       STRUCT:
         - id:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: identity
               name: NamespacedWrapper
     identity.NamespacedWrapper:
       NEWTYPESTRUCT:
-        QUALIFIEDTYPENAME:
+        TYPENAME:
           namespace: ROOT
           name: DoubleWrapperId
     ");
@@ -1060,36 +1060,36 @@ fn mixed_containers_with_explicit_namespace() {
     storage.MixedContainer:
       STRUCT:
         - single:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: Item
         - vector:
             SEQ:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Item
         - array:
             TUPLEARRAY:
               CONTENT:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: Item
               SIZE: 3
         - option:
             OPTION:
-              QUALIFIEDTYPENAME:
+              TYPENAME:
                 namespace: ROOT
                 name: Item
         - tuple:
             TUPLE:
-              - QUALIFIEDTYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: Item
               - STR
         - nested_option:
             OPTION:
               SEQ:
-                QUALIFIEDTYPENAME:
+                TYPENAME:
                   namespace: ROOT
                   name: Item
         - complex_map:
@@ -1098,7 +1098,7 @@ fn mixed_containers_with_explicit_namespace() {
               VALUE:
                 SEQ:
                   OPTION:
-                    QUALIFIEDTYPENAME:
+                    TYPENAME:
                       namespace: ROOT
                       name: Item
     ");
@@ -1136,17 +1136,17 @@ fn no_namespace_pollution() {
     RootContainer:
       STRUCT:
         - alpha:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: alpha
               name: AlphaContainer
         - beta:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: beta
               name: BetaContainer
         - unnamespaced:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: SharedType
     SharedType:
@@ -1155,13 +1155,13 @@ fn no_namespace_pollution() {
     alpha.AlphaContainer:
       STRUCT:
         - shared:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: SharedType
     beta.BetaContainer:
       STRUCT:
         - shared:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: SharedType
     ");
@@ -1202,29 +1202,29 @@ fn explicit_namespace_behavior_summary() {
     Root:
       STRUCT:
         - first:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: first
               name: FirstContainer
         - second:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace:
                 NAMED: second
               name: SecondContainer
         - direct:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: BaseType
     first.FirstContainer:
       STRUCT:
         - item:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: BaseType
     second.SecondContainer:
       STRUCT:
         - item:
-            QUALIFIEDTYPENAME:
+            TYPENAME:
               namespace: ROOT
               name: BaseType
     ");

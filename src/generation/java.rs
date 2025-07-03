@@ -199,12 +199,11 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
-            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
+            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(x) => self.quote_qualified_name(x),
-            QualifiedTypeName(qualified_name) => {
+            TypeName(qualified_name) => {
                 self.quote_qualified_name(&qualified_name.to_legacy_string())
             }
             Unit => "com.novi.serde.Unit".into(),
@@ -311,11 +310,11 @@ where
 
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
-            TypeName(_) | QualifiedTypeName(_) => format!("{value}.serialize(serializer);"),
+            TypeName(_) => format!("{value}.serialize(serializer);"),
             Unit => format!("serializer.serialize_unit({value});"),
             Bool => format!("serializer.serialize_bool({value});"),
             I8 => format!("serializer.serialize_i8({value});"),
@@ -344,15 +343,11 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
-            TypeName(name) => format!(
-                "{}.deserialize(deserializer)",
-                self.quote_qualified_name(name)
-            ),
-            QualifiedTypeName(qualified_name) => {
+            TypeName(qualified_name) => {
                 format!(
                     "{}.deserialize(deserializer)",
                     self.quote_qualified_name(&qualified_name.to_legacy_string())

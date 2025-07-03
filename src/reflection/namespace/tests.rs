@@ -41,7 +41,9 @@ fn single_namespace() {
     : ChildOne:
         STRUCT:
           - child:
-              TYPENAME: GrandChild
+              TYPENAME:
+                namespace: ROOT
+                name: GrandChild
       ChildTwo:
         STRUCT:
           - field: STR
@@ -51,9 +53,13 @@ fn single_namespace() {
       Parent:
         STRUCT:
           - one:
-              TYPENAME: ChildOne
+              TYPENAME:
+                namespace: ROOT
+                name: ChildOne
           - two:
-              TYPENAME: ChildTwo
+              TYPENAME:
+                namespace: ROOT
+                name: ChildTwo
     ");
 }
 
@@ -101,9 +107,15 @@ fn root_namespace_with_two_child_namespaces() {
     : Parent:
         STRUCT:
           - one:
-              TYPENAME: ChildOne
+              TYPENAME:
+                namespace:
+                  NAMED: one
+                name: ChildOne
           - two:
-              TYPENAME: ChildTwo
+              TYPENAME:
+                namespace:
+                  NAMED: two
+                name: ChildTwo
     ? module_name: one
       serialization: true
       encodings: []
@@ -117,7 +129,10 @@ fn root_namespace_with_two_child_namespaces() {
     : ChildOne:
         STRUCT:
           - child:
-              TYPENAME: GrandChild
+              TYPENAME:
+                namespace:
+                  NAMED: one
+                name: GrandChild
       GrandChild:
         STRUCT:
           - field: STR

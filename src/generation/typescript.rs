@@ -131,12 +131,11 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, QualifiedTypeName,
-            Seq, Str, Tuple, TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
+            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(x) => self.quote_qualified_name(x),
-            QualifiedTypeName(qualified_name) => {
+            TypeName(qualified_name) => {
                 self.quote_qualified_name(&qualified_name.to_legacy_string())
             }
             Unit => "unit".into(),
@@ -214,13 +213,13 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format, use_this: bool) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         let this_str = if use_this { "this." } else { "" };
 
         match format {
-            TypeName(_) | QualifiedTypeName(_) => {
+            TypeName(_) => {
                 format!("{this_str}{value}.serialize(serializer);")
             }
             Unit => format!("serializer.serializeUnit({this_str}{value});"),
@@ -251,15 +250,11 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, QualifiedTypeName, Str, TypeName,
-            U8, U16, U32, U64, U128, Unit,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
             TypeName(name) => format!(
-                "{}.deserialize(deserializer)",
-                self.quote_qualified_name(name)
-            ),
-            QualifiedTypeName(name) => format!(
                 "{}.deserialize(deserializer)",
                 self.quote_qualified_name(&name.to_legacy_string())
             ),
