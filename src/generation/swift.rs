@@ -95,7 +95,7 @@ impl<'a> CodeGenerator<'a> {
 
         emitter.output_preamble()?;
 
-        for (name, format) in registry {
+        for (name, format) in &registry.containers {
             emitter.output_container(&name.name, format)?;
         }
 
@@ -221,7 +221,7 @@ where
 
     fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
-        for format in registry.values() {
+        for format in registry.containers.values() {
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {

@@ -88,7 +88,7 @@ impl<'a> CodeGenerator<'a> {
         }
         std::fs::create_dir_all(&dir_path)?;
 
-        for (name, format) in registry {
+        for (name, format) in &registry.containers {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
         if self.config.serialization {
@@ -279,7 +279,7 @@ where
 
     fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
-        for format in registry.values() {
+        for format in registry.containers.values() {
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {

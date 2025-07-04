@@ -1434,20 +1434,22 @@ fn self_referencing_type() {
     let registry = reflect::<SimpleList>();
 
     insta::assert_debug_snapshot!(registry, @r#"
-    {
-        QualifiedTypeName {
-            namespace: Root,
-            name: "SimpleList",
-        }: NewTypeStruct(
-            Option(
-                TypeName(
-                    QualifiedTypeName {
-                        namespace: Root,
-                        name: "SimpleList",
-                    },
+    Registry {
+        containers: {
+            QualifiedTypeName {
+                namespace: Root,
+                name: "SimpleList",
+            }: NewTypeStruct(
+                Option(
+                    TypeName(
+                        QualifiedTypeName {
+                            namespace: Root,
+                            name: "SimpleList",
+                        },
+                    ),
                 ),
             ),
-        ),
+        },
     }
     "#);
 }
@@ -1464,31 +1466,33 @@ fn complex_self_referencing_type() {
     let registry = reflect::<Node>();
 
     insta::assert_debug_snapshot!(registry, @r#"
-    {
-        QualifiedTypeName {
-            namespace: Root,
-            name: "Node",
-        }: Struct(
-            [
-                Named {
-                    name: "value",
-                    value: I32,
-                },
-                Named {
-                    name: "children",
-                    value: Option(
-                        Seq(
-                            TypeName(
-                                QualifiedTypeName {
-                                    namespace: Root,
-                                    name: "Node",
-                                },
+    Registry {
+        containers: {
+            QualifiedTypeName {
+                namespace: Root,
+                name: "Node",
+            }: Struct(
+                [
+                    Named {
+                        name: "value",
+                        value: I32,
+                    },
+                    Named {
+                        name: "children",
+                        value: Option(
+                            Seq(
+                                TypeName(
+                                    QualifiedTypeName {
+                                        namespace: Root,
+                                        name: "Node",
+                                    },
+                                ),
                             ),
                         ),
-                    ),
-                },
-            ],
-        ),
+                    },
+                ],
+            ),
+        },
     }
     "#);
 }
@@ -1511,52 +1515,54 @@ fn tree_struct_with_mutual_recursion() {
     let registry = reflect::<Test>();
 
     insta::assert_debug_snapshot!(registry, @r#"
-    {
-        QualifiedTypeName {
-            namespace: Root,
-            name: "Test",
-        }: Enum(
-            {
-                0: Named {
-                    name: "TreeWithMutualRecursion",
-                    value: NewType(
-                        TypeName(
+    Registry {
+        containers: {
+            QualifiedTypeName {
+                namespace: Root,
+                name: "Test",
+            }: Enum(
+                {
+                    0: Named {
+                        name: "TreeWithMutualRecursion",
+                        value: NewType(
+                            TypeName(
+                                QualifiedTypeName {
+                                    namespace: Root,
+                                    name: "Tree",
+                                },
+                            ),
+                        ),
+                    },
+                },
+            ),
+            QualifiedTypeName {
+                namespace: Root,
+                name: "Tree",
+            }: Struct(
+                [
+                    Named {
+                        name: "value",
+                        value: TypeName(
                             QualifiedTypeName {
                                 namespace: Root,
-                                name: "Tree",
+                                name: "Test",
                             },
                         ),
-                    ),
-                },
-            },
-        ),
-        QualifiedTypeName {
-            namespace: Root,
-            name: "Tree",
-        }: Struct(
-            [
-                Named {
-                    name: "value",
-                    value: TypeName(
-                        QualifiedTypeName {
-                            namespace: Root,
-                            name: "Test",
-                        },
-                    ),
-                },
-                Named {
-                    name: "children",
-                    value: Seq(
-                        TypeName(
-                            QualifiedTypeName {
-                                namespace: Root,
-                                name: "Tree",
-                            },
+                    },
+                    Named {
+                        name: "children",
+                        value: Seq(
+                            TypeName(
+                                QualifiedTypeName {
+                                    namespace: Root,
+                                    name: "Tree",
+                                },
+                            ),
                         ),
-                    ),
-                },
-            ],
-        ),
+                    },
+                ],
+            ),
+        },
     }
     "#);
 }
@@ -1578,41 +1584,43 @@ fn tree_enum_with_mutual_recursion() {
     let registry = reflect::<Test>();
 
     insta::assert_debug_snapshot!(registry, @r#"
-    {
-        QualifiedTypeName {
-            namespace: Root,
-            name: "Test",
-        }: Struct(
-            [
-                Named {
-                    name: "tree_with_mutual_recursion",
-                    value: TypeName(
-                        QualifiedTypeName {
-                            namespace: Root,
-                            name: "Tree",
-                        },
-                    ),
-                },
-            ],
-        ),
-        QualifiedTypeName {
-            namespace: Root,
-            name: "Tree",
-        }: Enum(
-            {
-                0: Named {
-                    name: "Value",
-                    value: NewType(
-                        TypeName(
+    Registry {
+        containers: {
+            QualifiedTypeName {
+                namespace: Root,
+                name: "Test",
+            }: Struct(
+                [
+                    Named {
+                        name: "tree_with_mutual_recursion",
+                        value: TypeName(
                             QualifiedTypeName {
                                 namespace: Root,
-                                name: "Test",
+                                name: "Tree",
                             },
                         ),
-                    ),
+                    },
+                ],
+            ),
+            QualifiedTypeName {
+                namespace: Root,
+                name: "Tree",
+            }: Enum(
+                {
+                    0: Named {
+                        name: "Value",
+                        value: NewType(
+                            TypeName(
+                                QualifiedTypeName {
+                                    namespace: Root,
+                                    name: "Test",
+                                },
+                            ),
+                        ),
+                    },
                 },
-            },
-        ),
+            ),
+        },
     }
     "#);
 }
