@@ -992,8 +992,8 @@ mod tests {
     use facet::Facet;
 
     use crate::{
-        generation::SourceInstaller as _,
-        reflection::{namespace::split, reflect},
+        generation::{SourceInstaller as _, module::split},
+        reflection::reflect,
     };
 
     use super::*;

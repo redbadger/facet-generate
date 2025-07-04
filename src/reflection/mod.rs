@@ -1,6 +1,4 @@
-pub mod error;
 pub mod format;
-pub mod namespace;
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -14,10 +12,7 @@ use facet::{
 };
 use format::{ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat};
 
-use crate::reflection::{error::Error, format::Namespace};
-
-/// Result type used in this crate.
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+use crate::reflection::format::Namespace;
 
 /// A map of container formats.
 pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;

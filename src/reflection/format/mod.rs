@@ -16,14 +16,14 @@
 #[cfg(test)]
 mod tests;
 
-use super::{Result, error::Error};
+use crate::{Result, error::Error};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
 };
 use std::{
     cell::{Ref, RefCell, RefMut},
-    collections::{BTreeMap, btree_map::Entry},
+    collections::BTreeMap,
     rc::Rc,
 };
 
@@ -200,16 +200,6 @@ pub trait FormatHolder {
     /// * Return an error if any variable has still an unknown value (thus cannot be removed).
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()>;
 
-    /// Update variables and add missing enum variants so that the terms match.
-    /// This is a special case of [term unification](https://en.wikipedia.org/wiki/Unification_(computer_science)):
-    /// * Variables occurring in `other` must be "fresh" and distinct
-    ///   from each other. By "fresh", we mean that they do not occur in `self`
-    ///   and have no known value yet.
-    /// * If needed, enums in `self` will be extended with new variants taken from `other`.
-    /// * Although the parameter `other` is consumed (i.e. taken by value), all
-    ///   variables occurring either in `self` or `other` are correctly updated.
-    fn unify(&mut self, other: Self) -> Result<()>;
-
     /// Finalize the formats within `self` by removing variables and making sure
     /// that all eligible tuples are compressed into a `TupleArray`. Return an error
     /// if any variable has an unknown value.
@@ -249,14 +239,6 @@ pub trait FormatHolder {
 
     /// Whether this format is a variable with no known value yet.
     fn is_unknown(&self) -> bool;
-}
-
-fn unification_error<T1, T2>(v1: T1, v2: T2) -> Error
-where
-    T1: std::fmt::Debug,
-    T2: std::fmt::Debug,
-{
-    Error::Incompatible(format!("{v1:?}"), format!("{v2:?}"))
 }
 
 impl FormatHolder for VariantFormat {
@@ -307,62 +289,6 @@ impl FormatHolder for VariantFormat {
         Ok(())
     }
 
-    fn unify(&mut self, format: VariantFormat) -> Result<()> {
-        match (self, format) {
-            (format1, Self::Variable(variable2)) => {
-                if let Some(format2) = &mut *variable2.borrow_mut() {
-                    format1.unify(std::mem::take(format2))?;
-                }
-                *variable2.borrow_mut() = Some(format1.clone());
-            }
-            (Self::Variable(variable1), format2) => {
-                let inner_variable = match &mut *variable1.borrow_mut() {
-                    value1 @ None => {
-                        *value1 = Some(format2);
-                        None
-                    }
-                    Some(format1) => {
-                        format1.unify(format2)?;
-                        match format1 {
-                            Self::Variable(variable) => Some(variable.clone()),
-                            _ => None,
-                        }
-                    }
-                };
-                // Reduce multiple indirections to a single one.
-                if let Some(variable) = inner_variable {
-                    *variable1 = variable;
-                }
-            }
-
-            (Self::Unit, Self::Unit) => (),
-
-            (Self::NewType(format1), Self::NewType(format2)) => {
-                format1.as_mut().unify(*format2)?;
-            }
-
-            (Self::Tuple(formats1), Self::Tuple(formats2)) if formats1.len() == formats2.len() => {
-                for (format1, format2) in formats1.iter_mut().zip(formats2.into_iter()) {
-                    format1.unify(format2)?;
-                }
-            }
-
-            (Self::Struct(named_formats1), Self::Struct(named_formats2))
-                if named_formats1.len() == named_formats2.len() =>
-            {
-                for (format1, format2) in named_formats1.iter_mut().zip(named_formats2.into_iter())
-                {
-                    format1.unify(format2)?;
-                }
-            }
-
-            (format1, format2) => {
-                return Err(unification_error(format1, format2));
-            }
-        }
-        Ok(())
-    }
-
     fn is_unknown(&self) -> bool {
         if let Self::Variable(v) = self {
             return v.is_unknown();
@@ -381,13 +307,6 @@ where
 
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
         self.value.visit_mut(f)
-    }
-
-    fn unify(&mut self, other: Named<T>) -> Result<()> {
-        if self.name != other.name {
-            return Err(unification_error(&*self, &other));
-        }
-        self.value.unify(other.value)
     }
 
     fn is_unknown(&self) -> bool {
@@ -446,9 +365,7 @@ where
     T: FormatHolder + std::fmt::Debug + Clone,
 {
     fn visit<'a>(&'a self, _f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
-        Err(Error::NotSupported(
-            "Cannot immutability visit formats with variables",
-        ))
+        Err(Error::UnknownFormat)
     }
 
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
@@ -456,12 +373,6 @@ where
             None => Err(Error::UnknownFormat),
             Some(value) => value.visit_mut(f),
         }
-    }
-
-    fn unify(&mut self, _other: Variable<T>) -> Result<()> {
-        // Omitting this method because a correct implementation would require
-        // additional assumptions on T (in order to create new variables of type `T`).
-        Err(Error::NotSupported("Cannot unify variables directly"))
     }
 
     fn is_unknown(&self) -> bool {
@@ -514,52 +425,6 @@ impl FormatHolder for ContainerFormat {
                 for variant in variants {
                     variant.1.visit_mut(f)?;
                 }
-            }
-        }
-        Ok(())
-    }
-
-    fn unify(&mut self, format: ContainerFormat) -> Result<()> {
-        match (self, format) {
-            (Self::UnitStruct, Self::UnitStruct) => (),
-
-            (Self::NewTypeStruct(format1), Self::NewTypeStruct(format2)) => {
-                format1.as_mut().unify(*format2)?;
-            }
-
-            (Self::TupleStruct(formats1), Self::TupleStruct(formats2))
-                if formats1.len() == formats2.len() =>
-            {
-                for (format1, format2) in formats1.iter_mut().zip(formats2.into_iter()) {
-                    format1.unify(format2)?;
-                }
-            }
-
-            (Self::Struct(named_formats1), Self::Struct(named_formats2))
-                if named_formats1.len() == named_formats2.len() =>
-            {
-                for (format1, format2) in named_formats1.iter_mut().zip(named_formats2.into_iter())
-                {
-                    format1.unify(format2)?;
-                }
-            }
-
-            (Self::Enum(variants1), Self::Enum(variants2)) => {
-                for (index2, variant2) in variants2 {
-                    match variants1.entry(index2) {
-                        Entry::Vacant(e) => {
-                            // Note that we do not check for name collisions.
-                            e.insert(variant2);
-                        }
-                        Entry::Occupied(mut e) => {
-                            e.get_mut().unify(variant2)?;
-                        }
-                    }
-                }
-            }
-
-            (format1, format2) => {
-                return Err(unification_error(format1, format2));
             }
         }
         Ok(())
@@ -664,88 +529,6 @@ impl FormatHolder for Format {
             }
         }
         f(self)
-    }
-
-    /// Unify the newly "traced" value `format` into the current format.
-    /// Note that there should be no `TupleArray`s at this point.
-    fn unify(&mut self, format: Format) -> Result<()> {
-        match (self, format) {
-            (format1, Self::Variable(variable2)) => {
-                if let Some(format2) = &mut *variable2.borrow_mut() {
-                    format1.unify(std::mem::take(format2))?;
-                }
-                *variable2.borrow_mut() = Some(format1.clone());
-            }
-            (Self::Variable(variable1), format2) => {
-                let inner_variable = match &mut *variable1.borrow_mut() {
-                    value1 @ None => {
-                        *value1 = Some(format2);
-                        None
-                    }
-                    Some(format1) => {
-                        format1.unify(format2)?;
-                        match format1 {
-                            Self::Variable(variable) => Some(variable.clone()),
-                            _ => None,
-                        }
-                    }
-                };
-                // Reduce multiple indirections to a single one.
-                if let Some(variable) = inner_variable {
-                    *variable1 = variable;
-                }
-            }
-
-            (Self::Unit, Self::Unit)
-            | (Self::Bool, Self::Bool)
-            | (Self::I8, Self::I8)
-            | (Self::I16, Self::I16)
-            | (Self::I32, Self::I32)
-            | (Self::I64, Self::I64)
-            | (Self::I128, Self::I128)
-            | (Self::U8, Self::U8)
-            | (Self::U16, Self::U16)
-            | (Self::U32, Self::U32)
-            | (Self::U64, Self::U64)
-            | (Self::U128, Self::U128)
-            | (Self::F32, Self::F32)
-            | (Self::F64, Self::F64)
-            | (Self::Char, Self::Char)
-            | (Self::Str, Self::Str)
-            | (Self::Bytes, Self::Bytes) => (),
-
-            (Self::TypeName(name1), Self::TypeName(name2)) if *name1 == name2 => (),
-
-            (Self::Option(format1), Self::Option(format2))
-            | (Self::Seq(format1), Self::Seq(format2)) => {
-                format1.as_mut().unify(*format2)?;
-            }
-
-            (Self::Tuple(formats1), Self::Tuple(formats2)) if formats1.len() == formats2.len() => {
-                for (format1, format2) in formats1.iter_mut().zip(formats2.into_iter()) {
-                    format1.unify(format2)?;
-                }
-            }
-
-            (
-                Self::Map {
-                    key: key1,
-                    value: value1,
-                },
-                Self::Map {
-                    key: key2,
-                    value: value2,
-                },
-            ) => {
-                key1.as_mut().unify(*key2)?;
-                value1.as_mut().unify(*value2)?;
-            }
-
-            (format1, format2) => {
-                return Err(unification_error(format1, format2));
-            }
-        }
-        Ok(())
     }
 
     fn is_unknown(&self) -> bool {
