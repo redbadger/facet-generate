@@ -4,8 +4,6 @@ Reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into J
 
 ### Notes:
 1. Currently, struct and enum renaming is not fully implemented and probably requires an upstream PR to facet.
-2. Vendors [`serde-reflect`](https://crates.io/crates/serde-reflect) and [`serde-generate`](https://crates.io/crates/serde-generate), which we are evolving to support additional features and more idiomatic foreign type generation with additional extension points.
-3. One way to generate code is to install `serde-generate-bin` (`cargo install serde-generate-bin`), and run that on the yaml generated (e.g. `serdegen --language swift --with-runtimes serde bincode --module-name Test test.yaml`).
 
 ### Usage
 
@@ -55,8 +53,9 @@ enum HttpError {
 
 let registry = reflect::<HttpResult>();
 insta::assert_yaml_snapshot!(registry, @r"
-HttpError:
-  ENUM:
+? namespace: ROOT
+  name: HttpError
+: ENUM:
     0:
       Url:
         NEWTYPE: STR
@@ -65,12 +64,14 @@ HttpError:
         NEWTYPE: STR
     2:
       Timeout: UNIT
-HttpHeader:
-  STRUCT:
+? namespace: ROOT
+  name: HttpHeader
+: STRUCT:
     - name: STR
     - value: STR
-HttpResponse:
-  STRUCT:
+? namespace: ROOT
+  name: HttpResponse
+: STRUCT:
     - status: U16
     - headers:
         SEQ:
@@ -78,8 +79,9 @@ HttpResponse:
             namespace: ROOT
             name: HttpHeader
     - body: BYTES
-HttpResult:
-  ENUM:
+? namespace: ROOT
+  name: HttpResult
+: ENUM:
     0:
       Ok:
         NEWTYPE:

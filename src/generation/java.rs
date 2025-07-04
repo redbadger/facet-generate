@@ -89,7 +89,7 @@ impl<'a> CodeGenerator<'a> {
         std::fs::create_dir_all(&dir_path)?;
 
         for (name, format) in registry {
-            self.write_container_class(&dir_path, current_namespace.clone(), name, format)?;
+            self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
         if self.config.serialization {
             self.write_helper_class(&dir_path, current_namespace, registry)?;

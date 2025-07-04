@@ -8,7 +8,11 @@ fn unit_struct() {
     struct MyUnitStruct;
 
     let registry = reflect::<MyUnitStruct>();
-    insta::assert_yaml_snapshot!(registry, @"MyUnitStruct: UNITSTRUCT");
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyUnitStruct
+    : UNITSTRUCT
+    ");
 }
 
 #[test]
@@ -18,9 +22,10 @@ fn newtype_bool() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: BOOL
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: BOOL
+    ");
 }
 
 #[test]
@@ -30,9 +35,10 @@ fn newtype_unit() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: UNIT
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: UNIT
+    ");
 }
 
 #[test]
@@ -42,9 +48,10 @@ fn newtype_u8() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: U8
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: U8
+    ");
 }
 
 #[test]
@@ -54,9 +61,10 @@ fn newtype_u16() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: U16
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: U16
+    ");
 }
 
 #[test]
@@ -66,9 +74,10 @@ fn newtype_u32() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: U32
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: U32
+    ");
 }
 
 #[test]
@@ -78,9 +87,10 @@ fn newtype_u64() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: U64
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: U64
+    ");
 }
 
 #[test]
@@ -90,9 +100,10 @@ fn newtype_u128() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: U128
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: U128
+    ");
 }
 
 #[test]
@@ -102,9 +113,10 @@ fn newtype_i8() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: I8
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: I8
+    ");
 }
 
 #[test]
@@ -114,9 +126,10 @@ fn newtype_i16() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: I16
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: I16
+    ");
 }
 
 #[test]
@@ -126,9 +139,10 @@ fn newtype_i32() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: I32
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: I32
+    ");
 }
 
 #[test]
@@ -138,9 +152,10 @@ fn newtype_i64() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: I64
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: I64
+    ");
 }
 
 #[test]
@@ -150,9 +165,10 @@ fn newtype_i128() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: I128
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: I128
+    ");
 }
 
 #[test]
@@ -162,9 +178,10 @@ fn newtype_f32() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: F32
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: F32
+    ");
 }
 
 #[test]
@@ -174,9 +191,10 @@ fn newtype_f64() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: F64
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: F64
+    ");
 }
 
 #[test]
@@ -186,9 +204,10 @@ fn newtype_char() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT: CHAR
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: CHAR
+    ");
 }
 
 #[test]
@@ -201,10 +220,12 @@ fn nested_newtype() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyNewType:
-      NEWTYPESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
         TYPENAME:
           namespace: ROOT
           name: Inner
@@ -218,10 +239,11 @@ fn newtype_with_list() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT:
-            SEQ: I32
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
+        SEQ: I32
+    ");
 }
 
 #[test]
@@ -234,10 +256,12 @@ fn newtype_with_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyNewType:
-      NEWTYPESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
         SEQ:
           TYPENAME:
             namespace: ROOT
@@ -252,11 +276,12 @@ fn newtype_with_nested_list() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT:
-            SEQ:
-              SEQ: I32
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
+        SEQ:
+          SEQ: I32
+    ");
 }
 
 #[test]
@@ -269,10 +294,12 @@ fn newtype_with_nested_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyNewType:
-      NEWTYPESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
         SEQ:
           SEQ:
             TYPENAME:
@@ -291,10 +318,12 @@ fn newtype_with_triple_nested_list_of_named_type() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyNewType:
-      NEWTYPESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
         SEQ:
           SEQ:
             SEQ:
@@ -311,12 +340,13 @@ fn newtype_with_tuple_array() {
 
     let registry = reflect::<MyNewType>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyNewType:
-          NEWTYPESTRUCT:
-            TUPLEARRAY:
-              CONTENT: I32
-              SIZE: 3
-        ");
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
+        TUPLEARRAY:
+          CONTENT: I32
+          SIZE: 3
+    ");
 }
 
 #[test]
@@ -326,12 +356,13 @@ fn tuple_struct() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyTupleStruct:
-          TUPLESTRUCT:
-            - U8
-            - I32
-            - BOOL
-        ");
+    ? namespace: ROOT
+      name: MyTupleStruct
+    : TUPLESTRUCT:
+        - U8
+        - I32
+        - BOOL
+    ");
 }
 
 #[test]
@@ -341,12 +372,13 @@ fn tuple_struct_with_unit() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyTupleStruct:
-          TUPLESTRUCT:
-            - U8
-            - UNIT
-            - I32
-        ");
+    ? namespace: ROOT
+      name: MyTupleStruct
+    : TUPLESTRUCT:
+        - U8
+        - UNIT
+        - I32
+    ");
 }
 
 #[test]
@@ -358,11 +390,12 @@ fn option_of_unit() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a:
-                OPTION: UNIT
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a:
+            OPTION: UNIT
+    ");
 }
 
 #[test]
@@ -374,12 +407,13 @@ fn option_of_list() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a:
-                OPTION:
-                  SEQ: I32
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a:
+            OPTION:
+              SEQ: I32
+    ");
 }
 
 #[test]
@@ -391,13 +425,14 @@ fn option_of_nested_list() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a:
-                OPTION:
-                  SEQ:
-                    SEQ: I32
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a:
+            OPTION:
+              SEQ:
+                SEQ: I32
+    ");
 }
 
 #[test]
@@ -412,10 +447,12 @@ fn option_of_list_of_named_type() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             OPTION:
               SEQ:
@@ -434,12 +471,13 @@ fn list_of_options() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a:
-                SEQ:
-                  OPTION: I32
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a:
+            SEQ:
+              OPTION: I32
+    ");
 }
 
 #[test]
@@ -454,10 +492,12 @@ fn list_of_options_of_named_type() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             SEQ:
               OPTION:
@@ -476,13 +516,14 @@ fn nested_list_with_options() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a:
-                SEQ:
-                  SEQ:
-                    OPTION: I32
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a:
+            SEQ:
+              SEQ:
+                OPTION: I32
+    ");
 }
 
 #[test]
@@ -495,10 +536,12 @@ fn nested_tuple_struct_1() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyTupleStruct:
-      TUPLESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyTupleStruct
+    : TUPLESTRUCT:
         - TYPENAME:
             namespace: ROOT
             name: Inner
@@ -516,13 +559,15 @@ fn nested_tuple_struct_2() {
 
     let registry = reflect::<MyTupleStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      TUPLESTRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : TUPLESTRUCT:
         - I32
         - U8
         - BOOL
-    MyTupleStruct:
-      TUPLESTRUCT:
+    ? namespace: ROOT
+      name: MyTupleStruct
+    : TUPLESTRUCT:
         - I32
         - TYPENAME:
             namespace: ROOT
@@ -540,8 +585,9 @@ fn struct_with_vec_of_u8() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             SEQ: U8
     ");
@@ -557,8 +603,9 @@ fn struct_with_vec_of_u8_to_bytes() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a: BYTES
     ");
 }
@@ -572,8 +619,9 @@ fn struct_with_slice_of_u8() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             SEQ: U8
     ");
@@ -589,8 +637,9 @@ fn struct_with_slice_of_u8_to_bytes() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a: BYTES
     ");
 }
@@ -607,13 +656,14 @@ fn struct_with_scalar_fields() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyStruct:
-          STRUCT:
-            - a: U8
-            - b: I32
-            - c: BOOL
-            - d: UNIT
-        ");
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - a: U8
+        - b: I32
+        - c: BOOL
+        - d: UNIT
+    ");
 }
 
 #[test]
@@ -625,8 +675,9 @@ fn struct_with_tuple_field() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             TUPLE:
               - U8
@@ -650,14 +701,16 @@ fn struct_with_option_fields() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      STRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
         - a:
             OPTION: BOOL
         - b:
             OPTION: U8
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             OPTION:
               TYPENAME:
@@ -684,14 +737,17 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner1:
-      NEWTYPESTRUCT: I32
-    Inner2:
-      TUPLESTRUCT:
+    ? namespace: ROOT
+      name: Inner1
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: Inner2
+    : TUPLESTRUCT:
         - I8
         - U32
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - a:
             TYPENAME:
               namespace: ROOT
@@ -715,13 +771,14 @@ fn enum_with_unit_variants() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyEnum:
-          ENUM:
-            0:
-              Variant1: UNIT
-            1:
-              Variant2: UNIT
-        ");
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          Variant1: UNIT
+        1:
+          Variant2: UNIT
+    ");
 }
 
 #[test]
@@ -741,8 +798,9 @@ fn enum_with_newtype_variants() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             NEWTYPE: U8
@@ -782,10 +840,12 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             NEWTYPE:
@@ -810,8 +870,9 @@ fn enum_with_tuple_struct_variants() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             TUPLE:
@@ -845,10 +906,12 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             TUPLE:
@@ -882,11 +945,13 @@ fn enum_with_inline_struct_variants() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      STRUCT:
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
         - a: STR
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             STRUCT:
@@ -931,10 +996,12 @@ fn enum_with_struct_variants_mixed_types() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Inner:
-      NEWTYPESTRUCT: I32
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: Inner
+    : NEWTYPESTRUCT: I32
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1:
             STRUCT:
@@ -972,8 +1039,9 @@ fn enum_with_struct_variant() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           A: UNIT
         1:
@@ -1000,8 +1068,9 @@ fn enum_with_skip_serializing() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
         0:
           Variant1: UNIT
         1:
@@ -1022,8 +1091,9 @@ fn transparent() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - inner: I32
     ");
 }
@@ -1039,15 +1109,16 @@ fn map_of_string_and_bool() {
 
     let registry = reflect::<MyEnum>();
     insta::assert_yaml_snapshot!(registry, @r"
-        MyEnum:
-          ENUM:
-            0:
-              Map:
-                NEWTYPE:
-                  MAP:
-                    KEY: STR
-                    VALUE: BOOL
-        ");
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          Map:
+            NEWTYPE:
+              MAP:
+                KEY: STR
+                VALUE: BOOL
+    ");
 }
 
 #[test]
@@ -1070,8 +1141,9 @@ fn map_with_user_defined_types() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - user_map:
             MAP:
               KEY:
@@ -1092,10 +1164,12 @@ fn map_with_user_defined_types() {
               KEY: STR
               VALUE:
                 OPTION: U64
-    UserId:
-      NEWTYPESTRUCT: U32
-    UserProfile:
-      STRUCT:
+    ? namespace: ROOT
+      name: UserId
+    : NEWTYPESTRUCT: U32
+    ? namespace: ROOT
+      name: UserProfile
+    : STRUCT:
         - name: STR
         - active: BOOL
     ");
@@ -1113,8 +1187,9 @@ fn complex_map() {
 
     let registry = reflect::<ComplexMap>();
     insta::assert_yaml_snapshot!(registry, @r"
-    ComplexMap:
-      ENUM:
+    ? namespace: ROOT
+      name: ComplexMap
+    : ENUM:
         0:
           Map:
             NEWTYPE:
@@ -1146,14 +1221,16 @@ fn struct_with_box_of_t() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - boxed:
             TYPENAME:
               namespace: ROOT
               name: UserProfile
-    UserProfile:
-      STRUCT:
+    ? namespace: ROOT
+      name: UserProfile
+    : STRUCT:
         - name: STR
         - active: BOOL
     ");
@@ -1174,14 +1251,16 @@ fn struct_with_arc_of_t() {
 
     let registry = reflect::<MyStruct>();
     insta::assert_yaml_snapshot!(registry, @r"
-    MyStruct:
-      STRUCT:
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
         - boxed:
             TYPENAME:
               namespace: ROOT
               name: UserProfile
-    UserProfile:
-      STRUCT:
+    ? namespace: ROOT
+      name: UserProfile
+    : STRUCT:
         - name: STR
         - active: BOOL
     ");
@@ -1230,8 +1309,9 @@ fn own_result_enum() {
 
     let registry = reflect::<HttpResult>();
     insta::assert_yaml_snapshot!(registry, @r"
-    HttpError:
-      ENUM:
+    ? namespace: ROOT
+      name: HttpError
+    : ENUM:
         0:
           Url:
             NEWTYPE: STR
@@ -1240,12 +1320,14 @@ fn own_result_enum() {
             NEWTYPE: STR
         2:
           Timeout: UNIT
-    HttpHeader:
-      STRUCT:
+    ? namespace: ROOT
+      name: HttpHeader
+    : STRUCT:
         - name: STR
         - value: STR
-    HttpResponse:
-      STRUCT:
+    ? namespace: ROOT
+      name: HttpResponse
+    : STRUCT:
         - status: U16
         - headers:
             SEQ:
@@ -1253,8 +1335,9 @@ fn own_result_enum() {
                 namespace: ROOT
                 name: HttpHeader
         - body: BYTES
-    HttpResult:
-      ENUM:
+    ? namespace: ROOT
+      name: HttpResult
+    : ENUM:
         0:
           Ok:
             NEWTYPE:
@@ -1281,8 +1364,9 @@ fn struct_rename() {
 
     let registry = reflect::<EffectFfi>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Effect:
-      STRUCT:
+    ? namespace: ROOT
+      name: Effect
+    : STRUCT:
         - name: STR
         - active: BOOL
     ");
@@ -1301,8 +1385,9 @@ fn enum_rename() {
 
     let registry = reflect::<EffectFfi>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Effect:
-      ENUM:
+    ? namespace: ROOT
+      name: Effect
+    : ENUM:
         0:
           One: UNIT
         1:
@@ -1326,11 +1411,13 @@ fn struct_rename_with_named_type() {
 
     let registry = reflect::<Request>();
     insta::assert_yaml_snapshot!(registry, @r"
-    Effect:
-      STRUCT:
+    ? namespace: ROOT
+      name: Effect
+    : STRUCT:
         - inner: STR
-    Request:
-      STRUCT:
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
         - id: U32
         - effect:
             TYPENAME:
@@ -1348,7 +1435,10 @@ fn self_referencing_type() {
 
     insta::assert_debug_snapshot!(registry, @r#"
     {
-        "SimpleList": NewTypeStruct(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "SimpleList",
+        }: NewTypeStruct(
             Option(
                 TypeName(
                     QualifiedTypeName {
@@ -1375,7 +1465,10 @@ fn complex_self_referencing_type() {
 
     insta::assert_debug_snapshot!(registry, @r#"
     {
-        "Node": Struct(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "Node",
+        }: Struct(
             [
                 Named {
                     name: "value",
@@ -1419,7 +1512,10 @@ fn tree_struct_with_mutual_recursion() {
 
     insta::assert_debug_snapshot!(registry, @r#"
     {
-        "Test": Enum(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "Test",
+        }: Enum(
             {
                 0: Named {
                     name: "TreeWithMutualRecursion",
@@ -1434,7 +1530,10 @@ fn tree_struct_with_mutual_recursion() {
                 },
             },
         ),
-        "Tree": Struct(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "Tree",
+        }: Struct(
             [
                 Named {
                     name: "value",
@@ -1480,7 +1579,10 @@ fn tree_enum_with_mutual_recursion() {
 
     insta::assert_debug_snapshot!(registry, @r#"
     {
-        "Test": Struct(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "Test",
+        }: Struct(
             [
                 Named {
                     name: "tree_with_mutual_recursion",
@@ -1493,7 +1595,10 @@ fn tree_enum_with_mutual_recursion() {
                 },
             ],
         ),
-        "Tree": Enum(
+        QualifiedTypeName {
+            namespace: Root,
+            name: "Tree",
+        }: Enum(
             {
                 0: Named {
                     name: "Value",

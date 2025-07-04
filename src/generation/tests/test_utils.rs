@@ -623,8 +623,9 @@ fn test_get_sample_values() {
 fn test_get_simple_registry() {
     let registry = get_simple_registry();
     insta::assert_yaml_snapshot!(&registry, @r"
-    Choice:
-      ENUM:
+    ? namespace: ROOT
+      name: Choice
+    : ENUM:
         0:
           A: UNIT
         1:
@@ -634,8 +635,9 @@ fn test_get_simple_registry() {
           C:
             STRUCT:
               - x: U8
-    Test:
-      STRUCT:
+    ? namespace: ROOT
+      name: Test
+    : STRUCT:
         - a:
             SEQ: U32
         - b:
@@ -654,8 +656,9 @@ fn test_get_simple_registry() {
 fn test_get_registry() {
     let registry = get_registry();
     insta::assert_yaml_snapshot!(&registry, @r"
-    CStyleEnum:
-      ENUM:
+    ? namespace: ROOT
+      name: CStyleEnum
+    : ENUM:
         0:
           A: UNIT
         1:
@@ -666,8 +669,9 @@ fn test_get_registry() {
           D: UNIT
         4:
           E: UNIT
-    List:
-      ENUM:
+    ? namespace: ROOT
+      name: List
+    : ENUM:
         0:
           Empty: UNIT
         1:
@@ -679,10 +683,12 @@ fn test_get_registry() {
               - TYPENAME:
                   namespace: ROOT
                   name: List
-    NewTypeStruct:
-      NEWTYPESTRUCT: U64
-    OtherTypes:
-      STRUCT:
+    ? namespace: ROOT
+      name: NewTypeStruct
+    : NEWTYPESTRUCT: U64
+    ? namespace: ROOT
+      name: OtherTypes
+    : STRUCT:
         - f_string: STR
         - f_bytes: BYTES
         - f_option:
@@ -717,8 +723,9 @@ fn test_get_registry() {
                 TYPENAME:
                   namespace: ROOT
                   name: Struct
-    PrimitiveTypes:
-      STRUCT:
+    ? namespace: ROOT
+      name: PrimitiveTypes
+    : STRUCT:
         - f_bool: BOOL
         - f_u8: U8
         - f_u16: U16
@@ -736,8 +743,9 @@ fn test_get_registry() {
             OPTION: F64
         - f_char:
             OPTION: CHAR
-    SerdeData:
-      ENUM:
+    ? namespace: ROOT
+      name: SerdeData
+    : ENUM:
         0:
           PrimitiveTypes:
             NEWTYPE:
@@ -828,18 +836,21 @@ fn test_get_registry() {
                 VALUE: UNIT
         13:
           EmptyStructVariant: UNIT
-    SimpleList:
-      NEWTYPESTRUCT:
+    ? namespace: ROOT
+      name: SimpleList
+    : NEWTYPESTRUCT:
         OPTION:
           TYPENAME:
             namespace: ROOT
             name: SimpleList
-    Struct:
-      STRUCT:
+    ? namespace: ROOT
+      name: Struct
+    : STRUCT:
         - x: U32
         - y: U64
-    Tree:
-      STRUCT:
+    ? namespace: ROOT
+      name: Tree
+    : STRUCT:
         - value:
             TYPENAME:
               namespace: ROOT
@@ -849,11 +860,14 @@ fn test_get_registry() {
               TYPENAME:
                 namespace: ROOT
                 name: Tree
-    TupleStruct:
-      TUPLESTRUCT:
+    ? namespace: ROOT
+      name: TupleStruct
+    : TUPLESTRUCT:
         - U32
         - U64
-    UnitStruct: UNITSTRUCT
+    ? namespace: ROOT
+      name: UnitStruct
+    : UNITSTRUCT
     ");
 }
 

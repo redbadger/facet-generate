@@ -14,20 +14,20 @@ use facet::{
 };
 use format::{ContainerFormat, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat};
 
-use crate::reflection::error::Error;
+use crate::reflection::{error::Error, format::Namespace};
 
 /// Result type used in this crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// A map of container formats.
-pub type Registry = BTreeMap<String, ContainerFormat>;
+pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
 #[derive(Debug)]
 struct State {
     pub containers: Registry,
-    current: Vec<String>,
-    processed: HashSet<String>,
-    name_mappings: BTreeMap<String, String>,
+    current: Vec<QualifiedTypeName>,
+    processed: HashSet<QualifiedTypeName>,
+    name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
 }
 
 impl State {
@@ -40,21 +40,30 @@ impl State {
         }
     }
 
-    fn push(&mut self, name: String, container: ContainerFormat) {
+    fn push(&mut self, name: QualifiedTypeName, container: ContainerFormat) {
         self.containers.insert(name.clone(), container);
         self.current.push(name);
     }
 
-    fn register_type_mapping(&mut self, original: String, renamed: String) {
+    fn push_temporary(&mut self, name: String, container: ContainerFormat) -> QualifiedTypeName {
+        let name = QualifiedTypeName {
+            namespace: Namespace::Named("__temp__".to_string()),
+            name,
+        };
+        self.push(name.clone(), container);
+        name
+    }
+
+    fn register_type_mapping(&mut self, original: QualifiedTypeName, renamed: QualifiedTypeName) {
         self.name_mappings.insert(original, renamed);
     }
 
-    fn is_processed(&self, name: &str) -> bool {
+    fn is_processed(&self, name: &QualifiedTypeName) -> bool {
         self.processed.contains(name)
     }
 
-    fn mark_processed(&mut self, name: &str) {
-        self.processed.insert(name.to_string());
+    fn mark_processed(&mut self, name: QualifiedTypeName) {
+        self.processed.insert(name);
     }
 
     fn pop(&mut self) {
@@ -290,10 +299,9 @@ fn format_struct(
     registry: &mut State,
 ) {
     let struct_name = get_name(shape);
-    let struct_name_str = struct_name.to_legacy_string();
 
     // Check if already processed using the full namespaced name
-    if registry.is_processed(&struct_name_str) {
+    if registry.is_processed(&struct_name) {
         // This is a mutual recursion case - only update if there's an unknown format that needs updating
         let format = Format::TypeName(struct_name.clone());
         update_container_format_for_mutual_recursion(format, registry);
@@ -301,18 +309,22 @@ fn format_struct(
     }
 
     // Register name mapping if it's different from original
-    if struct_name_str != shape.type_identifier {
-        registry.register_type_mapping(shape.type_identifier.to_string(), struct_name_str.clone());
+    if struct_name.name != shape.type_identifier {
+        let name = QualifiedTypeName {
+            namespace: struct_name.namespace.clone(),
+            name: shape.type_identifier.to_string(),
+        };
+        registry.register_type_mapping(name, struct_name.clone());
     }
 
     // Extract namespace from this struct if it has one
     let current_namespace = extract_namespace_from_shape(shape);
 
-    registry.mark_processed(&struct_name_str);
+    registry.mark_processed(struct_name.clone());
 
     match struct_type.kind {
         StructKind::Unit => {
-            registry.push(struct_name_str, ContainerFormat::UnitStruct);
+            registry.push(struct_name, ContainerFormat::UnitStruct);
             registry.pop();
         }
         StructKind::TupleStruct => {
@@ -332,7 +344,7 @@ fn format_struct(
 
                 // Handle regular newtype struct
                 let container = ContainerFormat::NewTypeStruct(Box::default());
-                registry.push(struct_name_str, container);
+                registry.push(struct_name, container);
 
                 // Process the inner field
                 process_type(field_shape, current_namespace.as_deref(), registry);
@@ -341,7 +353,7 @@ fn format_struct(
             } else {
                 // Handle tuple struct with multiple fields
                 let container = ContainerFormat::TupleStruct(vec![]);
-                registry.push(struct_name_str, container);
+                registry.push(struct_name, container);
                 for field in struct_type.fields {
                     process_type(field.shape(), current_namespace.as_deref(), registry);
                 }
@@ -350,7 +362,7 @@ fn format_struct(
         }
         StructKind::Struct => {
             let container = ContainerFormat::Struct(vec![]);
-            registry.push(struct_name_str, container);
+            registry.push(struct_name, container);
             for field in struct_type.fields {
                 handle_struct_field(field, current_namespace.as_deref(), registry);
             }
@@ -567,24 +579,27 @@ fn format_enum(
     registry: &mut State,
 ) {
     let enum_name = get_name(shape);
-    let enum_name_str = enum_name.to_legacy_string();
 
     // Check if already processed using the full namespaced name
-    if registry.is_processed(&enum_name_str) {
+    if registry.is_processed(&enum_name) {
         return;
     }
 
     // Register name mapping if it's different from original
-    if enum_name_str != shape.type_identifier {
-        registry.register_type_mapping(shape.type_identifier.to_string(), enum_name_str.clone());
+    if enum_name.name != shape.type_identifier {
+        let name = QualifiedTypeName {
+            namespace: enum_name.namespace.clone(),
+            name: shape.type_identifier.to_string(),
+        };
+        registry.register_type_mapping(name, enum_name.clone());
     }
 
-    registry.mark_processed(&enum_name_str);
+    registry.mark_processed(enum_name.clone());
 
     let variants = process_enum_variants(enum_type, shape, parent_namespace, registry);
 
     let container = ContainerFormat::Enum(variants);
-    registry.push(enum_name_str, container);
+    registry.push(enum_name, container);
     registry.pop();
 }
 
@@ -680,8 +695,10 @@ fn process_newtype_variant_with_temp_container(
     _parent_namespace: Option<&str>,
     registry: &mut State,
 ) -> VariantFormat {
-    let temp_container = ContainerFormat::NewTypeStruct(Box::default());
-    registry.push(format!("temp_{}", variant.name), temp_container);
+    let temp = registry.push_temporary(
+        variant.name.to_string(),
+        ContainerFormat::NewTypeStruct(Box::default()),
+    );
 
     // Process the field to determine its format
     let current_namespace = extract_namespace_from_shape(shape);
@@ -689,7 +706,7 @@ fn process_newtype_variant_with_temp_container(
 
     // Extract the format from the temporary container
     let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format)) =
-        registry.containers.get(&format!("temp_{}", variant.name))
+        registry.containers.get(&temp)
     {
         VariantFormat::NewType(inner_format.clone())
     } else {
@@ -697,9 +714,7 @@ fn process_newtype_variant_with_temp_container(
     };
 
     // Clean up the temporary container
-    registry
-        .containers
-        .remove(&format!("temp_{}", variant.name));
+    registry.containers.remove(&temp);
     registry.pop();
 
     variant_format
@@ -728,8 +743,7 @@ fn process_struct_variant(
     _parent_namespace: Option<&str>,
     registry: &mut State,
 ) -> VariantFormat {
-    let temp_container = ContainerFormat::Struct(vec![]);
-    registry.push(format!("temp_{}", variant.name), temp_container);
+    let temp = registry.push_temporary(variant.name.to_string(), ContainerFormat::Struct(vec![]));
 
     // Process all fields with their names
     for field in variant.data.fields {
@@ -772,18 +786,15 @@ fn process_struct_variant(
     }
 
     // Extract the formats from the temporary container
-    let variant_format = if let Some(ContainerFormat::Struct(named_formats)) =
-        registry.containers.get(&format!("temp_{}", variant.name))
-    {
-        VariantFormat::Struct(named_formats.clone())
-    } else {
-        VariantFormat::Unit
-    };
+    let variant_format =
+        if let Some(ContainerFormat::Struct(named_formats)) = registry.containers.get(&temp) {
+            VariantFormat::Struct(named_formats.clone())
+        } else {
+            VariantFormat::Unit
+        };
 
     // Clean up the temporary container
-    registry
-        .containers
-        .remove(&format!("temp_{}", variant.name));
+    registry.containers.remove(&temp);
     registry.pop();
 
     variant_format
@@ -795,8 +806,10 @@ fn process_tuple_variant(
     _parent_namespace: Option<&str>,
     registry: &mut State,
 ) -> VariantFormat {
-    let temp_container = ContainerFormat::TupleStruct(vec![]);
-    registry.push(format!("temp_{}", variant.name), temp_container);
+    let temp = registry.push_temporary(
+        variant.name.to_string(),
+        ContainerFormat::TupleStruct(vec![]),
+    );
 
     // Process all fields
     for field in variant.data.fields {
@@ -806,18 +819,15 @@ fn process_tuple_variant(
     }
 
     // Extract the formats from the temporary container
-    let variant_format = if let Some(ContainerFormat::TupleStruct(formats)) =
-        registry.containers.get(&format!("temp_{}", variant.name))
-    {
-        VariantFormat::Tuple(formats.clone())
-    } else {
-        VariantFormat::Unit
-    };
+    let variant_format =
+        if let Some(ContainerFormat::TupleStruct(formats)) = registry.containers.get(&temp) {
+            VariantFormat::Tuple(formats.clone())
+        } else {
+            VariantFormat::Unit
+        };
 
     // Clean up the temporary container
-    registry
-        .containers
-        .remove(&format!("temp_{}", variant.name));
+    registry.containers.remove(&temp);
     registry.pop();
 
     variant_format

@@ -96,7 +96,7 @@ impl<'a> CodeGenerator<'a> {
         emitter.output_preamble()?;
 
         for (name, format) in registry {
-            emitter.output_container(name, format)?;
+            emitter.output_container(&name.name, format)?;
         }
 
         if self.config.serialization {
@@ -939,6 +939,7 @@ impl super::SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
+        println!("registry {registry:?}");
         let module_name = config.module_name().to_upper_camel_case();
         let targets = self.targets.entry(module_name.clone()).or_default();
         targets.insert("Serde".to_string());

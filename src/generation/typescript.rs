@@ -76,7 +76,7 @@ impl<'a> CodeGenerator<'a> {
         emitter.output_preamble()?;
 
         for (name, format) in registry {
-            emitter.output_container(name, format)?;
+            emitter.output_container(&name.name, format)?;
         }
 
         if self.config.serialization {

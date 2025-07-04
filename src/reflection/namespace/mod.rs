@@ -53,30 +53,24 @@ impl Ord for Namespace {
 pub fn split(root: &str, registry: Registry) -> BTreeMap<Namespace, Registry> {
     let mut registries = BTreeMap::<Namespace, Registry>::new();
     for (name, mut format) in registry {
-        if let Some((namespace, name)) = name.split_once('.') {
-            registries
-                .entry(
-                    make_namespace(&mut format, namespace)
-                        .expect("should not have any remaining placeholders"),
-                )
-                .or_default()
-                .insert(name.to_string(), format.clone());
-        } else {
-            registries
-                .entry(
-                    make_namespace(&mut format, root)
-                        .expect("should not have any remaining placeholders"),
-                )
-                .or_default()
-                .insert(name.to_string(), format.clone());
-        }
+        registries
+            .entry(
+                make_namespace(root, &mut format, &name.namespace)
+                    .expect("should not have any remaining placeholders"),
+            )
+            .or_default()
+            .insert(name, format.clone());
     }
     registries
 }
 
-fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> super::Result<Namespace> {
+fn make_namespace(
+    root: &str,
+    format: &mut ContainerFormat,
+    namespace: &format::Namespace,
+) -> super::Result<Namespace> {
     let mut external_definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    format.visit_mut(&mut |format| {
+    format.visit(&mut |format| {
         if let Format::TypeName(qualified_name) = format {
             if let format::Namespace::Named(ns) = &qualified_name.namespace {
                 external_definitions
@@ -87,6 +81,11 @@ fn make_namespace(format: &mut ContainerFormat, namespace: &str) -> super::Resul
         }
         Ok(())
     })?;
+    let namespace = match namespace {
+        format::Namespace::Root => root,
+        format::Namespace::Named(ns) => ns,
+    };
+
     let config = CodeGeneratorConfig::new(namespace.to_string())
         .with_external_definitions(external_definitions);
 
