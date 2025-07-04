@@ -38,20 +38,24 @@ fn single_namespace() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-    : ChildOne:
-        STRUCT:
+    : ? namespace: ROOT
+        name: ChildOne
+      : STRUCT:
           - child:
               TYPENAME:
                 namespace: ROOT
                 name: GrandChild
-      ChildTwo:
-        STRUCT:
+      ? namespace: ROOT
+        name: ChildTwo
+      : STRUCT:
           - field: STR
-      GrandChild:
-        STRUCT:
+      ? namespace: ROOT
+        name: GrandChild
+      : STRUCT:
           - field: STR
-      Parent:
-        STRUCT:
+      ? namespace: ROOT
+        name: Parent
+      : STRUCT:
           - one:
               TYPENAME:
                 namespace: ROOT
@@ -104,8 +108,9 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-    : Parent:
-        STRUCT:
+    : ? namespace: ROOT
+        name: Parent
+      : STRUCT:
           - one:
               TYPENAME:
                 namespace:
@@ -126,15 +131,19 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-    : ChildOne:
-        STRUCT:
+    : ? namespace:
+          NAMED: one
+        name: ChildOne
+      : STRUCT:
           - child:
               TYPENAME:
                 namespace:
                   NAMED: one
                 name: GrandChild
-      GrandChild:
-        STRUCT:
+      ? namespace:
+          NAMED: one
+        name: GrandChild
+      : STRUCT:
           - field: STR
     ? module_name: two
       serialization: true
@@ -144,8 +153,10 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-    : ChildTwo:
-        STRUCT:
+    : ? namespace:
+          NAMED: two
+        name: ChildTwo
+      : STRUCT:
           - field: STR
     ");
 }
