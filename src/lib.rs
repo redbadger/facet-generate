@@ -4,6 +4,13 @@ pub mod error;
 pub mod generation;
 pub mod reflection;
 
-use crate::error::Error;
+use std::collections::BTreeMap;
+
+use crate::{
+    error::Error,
+    reflection::format::{ContainerFormat, QualifiedTypeName},
+};
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;

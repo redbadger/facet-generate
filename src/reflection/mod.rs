@@ -1,5 +1,4 @@
 pub mod format;
-mod registry;
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -14,36 +13,37 @@ use facet::{
 use format::{
     ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
-pub use registry::Registry;
 
-/// Build a registry of container formats.
-#[must_use]
-pub fn reflect<'a, T: Facet<'a>>() -> Registry {
-    let mut builder = Builder::new();
-    builder.format(T::SHAPE);
-    builder.registry
-}
-
-#[derive(Debug)]
-struct Builder {
-    pub registry: Registry,
+#[derive(Debug, Default)]
+pub struct RegistryBuilder {
+    pub registry: BTreeMap<QualifiedTypeName, ContainerFormat>,
     current: Vec<QualifiedTypeName>,
     processed: HashSet<QualifiedTypeName>,
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
 }
 
-impl Builder {
-    fn new() -> Self {
-        Self {
-            registry: Registry::default(),
-            current: Vec::new(),
-            processed: HashSet::new(),
-            name_mappings: BTreeMap::new(),
-        }
+impl RegistryBuilder {
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
     }
 
+    #[must_use]
+    pub fn build(self) -> BTreeMap<QualifiedTypeName, ContainerFormat> {
+        self.registry
+    }
+
+    /// Reflect a type into the registry.
+    #[must_use]
+    pub fn add_type<'a, T: Facet<'a>>(mut self) -> Self {
+        self.format(T::SHAPE);
+        self
+    }
+}
+
+impl RegistryBuilder {
     fn push(&mut self, name: QualifiedTypeName, container: ContainerFormat) {
-        self.registry.containers.insert(name.clone(), container);
+        self.registry.insert(name.clone(), container);
         self.current.push(name);
     }
 
@@ -74,7 +74,7 @@ impl Builder {
 
     fn get_mut(&mut self) -> Option<&mut ContainerFormat> {
         if let Some(name) = self.current.last() {
-            self.registry.containers.get_mut(name)
+            self.registry.get_mut(name)
         } else {
             None
         }
@@ -622,16 +622,15 @@ impl Builder {
         self.process_type(field_shape, current_namespace.as_deref());
 
         // Extract the format from the temporary container
-        let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format)) =
-            self.registry.containers.get(&temp)
-        {
-            VariantFormat::NewType(inner_format.clone())
-        } else {
-            VariantFormat::Unit
-        };
+        let variant_format =
+            if let Some(ContainerFormat::NewTypeStruct(inner_format)) = self.registry.get(&temp) {
+                VariantFormat::NewType(inner_format.clone())
+            } else {
+                VariantFormat::Unit
+            };
 
         // Clean up the temporary container
-        self.registry.containers.remove(&temp);
+        self.registry.remove(&temp);
         self.pop();
 
         variant_format
@@ -703,16 +702,15 @@ impl Builder {
         }
 
         // Extract the formats from the temporary container
-        let variant_format = if let Some(ContainerFormat::Struct(named_formats)) =
-            self.registry.containers.get(&temp)
-        {
-            VariantFormat::Struct(named_formats.clone())
-        } else {
-            VariantFormat::Unit
-        };
+        let variant_format =
+            if let Some(ContainerFormat::Struct(named_formats)) = self.registry.get(&temp) {
+                VariantFormat::Struct(named_formats.clone())
+            } else {
+                VariantFormat::Unit
+            };
 
         // Clean up the temporary container
-        self.registry.containers.remove(&temp);
+        self.registry.remove(&temp);
         self.pop();
 
         variant_format
@@ -737,16 +735,15 @@ impl Builder {
         }
 
         // Extract the formats from the temporary container
-        let variant_format = if let Some(ContainerFormat::TupleStruct(formats)) =
-            self.registry.containers.get(&temp)
-        {
-            VariantFormat::Tuple(formats.clone())
-        } else {
-            VariantFormat::Unit
-        };
+        let variant_format =
+            if let Some(ContainerFormat::TupleStruct(formats)) = self.registry.get(&temp) {
+                VariantFormat::Tuple(formats.clone())
+            } else {
+                VariantFormat::Unit
+            };
 
         // Clean up the temporary container
-        self.registry.containers.remove(&temp);
+        self.registry.remove(&temp);
         self.pop();
 
         variant_format

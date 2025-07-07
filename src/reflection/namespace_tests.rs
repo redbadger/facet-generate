@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::reflection::reflect;
+use crate::reflection::RegistryBuilder;
 
 #[test]
 fn nested_namespaced_structs() {
@@ -30,7 +30,7 @@ fn nested_namespaced_structs() {
         two: two::Child,
     }
 
-    let registry = reflect::<Parent>();
+    let registry = RegistryBuilder::new().add_type::<Parent>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandChild
@@ -101,7 +101,7 @@ fn nested_namespaced_enums() {
         Two(two::Child),
     }
 
-    let registry = reflect::<Parent>();
+    let registry = RegistryBuilder::new().add_type::<Parent>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandChild
@@ -176,7 +176,7 @@ fn nested_namespaced_renamed_structs() {
         two: two::Child,
     }
 
-    let registry = reflect::<Parent>();
+    let registry = RegistryBuilder::new().add_type::<Parent>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandKid
@@ -234,7 +234,7 @@ fn namespaced_collections() {
         groups: Vec<Group>,
     }
 
-    let registry = reflect::<Response>();
+    let registry = RegistryBuilder::new().add_type::<Response>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Response
@@ -305,7 +305,7 @@ fn namespaced_maps() {
         user_counts: HashMap<String, u32>,
     }
 
-    let registry = reflect::<Database>();
+    let registry = RegistryBuilder::new().add_type::<Database>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Database
@@ -373,7 +373,7 @@ fn complex_namespaced_enums() {
         events: Vec<events::Event>,
     }
 
-    let registry = reflect::<EventLog>();
+    let registry = RegistryBuilder::new().add_type::<EventLog>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: EventLog
@@ -450,7 +450,7 @@ fn namespaced_transparent_structs() {
         wrapped_id: wrappers::TransparentWrapper,
     }
 
-    let registry = reflect::<Container>();
+    let registry = RegistryBuilder::new().add_type::<Container>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -499,7 +499,7 @@ fn cross_namespace_references() {
         records: Vec<Record>,
     }
 
-    let registry = reflect::<System>();
+    let registry = RegistryBuilder::new().add_type::<System>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: System
@@ -561,7 +561,7 @@ fn namespace_with_byte_attributes() {
         binary: data::BinaryData,
     }
 
-    let registry = reflect::<Document>();
+    let registry = RegistryBuilder::new().add_type::<Document>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Document
@@ -605,7 +605,7 @@ fn deeply_nested_namespaces() {
         deep_direct: level1::level2::DeepStruct,
     }
 
-    let registry = reflect::<RootStruct>();
+    let registry = RegistryBuilder::new().add_type::<RootStruct>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: RootStruct
@@ -655,7 +655,7 @@ fn transparent_struct_explicit_namespace() {
         wrapped_id: wrappers::TransparentWrapper,
     }
 
-    let registry = reflect::<Container>();
+    let registry = RegistryBuilder::new().add_type::<Container>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -736,7 +736,7 @@ fn explicit_namespace_declarations() {
         efficient: RootGroup,
     }
 
-    let registry = reflect::<RootContainer>();
+    let registry = RegistryBuilder::new().add_type::<RootContainer>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ApiContainer
@@ -851,7 +851,7 @@ fn collections_with_explicit_namespace() {
         nested_lists: Vec<Vec<UnnamedUser>>,
     }
 
-    let registry = reflect::<UserManager>();
+    let registry = RegistryBuilder::new().add_type::<UserManager>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: UnnamedRole
@@ -935,7 +935,7 @@ fn enums_with_explicit_namespace() {
         Empty,
     }
 
-    let registry = reflect::<Response>();
+    let registry = RegistryBuilder::new().add_type::<Response>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ErrorData
@@ -1024,7 +1024,7 @@ fn nested_structs_with_explicit_namespace() {
         inner_direct: DeepInner,
     }
 
-    let registry = reflect::<Container>();
+    let registry = RegistryBuilder::new().add_type::<Container>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: DeepInner
@@ -1096,7 +1096,7 @@ fn transparent_struct_chains() {
         id: NamespacedWrapper,
     }
 
-    let registry = reflect::<IdContainer>();
+    let registry = RegistryBuilder::new().add_type::<IdContainer>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: CoreId
@@ -1139,7 +1139,7 @@ fn mixed_containers_with_explicit_namespace() {
         complex_map: HashMap<String, Vec<Option<Item>>>,
     }
 
-    let registry = reflect::<MixedContainer>();
+    let registry = RegistryBuilder::new().add_type::<MixedContainer>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Item
@@ -1221,7 +1221,7 @@ fn no_namespace_pollution() {
         unnamespaced: SharedType,
     }
 
-    let registry = reflect::<RootContainer>();
+    let registry = RegistryBuilder::new().add_type::<RootContainer>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: RootContainer
@@ -1289,7 +1289,7 @@ fn explicit_namespace_behavior_summary() {
         direct: BaseType,
     }
 
-    let registry = reflect::<Root>();
+    let registry = RegistryBuilder::new().add_type::<Root>().build();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: BaseType

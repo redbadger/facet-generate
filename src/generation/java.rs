@@ -6,9 +6,9 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::reflection::{
+use crate::{
     Registry,
-    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
@@ -88,7 +88,7 @@ impl<'a> CodeGenerator<'a> {
         }
         std::fs::create_dir_all(&dir_path)?;
 
-        for (name, format) in &registry.containers {
+        for (name, format) in registry {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
         if self.config.serialization {
@@ -279,7 +279,7 @@ where
 
     fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
-        for format in registry.containers.values() {
+        for format in registry.values() {
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {

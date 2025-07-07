@@ -5,10 +5,7 @@ use serde::Serialize;
 use crate::{
     Result,
     generation::CodeGeneratorConfig,
-    reflection::{
-        Registry,
-        format::{ContainerFormat, Format, FormatHolder, Namespace},
-    },
+    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,16 +51,18 @@ impl Ord for Module {
 
 /// Splits a registry by namespace.
 #[must_use]
-pub fn split(root: &str, registry: Registry) -> BTreeMap<Module, Registry> {
-    let mut registries = BTreeMap::<Module, Registry>::new();
-    for (name, mut format) in registry.containers {
+pub fn split(
+    root: &str,
+    registry: BTreeMap<QualifiedTypeName, ContainerFormat>,
+) -> BTreeMap<Module, BTreeMap<QualifiedTypeName, ContainerFormat>> {
+    let mut registries = BTreeMap::<Module, BTreeMap<QualifiedTypeName, ContainerFormat>>::new();
+    for (name, mut format) in registry {
         registries
             .entry(
                 make_module(root, &mut format, &name.namespace)
                     .expect("should not have any remaining placeholders"),
             )
             .or_default()
-            .containers
             .insert(name, format.clone());
     }
     registries

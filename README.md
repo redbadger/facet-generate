@@ -51,7 +51,7 @@ enum HttpError {
     Timeout,
 }
 
-let registry = reflect::<HttpResult>();
+let registry = Registry::new().add_type::<HttpResult>().build();
 insta::assert_yaml_snapshot!(registry, @r"
 ? namespace: ROOT
   name: HttpError

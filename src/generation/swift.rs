@@ -7,9 +7,9 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::reflection::{
+use crate::{
     Registry,
-    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;
@@ -95,7 +95,7 @@ impl<'a> CodeGenerator<'a> {
 
         emitter.output_preamble()?;
 
-        for (name, format) in &registry.containers {
+        for (name, format) in registry {
             emitter.output_container(&name.name, format)?;
         }
 
@@ -221,7 +221,7 @@ where
 
     fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
-        for format in registry.containers.values() {
+        for format in registry.values() {
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {
@@ -993,7 +993,7 @@ mod tests {
 
     use crate::{
         generation::{SourceInstaller as _, module::split},
-        reflection::reflect,
+        reflection::RegistryBuilder,
     };
 
     use super::*;
@@ -1037,7 +1037,7 @@ mod tests {
             child: Child,
         }
 
-        let registry = reflect::<Root>();
+        let registry = RegistryBuilder::new().add_type::<Root>().build();
 
         let package_name = "MyPackage";
         let install_dir = std::path::PathBuf::from("/tmp");

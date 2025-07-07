@@ -6,9 +6,9 @@ use super::{
     CodeGeneratorConfig, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::reflection::{
+use crate::{
     Registry,
-    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
@@ -75,7 +75,7 @@ impl<'a> CodeGenerator<'a> {
 
         emitter.output_preamble()?;
 
-        for (name, format) in &registry.containers {
+        for (name, format) in registry {
             emitter.output_container(&name.name, format)?;
         }
 
@@ -180,7 +180,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
 
     fn output_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
-        for format in registry.containers.values() {
+        for format in registry.values() {
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {
