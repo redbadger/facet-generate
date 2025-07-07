@@ -51,16 +51,17 @@ impl Ord for Module {
 
 /// Splits a registry by namespace.
 #[must_use]
-pub fn split(root: &str, registry: Registry) -> BTreeMap<Module, Registry> {
+pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
     let mut registries = BTreeMap::<Module, Registry>::new();
-    for (name, mut format) in registry {
+    for (name, format) in registry {
+        let mut format = format.clone();
         registries
             .entry(
                 make_module(root, &mut format, &name.namespace)
                     .expect("should not have any remaining placeholders"),
             )
             .or_default()
-            .insert(name, format.clone());
+            .insert(name.clone(), format);
     }
     registries
 }

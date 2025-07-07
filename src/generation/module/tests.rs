@@ -28,7 +28,7 @@ fn single_namespace() {
     }
 
     let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", registry);
+    let result = split("Root", &registry);
     insta::assert_yaml_snapshot!(result, @r"
     ? module_name: Root
       serialization: true
@@ -94,7 +94,7 @@ fn root_namespace_with_two_child_namespaces() {
     }
 
     let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", registry);
+    let result = split("Root", &registry);
     insta::assert_yaml_snapshot!(result, @r"
     ? module_name: Root
       serialization: true
