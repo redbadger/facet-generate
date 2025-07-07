@@ -135,9 +135,9 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(qualified_name) => {
-                self.quote_qualified_name(&qualified_name.to_legacy_string())
-            }
+            TypeName(qualified_name) => self.quote_qualified_name(
+                &qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case),
+            ),
             Unit => "unit".into(),
             Bool => "bool".into(),
             I8 => "int8".into(),
@@ -256,7 +256,9 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         match format {
             TypeName(name) => format!(
                 "{}.deserialize(deserializer)",
-                self.quote_qualified_name(&name.to_legacy_string())
+                self.quote_qualified_name(
+                    &name.to_legacy_string(heck::ToUpperCamelCase::to_upper_camel_case)
+                )
             ),
             Unit => "deserializer.deserializeUnit()".to_string(),
             Bool => "deserializer.deserializeBool()".to_string(),

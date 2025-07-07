@@ -73,10 +73,10 @@ impl QualifiedTypeName {
 
     /// Convert to the legacy dot-separated string format for compatibility.
     #[must_use]
-    pub fn to_legacy_string(&self) -> String {
+    pub fn to_legacy_string(&self, namespace_formatter: fn(&str) -> String) -> String {
         match &self.namespace {
             Namespace::Root => self.name.clone(),
-            Namespace::Named(ns) => format!("{}.{}", ns, self.name),
+            Namespace::Named(ns) => format!("{}.{}", namespace_formatter(ns), self.name),
         }
     }
 

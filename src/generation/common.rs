@@ -1,6 +1,8 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+use std::string::ToString;
+
 use crate::reflection::format::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
@@ -9,7 +11,7 @@ pub(crate) fn mangle_type(format: &Format) -> String {
         TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
     };
     match format {
-        TypeName(qualified_name) => qualified_name.to_legacy_string(),
+        TypeName(qualified_name) => qualified_name.to_legacy_string(ToString::to_string),
         Unit => "unit".into(),
         Bool => "bool".into(),
         I8 => "i8".into(),

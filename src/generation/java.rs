@@ -16,6 +16,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     io::{Result, Write},
     path::PathBuf,
+    string::ToString,
 };
 
 /// Main configuration object for code-generation in Java.
@@ -204,7 +205,7 @@ where
         };
         match format {
             TypeName(qualified_name) => {
-                self.quote_qualified_name(&qualified_name.to_legacy_string())
+                self.quote_qualified_name(&qualified_name.to_legacy_string(ToString::to_string))
             }
             Unit => "com.novi.serde.Unit".into(),
             Bool => "Boolean".into(),
@@ -350,7 +351,9 @@ where
             TypeName(qualified_name) => {
                 format!(
                     "{}.deserialize(deserializer)",
-                    self.quote_qualified_name(&qualified_name.to_legacy_string())
+                    self.quote_qualified_name(
+                        &qualified_name.to_legacy_string(ToString::to_string)
+                    )
                 )
             }
             Unit => "deserializer.deserialize_unit()".to_string(),

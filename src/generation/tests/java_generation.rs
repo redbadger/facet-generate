@@ -10,7 +10,6 @@ fn test_that_java_code_compiles_with_config(
     config: &CodeGeneratorConfig,
 ) -> (TempDir, std::path::PathBuf) {
     let registry = test_utils::get_registry();
-    println!("Registry: {registry:#?}");
     let dir = tempdir().unwrap();
 
     let generator = java::CodeGenerator::new(config);
