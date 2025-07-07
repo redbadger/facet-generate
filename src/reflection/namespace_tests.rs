@@ -1,30 +1,36 @@
 use std::collections::HashMap;
 
+use facet::Facet;
+
 use crate::reflection::RegistryBuilder;
 
 #[test]
 fn nested_namespaced_structs() {
     mod one {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         pub struct GrandChild {
             field: String,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "one")]
         pub struct Child {
             child: GrandChild,
         }
     }
     mod two {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "two")]
         pub struct Child {
             field: String,
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Parent {
         one: one::Child,
         two: two::Child,
@@ -69,13 +75,15 @@ fn nested_namespaced_structs() {
 fn nested_namespaced_enums() {
     mod one {
         #![allow(unused)]
-        #[derive(facet::Facet)]
+
+        use facet::Facet;
+        #[derive(Facet)]
         #[repr(C)]
         pub enum GrandChild {
             None,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "one")]
         #[repr(C)]
         #[allow(unused)]
@@ -84,7 +92,9 @@ fn nested_namespaced_enums() {
         }
     }
     mod two {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "two")]
         #[repr(C)]
         #[allow(unused)]
@@ -93,7 +103,7 @@ fn nested_namespaced_enums() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[repr(C)]
     #[allow(unused)]
     enum Parent {
@@ -148,13 +158,15 @@ fn nested_namespaced_enums() {
 #[test]
 fn nested_namespaced_renamed_structs() {
     mod one {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(name = "GrandKid")]
         pub struct GrandChild {
             field: String,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "one")]
         #[facet(name = "Kid")]
         pub struct Child {
@@ -162,7 +174,9 @@ fn nested_namespaced_renamed_structs() {
         }
     }
     mod two {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "two")]
         #[facet(name = "Kid")]
         pub struct Child {
@@ -170,7 +184,7 @@ fn nested_namespaced_renamed_structs() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Parent {
         one: one::Child,
         two: two::Child,
@@ -213,20 +227,20 @@ fn nested_namespaced_renamed_structs() {
 
 #[test]
 fn namespaced_collections() {
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "api")]
     pub struct User {
         id: String,
         name: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "api")]
     pub struct Group {
         users: Vec<User>,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Response {
         users: Vec<User>,
         user_arrays: [User; 5],
@@ -287,11 +301,13 @@ fn namespaced_collections() {
 #[test]
 fn namespaced_maps() {
     mod models {
-        #[derive(facet::Facet, Clone, Hash, Eq, PartialEq)]
+        use facet::Facet;
+
+        #[derive(Facet, Clone, Hash, Eq, PartialEq)]
         #[facet(namespace = "models")]
         pub struct UserId(String);
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "models")]
         pub struct UserProfile {
             name: String,
@@ -299,7 +315,7 @@ fn namespaced_maps() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Database {
         user_profiles: HashMap<models::UserId, models::UserProfile>,
         user_counts: HashMap<String, u32>,
@@ -342,20 +358,22 @@ fn namespaced_maps() {
 #[test]
 fn complex_namespaced_enums() {
     mod events {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         pub struct UserData {
             id: String,
             email: String,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         pub struct SystemData {
             timestamp: u64,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         #[repr(C)]
         #[allow(unused)]
@@ -368,7 +386,7 @@ fn complex_namespaced_enums() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct EventLog {
         events: Vec<events::Event>,
     }
@@ -433,21 +451,19 @@ fn complex_namespaced_enums() {
 
 #[test]
 fn namespaced_transparent_structs() {
-    mod wrappers {
-        #[derive(facet::Facet, Clone)]
-        #[facet(namespace = "wrappers")]
-        pub struct UserId(String);
+    #[derive(Facet, Clone)]
+    #[facet(namespace = "wrappers")]
+    pub struct UserId(String);
 
-        #[derive(facet::Facet)]
-        #[facet(namespace = "wrappers")]
-        #[facet(transparent)]
-        pub struct TransparentWrapper(UserId);
-    }
+    #[derive(Facet)]
+    #[facet(namespace = "wrappers")]
+    #[facet(transparent)]
+    pub struct TransparentWrapper(UserId);
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Container {
-        direct_id: wrappers::UserId,
-        wrapped_id: wrappers::TransparentWrapper,
+        direct_id: UserId,
+        wrapped_id: TransparentWrapper,
     }
 
     let registry = RegistryBuilder::new().add_type::<Container>().build();
@@ -474,27 +490,27 @@ fn namespaced_transparent_structs() {
 
 #[test]
 fn cross_namespace_references() {
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "entities")]
     struct Entity {
         id: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "api")]
     struct Request {
         entity: Entity,
         metadata: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "storage")]
     struct Record {
         entity: Entity,
         request: Request,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct System {
         records: Vec<Record>,
     }
@@ -545,7 +561,9 @@ fn cross_namespace_references() {
 #[test]
 fn namespace_with_byte_attributes() {
     mod data {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "data")]
         pub struct BinaryData {
             #[facet(bytes)]
@@ -556,7 +574,7 @@ fn namespace_with_byte_attributes() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Document {
         binary: data::BinaryData,
     }
@@ -584,22 +602,26 @@ fn namespace_with_byte_attributes() {
 #[test]
 fn deeply_nested_namespaces() {
     mod level1 {
+        use facet::Facet;
+
         pub mod level2 {
-            #[derive(facet::Facet)]
+            use facet::Facet;
+
+            #[derive(Facet)]
             #[facet(namespace = "level1.level2")]
             pub struct DeepStruct {
                 value: String,
             }
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "level1")]
         pub struct MiddleStruct {
             deep: level2::DeepStruct,
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct RootStruct {
         middle: level1::MiddleStruct,
         deep_direct: level1::level2::DeepStruct,
@@ -641,16 +663,18 @@ fn deeply_nested_namespaces() {
 fn transparent_struct_explicit_namespace() {
     // Test transparent structs with explicit namespace annotations
     mod wrappers {
-        #[derive(facet::Facet, Clone)]
+        use facet::Facet;
+
+        #[derive(Facet, Clone)]
         pub struct UserId(String);
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "wrappers")]
         #[facet(transparent)]
         pub struct TransparentWrapper(UserId);
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Container {
         wrapped_id: wrappers::TransparentWrapper,
     }
@@ -674,14 +698,16 @@ fn transparent_struct_explicit_namespace() {
 #[allow(clippy::too_many_lines)]
 fn explicit_namespace_declarations() {
     mod api_example {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "api")]
         pub struct User {
             id: String,
             name: String,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "api")]
         pub struct Group {
             users: Vec<User>,
@@ -689,19 +715,21 @@ fn explicit_namespace_declarations() {
     }
 
     mod events_example {
-        #[derive(facet::Facet)]
+        use facet::Facet;
+
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         pub struct UserData {
             id: String,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         pub struct SystemData {
             timestamp: u64,
         }
 
-        #[derive(facet::Facet)]
+        #[derive(Facet)]
         #[facet(namespace = "events")]
         #[repr(C)]
         #[allow(unused)]
@@ -711,25 +739,25 @@ fn explicit_namespace_declarations() {
         }
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct ApiContainer {
         #[facet(name = "user")]
         user: api_example::User,
         group: api_example::Group,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct RootUser {
         id: String,
         name: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct RootGroup {
         users: Vec<RootUser>,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct RootContainer {
         api_data: ApiContainer,
         event: events_example::Event,
@@ -830,18 +858,18 @@ fn explicit_namespace_declarations() {
 #[test]
 fn collections_with_explicit_namespace() {
     // Test that types in collections go to root namespace when no explicit namespace is given
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct UnnamedUser {
         name: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct UnnamedRole {
         permissions: Vec<String>,
     }
 
     // Container with explicit namespace
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "system")]
     struct UserManager {
         users: Vec<UnnamedUser>,
@@ -902,25 +930,25 @@ fn collections_with_explicit_namespace() {
 #[test]
 fn enums_with_explicit_namespace() {
     // Test that enum variant types go to root namespace when no explicit namespace is given
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct ErrorData {
         code: u32,
         message: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct SuccessData {
         result: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct ProcessingData {
         progress: f32,
         estimate: ErrorData,
     }
 
     // Enum with explicit namespace
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "api")]
     #[repr(C)]
     #[allow(unused)]
@@ -998,25 +1026,25 @@ fn enums_with_explicit_namespace() {
 #[test]
 fn nested_structs_with_explicit_namespace() {
     // Test that deeply nested structs go to root namespace when no explicit namespace is given
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct DeepInner {
         value: i32,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct MiddleLayer {
         inner: DeepInner,
         inner_list: Vec<DeepInner>,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct TopLayer {
         middle: MiddleLayer,
         direct_inner: DeepInner,
     }
 
     // Container with explicit namespace
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "nested")]
     struct Container {
         top: TopLayer,
@@ -1075,23 +1103,23 @@ fn nested_structs_with_explicit_namespace() {
 #[test]
 fn transparent_struct_chains() {
     // Test transparent struct chains - they should resolve to the final non-transparent type
-    #[derive(facet::Facet, Clone)]
+    #[derive(Facet, Clone)]
     struct CoreId(String);
 
-    #[derive(facet::Facet, Clone)]
+    #[derive(Facet, Clone)]
     #[facet(transparent)]
     struct WrapperId(CoreId);
 
-    #[derive(facet::Facet, Clone)]
+    #[derive(Facet, Clone)]
     #[facet(transparent)]
     struct DoubleWrapperId(WrapperId);
 
     // Container with explicit namespace
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "identity")]
     struct NamespacedWrapper(DoubleWrapperId);
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct IdContainer {
         id: NamespacedWrapper,
     }
@@ -1122,12 +1150,12 @@ fn transparent_struct_chains() {
 #[test]
 fn mixed_containers_with_explicit_namespace() {
     // Test that various container types correctly reference root namespace types
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Item {
         id: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "storage")]
     struct MixedContainer {
         single: Item,
@@ -1197,24 +1225,24 @@ fn mixed_containers_with_explicit_namespace() {
 #[test]
 fn no_namespace_pollution() {
     // Test that types without explicit namespaces don't get duplicated across multiple namespaces
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct SharedType {
         value: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "alpha")]
     struct AlphaContainer {
         shared: SharedType,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "beta")]
     struct BetaContainer {
         shared: SharedType,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct RootContainer {
         alpha: AlphaContainer,
         beta: BetaContainer,
@@ -1265,24 +1293,24 @@ fn no_namespace_pollution() {
 
 #[test]
 fn explicit_namespace_behavior_summary() {
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct BaseType {
         value: String,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "first")]
     struct FirstContainer {
         item: BaseType,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     #[facet(namespace = "second")]
     struct SecondContainer {
         item: BaseType,
     }
 
-    #[derive(facet::Facet)]
+    #[derive(Facet)]
     struct Root {
         first: FirstContainer,
         second: SecondContainer,
