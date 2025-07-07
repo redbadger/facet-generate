@@ -3,7 +3,7 @@
 Reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into Java, Swift, and TypeScript.
 
 ### Notes:
-1. Currently, struct and enum renaming is not fully implemented and probably requires an upstream PR to facet.
+1. Currently, struct and enum renaming is implemented using `#[facet(name = "NewName")]`. To use `#[facet(rename = "NewName")]` we will probably require an upstream PR to facet.
 
 ### Usage
 
@@ -99,6 +99,28 @@ insta::assert_yaml_snapshot!(registry, @r"
 
 #### Arbitrary facet attributes
 
+##### Namespaces
+
+Types that are explictly annotated as belonging to a specific namespace are emitted as separate modules. In Swift this means they are a separate target in the current package. In Java, they are emitted as a child namespace of the package's namespace. In TypeScript they are emitted alongside as a separate `.ts` file.
+
+```rust
+#[derive(Facet)]
+#[facet(namespace = "server_sent_events")]
+pub struct SseRequest {
+    pub url: String,
+}
+
+#[derive(Facet)]
+#[facet(namespace = "server_sent_events")]
+#[repr(C)]
+pub enum SseResponse {
+    Chunk(Vec<u8>),
+    Done,
+}
+```
+
+##### Renaming
+
 Struct and Enum renaming doesn't use `#[facet(rename = "Effect")]`, as facet doesn't seem to pass it through (yet?). So instead, for now, we use an arbitrary `ShapeAttribute` (`name` instead of `rename`), like this:
 
 ```rust
@@ -109,6 +131,50 @@ struct EffectFfi {
     active: bool,
 }
 ```
+
+
+##### Skipping struct fields or enum variants
+
+You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)])` to prevent Facet from recursing through).
+
+```rust
+#[derive(Facet)]
+#[repr(C)]
+pub enum Event {
+    Get,
+
+    #[facet(skip)]
+    Set(HttpResult<HttpResponse<Count>, HttpError>),
+}
+```
+
+##### Transparent
+
+You can skip through (even successive layers) of newtyping by annotating the struct with `#[facet(transparent)]`.
+
+```rust
+#[test]
+fn transparent() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct Inner(i32);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        inner: Inner,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - inner: I32
+    ");
+}
+```
+
+##### Bytes
 
 In order to specify `BYTES` in the IR (for `Vec<u8>` and `&'a [u8]`), we can use the `#[facet(bytes)]` attribute:
 
