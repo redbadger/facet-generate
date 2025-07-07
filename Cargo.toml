@@ -39,8 +39,3 @@ default = ["java", "swift", "typescript"]
 java = ["include_dir"]
 swift = ["include_dir"]
 typescript = ["include_dir"]
-
-[[test]]
-name = "integration_tests"
-path = "src/generation/tests/lib.rs"
-harness = true

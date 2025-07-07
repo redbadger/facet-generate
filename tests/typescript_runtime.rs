@@ -1,8 +1,8 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
+mod common;
 
-use crate::test_utils;
-use crate::test_utils::{Choice, Runtime, Test};
+use common::{Choice, Runtime, Test};
 use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, typescript};
 use heck::ToUpperCamelCase;
 use std::{fs::File, io::Write, process::Command};
@@ -10,7 +10,7 @@ use tempfile::tempdir;
 
 #[test]
 fn test_typescript_runtime_bcs_serialization() {
-    let registry = test_utils::get_simple_registry();
+    let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path.join("tests")).unwrap();
