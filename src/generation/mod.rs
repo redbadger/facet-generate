@@ -5,6 +5,9 @@
 /// Utility function to generate indented text
 pub mod indent;
 
+/// Modules for code generation that map to Namespaces declared as `#[facet(namespace = "my_namespace")]`
+pub mod module;
+
 /// Support for code-generation in Java
 #[cfg(feature = "java")]
 pub mod java;

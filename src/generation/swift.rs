@@ -7,9 +7,9 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::reflection::{
+use crate::{
     Registry,
-    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;
@@ -992,8 +992,8 @@ mod tests {
     use facet::Facet;
 
     use crate::{
-        generation::SourceInstaller as _,
-        reflection::{namespace::split, reflect},
+        generation::{SourceInstaller as _, module::split},
+        reflection::RegistryBuilder,
     };
 
     use super::*;
@@ -1037,7 +1037,7 @@ mod tests {
             child: Child,
         }
 
-        let registry = reflect::<Root>();
+        let registry = RegistryBuilder::new().add_type::<Root>().build();
 
         let package_name = "MyPackage";
         let install_dir = std::path::PathBuf::from("/tmp");

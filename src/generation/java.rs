@@ -6,9 +6,9 @@ use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
-use crate::reflection::{
+use crate::{
     Registry,
-    format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::ToUpperCamelCase;
 use include_dir::include_dir as include_directory;
