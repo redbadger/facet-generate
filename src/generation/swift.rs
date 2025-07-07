@@ -163,7 +163,9 @@ where
             TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(qualified_name) => qualified_name.to_legacy_string(),
+            TypeName(qualified_name) => {
+                qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case)
+            }
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),
@@ -289,7 +291,9 @@ where
         match format {
             TypeName(name) => format!(
                 "try {}.deserialize(deserializer: deserializer)",
-                self.quote_qualified_name(&name.to_legacy_string())
+                self.quote_qualified_name(
+                    &name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case)
+                )
             ),
             Unit => "try deserializer.deserialize_unit()".to_string(),
             Bool => "try deserializer.deserialize_bool()".to_string(),
@@ -939,7 +943,6 @@ impl super::SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        println!("registry {registry:?}");
         let module_name = config.module_name().to_upper_camel_case();
         let targets = self.targets.entry(module_name.clone()).or_default();
         targets.insert("Serde".to_string());

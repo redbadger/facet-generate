@@ -1,7 +1,7 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::collections::HashSet;
+use std::{collections::HashSet, string::ToString};
 
 use crate::reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
 
@@ -29,7 +29,7 @@ fn test_format_visiting() {
         .visit(&mut |f| {
             if let TypeName(x) = f {
                 // Insert a &str borrowed from `format`.
-                names.insert(x.to_legacy_string());
+                names.insert(x.to_legacy_string(ToString::to_string));
             }
             Ok(())
         })

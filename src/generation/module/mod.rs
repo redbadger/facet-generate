@@ -3,9 +3,9 @@ use std::{cmp::Ordering, collections::BTreeMap};
 use serde::Serialize;
 
 use crate::{
-    Result,
+    Registry, Result,
     generation::CodeGeneratorConfig,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,11 +51,8 @@ impl Ord for Module {
 
 /// Splits a registry by namespace.
 #[must_use]
-pub fn split(
-    root: &str,
-    registry: BTreeMap<QualifiedTypeName, ContainerFormat>,
-) -> BTreeMap<Module, BTreeMap<QualifiedTypeName, ContainerFormat>> {
-    let mut registries = BTreeMap::<Module, BTreeMap<QualifiedTypeName, ContainerFormat>>::new();
+pub fn split(root: &str, registry: Registry) -> BTreeMap<Module, Registry> {
+    let mut registries = BTreeMap::<Module, Registry>::new();
     for (name, mut format) in registry {
         registries
             .entry(

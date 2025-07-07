@@ -14,9 +14,11 @@ use format::{
     ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
 
+use crate::Registry;
+
 #[derive(Debug, Default)]
 pub struct RegistryBuilder {
-    pub registry: BTreeMap<QualifiedTypeName, ContainerFormat>,
+    pub registry: Registry,
     current: Vec<QualifiedTypeName>,
     processed: HashSet<QualifiedTypeName>,
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
@@ -29,7 +31,7 @@ impl RegistryBuilder {
     }
 
     #[must_use]
-    pub fn build(self) -> BTreeMap<QualifiedTypeName, ContainerFormat> {
+    pub fn build(self) -> Registry {
         self.registry
     }
 
