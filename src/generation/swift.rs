@@ -1041,7 +1041,7 @@ mod tests {
         let install_dir = std::path::PathBuf::from("/tmp");
         let mut installer = Installer::new(package_name.to_string(), install_dir);
 
-        for (module, registry) in split(package_name, registry) {
+        for (module, registry) in split(package_name, &registry) {
             installer
                 .install_module(module.config(), &registry)
                 .unwrap();
