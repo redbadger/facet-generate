@@ -1,13 +1,11 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::test_utils;
-use crate::test_utils::{Choice, Runtime, Test};
-use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
-use std::{fs::File, io::Write, process::Command, sync::Mutex};
+mod common;
 
-// Avoid interleaving compiler calls because the output gets very messy.
-static MUTEX: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
+use common::{Choice, Runtime, Test};
+use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
+use std::{fs::File, io::Write, process::Command};
 
 #[test]
 fn test_swift_runtime_autotests() {
@@ -43,7 +41,7 @@ fn test_swift_runtime_on_simple_data(runtime: Runtime) {
     let dir = tempfile::tempdir().unwrap();
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_encodings(vec![runtime.into()]);
-    let registry = test_utils::get_simple_registry();
+    let registry = common::get_simple_registry();
     let mut installer = swift::Installer::new(config.module_name.clone(), dir.path().to_path_buf());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
@@ -125,15 +123,12 @@ let package = Package(
     )
     .unwrap();
 
-    {
-        let _lock = MUTEX.lock().unwrap();
-        let status = Command::new("swift")
-            .current_dir(dir.path())
-            .arg("run")
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .arg("run")
+        .status()
+        .unwrap();
+    assert!(status.success());
 }
 
 #[test]
@@ -165,7 +160,7 @@ fn test_swift_runtime_on_supported_types(runtime: Runtime) {
     let dir = tempfile::tempdir().unwrap();
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_encodings(vec![runtime.into()]);
-    let registry = test_utils::get_registry();
+    let registry = common::get_registry();
     let mut installer = swift::Installer::new(config.module_name.clone(), dir.path().to_path_buf());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
@@ -256,13 +251,10 @@ let package = Package(
     )
     .unwrap();
 
-    {
-        let _lock = MUTEX.lock().unwrap();
-        let status = Command::new("swift")
-            .current_dir(dir.path())
-            .arg("run")
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .arg("run")
+        .status()
+        .unwrap();
+    assert!(status.success());
 }

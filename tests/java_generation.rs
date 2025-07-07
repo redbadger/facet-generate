@@ -1,7 +1,8 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::test_utils;
+mod common;
+
 use facet_generate::generation::{CodeGeneratorConfig, Encoding, java};
 use std::{collections::BTreeMap, process::Command};
 use tempfile::{TempDir, tempdir};
@@ -9,7 +10,7 @@ use tempfile::{TempDir, tempdir};
 fn test_that_java_code_compiles_with_config(
     config: &CodeGeneratorConfig,
 ) -> (TempDir, std::path::PathBuf) {
-    let registry = test_utils::get_registry();
+    let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
     let generator = java::CodeGenerator::new(config);
@@ -88,7 +89,7 @@ fn test_that_java_code_compiles_with_comments() {
 
 #[test]
 fn test_java_code_with_external_definitions() {
-    let registry = test_utils::get_registry();
+    let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
     // (wrongly) Declare TraitHelpers as external.

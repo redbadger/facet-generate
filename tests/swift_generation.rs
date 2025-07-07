@@ -1,17 +1,15 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use crate::test_utils;
+mod common;
+
 use facet_generate::{
     Registry,
     generation::{CodeGeneratorConfig, Encoding, swift},
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs::File, io::Write, process::Command, sync::Mutex};
+use std::{collections::BTreeMap, fs::File, io::Write, process::Command};
 use tempfile::{TempDir, tempdir};
-
-// Avoid interleaving compiler calls because the output gets very messy.
-static MUTEX: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
 
 #[derive(Serialize, Deserialize)]
 struct Test {
@@ -21,7 +19,7 @@ struct Test {
 fn test_that_swift_code_compiles_with_config(
     config: &CodeGeneratorConfig,
 ) -> (TempDir, std::path::PathBuf) {
-    test_that_swift_code_compiles_with_config_and_registry(config, &test_utils::get_registry())
+    test_that_swift_code_compiles_with_config_and_registry(config, &common::get_registry())
 }
 
 fn test_that_swift_code_compiles_with_config_and_registry(
@@ -65,15 +63,12 @@ let package = Package(
     let generator = swift::CodeGenerator::new(config);
     generator.output(&mut source, registry).unwrap();
 
-    {
-        let _lock = MUTEX.lock();
-        let status = Command::new("swift")
-            .current_dir(dir.path())
-            .arg("build")
-            .status()
-            .unwrap();
-        assert!(status.success());
-    }
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .arg("build")
+        .status()
+        .unwrap();
+    assert!(status.success());
 
     (dir, source_path)
 }
@@ -142,7 +137,7 @@ fn test_that_swift_code_compiles_with_comments() {
 
 #[test]
 fn test_swift_code_with_external_definitions() {
-    let registry = test_utils::get_registry();
+    let registry = common::get_registry();
     let dir = tempdir().unwrap();
     let source_path = dir.path().join("Testing.swift");
     let mut source = File::create(&source_path).unwrap();
