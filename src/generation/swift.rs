@@ -62,13 +62,13 @@ impl<'a> CodeGenerator<'a> {
         );
         let mut external_qualified_names = HashMap::new();
         for (namespace, names) in &config.external_definitions {
-            let package_name = {
+            let module = {
                 let path = namespace.rsplitn(2, '/').collect::<Vec<_>>();
                 if path.len() <= 1 { namespace } else { path[0] }
             }
             .to_upper_camel_case();
             for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{package_name}.{name}"));
+                external_qualified_names.insert(name.to_string(), format!("{module}.{name}"));
             }
         }
         Self {
@@ -129,15 +129,6 @@ where
         Ok(())
     }
 
-    /// Compute a reference to the registry type `name`.
-    fn quote_qualified_name(&self, name: &str) -> String {
-        self.generator
-            .external_qualified_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| format!("{}.{}", self.generator.config.module_name, name))
-    }
-
     fn output_comment(&mut self, name: &str) -> std::io::Result<()> {
         let mut path = self.current_namespace.clone();
         path.push(name.to_string());
@@ -157,15 +148,21 @@ where
         Ok(())
     }
 
+    fn quote_typename(&self, name: &str) -> String {
+        self.generator
+            .external_qualified_names
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.to_string())
+    }
+
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
             Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
             TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(qualified_name) => {
-                qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case)
-            }
+            TypeName(qualified_name) => self.quote_typename(&qualified_name.name),
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),
@@ -283,42 +280,6 @@ where
         }
     }
 
-    fn quote_deserialize(&self, format: &Format) -> String {
-        use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
-        };
-        match format {
-            TypeName(name) => format!(
-                "try {}.deserialize(deserializer: deserializer)",
-                self.quote_qualified_name(
-                    &name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case)
-                )
-            ),
-            Unit => "try deserializer.deserialize_unit()".to_string(),
-            Bool => "try deserializer.deserialize_bool()".to_string(),
-            I8 => "try deserializer.deserialize_i8()".to_string(),
-            I16 => "try deserializer.deserialize_i16()".to_string(),
-            I32 => "try deserializer.deserialize_i32()".to_string(),
-            I64 => "try deserializer.deserialize_i64()".to_string(),
-            I128 => "try deserializer.deserialize_i128()".to_string(),
-            U8 => "try deserializer.deserialize_u8()".to_string(),
-            U16 => "try deserializer.deserialize_u16()".to_string(),
-            U32 => "try deserializer.deserialize_u32()".to_string(),
-            U64 => "try deserializer.deserialize_u64()".to_string(),
-            U128 => "try deserializer.deserialize_u128()".to_string(),
-            F32 => "try deserializer.deserialize_f32()".to_string(),
-            F64 => "try deserializer.deserialize_f64()".to_string(),
-            Char => "try deserializer.deserialize_char()".to_string(),
-            Str => "try deserializer.deserialize_str()".to_string(),
-            Bytes => "try deserializer.deserialize_bytes()".to_string(),
-            _ => format!(
-                "try deserialize_{}(deserializer: deserializer)",
-                common::mangle_type(format)
-            ),
-        }
-    }
-
     // TODO: Should this be an extension for Serializer?
     fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
@@ -425,7 +386,7 @@ if tag {{
     return nil
 }}
 ",
-                    self.quote_deserialize(format),
+                    quote_deserialize(format),
                 )?;
             }
 
@@ -441,7 +402,7 @@ for _ in 0..<length {{
 return obj
 ",
                     self.quote_type(format),
-                    self.quote_deserialize(format)
+                    quote_deserialize(format)
                 )?;
             }
 
@@ -467,8 +428,8 @@ return obj
 ",
                     self.quote_type(key),
                     self.quote_type(value),
-                    self.quote_deserialize(key),
-                    self.quote_deserialize(value),
+                    quote_deserialize(key),
+                    quote_deserialize(value),
                 )?;
             }
 
@@ -481,7 +442,7 @@ return Tuple{}.init({})
                     format_list.len(),
                     format_list
                         .iter()
-                        .map(|f| self.quote_deserialize(f))
+                        .map(quote_deserialize)
                         .collect::<Vec<_>>()
                         .join(", ")
                 )?;
@@ -499,7 +460,7 @@ return obj
 ",
                     self.quote_type(content),
                     size,
-                    self.quote_deserialize(content)
+                    quote_deserialize(content)
                 )?;
             }
 
@@ -637,7 +598,7 @@ return obj
                     self.out,
                     "let {} = {}",
                     field.name,
-                    self.quote_deserialize(&field.value)
+                    quote_deserialize(&field.value)
                 )?;
             }
             writeln!(self.out, "try deserializer.decrease_container_depth()")?;
@@ -795,7 +756,7 @@ switch index {{",
                         self.out,
                         "let {} = {}",
                         field.name,
-                        self.quote_deserialize(&field.value)
+                        quote_deserialize(&field.value)
                     )?;
                 }
                 writeln!(self.out, "try deserializer.decrease_container_depth()")?;
@@ -864,6 +825,40 @@ switch index {{",
             }
         };
         self.output_struct_container(name, &fields)
+    }
+}
+
+fn quote_deserialize(format: &Format) -> String {
+    use Format::{
+        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+        U128, Unit,
+    };
+    match format {
+        TypeName(name) => format!(
+            "try {}.deserialize(deserializer: deserializer)",
+            &name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case)
+        ),
+        Unit => "try deserializer.deserialize_unit()".to_string(),
+        Bool => "try deserializer.deserialize_bool()".to_string(),
+        I8 => "try deserializer.deserialize_i8()".to_string(),
+        I16 => "try deserializer.deserialize_i16()".to_string(),
+        I32 => "try deserializer.deserialize_i32()".to_string(),
+        I64 => "try deserializer.deserialize_i64()".to_string(),
+        I128 => "try deserializer.deserialize_i128()".to_string(),
+        U8 => "try deserializer.deserialize_u8()".to_string(),
+        U16 => "try deserializer.deserialize_u16()".to_string(),
+        U32 => "try deserializer.deserialize_u32()".to_string(),
+        U64 => "try deserializer.deserialize_u64()".to_string(),
+        U128 => "try deserializer.deserialize_u128()".to_string(),
+        F32 => "try deserializer.deserialize_f32()".to_string(),
+        F64 => "try deserializer.deserialize_f64()".to_string(),
+        Char => "try deserializer.deserialize_char()".to_string(),
+        Str => "try deserializer.deserialize_str()".to_string(),
+        Bytes => "try deserializer.deserialize_bytes()".to_string(),
+        _ => format!(
+            "try deserialize_{}(deserializer: deserializer)",
+            common::mangle_type(format)
+        ),
     }
 }
 
