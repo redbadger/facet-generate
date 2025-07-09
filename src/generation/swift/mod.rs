@@ -3,35 +3,28 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(dead_code)]
 
+mod package;
+#[cfg(test)]
+mod tests;
+
 use super::{
     CodeGeneratorConfig, Encoding, common,
     indent::{IndentConfig, IndentedWriter},
 };
 use crate::{
     Registry,
+    generation::Dependency,
     reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
 use include_dir::include_dir as include_directory;
+use indent::indent_all_with;
+use indoc::formatdoc;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     io::{Result, Write},
     path::PathBuf,
 };
-
-const PACKAGE_TEMPLATE: &str = r#"// swift-tools-version: 5.8
-import PackageDescription
-
-let package = Package(
-    name: "{{PACKAGE}}",
-    products: [
-        .library(
-            name: "{{PACKAGE}}",
-            targets: ["{{PACKAGE}}"])
-    ],
-    targets: [{{TARGETS}}]
-)
-"#;
 
 /// Main configuration object for code-generation in Swift.
 pub struct CodeGenerator<'a> {
@@ -120,6 +113,7 @@ where
             .config
             .external_definitions
             .keys()
+            .chain(self.generator.config.import_locations.keys())
             .map(AsUpperCamelCase)
             .collect::<Vec<_>>()
         {
@@ -867,17 +861,24 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     targets: BTreeMap<String, BTreeSet<String>>,
+    dependencies: BTreeSet<Dependency>,
 }
 
 impl Installer {
     #[must_use]
-    pub fn new(package_name: String, install_dir: PathBuf) -> Self {
+    pub fn new(
+        package_name: String,
+        install_dir: PathBuf,
+        dependencies: Option<Vec<Dependency>>,
+    ) -> Self {
         let mut targets = BTreeMap::new();
         targets.insert("Serde".to_string(), BTreeSet::new());
+        let dependencies = dependencies.unwrap_or_default().into_iter().collect();
         Installer {
             package_name,
             install_dir,
             targets,
+            dependencies,
         }
     }
 
@@ -896,7 +897,19 @@ impl Installer {
     }
 
     fn make_manifest(&self, package_name: &str) -> String {
+        let dependencies = self
+            .dependencies
+            .iter()
+            .cloned()
+            .map(|d| Dependency::to_swift(d, 2))
+            .collect::<Vec<_>>()
+            .join(",\n");
+
         let mut all_targets = self.targets.clone();
+
+        // Get names of external dependencies to exclude from target creation
+        let external_dependency_names: BTreeSet<String> =
+            self.dependencies.iter().map(|d| d.name.clone()).collect();
 
         let mut package_targets = BTreeSet::new();
         package_targets.insert("Serde".to_string());
@@ -909,24 +922,66 @@ impl Installer {
 
         let targets: Vec<String> = all_targets
             .iter()
+            .filter(|(name, _)| !external_dependency_names.contains(*name))
             .map(|(name, dependencies)| {
-                format!(
-                    ".target(name: \"{name}\", dependencies: [{}]),",
-                    dependencies
-                        .iter()
-                        .map(|dep| format!("\"{dep}\""))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
+                let dependencies = dependencies
+                    .iter()
+                    .map(|dep| format!(r#""{dep}""#))
+                    .collect::<Vec<String>>()
+                    .join(", ");
+
+                let base_target = formatdoc! {r#"
+                    .target(
+                        name: "{name}",
+                        dependencies: [{dependencies}]
+                    ),"#};
+
+                indent_all_with("        ", &base_target)
             })
             .collect();
 
-        PACKAGE_TEMPLATE
-            .replace("{{PACKAGE}}", &self.package_name)
-            .replace(
-                "{{TARGETS}}",
-                &format!("\n\t\t{}\n\t", &targets.join("\n\t\t")),
-            )
+        if dependencies.is_empty() {
+            formatdoc! {r#"
+                // swift-tools-version: 5.8
+                import PackageDescription
+
+                let package = Package(
+                    name: "{package}",
+                    products: [
+                        .library(
+                            name: "{package}",
+                            targets: ["{package}"]
+                        )
+                    ],
+                    targets: [{targets}]
+                )
+                "#,
+                package = self.package_name,
+                targets = format!("\n{}\n    ", targets.join("\n"))
+            }
+        } else {
+            let dependencies_section = format!("\n{dependencies}\n    ");
+            formatdoc! {r#"
+                // swift-tools-version: 5.8
+                import PackageDescription
+
+                let package = Package(
+                    name: "{package}",
+                    products: [
+                        .library(
+                            name: "{package}",
+                            targets: ["{package}"]
+                        )
+                    ],
+                    dependencies: [{dependencies}],
+                    targets: [{targets}]
+                )
+                "#,
+                package = self.package_name,
+                dependencies = dependencies_section,
+                targets = format!("\n{}\n    ", targets.join("\n"))
+            }
+        }
     }
 }
 
@@ -943,6 +998,10 @@ impl super::SourceInstaller for Installer {
         targets.insert("Serde".to_string());
         for target in config.external_definitions.keys() {
             targets.insert(target.clone());
+        }
+
+        for dep in config.import_locations.values() {
+            self.dependencies.insert(dep.clone());
         }
 
         let dir_path = self.install_dir.join("Sources").join(&module_name);
@@ -982,89 +1041,5 @@ impl super::SourceInstaller for Installer {
         file.write_all(manifest.as_bytes())?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use facet::Facet;
-
-    use crate::{
-        generation::{SourceInstaller as _, module::split},
-        reflection::RegistryBuilder,
-    };
-
-    use super::*;
-
-    #[test]
-    fn simple_manifest() {
-        let package_name = "MyPackage";
-        let install_dir = std::path::PathBuf::from("/tmp");
-        let installer = Installer::new(package_name.to_string(), install_dir);
-
-        let manifest = installer.make_manifest(package_name);
-        insta::assert_snapshot!(manifest, @r#"
-        // swift-tools-version: 5.8
-        import PackageDescription
-
-        let package = Package(
-            name: "MyPackage",
-            products: [
-                .library(
-                    name: "MyPackage",
-                    targets: ["MyPackage"])
-            ],
-            targets: [
-        		.target(name: "MyPackage", dependencies: ["Serde"]),
-        		.target(name: "Serde", dependencies: []),
-        	]
-        )
-        "#);
-    }
-
-    #[test]
-    fn manifest_with_namespaces() {
-        #[derive(Facet)]
-        #[facet(namespace = "my_namespace")]
-        struct Child {
-            name: String,
-        }
-
-        #[derive(Facet)]
-        struct Root {
-            child: Child,
-        }
-
-        let registry = RegistryBuilder::new().add_type::<Root>().build();
-
-        let package_name = "MyPackage";
-        let install_dir = std::path::PathBuf::from("/tmp");
-        let mut installer = Installer::new(package_name.to_string(), install_dir);
-
-        for (module, registry) in split(package_name, &registry) {
-            installer
-                .install_module(module.config(), &registry)
-                .unwrap();
-        }
-
-        let manifest = installer.make_manifest(package_name);
-        insta::assert_snapshot!(manifest, @r#"
-        // swift-tools-version: 5.8
-        import PackageDescription
-
-        let package = Package(
-            name: "MyPackage",
-            products: [
-                .library(
-                    name: "MyPackage",
-                    targets: ["MyPackage"])
-            ],
-            targets: [
-        		.target(name: "MyNamespace", dependencies: ["Serde"]),
-        		.target(name: "MyPackage", dependencies: ["MyNamespace", "Serde"]),
-        		.target(name: "Serde", dependencies: []),
-        	]
-        )
-        "#);
     }
 }

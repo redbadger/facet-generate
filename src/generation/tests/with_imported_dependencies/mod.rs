@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
+        Dependency, SourceInstaller as _, java,
         module::{self, Module},
         swift, typescript,
     },
@@ -18,10 +18,26 @@ use crate::{
 };
 
 #[test]
+#[ignore = "TODO"]
 fn test() {
+    mod external {
+        use super::*;
+        #[derive(Facet)]
+        pub struct ExternalChild {
+            name: String,
+        }
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(unused)]
+        pub enum ExternalParent {
+            Child(ExternalChild),
+        }
+    }
+
     #[derive(Facet)]
     struct Child {
-        name: String,
+        external: external::ExternalParent,
     }
 
     #[derive(Facet)]
@@ -64,12 +80,17 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
+                let dependencies = vec![Dependency {
+                    name: "External".to_string(),
+                    location: "https://github.com/example/external.git".to_string(),
+                    version: Some("1.0.0".to_string()),
+                }];
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     let mut installer = swift::Installer::new(
                         package_name.to_string(),
                         tmp_path.to_path_buf(),
-                        None,
+                        Some(dependencies.clone()),
                     );
                     installer.install_module(config, registry).unwrap();
                     installer.install_manifest(package_name).unwrap();

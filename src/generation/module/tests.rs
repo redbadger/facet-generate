@@ -34,6 +34,7 @@ fn single_namespace() {
       serialization: true
       encodings: []
       external_definitions: {}
+      import_locations: {}
       comments: {}
       custom_code: {}
       c_style_enums: false
@@ -104,6 +105,7 @@ fn root_namespace_with_two_child_namespaces() {
           - ChildOne
         two:
           - ChildTwo
+      import_locations: {}
       comments: {}
       custom_code: {}
       c_style_enums: false
@@ -127,6 +129,7 @@ fn root_namespace_with_two_child_namespaces() {
       external_definitions:
         one:
           - GrandChild
+      import_locations: {}
       comments: {}
       custom_code: {}
       c_style_enums: false
@@ -149,6 +152,7 @@ fn root_namespace_with_two_child_namespaces() {
       serialization: true
       encodings: []
       external_definitions: {}
+      import_locations: {}
       comments: {}
       custom_code: {}
       c_style_enums: false

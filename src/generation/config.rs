@@ -15,6 +15,7 @@ pub struct CodeGeneratorConfig {
     pub serialization: bool,
     pub encodings: BTreeSet<Encoding>,
     pub external_definitions: ExternalDefinitions,
+    pub import_locations: ImportLocations,
     pub comments: DocComments,
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
@@ -27,9 +28,13 @@ pub enum Encoding {
     Bcs,
 }
 
-/// Track types definitions provided by external modules.
+/// Track type definitions provided by other modules (key = <module>, value = <type names>).
 pub type ExternalDefinitions =
     std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;
+
+/// Track locations for imports of external packages (key = <module>, value = <import from>).
+pub type ImportLocations =
+    std::collections::BTreeMap</* module */ String, /* import from */ Dependency>;
 
 /// Track documentation to be attached to particular definitions.
 pub type DocComments =
@@ -79,6 +84,7 @@ impl CodeGeneratorConfig {
             serialization: true,
             encodings: BTreeSet::new(),
             external_definitions: BTreeMap::new(),
+            import_locations: BTreeMap::new(),
             comments: BTreeMap::new(),
             custom_code: BTreeMap::new(),
             c_style_enums: false,
@@ -108,10 +114,17 @@ impl CodeGeneratorConfig {
         self
     }
 
-    /// Container names provided by external modules.
+    /// Container names provided by other modules.
     #[must_use]
     pub fn with_external_definitions(mut self, external_definitions: ExternalDefinitions) -> Self {
         self.external_definitions = external_definitions;
+        self
+    }
+
+    /// Import locations for external dependencies.
+    #[must_use]
+    pub fn with_import_locations(mut self, import_locations: ImportLocations) -> Self {
+        self.import_locations = import_locations;
         self
     }
 
@@ -157,4 +170,11 @@ impl Encoding {
             Encoding::Bcs => "bcs",
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Dependency {
+    pub name: String,
+    pub location: String,
+    pub version: Option<String>,
 }
