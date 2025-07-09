@@ -1,4 +1,4 @@
-package root;
+package com.example;
 
 final class TraitHelpers {
 }

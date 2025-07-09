@@ -1,4 +1,4 @@
-package root;
+package com.example;
 
 
 public final class Child {

@@ -1,4 +1,4 @@
-package root;
+package com.example;
 
 
 public abstract class Parent {
@@ -14,9 +14,9 @@ public abstract class Parent {
     }
 
     public static final class Child extends Parent {
-        public final root.Child value;
+        public final com.example.Child value;
 
-        public Child(root.Child value) {
+        public Child(com.example.Child value) {
             java.util.Objects.requireNonNull(value, "value must not be null");
             this.value = value;
         }
@@ -31,7 +31,7 @@ public abstract class Parent {
         static Child load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
             deserializer.increase_container_depth();
             Builder builder = new Builder();
-            builder.value = root.Child.deserialize(deserializer);
+            builder.value = com.example.Child.deserialize(deserializer);
             deserializer.decrease_container_depth();
             return builder.build();
         }
@@ -52,7 +52,7 @@ public abstract class Parent {
         }
 
         public static final class Builder {
-            public root.Child value;
+            public com.example.Child value;
 
             public Child build() {
                 return new Child(
