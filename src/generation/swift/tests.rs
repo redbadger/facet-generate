@@ -67,6 +67,9 @@ fn manifest_with_namespaces() {
     let install_dir = std::path::PathBuf::from("/tmp");
     let mut installer = Installer::new(package_name.to_string(), install_dir, None);
 
+    // Install Serde runtime for serialization support
+    installer.install_serde_runtime().unwrap();
+
     for (module, registry) in split(package_name, &registry) {
         installer
             .install_module(module.config(), &registry)
@@ -102,4 +105,34 @@ fn manifest_with_namespaces() {
             ]
         )
         "#);
+}
+
+#[test]
+fn manifest_without_serde() {
+    let package_name = "MyPackage";
+    let install_dir = std::path::PathBuf::from("/tmp");
+    // No dependencies and no Serde runtime installed
+    let installer = Installer::new(package_name.to_string(), install_dir, None);
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "MyPackage",
+        products: [
+            .library(
+                name: "MyPackage",
+                targets: ["MyPackage"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "MyPackage",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
 }

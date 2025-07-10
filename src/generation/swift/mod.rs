@@ -871,8 +871,7 @@ impl Installer {
         install_dir: PathBuf,
         dependencies: Option<Vec<Dependency>>,
     ) -> Self {
-        let mut targets = BTreeMap::new();
-        targets.insert("Serde".to_string(), BTreeSet::new());
+        let targets = BTreeMap::new();
         let dependencies = dependencies.unwrap_or_default().into_iter().collect();
         Installer {
             package_name,
@@ -912,7 +911,11 @@ impl Installer {
             self.dependencies.iter().map(|d| d.name.clone()).collect();
 
         let mut package_targets = BTreeSet::new();
-        package_targets.insert("Serde".to_string());
+        // Add Serde if it's available (either as external dependency or local target)
+        // This is needed because the generated code typically requires Serde for serialization
+        if external_dependency_names.contains("Serde") || self.targets.contains_key("Serde") {
+            package_targets.insert("Serde".to_string());
+        }
         for targets in all_targets.values() {
             for target in targets {
                 package_targets.insert(target.to_upper_camel_case());
@@ -994,8 +997,17 @@ impl super::SourceInstaller for Installer {
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
         let module_name = config.module_name().to_upper_camel_case();
+
+        // Check if Serde is available before getting mutable reference
+        let serde_is_available = self.dependencies.iter().any(|d| d.name == "Serde")
+            || self.targets.contains_key("Serde");
+
         let targets = self.targets.entry(module_name.clone()).or_default();
-        targets.insert("Serde".to_string());
+
+        // Add Serde dependency if it's available (either as external dependency or local target)
+        if serde_is_available {
+            targets.insert("Serde".to_string());
+        }
         for target in config.external_definitions.keys() {
             targets.insert(target.clone());
         }
@@ -1013,11 +1025,14 @@ impl super::SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_serde_runtime(&self) -> std::result::Result<(), Self::Error> {
+    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
         self.install_runtime(
             &include_directory!("runtime/swift/Sources/Serde"),
             "Sources/Serde",
-        )
+        )?;
+        // Register Serde as a local target
+        self.targets.insert("Serde".to_string(), BTreeSet::new());
+        Ok(())
     }
 
     fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {

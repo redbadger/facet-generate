@@ -58,7 +58,7 @@ pub trait SourceInstaller {
     ) -> std::result::Result<(), Self::Error>;
 
     /// Install the serde runtime.
-    fn install_serde_runtime(&self) -> std::result::Result<(), Self::Error>;
+    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error>;
 
     /// Install the bincode runtime.
     fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error>;
