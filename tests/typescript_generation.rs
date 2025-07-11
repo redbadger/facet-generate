@@ -20,7 +20,7 @@ fn test_typescript_code_compiles_with_config(
     let registry = common::get_registry();
     make_output_file(dir_path);
 
-    let installer = typescript::Installer::new(dir_path.to_path_buf());
+    let mut installer = typescript::Installer::new(dir_path.to_path_buf());
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 

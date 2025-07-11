@@ -5,7 +5,7 @@ mod common;
 
 use facet_generate::{
     Registry,
-    generation::{CodeGeneratorConfig, Encoding, swift},
+    generation::{CodeGeneratorConfig, Encoding, swift::CodeGenerator},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, io::Write, process::Command};
@@ -60,7 +60,7 @@ let package = Package(
     let source_path = dir.path().join("Sources/Testing/Testing.swift");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = swift::CodeGenerator::new(config);
+    let generator = CodeGenerator::new(config);
     generator.output(&mut source, registry).unwrap();
 
     let status = Command::new("swift")
@@ -147,7 +147,7 @@ fn test_swift_code_with_external_definitions() {
     definitions.insert("foo".to_string(), vec!["Tree".to_string()]);
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_external_definitions(definitions);
-    let generator = swift::CodeGenerator::new(&config);
+    let generator = CodeGenerator::new(&config);
     generator.output(&mut source, &registry).unwrap();
 
     // References were updated.
