@@ -49,6 +49,7 @@ fn test() {
         match target {
             "java" => {
                 let package_name = "com.example";
+                let mut installer = java::Installer::new(tmp_path.to_path_buf());
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
                     let is_root_package = package_name == this_module;
@@ -58,28 +59,24 @@ fn test() {
                         &Module::new([package_name, this_module].join("."))
                     };
                     let config = module.config();
-                    let mut installer = java::Installer::new(tmp_path.to_path_buf());
                     installer.install_module(config, registry).unwrap();
                 }
             }
             "swift" => {
                 let package_name = "Example";
+                let mut installer =
+                    swift::Installer::new(package_name.to_string(), tmp_path.to_path_buf(), None);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
-                    let mut installer = swift::Installer::new(
-                        package_name.to_string(),
-                        tmp_path.to_path_buf(),
-                        None,
-                    );
                     installer.install_module(config, registry).unwrap();
                     installer.install_manifest(package_name).unwrap();
                 }
             }
             "typescript" => {
                 let package_name = "example";
+                let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
-                    let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
                     installer.install_module(config, registry).unwrap();
                 }
             }

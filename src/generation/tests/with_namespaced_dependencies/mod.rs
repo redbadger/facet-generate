@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 use crate::{
     generation::{
-        Dependency, SourceInstaller as _, java,
+        SourceInstaller as _, java,
         module::{self, Module},
         swift, typescript,
     },
@@ -60,12 +60,6 @@ fn test() {
         let snapshot_dir = this_dir.join(target);
         fs::create_dir_all(&snapshot_dir).unwrap();
 
-        let deps = vec![Dependency {
-            name: "Other".to_string(),
-            location: "https://example.com/other".to_string(),
-            version: Some("1.0.0".to_string()),
-        }];
-
         match target {
             "java" => {
                 let package_name = "com.example";
@@ -84,11 +78,8 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = swift::Installer::new(
-                    package_name.to_string(),
-                    tmp_path.to_path_buf(),
-                    Some(deps),
-                );
+                let mut installer =
+                    swift::Installer::new(package_name.to_string(), tmp_path.to_path_buf(), None);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();

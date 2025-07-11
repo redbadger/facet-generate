@@ -9,17 +9,14 @@ let package = Package(
             targets: ["Example"]
         )
     ],
-    dependencies: [
-        .package(
-            name: "Other",
-            url: "https://example.com/other",
-            from: "1.0.0"
-        )
-    ],
     targets: [
         .target(
             name: "Example",
             dependencies: ["Other"]
+        ),
+        .target(
+            name: "Other",
+            dependencies: []
         ),
     ]
 )

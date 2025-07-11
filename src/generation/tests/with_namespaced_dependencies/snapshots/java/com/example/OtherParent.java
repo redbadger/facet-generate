@@ -1,22 +1,22 @@
 package com.example;
 
 
-public abstract class ExternalParent {
+public abstract class OtherParent {
 
     abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
 
-    public static ExternalParent deserialize(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
+    public static OtherParent deserialize(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
         int index = deserializer.deserialize_variant_index();
         switch (index) {
             case 0: return Child.load(deserializer);
-            default: throw new com.novi.serde.DeserializationError("Unknown variant index for ExternalParent: " + index);
+            default: throw new com.novi.serde.DeserializationError("Unknown variant index for OtherParent: " + index);
         }
     }
 
-    public static final class Child extends ExternalParent {
-        public final ExternalChild value;
+    public static final class Child extends OtherParent {
+        public final OtherChild value;
 
-        public Child(ExternalChild value) {
+        public Child(OtherChild value) {
             java.util.Objects.requireNonNull(value, "value must not be null");
             this.value = value;
         }
@@ -31,7 +31,7 @@ public abstract class ExternalParent {
         static Child load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
             deserializer.increase_container_depth();
             Builder builder = new Builder();
-            builder.value = ExternalChild.deserialize(deserializer);
+            builder.value = OtherChild.deserialize(deserializer);
             deserializer.decrease_container_depth();
             return builder.build();
         }
@@ -52,7 +52,7 @@ public abstract class ExternalParent {
         }
 
         public static final class Builder {
-            public ExternalChild value;
+            public OtherChild value;
 
             public Child build() {
                 return new Child(

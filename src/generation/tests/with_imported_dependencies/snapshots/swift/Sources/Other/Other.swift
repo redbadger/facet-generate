@@ -1,30 +1,29 @@
 import Serde
 
-import Other
 
-public struct Child: Hashable {
-    @Indirect public var external: Other.OtherParent
+public struct OtherChild: Hashable {
+    @Indirect public var name: String
 
-    public init(external: Other.OtherParent) {
-        self.external = external
+    public init(name: String) {
+        self.name = name
     }
 
     public func serialize<S: Serializer>(serializer: S) throws {
         try serializer.increase_container_depth()
-        try self.external.serialize(serializer: serializer)
+        try serializer.serialize_str(value: self.name)
         try serializer.decrease_container_depth()
     }
 
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Child {
+    public static func deserialize<D: Deserializer>(deserializer: D) throws -> OtherChild {
         try deserializer.increase_container_depth()
-        let external = try Other.OtherParent.deserialize(deserializer: deserializer)
+        let name = try deserializer.deserialize_str()
         try deserializer.decrease_container_depth()
-        return Child.init(external: external)
+        return OtherChild.init(name: name)
     }
 }
 
-indirect public enum Parent: Hashable {
-    case child(Child)
+indirect public enum OtherParent: Hashable {
+    case child(OtherChild)
 
     public func serialize<S: Serializer>(serializer: S) throws {
         try serializer.increase_container_depth()
@@ -36,15 +35,15 @@ indirect public enum Parent: Hashable {
         try serializer.decrease_container_depth()
     }
 
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
+    public static func deserialize<D: Deserializer>(deserializer: D) throws -> OtherParent {
         let index = try deserializer.deserialize_variant_index()
         try deserializer.increase_container_depth()
         switch index {
         case 0:
-            let x = try Child.deserialize(deserializer: deserializer)
+            let x = try Other.OtherChild.deserialize(deserializer: deserializer)
             try deserializer.decrease_container_depth()
             return .child(x)
-        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Parent: \(index)")
+        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for OtherParent: \(index)")
         }
     }
 }
