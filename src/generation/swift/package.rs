@@ -6,14 +6,12 @@ use crate::generation::Dependency;
 impl Dependency {
     #[must_use]
     pub fn to_swift(self, level: usize) -> String {
-        let name = self.name;
         let location = self.location;
         let version = self.version.unwrap_or_default();
         let indent_str = " ".repeat(4 * level);
 
         let base_string = formatdoc! {r#"
             .package(
-                name: "{name}",
                 url: "{location}",
                 from: "{version}"
             )"#};
@@ -36,7 +34,6 @@ mod tests {
 
         insta::assert_snapshot!(dependency.to_swift(3), @r#"
             .package(
-                name: "SQLite.swift",
                 url: "https://github.com/stephencelis/SQLite.swift.git",
                 from: "0.12.2"
             )

@@ -11,7 +11,6 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            name: "Other",
             url: "https://example.com/other",
             from: "1.0.0"
         )

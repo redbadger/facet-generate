@@ -114,7 +114,6 @@ fn manifest_with_serde_as_dependency() {
         ],
         dependencies: [
             .package(
-                name: "Serde",
                 url: "https://github.com/serde-rs/serde",
                 from: "1.0.137"
             )
@@ -218,7 +217,6 @@ fn manifest_with_dependencies() {
         ],
         dependencies: [
             .package(
-                name: "Serde",
                 url: "https://github.com/serde-rs/serde",
                 from: "1.0.137"
             )
@@ -287,7 +285,6 @@ fn manifest_with_namespaces_and_dependencies() {
         ],
         dependencies: [
             .package(
-                name: "MyNamespace",
                 url: "https://github.com/example/my_namespace",
                 from: "1.0"
             )
