@@ -1,20 +1,21 @@
 use facet::Facet;
 
 use crate::{
-    generation::{SourceInstaller as _, module::split},
+    generation::{
+        ExternalPackage, SourceInstaller as _, module::split, swift::installer::Installer,
+    },
     reflection::RegistryBuilder,
 };
 
-use super::*;
-
 #[test]
-fn manifest_without_serde() {
+fn simple_manifest() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
+
     let installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        None,
+        vec![],
     );
 
     let manifest = installer.make_manifest(package_name);
@@ -41,14 +42,14 @@ fn manifest_without_serde() {
 }
 
 #[test]
-fn manifest_with_serde_installed() {
+fn manifest_with_serde_as_target() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    // No dependencies and no Serde runtime installed
+
     let mut installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        None,
+        vec![],
     );
 
     installer.install_serde_runtime().unwrap();
@@ -69,7 +70,7 @@ fn manifest_with_serde_installed() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
             .target(
                 name: "Serde",
@@ -84,19 +85,15 @@ fn manifest_with_serde_installed() {
 fn manifest_with_serde_as_dependency() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let deps = vec![(
-        "serde".to_string(),
-        Dependency {
-            name: "Serde".to_string(),
-            location: "https://github.com/serde-rs/serde".to_string(),
-            version: Some("1.0.137".to_string()),
-        },
-    )];
 
     let installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        Some(deps),
+        vec![ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: "https://github.com/serde-rs/serde".to_string(),
+            version: Some("1.0.137".to_string()),
+        }],
     );
 
     let manifest = installer.make_manifest(package_name);
@@ -121,7 +118,7 @@ fn manifest_with_serde_as_dependency() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -131,7 +128,7 @@ fn manifest_with_serde_as_dependency() {
 #[test]
 fn manifest_with_namespaces() {
     #[derive(Facet)]
-    #[facet(namespace = "my_namespace")]
+    #[facet(namespace = "another_target")]
     struct Child {
         name: String,
     }
@@ -148,7 +145,7 @@ fn manifest_with_namespaces() {
     let mut installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        None,
+        vec![],
     );
 
     for (module, registry) in split(package_name, &registry) {
@@ -172,12 +169,12 @@ fn manifest_with_namespaces() {
             ],
             targets: [
                 .target(
-                    name: "MyNamespace",
+                    name: "AnotherTarget",
                     dependencies: []
                 ),
                 .target(
                     name: "MyPackage",
-                    dependencies: ["MyNamespace"]
+                    dependencies: ["AnotherTarget"]
                 ),
             ]
         )
@@ -188,18 +185,15 @@ fn manifest_with_namespaces() {
 fn manifest_with_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let deps = vec![(
-        "serde".to_string(),
-        Dependency {
-            name: "Serde".to_string(),
-            location: "https://github.com/serde-rs/serde".to_string(),
-            version: Some("1.0.137".to_string()),
-        },
-    )];
+
     let installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        Some(deps),
+        vec![ExternalPackage {
+            for_namespace: "AnotherPackage".to_string(),
+            location: "https://github.com/example/another_package".to_string(),
+            version: Some("1.0".to_string()),
+        }],
     );
 
     let manifest = installer.make_manifest(package_name);
@@ -217,14 +211,14 @@ fn manifest_with_dependencies() {
         ],
         dependencies: [
             .package(
-                url: "https://github.com/serde-rs/serde",
-                from: "1.0.137"
+                url: "https://github.com/example/another_package",
+                from: "1.0"
             )
         ],
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -234,7 +228,7 @@ fn manifest_with_dependencies() {
 #[test]
 fn manifest_with_namespaces_and_dependencies() {
     #[derive(Facet)]
-    #[facet(namespace = "my_namespace")]
+    #[facet(namespace = "another_package")]
     struct Child {
         name: String,
     }
@@ -249,19 +243,14 @@ fn manifest_with_namespaces_and_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let deps = vec![(
-        "my_namespace".to_string(),
-        Dependency {
-            name: "MyNamespace".to_string(),
-            location: "https://github.com/example/my_namespace".to_string(),
-            version: Some("1.0".to_string()),
-        },
-    )];
-
     let mut installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
-        Some(deps),
+        vec![ExternalPackage {
+            for_namespace: "another_package".to_string(),
+            location: "https://github.com/example/another_package".to_string(),
+            version: Some("1.0".to_string()),
+        }],
     );
 
     for (module, registry) in split(package_name, &registry) {
@@ -285,14 +274,14 @@ fn manifest_with_namespaces_and_dependencies() {
         ],
         dependencies: [
             .package(
-                url: "https://github.com/example/my_namespace",
+                url: "https://github.com/example/another_package",
                 from: "1.0"
             )
         ],
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["MyNamespace"]
+                dependencies: ["AnotherPackage"]
             ),
         ]
     )

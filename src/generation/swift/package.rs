@@ -1,9 +1,9 @@
 use indent::indent_all_with;
 use indoc::formatdoc;
 
-use crate::generation::Dependency;
+use crate::generation::ExternalPackage;
 
-impl Dependency {
+impl ExternalPackage {
     #[must_use]
     pub fn to_swift(self, level: usize) -> String {
         let location = self.location;
@@ -26,8 +26,8 @@ mod tests {
 
     #[test]
     fn test_to_string() {
-        let dependency = Dependency {
-            name: "SQLite.swift".to_string(),
+        let dependency = ExternalPackage {
+            for_namespace: "SQLite.swift".to_string(),
             location: "https://github.com/stephencelis/SQLite.swift.git".to_string(),
             version: Some("0.12.2".to_string()),
         };

@@ -1,6 +1,5 @@
 import Serde
 
-
 public struct Child: Hashable {
     @Indirect public var name: String
 

@@ -12,7 +12,8 @@ use crate::{
     generation::{
         SourceInstaller as _, java,
         module::{self, Module},
-        swift, typescript,
+        swift::Installer,
+        typescript,
     },
     reflection::RegistryBuilder,
 };
@@ -65,7 +66,7 @@ fn test() {
             "swift" => {
                 let package_name = "Example";
                 let mut installer =
-                    swift::Installer::new(package_name.to_string(), tmp_path.to_path_buf(), None);
+                    Installer::new(package_name.to_string(), tmp_path.to_path_buf(), vec![]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();

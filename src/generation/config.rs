@@ -15,7 +15,7 @@ pub struct CodeGeneratorConfig {
     pub serialization: bool,
     pub encodings: BTreeSet<Encoding>,
     pub external_definitions: ExternalDefinitions,
-    pub import_locations: ImportLocations,
+    pub external_packages: ExternalPackages,
     pub comments: DocComments,
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
@@ -33,8 +33,8 @@ pub type ExternalDefinitions =
     std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;
 
 /// Track locations for imports of external packages (key = <module>, value = <import from>).
-pub type ImportLocations =
-    std::collections::BTreeMap</* module */ String, /* import from */ Dependency>;
+pub type ExternalPackages =
+    std::collections::BTreeMap</* module */ String, /* import from */ ExternalPackage>;
 
 /// Track documentation to be attached to particular definitions.
 pub type DocComments =
@@ -84,7 +84,7 @@ impl CodeGeneratorConfig {
             serialization: true,
             encodings: BTreeSet::new(),
             external_definitions: BTreeMap::new(),
-            import_locations: BTreeMap::new(),
+            external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
             custom_code: BTreeMap::new(),
             c_style_enums: false,
@@ -123,8 +123,8 @@ impl CodeGeneratorConfig {
 
     /// Import locations for external dependencies.
     #[must_use]
-    pub fn with_import_locations(mut self, import_locations: ImportLocations) -> Self {
-        self.import_locations = import_locations;
+    pub fn with_import_locations(mut self, import_locations: ExternalPackages) -> Self {
+        self.external_packages = import_locations;
         self
     }
 
@@ -173,8 +173,8 @@ impl Encoding {
 }
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Dependency {
-    pub name: String,
+pub struct ExternalPackage {
+    pub for_namespace: String,
     pub location: String,
     pub version: Option<String>,
 }
