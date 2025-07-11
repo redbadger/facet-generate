@@ -3,37 +3,12 @@ package com.example;
 
 public abstract class Parent {
 
-    abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
-
-    public static Parent deserialize(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
-        int index = deserializer.deserialize_variant_index();
-        switch (index) {
-            case 0: return Child.load(deserializer);
-            default: throw new com.novi.serde.DeserializationError("Unknown variant index for Parent: " + index);
-        }
-    }
-
     public static final class Child extends Parent {
         public final com.example.Child value;
 
         public Child(com.example.Child value) {
             java.util.Objects.requireNonNull(value, "value must not be null");
             this.value = value;
-        }
-
-        public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {
-            serializer.increase_container_depth();
-            serializer.serialize_variant_index(0);
-            value.serialize(serializer);
-            serializer.decrease_container_depth();
-        }
-
-        static Child load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
-            deserializer.increase_container_depth();
-            Builder builder = new Builder();
-            builder.value = com.example.Child.deserialize(deserializer);
-            deserializer.decrease_container_depth();
-            return builder.build();
         }
 
         public boolean equals(Object obj) {

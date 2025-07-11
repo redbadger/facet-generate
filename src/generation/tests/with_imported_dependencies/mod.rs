@@ -1,18 +1,16 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{env, fs, path::PathBuf};
 
-use expect_test::{ExpectFile, expect_file};
+use expect_test::expect_file;
 use facet::Facet;
-use ignore::WalkBuilder;
 use tempfile::TempDir;
 
 use crate::{
     generation::{
         ExternalPackage, SourceInstaller as _, java,
         module::{self, Module},
-        swift, typescript,
+        swift,
+        tests::{check, find_files},
+        typescript,
     },
     reflection::RegistryBuilder,
 };
@@ -72,8 +70,8 @@ fn test() {
                     } else {
                         &Module::new([package_name, this_module].join("."))
                     };
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_serialization(false);
+                    installer.install_module(&config, registry).unwrap();
                 }
             }
             "swift" => {
@@ -88,8 +86,8 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_serialization(false);
+                    installer.install_module(&config, registry).unwrap();
                     installer.install_manifest(package_name).unwrap();
                 }
             }
@@ -97,8 +95,8 @@ fn test() {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_serialization(false);
+                    installer.install_module(&config, registry).unwrap();
                 }
             }
             _ => unreachable!(),
@@ -108,31 +106,4 @@ fn test() {
             check(&actual, &expect_file!(&expected));
         }
     }
-}
-
-fn find_files(tmp_path: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> Vec<(String, PathBuf)> {
-    let mut files = Vec::new();
-    for entry in WalkBuilder::new(&tmp_path)
-        .hidden(false)
-        .follow_links(true)
-        .build()
-    {
-        if let Ok(entry) = entry
-            && let Some(file_type) = entry.file_type()
-            && file_type.is_file()
-        {
-            let relative_path = entry.path().strip_prefix(&tmp_path).unwrap();
-            let expected = out_dir.as_ref().join(relative_path);
-            fs::create_dir_all(out_dir.as_ref().join(expected.parent().unwrap())).unwrap();
-
-            let actual = fs::read_to_string(entry.path()).unwrap();
-
-            files.push((actual, expected));
-        }
-    }
-    files
-}
-
-fn check(actual: &str, expect: &ExpectFile) {
-    expect.assert_eq(actual);
 }

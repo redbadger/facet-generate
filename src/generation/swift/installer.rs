@@ -74,22 +74,7 @@ impl Installer {
 
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
-        let external_packages = self
-            .external_packages
-            .values()
-            .cloned()
-            .map(|d| ExternalPackage::to_swift(d, 2))
-            .collect::<Vec<_>>()
-            .join(",\n");
-
         let mut all_targets = self.targets.clone();
-
-        // Get names of external dependencies to exclude from target creation
-        let external_package_names: BTreeSet<String> = self
-            .external_packages
-            .values()
-            .map(|d| d.for_namespace.to_upper_camel_case())
-            .collect();
 
         let mut package_targets = BTreeSet::new();
 
@@ -99,6 +84,13 @@ impl Installer {
             }
         }
         all_targets.insert(package_name.to_upper_camel_case(), package_targets);
+
+        // Get names of external dependencies to exclude from target creation
+        let external_package_names: BTreeSet<String> = self
+            .external_packages
+            .values()
+            .map(|d| d.for_namespace.to_upper_camel_case())
+            .collect();
 
         let targets: Vec<String> = all_targets
             .iter()
@@ -120,7 +112,7 @@ impl Installer {
             })
             .collect();
 
-        if external_packages.is_empty() {
+        if self.external_packages.is_empty() {
             formatdoc! {r#"
                 // swift-tools-version: 5.8
                 import PackageDescription
@@ -140,6 +132,14 @@ impl Installer {
                 targets = format!("\n{}\n    ", targets.join("\n"))
             }
         } else {
+            let external_packages = self
+                .external_packages
+                .values()
+                .cloned()
+                .map(|d| ExternalPackage::to_swift(d, 2))
+                .collect::<Vec<_>>()
+                .join(",\n");
+
             let dependencies_section = format!("\n{external_packages}\n    ");
             formatdoc! {r#"
                 // swift-tools-version: 5.8
@@ -173,25 +173,29 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        self.external_packages
-            .append(&mut config.external_packages.clone());
+        let should_install_module = !self.external_packages.contains_key(config.module_name());
 
-        if !self.external_packages.contains_key(config.module_name()) {
+        if should_install_module {
             let module_name = config.module_name().to_upper_camel_case();
 
             let targets = self.targets.entry(module_name.clone()).or_default();
-
             for target in config.external_definitions.keys() {
                 targets.insert(target.clone());
+            }
+
+            if config.serialization {
+                targets.insert("Serde".to_string());
             }
 
             let dir_path = self.install_dir.join("Sources").join(&module_name);
             std::fs::create_dir_all(&dir_path)?;
             let source_path = dir_path.join(format!("{module_name}.swift"));
+
             let mut file = std::fs::File::create(source_path)?;
             let generator = CodeGenerator::new(config);
             generator.output(&mut file, registry)?;
         }
+
         Ok(())
     }
 
@@ -200,8 +204,10 @@ impl SourceInstaller for Installer {
             &include_dir!("runtime/swift/Sources/Serde"),
             "Sources/Serde",
         )?;
+
         // Register Serde as a local target
         self.targets.insert("Serde".to_string(), BTreeSet::new());
+
         Ok(())
     }
 

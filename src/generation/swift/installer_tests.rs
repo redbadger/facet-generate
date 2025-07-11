@@ -156,29 +156,29 @@ fn manifest_with_namespaces() {
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_snapshot!(manifest, @r#"
-        // swift-tools-version: 5.8
-        import PackageDescription
+    // swift-tools-version: 5.8
+    import PackageDescription
 
-        let package = Package(
-            name: "MyPackage",
-            products: [
-                .library(
-                    name: "MyPackage",
-                    targets: ["MyPackage"]
-                )
-            ],
-            targets: [
-                .target(
-                    name: "AnotherTarget",
-                    dependencies: []
-                ),
-                .target(
-                    name: "MyPackage",
-                    dependencies: ["AnotherTarget"]
-                ),
-            ]
-        )
-        "#);
+    let package = Package(
+        name: "MyPackage",
+        products: [
+            .library(
+                name: "MyPackage",
+                targets: ["MyPackage"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "AnotherTarget",
+                dependencies: ["Serde"]
+            ),
+            .target(
+                name: "MyPackage",
+                dependencies: ["AnotherTarget", "Serde"]
+            ),
+        ]
+    )
+    "#);
 }
 
 #[test]
@@ -281,7 +281,7 @@ fn manifest_with_namespaces_and_dependencies() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["AnotherPackage"]
+                dependencies: ["AnotherPackage", "Serde"]
             ),
         ]
     )

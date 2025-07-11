@@ -26,8 +26,13 @@ impl<T> SwiftEmitter<'_, T>
 where
     T: Write,
 {
-    pub fn output_preamble(&mut self) -> Result<()> {
-        let mut imports = ["Serde".to_string()] // always "import Serde" (for now)
+    pub fn output_preamble(&mut self, needs_serde: bool) -> Result<()> {
+        let imports = if needs_serde {
+            vec!["Serde".to_string()]
+        } else {
+            vec![]
+        };
+        let mut imports = imports
             .iter()
             .chain(self.generator.config.external_definitions.keys())
             .chain(self.generator.config.external_packages.keys())
