@@ -1015,16 +1015,14 @@ impl super::SourceInstaller for Installer {
         self.dependencies
             .append(&mut config.import_locations.clone());
 
-        // if !self.dependencies.contains("Serde") {
-        //     self.install_serde_runtime()?;
-        // }
-
-        let dir_path = self.install_dir.join("Sources").join(&module_name);
-        std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join(format!("{module_name}.swift"));
-        let mut file = std::fs::File::create(source_path)?;
-        let generator = CodeGenerator::new(config);
-        generator.output(&mut file, registry)?;
+        if !self.dependencies.contains_key(config.module_name()) {
+            let dir_path = self.install_dir.join("Sources").join(&module_name);
+            std::fs::create_dir_all(&dir_path)?;
+            let source_path = dir_path.join(format!("{module_name}.swift"));
+            let mut file = std::fs::File::create(source_path)?;
+            let generator = CodeGenerator::new(config);
+            generator.output(&mut file, registry)?;
+        }
         Ok(())
     }
 
