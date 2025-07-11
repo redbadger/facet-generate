@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     Registry,
-    generation::Dependency,
+    generation::{Dependency, ImportLocations},
     reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
@@ -861,7 +861,7 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     targets: BTreeMap<String, BTreeSet<String>>,
-    dependencies: BTreeSet<Dependency>,
+    dependencies: ImportLocations,
 }
 
 impl Installer {
@@ -869,7 +869,7 @@ impl Installer {
     pub fn new(
         package_name: String,
         install_dir: PathBuf,
-        dependencies: Option<Vec<Dependency>>,
+        dependencies: Option<Vec<(String, Dependency)>>,
     ) -> Self {
         let targets = BTreeMap::new();
         let dependencies = dependencies.unwrap_or_default().into_iter().collect();
@@ -898,7 +898,7 @@ impl Installer {
     fn make_manifest(&self, package_name: &str) -> String {
         let dependencies = self
             .dependencies
-            .iter()
+            .values()
             .cloned()
             .map(|d| Dependency::to_swift(d, 2))
             .collect::<Vec<_>>()
@@ -908,7 +908,7 @@ impl Installer {
 
         // Get names of external dependencies to exclude from target creation
         let external_dependency_names: BTreeSet<String> =
-            self.dependencies.iter().map(|d| d.name.clone()).collect();
+            self.dependencies.values().map(|d| d.name.clone()).collect();
 
         let mut package_targets = BTreeSet::new();
         // Add Serde if it's available (either as external dependency or local target)
@@ -999,7 +999,7 @@ impl super::SourceInstaller for Installer {
         let module_name = config.module_name().to_upper_camel_case();
 
         // Check if Serde is available before getting mutable reference
-        let serde_is_available = self.dependencies.iter().any(|d| d.name == "Serde")
+        let serde_is_available = self.dependencies.iter().any(|(_ns, d)| d.name == "Serde")
             || self.targets.contains_key("Serde");
 
         let targets = self.targets.entry(module_name.clone()).or_default();
@@ -1012,9 +1012,12 @@ impl super::SourceInstaller for Installer {
             targets.insert(target.clone());
         }
 
-        for dep in config.import_locations.values() {
-            self.dependencies.insert(dep.clone());
-        }
+        self.dependencies
+            .append(&mut config.import_locations.clone());
+
+        // if !self.dependencies.contains("Serde") {
+        //     self.install_serde_runtime()?;
+        // }
 
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;

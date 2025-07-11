@@ -60,11 +60,14 @@ fn test() {
         let snapshot_dir = this_dir.join(target);
         fs::create_dir_all(&snapshot_dir).unwrap();
 
-        let deps = vec![Dependency {
-            name: "Other".to_string(),
-            location: "https://example.com/other".to_string(),
-            version: Some("1.0.0".to_string()),
-        }];
+        let deps = vec![(
+            "other".to_string(),
+            Dependency {
+                name: "Other".to_string(),
+                location: "https://example.com/other".to_string(),
+                version: Some("1.0.0".to_string()),
+            },
+        )];
 
         match target {
             "java" => {

@@ -84,11 +84,14 @@ fn manifest_with_serde_installed() {
 fn manifest_with_serde_as_dependency() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let deps = vec![Dependency {
-        name: "Serde".to_string(),
-        location: "https://github.com/serde-rs/serde".to_string(),
-        version: Some("1.0.137".to_string()),
-    }];
+    let deps = vec![(
+        "serde".to_string(),
+        Dependency {
+            name: "Serde".to_string(),
+            location: "https://github.com/serde-rs/serde".to_string(),
+            version: Some("1.0.137".to_string()),
+        },
+    )];
 
     let installer = Installer::new(
         package_name.to_string(),
@@ -186,11 +189,14 @@ fn manifest_with_namespaces() {
 fn manifest_with_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let deps = vec![Dependency {
-        name: "Serde".to_string(),
-        location: "https://github.com/serde-rs/serde".to_string(),
-        version: Some("1.0.137".to_string()),
-    }];
+    let deps = vec![(
+        "serde".to_string(),
+        Dependency {
+            name: "Serde".to_string(),
+            location: "https://github.com/serde-rs/serde".to_string(),
+            version: Some("1.0.137".to_string()),
+        },
+    )];
     let installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
@@ -245,11 +251,14 @@ fn manifest_with_namespaces_and_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let deps = vec![Dependency {
-        name: "MyNamespace".to_string(),
-        location: "https://github.com/example/my_namespace".to_string(),
-        version: Some("1.0".to_string()),
-    }];
+    let deps = vec![(
+        "my_namespace".to_string(),
+        Dependency {
+            name: "MyNamespace".to_string(),
+            location: "https://github.com/example/my_namespace".to_string(),
+            version: Some("1.0".to_string()),
+        },
+    )];
 
     let mut installer = Installer::new(
         package_name.to_string(),
