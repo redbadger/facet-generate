@@ -11,6 +11,7 @@ mod with_imported_dependencies;
 mod with_namespaces_as_dependencies;
 mod with_namespaces_as_targets;
 mod with_serialization;
+mod with_serialization_and_serde_as_separate_package;
 mod with_serialization_and_serde_dependency;
 mod with_serialization_and_serde_target;
 
