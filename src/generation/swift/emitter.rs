@@ -1,128 +1,43 @@
-// Copyright (c) Facebook, Inc. and its affiliates
-// SPDX-License-Identifier: MIT OR Apache-2.0
-#![allow(clippy::missing_errors_doc)]
-#![allow(dead_code)]
+use std::collections::BTreeMap;
+use std::io::{Result, Write};
 
-use super::{
-    CodeGeneratorConfig, Encoding, common,
-    indent::{IndentConfig, IndentedWriter},
-};
+use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
+
+use crate::generation::Encoding;
+use crate::generation::swift::generator::CodeGenerator;
+use crate::reflection::format::{ContainerFormat, Named, VariantFormat};
 use crate::{
     Registry,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
+    generation::{common, indent::IndentedWriter},
+    reflection::format::{Format, FormatHolder as _},
 };
-use heck::{AsUpperCamelCase, ToLowerCamelCase, ToUpperCamelCase};
-use include_dir::include_dir as include_directory;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    io::{Result, Write},
-    path::PathBuf,
-};
-
-const PACKAGE_TEMPLATE: &str = r#"// swift-tools-version: 5.8
-import PackageDescription
-
-let package = Package(
-    name: "{{PACKAGE}}",
-    products: [
-        .library(
-            name: "{{PACKAGE}}",
-            targets: ["{{PACKAGE}}"])
-    ],
-    targets: [{{TARGETS}}]
-)
-"#;
-
-/// Main configuration object for code-generation in Swift.
-pub struct CodeGenerator<'a> {
-    /// Language-independent configuration.
-    config: &'a CodeGeneratorConfig,
-    /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" ->`com.my_org.my_package.MyClass`").
-    /// Derived from `config.external_definitions`.
-    external_qualified_names: HashMap<String, String>,
-}
 
 /// Shared state for the code generation of a Swift source file.
-struct SwiftEmitter<'a, T> {
+pub struct SwiftEmitter<'a, T> {
     /// Writer.
-    out: IndentedWriter<T>,
+    pub out: IndentedWriter<T>,
     /// Generator.
-    generator: &'a CodeGenerator<'a>,
+    pub generator: &'a CodeGenerator<'a>,
     /// Current namespace (e.g. vec!["Package", "`MyClass`"])
-    current_namespace: Vec<String>,
-}
-
-impl<'a> CodeGenerator<'a> {
-    /// Create a Swift code generator for the given config.
-    #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
-        assert!(
-            !config.c_style_enums,
-            "Swift does not support generating c-style enums"
-        );
-        let mut external_qualified_names = HashMap::new();
-        for (namespace, names) in &config.external_definitions {
-            let module = {
-                let path = namespace.rsplitn(2, '/').collect::<Vec<_>>();
-                if path.len() <= 1 { namespace } else { path[0] }
-            }
-            .to_upper_camel_case();
-            for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{module}.{name}"));
-            }
-        }
-        Self {
-            config,
-            external_qualified_names,
-        }
-    }
-
-    /// Output class definitions for `registry`.
-    pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> Result<()> {
-        let current_namespace = self
-            .config
-            .module_name
-            .split('.')
-            .map(AsUpperCamelCase)
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
-
-        let mut emitter = SwiftEmitter {
-            out: IndentedWriter::new(out, IndentConfig::Space(4)),
-            generator: self,
-            current_namespace,
-        };
-
-        emitter.output_preamble()?;
-
-        for (name, format) in registry {
-            emitter.output_container(&name.name, format)?;
-        }
-
-        if self.config.serialization {
-            writeln!(emitter.out)?;
-            emitter.output_trait_helpers(registry)?;
-        }
-
-        Ok(())
-    }
+    pub current_namespace: Vec<String>,
 }
 
 impl<T> SwiftEmitter<'_, T>
 where
     T: Write,
 {
-    fn output_preamble(&mut self) -> Result<()> {
-        writeln!(self.out, "import Serde\n")?;
-
-        for import in self
-            .generator
-            .config
-            .external_definitions
-            .keys()
+    pub fn output_preamble(&mut self) -> Result<()> {
+        let mut imports = ["Serde".to_string()]
+            .iter()
+            .chain(self.generator.config.external_definitions.keys())
+            .chain(self.generator.config.external_packages.keys())
             .map(AsUpperCamelCase)
-            .collect::<Vec<_>>()
-        {
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+        imports.sort();
+        imports.dedup();
+
+        for import in imports {
             writeln!(self.out, "import {import}")?;
         }
 
@@ -218,7 +133,7 @@ where
         self.current_namespace.pop();
     }
 
-    fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
+    pub fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
         let mut subtypes = BTreeMap::new();
         for format in registry.values() {
             format
@@ -796,7 +711,7 @@ switch index {{",
         Ok(())
     }
 
-    fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
+    pub fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
         use ContainerFormat::{Enum, NewTypeStruct, Struct, TupleStruct, UnitStruct};
         let fields = match format {
             UnitStruct => Vec::new(),
@@ -859,212 +774,5 @@ fn quote_deserialize(format: &Format) -> String {
             "try deserialize_{}(deserializer: deserializer)",
             common::mangle_type(format)
         ),
-    }
-}
-
-/// Installer for generated source files in Swift.
-pub struct Installer {
-    package_name: String,
-    install_dir: PathBuf,
-    targets: BTreeMap<String, BTreeSet<String>>,
-}
-
-impl Installer {
-    #[must_use]
-    pub fn new(package_name: String, install_dir: PathBuf) -> Self {
-        let mut targets = BTreeMap::new();
-        targets.insert("Serde".to_string(), BTreeSet::new());
-        Installer {
-            package_name,
-            install_dir,
-            targets,
-        }
-    }
-
-    fn install_runtime(
-        &self,
-        source_dir: &include_dir::Dir,
-        path: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let dir_path = self.install_dir.join(path);
-        std::fs::create_dir_all(&dir_path)?;
-        for entry in source_dir.files() {
-            let mut file = std::fs::File::create(dir_path.join(entry.path()))?;
-            file.write_all(entry.contents())?;
-        }
-        Ok(())
-    }
-
-    fn make_manifest(&self, package_name: &str) -> String {
-        let mut all_targets = self.targets.clone();
-
-        let mut package_targets = BTreeSet::new();
-        package_targets.insert("Serde".to_string());
-        for targets in all_targets.values() {
-            for target in targets {
-                package_targets.insert(target.to_upper_camel_case());
-            }
-        }
-        all_targets.insert(package_name.to_upper_camel_case(), package_targets);
-
-        let targets: Vec<String> = all_targets
-            .iter()
-            .map(|(name, dependencies)| {
-                format!(
-                    ".target(name: \"{name}\", dependencies: [{}]),",
-                    dependencies
-                        .iter()
-                        .map(|dep| format!("\"{dep}\""))
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                )
-            })
-            .collect();
-
-        PACKAGE_TEMPLATE
-            .replace("{{PACKAGE}}", &self.package_name)
-            .replace(
-                "{{TARGETS}}",
-                &format!("\n\t\t{}\n\t", &targets.join("\n\t\t")),
-            )
-    }
-}
-
-impl super::SourceInstaller for Installer {
-    type Error = Box<dyn std::error::Error>;
-
-    fn install_module(
-        &mut self,
-        config: &CodeGeneratorConfig,
-        registry: &Registry,
-    ) -> std::result::Result<(), Self::Error> {
-        let module_name = config.module_name().to_upper_camel_case();
-        let targets = self.targets.entry(module_name.clone()).or_default();
-        targets.insert("Serde".to_string());
-        for target in config.external_definitions.keys() {
-            targets.insert(target.clone());
-        }
-
-        let dir_path = self.install_dir.join("Sources").join(&module_name);
-        std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join(format!("{module_name}.swift"));
-        let mut file = std::fs::File::create(source_path)?;
-        let generator = CodeGenerator::new(config);
-        generator.output(&mut file, registry)?;
-        Ok(())
-    }
-
-    fn install_serde_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(
-            &include_directory!("runtime/swift/Sources/Serde"),
-            "Sources/Serde",
-        )
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {
-        // Ignored. Currently always installed with Serde.
-        Ok(())
-    }
-
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        // Ignored. Currently always installed with Serde.
-        Ok(())
-    }
-
-    fn install_manifest(
-        &self,
-        package_name: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let manifest = self.make_manifest(package_name);
-
-        let manifest_path = self.install_dir.join("Package.swift");
-        let mut file = std::fs::File::create(manifest_path)?;
-        file.write_all(manifest.as_bytes())?;
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use facet::Facet;
-
-    use crate::{
-        generation::{SourceInstaller as _, module::split},
-        reflection::RegistryBuilder,
-    };
-
-    use super::*;
-
-    #[test]
-    fn simple_manifest() {
-        let package_name = "MyPackage";
-        let install_dir = std::path::PathBuf::from("/tmp");
-        let installer = Installer::new(package_name.to_string(), install_dir);
-
-        let manifest = installer.make_manifest(package_name);
-        insta::assert_snapshot!(manifest, @r#"
-        // swift-tools-version: 5.8
-        import PackageDescription
-
-        let package = Package(
-            name: "MyPackage",
-            products: [
-                .library(
-                    name: "MyPackage",
-                    targets: ["MyPackage"])
-            ],
-            targets: [
-        		.target(name: "MyPackage", dependencies: ["Serde"]),
-        		.target(name: "Serde", dependencies: []),
-        	]
-        )
-        "#);
-    }
-
-    #[test]
-    fn manifest_with_namespaces() {
-        #[derive(Facet)]
-        #[facet(namespace = "my_namespace")]
-        struct Child {
-            name: String,
-        }
-
-        #[derive(Facet)]
-        struct Root {
-            child: Child,
-        }
-
-        let registry = RegistryBuilder::new().add_type::<Root>().build();
-
-        let package_name = "MyPackage";
-        let install_dir = std::path::PathBuf::from("/tmp");
-        let mut installer = Installer::new(package_name.to_string(), install_dir);
-
-        for (module, registry) in split(package_name, &registry) {
-            installer
-                .install_module(module.config(), &registry)
-                .unwrap();
-        }
-
-        let manifest = installer.make_manifest(package_name);
-        insta::assert_snapshot!(manifest, @r#"
-        // swift-tools-version: 5.8
-        import PackageDescription
-
-        let package = Package(
-            name: "MyPackage",
-            products: [
-                .library(
-                    name: "MyPackage",
-                    targets: ["MyPackage"])
-            ],
-            targets: [
-        		.target(name: "MyNamespace", dependencies: ["Serde"]),
-        		.target(name: "MyPackage", dependencies: ["MyNamespace", "Serde"]),
-        		.target(name: "Serde", dependencies: []),
-        	]
-        )
-        "#);
     }
 }

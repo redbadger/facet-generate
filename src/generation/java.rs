@@ -994,7 +994,7 @@ impl super::SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_serde_runtime(&self) -> std::result::Result<(), Self::Error> {
+    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
         self.install_runtime(
             &include_directory!("runtime/java/com/novi/serde"),
             "com/novi/serde",
