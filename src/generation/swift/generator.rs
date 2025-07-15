@@ -64,7 +64,7 @@ impl<'a> CodeGenerator<'a> {
             current_namespace,
         };
 
-        emitter.output_preamble(self.config.serialization)?;
+        emitter.output_preamble()?;
 
         for (name, format) in registry {
             emitter.output_container(&name.name, format)?;

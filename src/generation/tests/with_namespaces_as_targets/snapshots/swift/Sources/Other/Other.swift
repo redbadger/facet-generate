@@ -1,3 +1,4 @@
+import Serde
 
 public struct OtherChild: Hashable {
     @Indirect public var name: String
