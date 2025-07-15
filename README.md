@@ -1,14 +1,11 @@
-# `facet-generate` &middot; [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet-generate.svg)](https://crates.io/crates/facet-generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet-generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
+# `facet_generate` &middot; [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
 Reflect types annotated with [`#[Facet]`](https://crates.io/crates/facet) into Java, Swift, and TypeScript.
-
-### Notes:
-1. Currently, struct and enum renaming is implemented using `#[facet(name = "NewName")]`. To use `#[facet(rename = "NewName")]` we will probably require an upstream PR to facet.
 
 ### Usage
 
 ```sh
-cargo add facet facet-generate
+cargo add facet facet_generate
 ```
 
 ```rust

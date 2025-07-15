@@ -50,7 +50,7 @@ All notable changes to this project will be documented in this file.
 - *(facet_generate)* Add CI
 - *(facet_generate)* Tidy
 - *(facet_generate)* 0.2.0 and readme
-- *(facet-generate)* Deps and v0.2.1
+- *(facet_generate)* Deps and v0.2.1
 - Vendor serde crates
 - 0.3.0, + mit license
 - Add swift and deno to build.yaml
