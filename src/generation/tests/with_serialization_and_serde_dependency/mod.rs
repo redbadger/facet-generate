@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 use crate::{
     generation::{
-        ExternalPackage, SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
         typescript,
@@ -71,8 +71,8 @@ fn test() {
                     tmp_path.to_path_buf(),
                     vec![ExternalPackage {
                         for_namespace: "serde".to_string(),
-                        location: "https://github.com/serde-rs/serde".to_string(),
-                        version: Some("1.0.137".to_string()),
+                        location: PackageLocation::Path("../Serde".to_string()),
+                        version: None,
                     }],
                 );
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode

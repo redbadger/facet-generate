@@ -11,8 +11,7 @@ let package = Package(
     ],
     dependencies: [
         .package(
-            url: "https://github.com/serde-rs/serde",
-            from: "1.0.137"
+            path: "../Serde"
         )
     ],
     targets: [

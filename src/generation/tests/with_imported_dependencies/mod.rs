@@ -6,7 +6,7 @@ use tempfile::TempDir;
 
 use crate::{
     generation::{
-        ExternalPackage, SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift,
         tests::{check, find_files},
@@ -81,7 +81,7 @@ fn test() {
                     tmp_path.to_path_buf(),
                     vec![ExternalPackage {
                         for_namespace: "other".to_string(),
-                        location: "https://example.com/other".to_string(),
+                        location: PackageLocation::Url("https://example.com/other".to_string()),
                         version: Some("1.0.0".to_string()),
                     }],
                 );

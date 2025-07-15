@@ -173,8 +173,14 @@ impl Encoding {
 }
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PackageLocation {
+    Path(String),
+    Url(String),
+}
+
+#[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExternalPackage {
     pub for_namespace: String,
-    pub location: String,
+    pub location: PackageLocation,
     pub version: Option<String>,
 }

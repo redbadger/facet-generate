@@ -1,0 +1,3 @@
+- ~emit dependencies with `path:`~
+- emit Serde runtime as a standalone package
+- when Serde is standalone, emit dependencies instead of targets

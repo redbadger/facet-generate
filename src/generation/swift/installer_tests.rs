@@ -2,7 +2,8 @@ use facet::Facet;
 
 use crate::{
     generation::{
-        ExternalPackage, SourceInstaller as _, module::split, swift::installer::Installer,
+        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        swift::installer::Installer,
     },
     reflection::RegistryBuilder,
 };
@@ -43,6 +44,14 @@ fn simple_manifest() {
 
 #[test]
 fn manifest_with_serde_as_target() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+        name: String,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
@@ -51,6 +60,12 @@ fn manifest_with_serde_as_target() {
         install_dir.path().to_path_buf(),
         vec![],
     );
+
+    for (module, registry) in split(package_name, &registry) {
+        installer
+            .install_module(module.config(), &registry)
+            .unwrap();
+    }
 
     installer.install_serde_runtime().unwrap();
 
@@ -70,7 +85,7 @@ fn manifest_with_serde_as_target() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: []
+                dependencies: ["Serde"]
             ),
             .target(
                 name: "Serde",
@@ -82,19 +97,33 @@ fn manifest_with_serde_as_target() {
 }
 
 #[test]
-fn manifest_with_serde_as_dependency() {
+fn manifest_with_serde_as_a_remote_dependency() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+        name: String,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let installer = Installer::new(
+    let mut installer = Installer::new(
         package_name.to_string(),
         install_dir.path().to_path_buf(),
         vec![ExternalPackage {
             for_namespace: "serde".to_string(),
-            location: "https://github.com/serde-rs/serde".to_string(),
+            location: PackageLocation::Url("https://github.com/serde-rs/serde".to_string()),
             version: Some("1.0.137".to_string()),
         }],
     );
+
+    for (module, registry) in split(package_name, &registry) {
+        installer
+            .install_module(module.config(), &registry)
+            .unwrap();
+    }
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_snapshot!(manifest, @r#"
@@ -118,7 +147,64 @@ fn manifest_with_serde_as_dependency() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: []
+                dependencies: ["Serde"]
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn manifest_with_serde_as_a_local_dependency() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+        name: String,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+
+    let package_name = "MyPackage";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(
+        package_name.to_string(),
+        install_dir.path().to_path_buf(),
+        vec![ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: PackageLocation::Path("../Serde".to_string()),
+            version: None,
+        }],
+    );
+
+    for (module, registry) in split(package_name, &registry) {
+        installer
+            .install_module(module.config(), &registry)
+            .unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "MyPackage",
+        products: [
+            .library(
+                name: "MyPackage",
+                targets: ["MyPackage"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Serde"
+            )
+        ],
+        targets: [
+            .target(
+                name: "MyPackage",
+                dependencies: ["Serde"]
             ),
         ]
     )
@@ -182,7 +268,7 @@ fn manifest_with_namespaces() {
 }
 
 #[test]
-fn manifest_with_dependencies() {
+fn manifest_with_remote_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
@@ -191,7 +277,9 @@ fn manifest_with_dependencies() {
         install_dir.path().to_path_buf(),
         vec![ExternalPackage {
             for_namespace: "AnotherPackage".to_string(),
-            location: "https://github.com/example/another_package".to_string(),
+            location: PackageLocation::Url(
+                "https://github.com/example/another_package".to_string(),
+            ),
             version: Some("1.0".to_string()),
         }],
     );
@@ -248,7 +336,9 @@ fn manifest_with_namespaces_and_dependencies() {
         install_dir.path().to_path_buf(),
         vec![ExternalPackage {
             for_namespace: "another_package".to_string(),
-            location: "https://github.com/example/another_package".to_string(),
+            location: PackageLocation::Url(
+                "https://github.com/example/another_package".to_string(),
+            ),
             version: Some("1.0".to_string()),
         }],
     );
