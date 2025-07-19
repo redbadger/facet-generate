@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.7.1] - 2025-07-19
+
+### 🐛 Bug Fixes
+
+- fix handling of disjoint namespaces, which could be orphaned and are now referenced as top level library targets.
+
 ## [0.7.0] - 2025-07-15
 
 ### 🚀 Features
