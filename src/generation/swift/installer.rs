@@ -92,6 +92,30 @@ impl Installer {
             .map(|d| d.for_namespace.to_upper_camel_case())
             .collect();
 
+        // Find all dependencies referenced by any target
+        let mut all_dependencies = BTreeSet::new();
+        for dependencies in all_targets.values() {
+            for dep in dependencies {
+                all_dependencies.insert(dep.clone());
+            }
+        }
+
+        // Determine which targets are top-level (not dependencies of other targets)
+        let top_level_targets: Vec<String> = all_targets
+            .keys()
+            .filter(|name| {
+                !external_package_names.contains(*name) && !all_dependencies.contains(*name)
+            })
+            .cloned()
+            .collect();
+
+        // If no top-level targets found (all are dependencies), include the main package
+        let library_targets = if top_level_targets.is_empty() {
+            vec![package_name.to_string()]
+        } else {
+            top_level_targets
+        };
+
         let targets: Vec<String> = all_targets
             .iter()
             .filter(|(name, _)| !external_package_names.contains(*name))
@@ -112,6 +136,12 @@ impl Installer {
             })
             .collect();
 
+        let library_targets_str = library_targets
+            .iter()
+            .map(|t| format!(r#""{t}""#))
+            .collect::<Vec<_>>()
+            .join(", ");
+
         if self.external_packages.is_empty() {
             formatdoc! {r#"
                 // swift-tools-version: 5.8
@@ -122,13 +152,14 @@ impl Installer {
                     products: [
                         .library(
                             name: "{package}",
-                            targets: ["{package}"]
+                            targets: [{library_targets}]
                         )
                     ],
                     targets: [{targets}]
                 )
                 "#,
                 package = self.package_name,
+                library_targets = library_targets_str,
                 targets = format!("\n{}\n    ", targets.join("\n"))
             }
         } else {
@@ -150,7 +181,7 @@ impl Installer {
                     products: [
                         .library(
                             name: "{package}",
-                            targets: ["{package}"]
+                            targets: [{library_targets}]
                         )
                     ],
                     dependencies: [{dependencies}],
@@ -158,6 +189,7 @@ impl Installer {
                 )
                 "#,
                 package = self.package_name,
+                library_targets = library_targets_str,
                 dependencies = dependencies_section,
                 targets = format!("\n{}\n    ", targets.join("\n"))
             }
