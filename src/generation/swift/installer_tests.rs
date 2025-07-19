@@ -268,6 +268,65 @@ fn manifest_with_namespaces() {
 }
 
 #[test]
+fn manifest_with_disjoint_namespaces() {
+    #[derive(Facet)]
+    #[facet(namespace = "another_namespace")]
+    struct Another {
+        name: String,
+    }
+
+    #[derive(Facet)]
+    struct Root {
+        id: u32,
+    }
+
+    let registry = RegistryBuilder::new()
+        .add_type::<Root>()
+        .add_type::<Another>()
+        .build();
+
+    let package_name = "MyPackage";
+    let install_dir = tempfile::tempdir().unwrap();
+    let mut installer = Installer::new(
+        package_name.to_string(),
+        install_dir.path().to_path_buf(),
+        vec![],
+    );
+
+    for (module, registry) in split(package_name, &registry) {
+        installer
+            .install_module(module.config(), &registry)
+            .unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "MyPackage",
+        products: [
+            .library(
+                name: "MyPackage",
+                targets: ["AnotherNamespace", "MyPackage"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "AnotherNamespace",
+                dependencies: ["Serde"]
+            ),
+            .target(
+                name: "MyPackage",
+                dependencies: ["Serde"]
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
 fn manifest_with_remote_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -372,6 +431,74 @@ fn manifest_with_namespaces_and_dependencies() {
             .target(
                 name: "MyPackage",
                 dependencies: ["AnotherPackage", "Serde"]
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn manifest_with_disjoint_namespaces_and_dependencies() {
+    #[derive(Facet)]
+    #[facet(namespace = "another_namespace")]
+    struct Another {
+        name: String,
+    }
+
+    #[derive(Facet)]
+    struct Root {
+        id: u32,
+    }
+
+    let registry = RegistryBuilder::new()
+        .add_type::<Root>()
+        .add_type::<Another>()
+        .build();
+
+    let package_name = "MyPackage";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(
+        package_name.to_string(),
+        install_dir.path().to_path_buf(),
+        vec![ExternalPackage {
+            for_namespace: "another_namespace".to_string(),
+            location: PackageLocation::Url(
+                "https://github.com/example/another_package".to_string(),
+            ),
+            version: Some("1.0".to_string()),
+        }],
+    );
+
+    for (module, registry) in split(package_name, &registry) {
+        installer
+            .install_module(module.config(), &registry)
+            .unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "MyPackage",
+        products: [
+            .library(
+                name: "MyPackage",
+                targets: ["MyPackage"]
+            )
+        ],
+        dependencies: [
+            .package(
+                url: "https://github.com/example/another_package",
+                from: "1.0"
+            )
+        ],
+        targets: [
+            .target(
+                name: "MyPackage",
+                dependencies: ["Serde"]
             ),
         ]
     )
