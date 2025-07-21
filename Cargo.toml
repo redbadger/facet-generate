@@ -11,6 +11,7 @@ rust-version = "1.87"
 
 [dependencies]
 anyhow = "1.0.98"
+derive_builder = "0.20.2"
 erased-discriminant = "1"
 facet = "0.27.16"
 heck = "0.5.0"
