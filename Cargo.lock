@@ -1205,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "facet_generate"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "alloy-sol-types",
  "anyhow",

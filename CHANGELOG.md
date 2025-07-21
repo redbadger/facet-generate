@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.7.2] - 2025-07-21
+
+### 🚀 Features
+
+Adds a new Config object with associated builder for clients to use when configuring the generation process.
+
 ## [0.7.1] - 2025-07-19
 
 ### 🐛 Bug Fixes
