@@ -2,8 +2,12 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+};
 
+use derive_builder::Builder;
 use serde::Serialize;
 
 use crate::Registry;
@@ -169,6 +173,63 @@ impl Encoding {
             Encoding::Bincode => "bincode",
             Encoding::Bcs => "bcs",
         }
+    }
+}
+
+/// Configuration for foreign type generation.
+#[derive(Default, Builder)]
+#[builder(
+    custom_constructor,
+    create_empty = "empty",
+    build_fn(private, name = "fallible_build")
+)]
+pub struct Config {
+    /// The name of the package to generate.
+    #[builder(setter(into))]
+    pub package_name: String,
+    /// The directory to generate the types in.
+    #[builder(setter(into))]
+    pub out_dir: PathBuf,
+    /// External packages to reference.
+    #[builder(default = vec![], setter(each(name = "reference")))]
+    pub external_packages: Vec<ExternalPackage>,
+    /// Whether to add runtimes to the generated types.
+    #[builder(default = false, setter(custom))]
+    pub add_runtimes: bool,
+    /// Whether to add extensions to the generated types.
+    #[builder(default = false, setter(custom))]
+    pub add_extensions: bool,
+}
+
+impl Config {
+    pub fn builder(name: &str, out_dir: impl AsRef<Path>) -> ConfigBuilder {
+        ConfigBuilder {
+            package_name: Some(name.to_string()),
+            out_dir: Some(out_dir.as_ref().to_path_buf()),
+            ..ConfigBuilder::empty()
+        }
+    }
+}
+
+impl ConfigBuilder {
+    #[must_use]
+    pub fn add_runtimes(&mut self) -> &mut Self {
+        self.add_runtimes = Some(true);
+        self
+    }
+
+    #[must_use]
+    pub fn add_extensions(&mut self) -> &mut Self {
+        self.add_extensions = Some(true);
+        self
+    }
+
+    /// # Panics
+    /// If any required fields are not initialized.
+    #[must_use]
+    pub fn build(&self) -> Config {
+        self.fallible_build()
+            .expect("All required fields were initialized")
     }
 }
 
