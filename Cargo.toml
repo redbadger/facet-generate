@@ -1,6 +1,6 @@
 [package]
 name = "facet_generate"
-description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[Facet]`"
+description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
 version = "0.10.1"
 authors = ["Red Badger Consulting Limited"]
 repository = "https://github.com/redbadger/facet-generate"
