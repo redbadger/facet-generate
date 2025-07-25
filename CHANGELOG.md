@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.8.0] - 2025-07-25
+
+### 🚀 Features
+
+Updates to `facet` v0.28.0 and allows installer methods to take parameters by reference
+
 ## [0.7.2] - 2025-07-21
 
 ### 🚀 Features
