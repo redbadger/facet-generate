@@ -1,97 +1,28 @@
-// Copyright (c) Facebook, Inc. and its affiliates
-// SPDX-License-Identifier: MIT OR Apache-2.0
-#![allow(clippy::missing_errors_doc)]
+use std::{collections::BTreeMap, io::Write};
 
-use super::{
-    CodeGeneratorConfig, common,
-    indent::{IndentConfig, IndentedWriter},
-};
+use heck::ToUpperCamelCase;
+
 use crate::{
     Registry,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
-};
-use heck::ToUpperCamelCase;
-use include_dir::include_dir as include_directory;
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::{Result, Write},
-    path::{Path, PathBuf},
+    generation::{common, typescript::CodeGenerator},
+    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
-/// Main configuration object for code-generation in TypeScript, powered by
-/// the Deno runtime.
-pub struct CodeGenerator<'a> {
-    /// Language-independent configuration.
-    config: &'a CodeGeneratorConfig,
-    /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
-    /// Derived from `config.external_definitions`.
-    external_qualified_names: HashMap<String, String>,
-    /// vector of namespaces to import
-    namespaces_to_import: Vec<String>,
-}
+use super::super::indent::IndentedWriter;
 
 /// Shared state for the code generation of a TypeScript source file.
-struct TypeScriptEmitter<'a, T> {
+pub(crate) struct TypeScriptEmitter<'a, T> {
     /// Writer.
-    out: IndentedWriter<T>,
+    pub(crate) out: IndentedWriter<T>,
     /// Generator.
-    generator: &'a CodeGenerator<'a>,
-}
-
-impl<'a> CodeGenerator<'a> {
-    /// Create a TypeScript code generator for the given config.
-    #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
-        assert!(
-            !config.c_style_enums,
-            "TypeScript does not support generating c-style enums"
-        );
-        let mut external_qualified_names = HashMap::new();
-        for (namespace, names) in &config.external_definitions {
-            for name in names {
-                external_qualified_names.insert(
-                    name.to_string(),
-                    format!("{}.{}", namespace.to_upper_camel_case(), name),
-                );
-            }
-        }
-        Self {
-            config,
-            external_qualified_names,
-            namespaces_to_import: config
-                .external_definitions
-                .keys()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>(),
-        }
-    }
-
-    /// Output class definitions for `registry` in a single source file.
-    pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> Result<()> {
-        let mut emitter = TypeScriptEmitter {
-            out: IndentedWriter::new(out, IndentConfig::Space(2)),
-            generator: self,
-        };
-
-        emitter.output_preamble()?;
-
-        for (name, format) in registry {
-            emitter.output_container(&name.name, format)?;
-        }
-
-        if self.config.serialization {
-            emitter.output_helpers(registry)?;
-        }
-
-        Ok(())
-    }
+    pub(crate) generator: &'a CodeGenerator<'a>,
 }
 
 impl<T> TypeScriptEmitter<'_, T>
 where
     T: Write,
 {
-    fn output_preamble(&mut self) -> Result<()> {
+    pub fn output_preamble(&mut self) -> std::io::Result<()> {
         writeln!(
             self.out,
             r"
@@ -178,7 +109,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             .join(sep)
     }
 
-    fn output_helpers(&mut self, registry: &Registry) -> Result<()> {
+    pub fn output_helpers(&mut self, registry: &Registry) -> std::io::Result<()> {
         let mut subtypes = BTreeMap::new();
         for format in registry.values() {
             format
@@ -284,7 +215,7 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
         }
     }
 
-    fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> Result<()> {
+    fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
         write!(
@@ -376,7 +307,11 @@ value.forEach((item) =>{{
     }
 
     #[allow(clippy::too_many_lines)]
-    fn output_deserialization_helper(&mut self, name: &str, format0: &Format) -> Result<()> {
+    fn output_deserialization_helper(
+        &mut self,
+        name: &str,
+        format0: &Format,
+    ) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
         write!(
@@ -492,7 +427,7 @@ return list;
         index: u32,
         name: &str,
         variant: &VariantFormat,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         use VariantFormat::{NewType, Struct, Tuple, Unit, Variable};
         let fields = match variant {
             Unit => Vec::new(),
@@ -518,7 +453,7 @@ return list;
         &mut self,
         base: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         for (index, variant) in variants {
             self.output_variant(base, *index, &variant.name, &variant.value)?;
         }
@@ -531,7 +466,7 @@ return list;
         variant_index: Option<u32>,
         name: &str,
         fields: &[Named<Format>],
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         let mut variant_base_name = String::new();
 
         // Beginning of class
@@ -629,7 +564,7 @@ return list;
         &mut self,
         name: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         self.output_comment(name)?;
         writeln!(self.out, "export abstract class {name} {{")?;
         if self.generator.config.serialization {
@@ -670,7 +605,11 @@ switch (index) {{",
         Ok(())
     }
 
-    fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
+    pub fn output_container(
+        &mut self,
+        name: &str,
+        format: &ContainerFormat,
+    ) -> std::io::Result<()> {
         use ContainerFormat::{Enum, NewTypeStruct, Struct, TupleStruct, UnitStruct};
         let fields = match format {
             UnitStruct => Vec::new(),
@@ -693,64 +632,5 @@ switch (index) {{",
             }
         };
         self.output_struct_or_variant_container(None, None, name, &fields)
-    }
-}
-
-/// Installer for generated source files in TypeScript.
-pub struct Installer {
-    install_dir: PathBuf,
-}
-
-impl Installer {
-    #[must_use]
-    pub fn new(install_dir: impl AsRef<Path>) -> Self {
-        Installer {
-            install_dir: install_dir.as_ref().to_path_buf(),
-        }
-    }
-
-    fn install_runtime(
-        &self,
-        source_dir: &include_dir::Dir,
-        path: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let dir_path = self.install_dir.join(path);
-        std::fs::create_dir_all(&dir_path)?;
-        for entry in source_dir.files() {
-            let mut file = std::fs::File::create(dir_path.join(entry.path()))?;
-            file.write_all(entry.contents())?;
-        }
-        Ok(())
-    }
-}
-
-impl super::SourceInstaller for Installer {
-    type Error = Box<dyn std::error::Error>;
-
-    fn install_module(
-        &mut self,
-        config: &CodeGeneratorConfig,
-        registry: &Registry,
-    ) -> std::result::Result<(), Self::Error> {
-        let dir_path = self.install_dir.join(&config.module_name);
-        std::fs::create_dir_all(&dir_path)?;
-        let source_path = dir_path.join("mod.ts");
-        let mut file = std::fs::File::create(source_path)?;
-
-        let generator = CodeGenerator::new(config);
-        generator.output(&mut file, registry)?;
-        Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(&include_directory!("runtime/typescript/serde"), "serde")
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(&include_directory!("runtime/typescript/bincode"), "bincode")
-    }
-
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(&include_directory!("runtime/typescript/bcs"), "bcs")
     }
 }
