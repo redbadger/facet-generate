@@ -67,9 +67,9 @@ fn test() {
             "swift" => {
                 let package_name = "Example";
                 let mut installer = Installer::new(
-                    package_name.to_string(),
+                    package_name,
                     tmp_path.join(package_name),
-                    vec![ExternalPackage {
+                    &[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../Serde".to_string()),
                         version: None,
@@ -82,11 +82,7 @@ fn test() {
                 }
 
                 let package_name = "Serde";
-                let mut installer = Installer::new(
-                    package_name.to_string(),
-                    tmp_path.join(package_name),
-                    vec![],
-                );
+                let mut installer = Installer::new(package_name, tmp_path.join(package_name), &[]);
                 installer.install_serde_runtime().unwrap();
                 installer.install_manifest(package_name).unwrap();
             }

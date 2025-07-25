@@ -15,7 +15,7 @@ use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
     io::{Result, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     string::ToString,
 };
 
@@ -962,8 +962,10 @@ pub struct Installer {
 
 impl Installer {
     #[must_use]
-    pub fn new(install_dir: PathBuf) -> Self {
-        Installer { install_dir }
+    pub fn new(install_dir: impl AsRef<Path>) -> Self {
+        Installer {
+            install_dir: install_dir.as_ref().to_path_buf(),
+        }
     }
 
     fn install_runtime(

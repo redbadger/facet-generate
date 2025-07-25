@@ -13,11 +13,7 @@ fn simple_manifest() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![],
-    );
+    let installer = Installer::new(package_name, install_dir.path(), &[]);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_snapshot!(manifest, @r#"
@@ -55,11 +51,7 @@ fn manifest_with_serde_as_target() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![],
-    );
+    let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -110,9 +102,9 @@ fn manifest_with_serde_as_a_remote_dependency() {
     let install_dir = tempfile::tempdir().unwrap();
 
     let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![ExternalPackage {
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Url("https://github.com/serde-rs/serde".to_string()),
             version: Some("1.0.137".to_string()),
@@ -168,9 +160,9 @@ fn manifest_with_serde_as_a_local_dependency() {
     let install_dir = tempfile::tempdir().unwrap();
 
     let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![ExternalPackage {
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Path("../Serde".to_string()),
             version: None,
@@ -228,11 +220,7 @@ fn manifest_with_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![],
-    );
+    let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -287,11 +275,7 @@ fn manifest_with_disjoint_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![],
-    );
+    let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -332,9 +316,9 @@ fn manifest_with_remote_dependencies() {
     let install_dir = tempfile::tempdir().unwrap();
 
     let installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![ExternalPackage {
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
             for_namespace: "AnotherPackage".to_string(),
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
@@ -391,9 +375,9 @@ fn manifest_with_namespaces_and_dependencies() {
     let install_dir = tempfile::tempdir().unwrap();
 
     let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![ExternalPackage {
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
             for_namespace: "another_package".to_string(),
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
@@ -459,9 +443,9 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
     let install_dir = tempfile::tempdir().unwrap();
 
     let mut installer = Installer::new(
-        package_name.to_string(),
-        install_dir.path().to_path_buf(),
-        vec![ExternalPackage {
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
             for_namespace: "another_namespace".to_string(),
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
