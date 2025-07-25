@@ -82,11 +82,11 @@ impl RegistryBuilder {
         }
     }
 
-    fn format<'shape>(&mut self, shape: &'shape Shape<'shape>) {
+    fn format(&mut self, shape: &Shape) {
         self.process_type(shape, None);
     }
 
-    fn process_type<'shape>(&mut self, shape: &'shape Shape<'shape>, namespace: Option<&str>) {
+    fn process_type(&mut self, shape: &Shape, namespace: Option<&str>) {
         // First check for special cases in the def system (like Option)
         if let Def::Option(option_def) = shape.def {
             self.format_option(option_def, namespace);

@@ -50,7 +50,7 @@ fn test() {
         match target {
             "java" => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(tmp_path.to_path_buf());
+                let mut installer = java::Installer::new(tmp_path);
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
@@ -66,8 +66,7 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer =
-                    Installer::new(package_name.to_string(), tmp_path.to_path_buf(), vec![]);
+                let mut installer = Installer::new(package_name, tmp_path, &[]);
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
@@ -77,7 +76,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
+                let mut installer = typescript::Installer::new(tmp_path);
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();

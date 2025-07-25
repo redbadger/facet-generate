@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write as _,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use heck::ToUpperCamelCase as _;
@@ -28,29 +28,20 @@ pub struct Installer {
 impl Installer {
     #[must_use]
     pub fn new(
-        package_name: String,
-        install_dir: PathBuf,
-        external_packages: Vec<ExternalPackage>,
+        package_name: &str,
+        install_dir: impl AsRef<Path>,
+        external_packages: &[ExternalPackage],
     ) -> Self {
         let targets = BTreeMap::new();
 
         let external_packages = external_packages
-            .into_iter()
-            .map(|d| {
-                (
-                    d.for_namespace.clone(),
-                    ExternalPackage {
-                        for_namespace: d.for_namespace,
-                        location: d.location,
-                        version: d.version,
-                    },
-                )
-            })
+            .iter()
+            .map(|d| (d.for_namespace.clone(), d.clone()))
             .collect();
 
         Installer {
-            package_name,
-            install_dir,
+            package_name: package_name.to_string(),
+            install_dir: install_dir.as_ref().to_path_buf(),
             targets,
             external_packages,
         }

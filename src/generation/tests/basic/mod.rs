@@ -47,7 +47,7 @@ fn test() {
         match target {
             "java" => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(tmp_path.to_path_buf());
+                let mut installer = java::Installer::new(tmp_path);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
                     let is_root_package = package_name == this_module;
@@ -62,8 +62,7 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer =
-                    Installer::new(package_name.to_string(), tmp_path.to_path_buf(), vec![]);
+                let mut installer = Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();
@@ -72,7 +71,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
+                let mut installer = typescript::Installer::new(tmp_path);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();

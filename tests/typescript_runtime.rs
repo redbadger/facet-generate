@@ -15,7 +15,7 @@ fn test_typescript_runtime_bcs_serialization() {
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path.join("tests")).unwrap();
 
-    let mut installer = typescript::Installer::new(dir_path.to_path_buf());
+    let mut installer = typescript::Installer::new(dir_path);
     installer.install_serde_runtime().unwrap();
     installer.install_bcs_runtime().unwrap();
 
