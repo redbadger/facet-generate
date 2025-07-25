@@ -13,6 +13,7 @@ use crate::{
         ExternalPackage, PackageLocation, SourceInstaller as _,
         module::{self},
         swift::Installer,
+        typescript,
     },
     reflection::RegistryBuilder,
 };
@@ -78,8 +79,8 @@ fn test() {
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
 
                 let package_name = "Serde";
                 let mut installer = Installer::new(package_name, tmp_path.join(package_name), &[]);
@@ -87,13 +88,25 @@ fn test() {
                 installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
-                // let package_name = "example";
-                // let mut installer = typescript::Installer::new(tmp_path.to_path_buf());
-                // installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
-                // for (module, registry) in &module::split(package_name, &registry) {
-                //     let config = module.config();
-                //     installer.install_module(config, registry).unwrap();
-                // }
+                let package_name = "example";
+                let mut installer = typescript::Installer::new_with_external_packages(
+                    tmp_path.join(package_name),
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("../serde".to_string()),
+                        version: None,
+                    }],
+                );
+                for (module, registry) in &module::split(package_name, &registry) {
+                    let config = module.config();
+                    installer.install_module(config, registry).unwrap();
+                }
+                installer.install_manifest(package_name).unwrap();
+
+                let package_name = "serde";
+                let mut installer = typescript::Installer::new(tmp_path.join(package_name));
+                installer.install_serde_runtime().unwrap();
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }

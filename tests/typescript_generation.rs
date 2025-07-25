@@ -5,6 +5,7 @@ mod common;
 
 use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
 use regex::Regex;
+use serde_json::Value;
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -134,4 +135,24 @@ fn test_typescript_code_compiles_with_external_definitions() {
         .with_external_definitions(external_definitions);
 
     test_typescript_code_compiles_with_config(dir.path(), &config);
+}
+
+#[test]
+fn test_typescript_manifest_generation() {
+    let dir = tempdir().unwrap();
+
+    let installer = typescript::Installer::new(dir.path());
+    installer.install_manifest("my-typescript-package").unwrap();
+
+    // Check that package.json was created
+    let manifest_path = dir.path().join("package.json");
+    assert!(manifest_path.exists());
+
+    // Check that package.json has correct content
+    let manifest_content = std::fs::read_to_string(&manifest_path).unwrap();
+    let manifest: Value = serde_json::from_str(&manifest_content).unwrap();
+
+    assert_eq!(manifest["name"], "my-typescript-package");
+    assert_eq!(manifest["version"], "0.1.0");
+    assert_eq!(manifest["devDependencies"]["typescript"], "^5.8.3");
 }

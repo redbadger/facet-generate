@@ -244,10 +244,7 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_manifest(
-        &self,
-        package_name: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {
         let manifest = self.make_manifest(package_name);
 
         let manifest_path = self.install_dir.join("Package.swift");

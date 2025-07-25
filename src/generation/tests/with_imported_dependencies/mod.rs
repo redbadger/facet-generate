@@ -88,16 +88,26 @@ fn test() {
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path);
+                let mut installer = typescript::Installer::new_with_external_packages(
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Url(
+                            "https://registry.npmjs.org/other".to_string(),
+                        ),
+                        version: Some("^1.0.0".to_string()),
+                    }],
+                );
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }

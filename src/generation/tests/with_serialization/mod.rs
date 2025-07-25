@@ -66,19 +66,22 @@ fn test() {
             "swift" => {
                 let package_name = "Example";
                 let mut installer = Installer::new(package_name, tmp_path, &[]);
+                installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(tmp_path);
+                installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }

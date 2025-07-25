@@ -66,8 +66,8 @@ fn test() {
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
@@ -76,6 +76,7 @@ fn test() {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }
