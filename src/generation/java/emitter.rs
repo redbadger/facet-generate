@@ -1,146 +1,37 @@
-#![allow(clippy::missing_errors_doc)]
-// Copyright (c) Facebook, Inc. and its affiliates
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
-use super::{
-    CodeGeneratorConfig, Encoding, common,
-    indent::{IndentConfig, IndentedWriter},
-};
-use crate::{
-    Registry,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
-};
-use heck::ToUpperCamelCase;
-use include_dir::include_dir as include_directory;
 use std::{
     collections::{BTreeMap, HashMap},
-    io::{Result, Write},
-    path::{Path, PathBuf},
-    string::ToString,
+    io::Write,
 };
 
-/// Main configuration object for code-generation in Java.
-pub struct CodeGenerator<'a> {
-    /// Language-independent configuration.
-    config: &'a CodeGeneratorConfig,
-    /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
-    /// Derived from `config.external_definitions`.
-    external_qualified_names: HashMap<String, String>,
-}
+use heck::ToUpperCamelCase as _;
+
+use crate::{
+    generation::{common, indent::IndentedWriter, java::generator::CodeGenerator, Encoding},
+    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    Registry,
+};
 
 /// Shared state for the code generation of a Java source file.
-struct JavaEmitter<'a, T> {
+pub(crate) struct JavaEmitter<'a, T> {
     /// Writer.
-    out: IndentedWriter<T>,
+    pub(crate) out: IndentedWriter<T>,
     /// Generator.
-    generator: &'a CodeGenerator<'a>,
+    pub(crate) generator: &'a CodeGenerator<'a>,
     #[allow(clippy::doc_markdown)]
     /// Current namespace (e.g. vec!["com", "my_org", "my_package", "MyClass"])
-    current_namespace: Vec<String>,
+    pub(crate) current_namespace: Vec<String>,
     /// Current (non-qualified) generated class names that could clash with names in the registry
     /// (e.g. "Builder" or variant classes).
     /// * We count multiplicities to allow inplace backtracking.
     /// * Names in the registry are assumed to never clash.
-    current_reserved_names: HashMap<String, usize>,
-}
-
-impl<'a> CodeGenerator<'a> {
-    /// Create a Java code generator for the given config.
-    #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
-        assert!(
-            !config.c_style_enums,
-            "Java does not support generating c-style enums"
-        );
-        let mut external_qualified_names = HashMap::new();
-        let root_module = config.module_name();
-        for (namespace, names) in &config.external_definitions {
-            for name in names {
-                external_qualified_names.insert(
-                    name.to_string(),
-                    format!("{root_module}.{namespace}.{name}"),
-                );
-            }
-        }
-        Self {
-            config,
-            external_qualified_names,
-        }
-    }
-
-    /// Output class definitions for ` registry` in separate source files.
-    /// Source files will be created in a subdirectory of `install_dir` corresponding to the given
-    /// package name (if any, otherwise `install_dir` it self).
-    pub fn write_source_files(
-        &self,
-        install_dir: std::path::PathBuf,
-        registry: &Registry,
-    ) -> Result<()> {
-        let current_namespace = self
-            .config
-            .module_name
-            .split('.')
-            .map(String::from)
-            .collect::<Vec<_>>();
-
-        let mut dir_path = install_dir;
-        for part in &current_namespace {
-            dir_path = dir_path.join(part);
-        }
-        std::fs::create_dir_all(&dir_path)?;
-
-        for (name, format) in registry {
-            self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
-        }
-        if self.config.serialization {
-            self.write_helper_class(&dir_path, current_namespace, registry)?;
-        }
-        Ok(())
-    }
-
-    fn write_container_class(
-        &self,
-        dir_path: &std::path::Path,
-        current_namespace: Vec<String>,
-        name: &str,
-        format: &ContainerFormat,
-    ) -> Result<()> {
-        let mut file = std::fs::File::create(dir_path.join(name.to_string() + ".java"))?;
-        let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
-            generator: self,
-            current_namespace,
-            current_reserved_names: HashMap::new(),
-        };
-
-        emitter.output_preamble()?;
-        emitter.output_container(name, format)
-    }
-
-    fn write_helper_class(
-        &self,
-        dir_path: &std::path::Path,
-        current_namespace: Vec<String>,
-        registry: &Registry,
-    ) -> Result<()> {
-        let mut file = std::fs::File::create(dir_path.join("TraitHelpers.java"))?;
-        let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
-            generator: self,
-            current_namespace,
-            current_reserved_names: HashMap::new(),
-        };
-
-        emitter.output_preamble()?;
-        emitter.output_trait_helpers(registry)
-    }
+    pub(crate) current_reserved_names: HashMap<String, usize>,
 }
 
 impl<T> JavaEmitter<'_, T>
 where
     T: Write,
 {
-    fn output_preamble(&mut self) -> Result<()> {
+    pub(crate) fn output_preamble(&mut self) -> std::io::Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
 
         Ok(())
@@ -200,8 +91,8 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
+            Bool, Bytes, Char, Map, Option, Seq, Str, Tuple, TupleArray, TypeName, Unit, Variable,
+            F32, F64, I128, I16, I32, I64, I8, U128, U16, U32, U64, U8,
         };
         match format {
             TypeName(qualified_name) => {
@@ -278,7 +169,7 @@ where
             .join(", ")
     }
 
-    fn output_trait_helpers(&mut self, registry: &Registry) -> Result<()> {
+    pub(crate) fn output_trait_helpers(&mut self, registry: &Registry) -> std::io::Result<()> {
         let mut subtypes = BTreeMap::new();
         for format in registry.values() {
             format
@@ -311,8 +202,8 @@ where
 
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, Str, TypeName, Unit, F32, F64, I128, I16, I32, I64, I8, U128, U16,
+            U32, U64, U8,
         };
         match format {
             TypeName(_) => format!("{value}.serialize(serializer);"),
@@ -344,8 +235,8 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
+            Bool, Bytes, Char, Str, TypeName, Unit, F32, F64, I128, I16, I32, I64, I8, U128, U16,
+            U32, U64, U8,
         };
         match format {
             TypeName(qualified_name) => {
@@ -381,7 +272,7 @@ where
         }
     }
 
-    fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> Result<()> {
+    fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
         write!(
@@ -474,7 +365,11 @@ for ({1} item : value) {{
     }
 
     #[allow(clippy::too_many_lines)]
-    fn output_deserialization_helper(&mut self, name: &str, format0: &Format) -> Result<()> {
+    fn output_deserialization_helper(
+        &mut self,
+        name: &str,
+        format0: &Format,
+    ) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
         write!(
@@ -591,7 +486,7 @@ return obj;
         index: u32,
         name: &str,
         variant: &VariantFormat,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         use VariantFormat::{NewType, Struct, Tuple, Unit, Variable};
         let fields = match variant {
             Unit => Vec::new(),
@@ -617,7 +512,7 @@ return obj;
         &mut self,
         base: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         for (index, variant) in variants {
             self.output_variant(base, *index, &variant.name, &variant.value)?;
         }
@@ -631,7 +526,7 @@ return obj;
         variant_index: Option<u32>,
         name: &str,
         fields: &[Named<Format>],
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         // Beginning of class
         writeln!(self.out)?;
         if let Some(base) = variant_base {
@@ -794,7 +689,7 @@ if (getClass() != obj.getClass()) return false;
         &mut self,
         name: &str,
         fields: &[Named<Format>],
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         // Beginning of builder class
         writeln!(self.out)?;
         writeln!(self.out, "public static final class Builder {{")?;
@@ -837,7 +732,7 @@ if (getClass() != obj.getClass()) return false;
         &mut self,
         name: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         writeln!(self.out)?;
         self.output_comment(name)?;
         writeln!(self.out, "public abstract class {name} {{")?;
@@ -890,7 +785,7 @@ switch (index) {{",
         writeln!(self.out, "}}\n")
     }
 
-    fn output_class_serialize_for_encoding(&mut self, encoding: Encoding) -> Result<()> {
+    fn output_class_serialize_for_encoding(&mut self, encoding: Encoding) -> std::io::Result<()> {
         writeln!(
             self.out,
             r"
@@ -908,7 +803,7 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
         &mut self,
         name: &str,
         encoding: Encoding,
-    ) -> Result<()> {
+    ) -> std::io::Result<()> {
         writeln!(
             self.out,
             r#"
@@ -929,7 +824,11 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         )
     }
 
-    fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
+    pub(crate) fn output_container(
+        &mut self,
+        name: &str,
+        format: &ContainerFormat,
+    ) -> std::io::Result<()> {
         use ContainerFormat::{Enum, NewTypeStruct, Struct, TupleStruct, UnitStruct};
         let fields = match format {
             UnitStruct => Vec::new(),
@@ -952,68 +851,5 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
             }
         };
         self.output_struct_or_variant_container(None, None, name, &fields)
-    }
-}
-
-/// Installer for generated source files in Java.
-pub struct Installer {
-    install_dir: PathBuf,
-}
-
-impl Installer {
-    #[must_use]
-    pub fn new(install_dir: impl AsRef<Path>) -> Self {
-        Installer {
-            install_dir: install_dir.as_ref().to_path_buf(),
-        }
-    }
-
-    fn install_runtime(
-        &self,
-        source_dir: &include_dir::Dir,
-        path: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-        let dir_path = self.install_dir.join(path);
-        std::fs::create_dir_all(&dir_path)?;
-        for entry in source_dir.files() {
-            let mut file = std::fs::File::create(dir_path.join(entry.path()))?;
-            file.write_all(entry.contents())?;
-        }
-        Ok(())
-    }
-}
-
-impl super::SourceInstaller for Installer {
-    type Error = Box<dyn std::error::Error>;
-
-    fn install_module(
-        &mut self,
-        config: &CodeGeneratorConfig,
-        registry: &Registry,
-    ) -> std::result::Result<(), Self::Error> {
-        let generator = CodeGenerator::new(config);
-        generator.write_source_files(self.install_dir.clone(), registry)?;
-        Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(
-            &include_directory!("runtime/java/com/novi/serde"),
-            "com/novi/serde",
-        )
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(
-            &include_directory!("runtime/java/com/novi/bincode"),
-            "com/novi/bincode",
-        )
-    }
-
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(
-            &include_directory!("runtime/java/com/novi/bcs"),
-            "com/novi/bcs",
-        )
     }
 }
