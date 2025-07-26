@@ -1,4 +1,4 @@
-import * as Other from './other';
+import * as Other from 'other';
 
 export class Child {
 

@@ -85,7 +85,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path);
+                let mut installer = typescript::Installer::new(tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();

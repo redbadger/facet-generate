@@ -23,15 +23,7 @@ pub struct Installer {
 
 impl Installer {
     #[must_use]
-    pub fn new(install_dir: impl AsRef<Path>) -> Self {
-        Self::new_with_external_packages(install_dir, &[])
-    }
-
-    #[must_use]
-    pub fn new_with_external_packages(
-        install_dir: impl AsRef<Path>,
-        external_packages: &[ExternalPackage],
-    ) -> Self {
+    pub fn new(install_dir: impl AsRef<Path>, external_packages: &[ExternalPackage]) -> Self {
         let external_packages = external_packages
             .iter()
             .map(|d| (d.for_namespace.clone(), d.clone()))

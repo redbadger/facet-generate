@@ -10,7 +10,7 @@ use tempfile::TempDir;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, java,
+        ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
         typescript,
@@ -84,7 +84,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new_with_external_packages(
+                let mut installer = typescript::Installer::new(
                     tmp_path,
                     &[ExternalPackage {
                         for_namespace: "serde".to_string(),
@@ -93,9 +93,21 @@ fn test() {
                     }],
                 );
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
+                let external_packages: ExternalPackages = vec![ExternalPackage {
+                    for_namespace: "serde".to_string(),
+                    location: PackageLocation::Path("../serde".to_string()),
+                    version: None,
+                }]
+                .into_iter()
+                .map(|d| (d.for_namespace.clone(), d))
+                .collect();
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_import_locations(external_packages.clone());
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

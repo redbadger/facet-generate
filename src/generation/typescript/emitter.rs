@@ -34,11 +34,18 @@ import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64
             )?;
         }
         for namespace in &self.generator.namespaces_to_import {
+            let import_path =
+                if let Some(path) = self.generator.external_import_paths.get(namespace) {
+                    path.clone()
+                } else {
+                    format!("./{namespace}")
+                };
+
             writeln!(
                 self.out,
-                "import * as {} from './{}';\n",
+                "import * as {} from '{}';\n",
                 namespace.to_upper_camel_case(),
-                namespace
+                import_path
             )?;
         }
 

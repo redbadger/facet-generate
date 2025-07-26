@@ -22,6 +22,8 @@ pub struct CodeGenerator<'a> {
     pub(crate) external_qualified_names: HashMap<String, String>,
     /// vector of namespaces to import
     pub(crate) namespaces_to_import: Vec<String>,
+    /// Mapping from namespace to import path for external packages
+    pub(crate) external_import_paths: HashMap<String, String>,
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -41,6 +43,25 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
         }
+        let mut external_import_paths = HashMap::new();
+        for (namespace, external_package) in &config.external_packages {
+            let import_path = match &external_package.location {
+                crate::generation::PackageLocation::Url(url) => {
+                    // Extract package name from URL for npm packages
+                    if let Some(package_name) = url.split('/').next_back() {
+                        package_name.to_string()
+                    } else {
+                        namespace.clone()
+                    }
+                }
+                crate::generation::PackageLocation::Path(path) => {
+                    // For local packages, use relative path
+                    format!("./{}", path.trim_start_matches("../"))
+                }
+            };
+            external_import_paths.insert(namespace.clone(), import_path);
+        }
+
         Self {
             config,
             external_qualified_names,
@@ -49,6 +70,7 @@ impl<'a> CodeGenerator<'a> {
                 .keys()
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>(),
+            external_import_paths,
         }
     }
 

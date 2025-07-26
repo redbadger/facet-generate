@@ -76,7 +76,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path);
+                let mut installer = typescript::Installer::new(tmp_path, &[]);
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();

@@ -21,7 +21,7 @@ fn test_typescript_code_compiles_with_config(
     let registry = common::get_registry();
     make_output_file(dir_path);
 
-    let mut installer = typescript::Installer::new(dir_path);
+    let mut installer = typescript::Installer::new(dir_path, &[]);
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
@@ -141,7 +141,7 @@ fn test_typescript_code_compiles_with_external_definitions() {
 fn test_typescript_manifest_generation() {
     let dir = tempdir().unwrap();
 
-    let installer = typescript::Installer::new(dir.path());
+    let installer = typescript::Installer::new(dir.path(), &[]);
     installer.install_manifest("my-typescript-package").unwrap();
 
     // Check that package.json was created
