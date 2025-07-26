@@ -24,12 +24,14 @@ pub struct CodeGenerator<'a> {
     pub(crate) namespaces_to_import: Vec<String>,
     /// Mapping from namespace to import path for external packages
     pub(crate) external_import_paths: HashMap<String, String>,
+    /// Whether to generate extensionless imports (for React/Node.js compatibility)
+    pub(crate) extensionless_imports: bool,
 }
 
 impl<'a> CodeGenerator<'a> {
     /// Create a TypeScript code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig, extensionless_imports: bool) -> Self {
         assert!(
             !config.c_style_enums,
             "TypeScript does not support generating c-style enums"
@@ -71,6 +73,7 @@ impl<'a> CodeGenerator<'a> {
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>(),
             external_import_paths,
+            extensionless_imports,
         }
     }
 

@@ -21,7 +21,7 @@ fn test_typescript_code_compiles_with_config(
     let registry = common::get_registry();
     make_output_file(dir_path);
 
-    let mut installer = typescript::Installer::new(dir_path, &[]);
+    let mut installer = typescript::Installer::new(dir_path, &[], false);
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
@@ -31,7 +31,7 @@ fn test_typescript_code_compiles_with_config(
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::CodeGenerator::new(config);
+    let generator = typescript::CodeGenerator::new(config, false);
     generator.output(&mut source, &registry).unwrap();
 
     assert_deno_info(&source_path);
@@ -141,7 +141,7 @@ fn test_typescript_code_compiles_with_external_definitions() {
 fn test_typescript_manifest_generation() {
     let dir = tempdir().unwrap();
 
-    let installer = typescript::Installer::new(dir.path(), &[]);
+    let installer = typescript::Installer::new(dir.path(), &[], false);
     installer.install_manifest("my-typescript-package").unwrap();
 
     // Check that package.json was created
@@ -155,4 +155,77 @@ fn test_typescript_manifest_generation() {
     assert_eq!(manifest["name"], "my-typescript-package");
     assert_eq!(manifest["version"], "0.1.0");
     assert_eq!(manifest["devDependencies"]["typescript"], "^5.8.3");
+}
+
+#[test]
+fn test_typescript_code_generation_without_extensions() {
+    let dir = tempdir().unwrap();
+    let registry = common::get_registry();
+
+    // Test with extensionless_imports = true
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+
+    let mut installer = typescript::Installer::new(dir.path(), &[], true);
+    installer.install_module(&config, &registry).unwrap();
+    installer.install_serde_runtime().unwrap();
+    installer.install_bcs_runtime().unwrap();
+
+    // Check that the generated module file is index.ts instead of mod.ts
+    let module_path = dir.path().join("testing").join("index.ts");
+    assert!(module_path.exists());
+
+    // Check that the generated content doesn't have .ts extensions in imports
+    let content = std::fs::read_to_string(&module_path).unwrap();
+    assert!(content.contains("from '../serde/mod'"));
+    assert!(content.contains("from '../bcs/mod'"));
+    assert!(!content.contains("from '../serde/mod.ts'"));
+    assert!(!content.contains("from '../bcs/mod.ts'"));
+
+    // Check that runtime files were transformed
+    let serde_index = dir.path().join("serde").join("index.ts");
+    assert!(serde_index.exists());
+
+    let serde_content = std::fs::read_to_string(&serde_index).unwrap();
+    assert!(serde_content.contains("from \"./types\""));
+    assert!(!serde_content.contains("from \"./types.ts\""));
+
+    // Check that other serde files were also transformed
+    let binary_deserializer = dir.path().join("serde").join("binaryDeserializer.ts");
+    assert!(binary_deserializer.exists());
+
+    let binary_deserializer_content = std::fs::read_to_string(&binary_deserializer).unwrap();
+    assert!(binary_deserializer_content.contains("from \"./deserializer\""));
+    assert!(!binary_deserializer_content.contains("from \"./deserializer.ts\""));
+}
+
+#[test]
+fn test_typescript_code_generation_with_extensions() {
+    let dir = tempdir().unwrap();
+    let registry = common::get_registry();
+
+    // Test with extensionless_imports = false (default)
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+
+    let mut installer = typescript::Installer::new(dir.path(), &[], false);
+    installer.install_module(&config, &registry).unwrap();
+    installer.install_serde_runtime().unwrap();
+    installer.install_bcs_runtime().unwrap();
+
+    // Check that the generated module file is mod.ts
+    let module_path = dir.path().join("testing").join("mod.ts");
+    assert!(module_path.exists());
+
+    // Check that the generated content has .ts extensions in imports
+    let content = std::fs::read_to_string(&module_path).unwrap();
+    assert!(content.contains("from '../serde/mod.ts'"));
+    assert!(content.contains("from '../bcs/mod.ts'"));
+
+    // Check that runtime files kept original structure
+    let serde_mod = dir.path().join("serde").join("mod.ts");
+    assert!(serde_mod.exists());
+
+    let serde_content = std::fs::read_to_string(&serde_mod).unwrap();
+    assert!(serde_content.contains("from \"./types.ts\""));
 }

@@ -24,13 +24,18 @@ where
 {
     pub fn output_preamble(&mut self) -> std::io::Result<()> {
         if self.generator.config.serialization {
+            let ext = if self.generator.extensionless_imports {
+                ""
+            } else {
+                ".ts"
+            };
             writeln!(
                 self.out,
                 r"
-import {{ Serializer, Deserializer }} from '../serde/mod.ts';
-import {{ BcsSerializer, BcsDeserializer }} from '../bcs/mod.ts';
-import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde/mod.ts';
-",
+import {{ Serializer, Deserializer }} from '../serde/mod{ext}';
+import {{ BcsSerializer, BcsDeserializer }} from '../bcs/mod{ext}';
+import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde/mod{ext}';
+"
             )?;
         }
         for namespace in &self.generator.namespaces_to_import {

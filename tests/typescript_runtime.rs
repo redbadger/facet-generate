@@ -15,7 +15,7 @@ fn test_typescript_runtime_bcs_serialization() {
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path.join("tests")).unwrap();
 
-    let mut installer = typescript::Installer::new(dir_path, &[]);
+    let mut installer = typescript::Installer::new(dir_path, &[], false);
     installer.install_serde_runtime().unwrap();
     installer.install_bcs_runtime().unwrap();
 
@@ -24,7 +24,7 @@ fn test_typescript_runtime_bcs_serialization() {
 
     let runtime = Runtime::Bcs;
     let config = CodeGeneratorConfig::new("main".to_string()).with_encodings(vec![runtime.into()]);
-    let generator = typescript::CodeGenerator::new(&config);
+    let generator = typescript::CodeGenerator::new(&config, false);
     generator.output(&mut source, &registry).unwrap();
 
     let reference = runtime.serialize(&Test {

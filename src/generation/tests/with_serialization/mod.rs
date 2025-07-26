@@ -6,7 +6,7 @@ use std::{
 use expect_test::{ExpectFile, expect_file};
 use facet::Facet;
 use ignore::WalkBuilder;
-use tempfile::TempDir;
+use tempfile::tempdir;
 
 use crate::{
     generation::{
@@ -41,7 +41,7 @@ fn test() {
         .join("snapshots");
 
     for target in ["java", "swift", "typescript"] {
-        let tmp_dir = TempDir::new().unwrap();
+        let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
         let snapshot_dir = this_dir.join(target);
@@ -75,7 +75,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[]);
+                let mut installer = typescript::Installer::new(tmp_path, &[], false);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();

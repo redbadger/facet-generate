@@ -2,7 +2,7 @@ use std::{env, fs, path::PathBuf};
 
 use expect_test::expect_file;
 use facet::Facet;
-use tempfile::TempDir;
+use tempfile::tempdir;
 
 use crate::{
     generation::{
@@ -53,7 +53,7 @@ fn test() {
         .join("snapshots");
 
     for target in ["java", "swift", "typescript"] {
-        let tmp_dir = TempDir::new().unwrap();
+        let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
         let snapshot_dir = this_dir.join(target);
@@ -105,6 +105,7 @@ fn test() {
                         ),
                         version: Some("^1.0.0".to_string()),
                     }],
+                    false,
                 );
                 let external_packages: ExternalPackages = vec![ExternalPackage {
                     for_namespace: "other".to_string(),

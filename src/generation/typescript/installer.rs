@@ -16,14 +16,33 @@ use crate::{
 };
 
 /// Installer for generated source files in TypeScript.
+///
+/// # Examples
+///
+/// ```rust
+/// use facet_generate::generation::typescript;
+///
+/// let output_dir = std::path::PathBuf::from("output");
+///
+/// // For Deno (with .ts extensions) - default behavior
+/// let installer = typescript::Installer::new(&output_dir, &[], false);
+///
+/// // For React/Node.js (extensionless imports)
+/// let installer = typescript::Installer::new(&output_dir, &[], true);
+/// ```
 pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
+    extensionless_imports: bool,
 }
 
 impl Installer {
     #[must_use]
-    pub fn new(install_dir: impl AsRef<Path>, external_packages: &[ExternalPackage]) -> Self {
+    pub fn new(
+        install_dir: impl AsRef<Path>,
+        external_packages: &[ExternalPackage],
+        extensionless_imports: bool,
+    ) -> Self {
         let external_packages = external_packages
             .iter()
             .map(|d| (d.for_namespace.clone(), d.clone()))
@@ -32,6 +51,7 @@ impl Installer {
         Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages,
+            extensionless_imports,
         }
     }
 
@@ -43,10 +63,55 @@ impl Installer {
         let dir_path = self.install_dir.join(path);
         std::fs::create_dir_all(&dir_path)?;
         for entry in source_dir.files() {
-            let mut file = std::fs::File::create(dir_path.join(entry.path()))?;
-            file.write_all(entry.contents())?;
+            let (file_name, content) = self.transform_runtime_file(entry)?;
+            let mut file = std::fs::File::create(dir_path.join(file_name))?;
+            file.write_all(&content)?;
         }
         Ok(())
+    }
+
+    fn transform_imports(content: &str) -> String {
+        // Transform imports and exports to remove .ts extensions
+        content
+            .lines()
+            .map(|line| {
+                let trimmed = line.trim_start();
+                if (trimmed.starts_with("import") || trimmed.starts_with("export"))
+                    && line.contains(".ts")
+                {
+                    // Remove .ts extensions from import and export statements
+                    line.replace(".ts\"", "\"").replace(".ts'", "'")
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn transform_runtime_file(
+        &self,
+        entry: &include_dir::File,
+    ) -> Result<(String, Vec<u8>), Box<dyn std::error::Error>> {
+        let file_name = if self.extensionless_imports
+            && entry.path().file_name() == Some(std::ffi::OsStr::new("mod.ts"))
+        {
+            "index.ts".to_string()
+        } else {
+            entry.path().to_string_lossy().to_string()
+        };
+
+        let content = if self.extensionless_imports {
+            // Strip .ts extensions from imports and exports
+            let content_str = std::str::from_utf8(entry.contents())?;
+            let transformed = Self::transform_imports(content_str);
+            transformed.into_bytes()
+        } else {
+            // Keep original content with .ts extensions
+            entry.contents().to_vec()
+        };
+
+        Ok((file_name, content))
     }
 
     #[must_use]
@@ -126,10 +191,15 @@ impl SourceInstaller for Installer {
         if should_install_module {
             let dir_path = self.install_dir.join(&config.module_name);
             std::fs::create_dir_all(&dir_path)?;
-            let source_path = dir_path.join("mod.ts");
+            let file_name = if self.extensionless_imports {
+                "index.ts" // Use index.ts for extensionless imports
+            } else {
+                "mod.ts"
+            };
+            let source_path = dir_path.join(file_name);
             let mut file = std::fs::File::create(source_path)?;
 
-            let generator = CodeGenerator::new(config);
+            let generator = CodeGenerator::new(config, self.extensionless_imports);
             generator.output(&mut file, registry)?;
         }
 
