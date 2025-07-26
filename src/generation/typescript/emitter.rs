@@ -23,14 +23,16 @@ where
     T: Write,
 {
     pub fn output_preamble(&mut self) -> std::io::Result<()> {
-        writeln!(
-            self.out,
-            r"
+        if self.generator.config.serialization {
+            writeln!(
+                self.out,
+                r"
 import {{ Serializer, Deserializer }} from '../serde/mod.ts';
 import {{ BcsSerializer, BcsDeserializer }} from '../bcs/mod.ts';
 import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde/mod.ts';
 ",
-        )?;
+            )?;
+        }
         for namespace in &self.generator.namespaces_to_import {
             writeln!(
                 self.out,
