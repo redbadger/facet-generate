@@ -11,7 +11,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller,
-        typescript::CodeGenerator,
+        typescript::{CodeGenerator, InstallTarget},
     },
 };
 
@@ -20,20 +20,20 @@ use crate::{
 /// # Examples
 ///
 /// ```rust
-/// use facet_generate::generation::typescript;
+/// use facet_generate::generation::typescript::{self, InstallTarget};
 ///
 /// let output_dir = std::path::PathBuf::from("output");
 ///
-/// // For Deno (with .ts extensions) - default behavior
-/// let installer = typescript::Installer::new(&output_dir, &[], false);
+/// // For Deno (with .ts extensions)
+/// let installer = typescript::Installer::new(&output_dir, &[], InstallTarget::Deno);
 ///
 /// // For React/Node.js (extensionless imports)
-/// let installer = typescript::Installer::new(&output_dir, &[], true);
+/// let installer = typescript::Installer::new(&output_dir, &[], InstallTarget::Node);
 /// ```
 pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    extensionless_imports: bool,
+    target: InstallTarget,
 }
 
 impl Installer {
@@ -41,7 +41,7 @@ impl Installer {
     pub fn new(
         install_dir: impl AsRef<Path>,
         external_packages: &[ExternalPackage],
-        extensionless_imports: bool,
+        target: InstallTarget,
     ) -> Self {
         let external_packages = external_packages
             .iter()
@@ -51,7 +51,7 @@ impl Installer {
         Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages,
-            extensionless_imports,
+            target,
         }
     }
 
@@ -93,22 +93,28 @@ impl Installer {
         &self,
         entry: &include_dir::File,
     ) -> Result<(String, Vec<u8>), Box<dyn std::error::Error>> {
-        let file_name = if self.extensionless_imports
-            && entry.path().file_name() == Some(std::ffi::OsStr::new("mod.ts"))
-        {
-            "index.ts".to_string()
-        } else {
-            entry.path().to_string_lossy().to_string()
+        let file_name = match self.target {
+            InstallTarget::Node => {
+                if entry.path().file_name() == Some(std::ffi::OsStr::new("mod.ts")) {
+                    "index.ts".to_string()
+                } else {
+                    entry.path().to_string_lossy().to_string()
+                }
+            }
+            InstallTarget::Deno => entry.path().to_string_lossy().to_string(),
         };
 
-        let content = if self.extensionless_imports {
-            // Strip .ts extensions from imports and exports
-            let content_str = std::str::from_utf8(entry.contents())?;
-            let transformed = Self::transform_imports(content_str);
-            transformed.into_bytes()
-        } else {
-            // Keep original content with .ts extensions
-            entry.contents().to_vec()
+        let content = match self.target {
+            InstallTarget::Node => {
+                // Strip .ts extensions from imports and exports
+                let content_str = std::str::from_utf8(entry.contents())?;
+                let transformed = Self::transform_imports(content_str);
+                transformed.into_bytes()
+            }
+            InstallTarget::Deno => {
+                // Keep original content with .ts extensions
+                entry.contents().to_vec()
+            }
         };
 
         Ok((file_name, content))
@@ -191,15 +197,14 @@ impl SourceInstaller for Installer {
         if should_install_module {
             let dir_path = self.install_dir.join(&config.module_name);
             std::fs::create_dir_all(&dir_path)?;
-            let file_name = if self.extensionless_imports {
-                "index.ts" // Use index.ts for extensionless imports
-            } else {
-                "mod.ts"
+            let file_name = match self.target {
+                InstallTarget::Node => "index.ts",
+                InstallTarget::Deno => "mod.ts",
             };
             let source_path = dir_path.join(file_name);
             let mut file = std::fs::File::create(source_path)?;
 
-            let generator = CodeGenerator::new(config, self.extensionless_imports);
+            let generator = CodeGenerator::new(config, self.target);
             generator.output(&mut file, registry)?;
         }
 
@@ -207,15 +212,27 @@ impl SourceInstaller for Installer {
     }
 
     fn install_serde_runtime(&mut self) -> Result<(), Self::Error> {
-        self.install_runtime(&include_dir!("runtime/typescript/serde"), "serde")
+        let dir = match self.target {
+            InstallTarget::Node => include_dir!("runtime/typescript-node/serde"),
+            InstallTarget::Deno => include_dir!("runtime/typescript-deno/serde"),
+        };
+        self.install_runtime(&dir, "serde")
     }
 
     fn install_bincode_runtime(&self) -> Result<(), Self::Error> {
-        self.install_runtime(&include_dir!("runtime/typescript/bincode"), "bincode")
+        let dir = match self.target {
+            InstallTarget::Node => include_dir!("runtime/typescript-node/bincode"),
+            InstallTarget::Deno => include_dir!("runtime/typescript-deno/bincode"),
+        };
+        self.install_runtime(&dir, "bincode")
     }
 
     fn install_bcs_runtime(&self) -> Result<(), Self::Error> {
-        self.install_runtime(&include_dir!("runtime/typescript/bcs"), "bcs")
+        let dir = match self.target {
+            InstallTarget::Node => include_dir!("runtime/typescript-node/bcs"),
+            InstallTarget::Deno => include_dir!("runtime/typescript-deno/bcs"),
+        };
+        self.install_runtime(&dir, "bcs")
     }
 
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {

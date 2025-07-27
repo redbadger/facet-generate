@@ -13,7 +13,7 @@ use crate::{
         SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
-        typescript,
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
@@ -76,7 +76,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], false);
+                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();

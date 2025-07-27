@@ -3,15 +3,12 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  */
 
-import { Deserializer } from "./deserializer.ts";
-import * as util from "https://deno.land/std@0.85.0/node/util.ts";
+import { Deserializer } from "./deserializer";
 
 export abstract class BinaryDeserializer implements Deserializer {
   private static readonly BIG_32: bigint = BigInt(32);
   private static readonly BIG_64: bigint = BigInt(64);
-  private static readonly textDecoder = typeof window === "undefined"
-    ? new util.TextDecoder()
-    : new TextDecoder();
+  private static readonly textDecoder = new TextDecoder();
   public buffer: ArrayBuffer;
   public offset: number;
 
@@ -110,8 +107,10 @@ export abstract class BinaryDeserializer implements Deserializer {
     const high = this.deserializeI32();
 
     // combine the two 32-bit values and return (little endian)
-    return (BigInt(high.toString()) << BinaryDeserializer.BIG_32) |
-      BigInt(low.toString());
+    return (
+      (BigInt(high.toString()) << BinaryDeserializer.BIG_32) |
+      BigInt(low.toString())
+    );
   }
 
   public deserializeI128(): bigint {
@@ -119,8 +118,10 @@ export abstract class BinaryDeserializer implements Deserializer {
     const high = this.deserializeI64();
 
     // combine the two 64-bit values and return (little endian)
-    return (BigInt(high.toString()) << BinaryDeserializer.BIG_64) |
-      BigInt(low.toString());
+    return (
+      (BigInt(high.toString()) << BinaryDeserializer.BIG_64) |
+      BigInt(low.toString())
+    );
   }
 
   public deserializeOptionTag(): boolean {

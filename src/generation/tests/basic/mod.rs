@@ -10,7 +10,7 @@ use crate::{
         module::{self, Module},
         swift::Installer,
         tests::{check, find_files},
-        typescript,
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
@@ -71,7 +71,7 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], false);
+                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_serialization(false);
                     installer.install_module(&config, registry).unwrap();

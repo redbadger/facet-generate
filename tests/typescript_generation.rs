@@ -3,7 +3,10 @@
 
 mod common;
 
-use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
+use facet_generate::generation::{
+    CodeGeneratorConfig, Encoding, SourceInstaller,
+    typescript::{self, InstallTarget},
+};
 use regex::Regex;
 use serde_json::Value;
 use std::{
@@ -21,7 +24,7 @@ fn test_typescript_code_compiles_with_config(
     let registry = common::get_registry();
     make_output_file(dir_path);
 
-    let mut installer = typescript::Installer::new(dir_path, &[], false);
+    let mut installer = typescript::Installer::new(dir_path, &[], InstallTarget::Deno);
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
@@ -31,7 +34,7 @@ fn test_typescript_code_compiles_with_config(
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::CodeGenerator::new(config, false);
+    let generator = typescript::CodeGenerator::new(config, InstallTarget::Deno);
     generator.output(&mut source, &registry).unwrap();
 
     assert_deno_info(&source_path);
@@ -141,7 +144,7 @@ fn test_typescript_code_compiles_with_external_definitions() {
 fn test_typescript_manifest_generation() {
     let dir = tempdir().unwrap();
 
-    let installer = typescript::Installer::new(dir.path(), &[], false);
+    let installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
     installer.install_manifest("my-typescript-package").unwrap();
 
     // Check that package.json was created
@@ -166,7 +169,7 @@ fn test_typescript_code_generation_without_extensions() {
     let config =
         CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
 
-    let mut installer = typescript::Installer::new(dir.path(), &[], true);
+    let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Node);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bcs_runtime().unwrap();
@@ -208,7 +211,7 @@ fn test_typescript_code_generation_with_extensions() {
     let config =
         CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
 
-    let mut installer = typescript::Installer::new(dir.path(), &[], false);
+    let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bcs_runtime().unwrap();

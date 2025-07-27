@@ -3,8 +3,9 @@ use serde_json::Value;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
-        typescript::installer::Installer,
+        ExternalPackage, PackageLocation, SourceInstaller as _,
+        module::split,
+        typescript::{InstallTarget, installer::Installer},
     },
     reflection::RegistryBuilder,
 };
@@ -14,7 +15,7 @@ fn simple_manifest() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let installer = Installer::new(install_dir.path(), &[], false);
+    let installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
     let expected: Value = serde_json::json!({
@@ -46,7 +47,7 @@ fn manifest_with_dependencies() {
         },
     ];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, false);
+    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
     let expected: Value = serde_json::json!({
@@ -75,7 +76,7 @@ fn manifest_with_local_dependencies() {
         version: None,
     }];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, false);
+    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
     let expected: Value = serde_json::json!({
@@ -110,7 +111,7 @@ fn manifest_with_mixed_dependencies() {
         },
     ];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, false);
+    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
     let expected: Value = serde_json::json!({
@@ -141,7 +142,7 @@ fn manifest_with_serde_module() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer = Installer::new(install_dir.path(), &[], false);
+    let mut installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -180,7 +181,7 @@ fn manifest_with_namespaces() {
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(install_dir.path(), &[], false);
+    let mut installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -224,7 +225,7 @@ fn manifest_with_external_namespace_dependencies() {
         version: Some("^1.0.0".to_string()),
     }];
 
-    let mut installer = Installer::new(install_dir.path(), &external_packages, false);
+    let mut installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -258,7 +259,7 @@ fn manifest_with_scoped_package() {
         version: Some("^20.0.0".to_string()),
     }];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, false);
+    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
     let expected: Value = serde_json::json!({

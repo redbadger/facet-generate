@@ -8,7 +8,7 @@ use crate::{
     reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
-use super::super::indent::IndentedWriter;
+use super::{super::indent::IndentedWriter, InstallTarget};
 
 /// Shared state for the code generation of a TypeScript source file.
 pub(crate) struct TypeScriptEmitter<'a, T> {
@@ -24,17 +24,16 @@ where
 {
     pub fn output_preamble(&mut self) -> std::io::Result<()> {
         if self.generator.config.serialization {
-            let ext = if self.generator.extensionless_imports {
-                ""
-            } else {
-                ".ts"
+            let index = match self.generator.target {
+                InstallTarget::Node => "",
+                InstallTarget::Deno => "/mod.ts",
             };
             writeln!(
                 self.out,
                 r"
-import {{ Serializer, Deserializer }} from '../serde/mod{ext}';
-import {{ BcsSerializer, BcsDeserializer }} from '../bcs/mod{ext}';
-import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde/mod{ext}';
+import {{ Serializer, Deserializer }} from '../serde{index}';
+import {{ BcsSerializer, BcsDeserializer }} from '../bcs{index}';
+import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde{index}';
 "
             )?;
         }

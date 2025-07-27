@@ -13,7 +13,7 @@ use crate::{
         ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
-        typescript,
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
@@ -91,7 +91,7 @@ fn test() {
                         location: PackageLocation::Path("../serde".to_string()),
                         version: None,
                     }],
-                    false,
+                    InstallTarget::Node,
                 );
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
                 let external_packages: ExternalPackages = vec![ExternalPackage {

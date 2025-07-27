@@ -5,12 +5,11 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{
+        CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
-        typescript::emitter::TypeScriptEmitter,
+        typescript::{InstallTarget, emitter::TypeScriptEmitter},
     },
 };
-
-use super::super::CodeGeneratorConfig;
 
 /// Main configuration object for code-generation in TypeScript, powered by
 /// the Deno runtime.
@@ -25,13 +24,13 @@ pub struct CodeGenerator<'a> {
     /// Mapping from namespace to import path for external packages
     pub(crate) external_import_paths: HashMap<String, String>,
     /// Whether to generate extensionless imports (for React/Node.js compatibility)
-    pub(crate) extensionless_imports: bool,
+    pub(crate) target: InstallTarget,
 }
 
 impl<'a> CodeGenerator<'a> {
     /// Create a TypeScript code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig, extensionless_imports: bool) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig, target: InstallTarget) -> Self {
         assert!(
             !config.c_style_enums,
             "TypeScript does not support generating c-style enums"
@@ -73,7 +72,7 @@ impl<'a> CodeGenerator<'a> {
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>(),
             external_import_paths,
-            extensionless_imports,
+            target,
         }
     }
 

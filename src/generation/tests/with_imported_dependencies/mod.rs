@@ -10,7 +10,7 @@ use crate::{
         module::{self, Module},
         swift,
         tests::{check, find_files},
-        typescript,
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
@@ -103,7 +103,7 @@ fn test() {
                         ),
                         version: Some("^1.0.0".to_string()),
                     }],
-                    false,
+                    InstallTarget::Node,
                 );
                 let external_packages: ExternalPackages = vec![ExternalPackage {
                     for_namespace: "other".to_string(),
