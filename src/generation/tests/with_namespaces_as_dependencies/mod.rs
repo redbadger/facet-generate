@@ -71,7 +71,7 @@ fn test() {
                     } else {
                         &Module::new([package_name, this_module].join("."))
                     };
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -89,7 +89,7 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
@@ -120,7 +120,7 @@ fn test() {
                     let config = module
                         .config()
                         .clone()
-                        .with_serialization(false)
+                        .without_serialization()
                         .with_import_locations(external_packages.clone());
                     installer.install_module(&config, registry).unwrap();
                 }

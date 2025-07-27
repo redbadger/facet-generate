@@ -206,7 +206,7 @@ impl SourceInstaller for Installer {
                 targets.insert(target.clone());
             }
 
-            if config.serialization {
+            if config.serialization.is_enabled() {
                 targets.insert("Serde".to_string());
             }
 

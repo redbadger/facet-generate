@@ -4,7 +4,7 @@ mod common;
 
 use common::{Choice, Runtime, Test};
 use facet_generate::generation::{
-    CodeGeneratorConfig, SourceInstaller,
+    CodeGeneratorConfig, Serialization, SourceInstaller,
     typescript::{self, InstallTarget},
 };
 use heck::ToUpperCamelCase;
@@ -26,7 +26,9 @@ fn test_typescript_runtime_bcs_serialization() {
     let mut source = File::create(&source_path).unwrap();
 
     let runtime = Runtime::Bcs;
-    let config = CodeGeneratorConfig::new("main".to_string()).with_encodings(vec![runtime.into()]);
+    let config = CodeGeneratorConfig::new("main".to_string())
+        .with_encodings([runtime.into()])
+        .with_serialization(Serialization::Bcs);
     let generator = typescript::CodeGenerator::new(&config, InstallTarget::Deno);
     generator.output(&mut source, &registry).unwrap();
 

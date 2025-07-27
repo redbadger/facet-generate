@@ -6,9 +6,9 @@ use std::{
 use heck::ToUpperCamelCase as _;
 
 use crate::{
-    generation::{common, indent::IndentedWriter, java::generator::CodeGenerator, Encoding},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
     Registry,
+    generation::{Encoding, common, indent::IndentedWriter, java::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Java source file.
@@ -91,8 +91,8 @@ where
 
     fn quote_type(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, Map, Option, Seq, Str, Tuple, TupleArray, TypeName, Unit, Variable,
-            F32, F64, I128, I16, I32, I64, I8, U128, U16, U32, U64, U8,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
+            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
             TypeName(qualified_name) => {
@@ -202,8 +202,8 @@ where
 
     fn quote_serialize_value(&self, value: &str, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, Str, TypeName, Unit, F32, F64, I128, I16, I32, I64, I8, U128, U16,
-            U32, U64, U8,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
             TypeName(_) => format!("{value}.serialize(serializer);"),
@@ -235,8 +235,8 @@ where
 
     fn quote_deserialize(&self, format: &Format) -> String {
         use Format::{
-            Bool, Bytes, Char, Str, TypeName, Unit, F32, F64, I128, I16, I32, I64, I8, U128, U16,
-            U32, U64, U8,
+            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
+            U128, Unit,
         };
         match format {
             TypeName(qualified_name) => {
@@ -579,7 +579,7 @@ return obj;
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "\npublic void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {{",
@@ -605,9 +605,8 @@ return obj;
                     self.output_class_serialize_for_encoding(*encoding)?;
                 }
             }
-        }
-        // Deserialize (struct) or Load (variant)
-        if self.generator.config.serialization {
+
+            // Deserialize (struct) or Load (variant)
             if variant_index.is_none() {
                 writeln!(
                     self.out,
@@ -741,7 +740,7 @@ if (getClass() != obj.getClass()) return false;
             .map(|v| v.name.as_str())
             .collect::<Vec<_>>();
         self.enter_class(name, &reserved_names);
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "\nabstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;"

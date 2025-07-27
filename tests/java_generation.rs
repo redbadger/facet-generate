@@ -45,21 +45,20 @@ fn test_that_java_code_compiles() {
 
 #[test]
 fn test_that_java_code_compiles_without_serialization() {
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_serialization(false);
+    let config = CodeGeneratorConfig::new("testing".to_string()).without_serialization();
     test_that_java_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_java_code_compiles_with_bcs() {
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encodings([Encoding::Bcs]);
     test_that_java_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_java_code_compiles_with_bincode() {
     let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bincode]);
+        CodeGeneratorConfig::new("testing".to_string()).with_encodings([Encoding::Bincode]);
     test_that_java_code_compiles_with_config(&config);
 }
 

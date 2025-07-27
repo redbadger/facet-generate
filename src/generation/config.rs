@@ -12,11 +12,26 @@ use serde::Serialize;
 
 use crate::Registry;
 
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize)]
+pub enum Serialization {
+    #[default]
+    Bincode,
+    Bcs,
+    None,
+}
+
+impl Serialization {
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        *self != Serialization::None
+    }
+}
+
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
-    pub serialization: bool,
+    pub serialization: Serialization,
     pub encodings: BTreeSet<Encoding>,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
@@ -85,7 +100,7 @@ impl CodeGeneratorConfig {
     pub fn new(module_name: String) -> Self {
         Self {
             module_name,
-            serialization: true,
+            serialization: Serialization::default(),
             encodings: BTreeSet::new(),
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
@@ -103,8 +118,15 @@ impl CodeGeneratorConfig {
 
     /// Whether to include serialization methods.
     #[must_use]
-    pub fn with_serialization(mut self, serialization: bool) -> Self {
+    pub fn with_serialization(mut self, serialization: Serialization) -> Self {
         self.serialization = serialization;
+        self
+    }
+
+    /// Do not include serialization methods.
+    #[must_use]
+    pub fn without_serialization(mut self) -> Self {
+        self.serialization = Serialization::None;
         self
     }
 

@@ -1,8 +1,8 @@
 
-import { Serializer, Deserializer } from '../serde';
-import { BcsSerializer, BcsDeserializer } from '../bcs';
-import { Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes } from '../serde';
-
+    import { Serializer, Deserializer } from '../serde';
+    import { Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes } from '../serde';
+    
+import { BincodeSerializer, BincodeDeserializer } from '../bincode';
 export class Child {
 
 constructor (public name: str) {

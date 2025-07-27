@@ -70,7 +70,7 @@ fn test() {
                     } else {
                         &Module::new([package_name, this_module].join("."))
                     };
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -78,7 +78,7 @@ fn test() {
                 let package_name = "Example";
                 let mut installer = swift::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
@@ -87,7 +87,7 @@ fn test() {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();

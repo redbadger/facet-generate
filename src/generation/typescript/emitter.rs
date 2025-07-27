@@ -23,19 +23,31 @@ where
     T: Write,
 {
     pub fn output_preamble(&mut self) -> std::io::Result<()> {
-        if self.generator.config.serialization {
-            let index = match self.generator.target {
-                InstallTarget::Node => "",
-                InstallTarget::Deno => "/mod.ts",
+        if self.generator.config.serialization.is_enabled() {
+            let (serde, bcs, bincode) = match self.generator.target {
+                InstallTarget::Node => ("serde", "bcs", "bincode"),
+                InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts", "bincode/mod.ts"),
             };
-            writeln!(
-                self.out,
-                r"
-import {{ Serializer, Deserializer }} from '../serde{index}';
-import {{ BcsSerializer, BcsDeserializer }} from '../bcs{index}';
-import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../serde{index}';
-"
-            )?;
+            if self.generator.config.serialization.is_enabled() {
+                writeln!(
+                    self.out,
+                    r"
+    import {{ Serializer, Deserializer }} from '../{serde}';
+    import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../{serde}';
+    "
+                )?;
+            }
+            match self.generator.config.serialization {
+                crate::generation::Serialization::Bincode => writeln!(
+                    self.out,
+                    r"import {{ BincodeSerializer, BincodeDeserializer }} from '../{bincode}';"
+                )?,
+                crate::generation::Serialization::Bcs => writeln!(
+                    self.out,
+                    r"import {{ BcsSerializer, BcsDeserializer }} from '../{bcs}';"
+                )?,
+                crate::generation::Serialization::None => (),
+            }
         }
         for namespace in &self.generator.namespaces_to_import {
             let import_path =
@@ -515,7 +527,7 @@ return list;
         }
         writeln!(self.out, "}}\n")?;
         // Serialize
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "public serialize(serializer: Serializer): void {{",
@@ -535,7 +547,7 @@ return list;
             writeln!(self.out, "}}\n")?;
         }
         // Deserialize (struct) or Load (variant)
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             if variant_index.is_none() {
                 writeln!(
                     self.out,
@@ -580,7 +592,7 @@ return list;
     ) -> std::io::Result<()> {
         self.output_comment(name)?;
         writeln!(self.out, "export abstract class {name} {{")?;
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "abstract serialize(serializer: Serializer): void;\n"

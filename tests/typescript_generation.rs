@@ -4,7 +4,7 @@
 mod common;
 
 use facet_generate::generation::{
-    CodeGeneratorConfig, Encoding, SourceInstaller,
+    CodeGeneratorConfig, Encoding, Serialization, SourceInstaller,
     typescript::{self, InstallTarget},
 };
 use regex::Regex;
@@ -94,8 +94,7 @@ fn test_is_error_output() {
 #[test]
 fn test_typescript_code_compiles_with_bcs() {
     let dir = tempdir().unwrap();
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encodings([Encoding::Bcs]);
     test_typescript_code_compiles_with_config(dir.path(), &config);
 }
 
@@ -166,8 +165,9 @@ fn test_typescript_code_generation_without_extensions() {
     let registry = common::get_registry();
 
     // Test with extensionless_imports = true
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("testing".to_string())
+        .with_encodings([Encoding::Bcs])
+        .with_serialization(Serialization::Bcs);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Node);
     installer.install_module(&config, &registry).unwrap();
@@ -180,8 +180,8 @@ fn test_typescript_code_generation_without_extensions() {
 
     // Check that the generated content doesn't have .ts extensions in imports
     let content = std::fs::read_to_string(&module_path).unwrap();
-    assert!(content.contains("from '../serde/mod'"));
-    assert!(content.contains("from '../bcs/mod'"));
+    assert!(content.contains("from '../serde'"));
+    assert!(content.contains("from '../bcs'"));
     assert!(!content.contains("from '../serde/mod.ts'"));
     assert!(!content.contains("from '../bcs/mod.ts'"));
 
@@ -208,8 +208,9 @@ fn test_typescript_code_generation_with_extensions() {
     let registry = common::get_registry();
 
     // Test with extensionless_imports = false (default)
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings(vec![Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("testing".to_string())
+        .with_encodings([Encoding::Bcs])
+        .with_serialization(Serialization::Bcs);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
     installer.install_module(&config, &registry).unwrap();

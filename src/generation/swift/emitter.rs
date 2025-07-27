@@ -478,7 +478,7 @@ return obj
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -499,9 +499,7 @@ return obj
             for encoding in &self.generator.config.encodings {
                 self.output_struct_serialize_for_encoding(*encoding)?;
             }
-        }
-        // Deserialize
-        if self.generator.config.serialization {
+            // Deserialize
             writeln!(
                 self.out,
                 "\npublic static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} {{",
@@ -593,7 +591,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
         }
 
         // Serialize
-        if self.generator.config.serialization {
+        if self.generator.config.serialization.is_enabled() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -640,9 +638,8 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
             for encoding in &self.generator.config.encodings {
                 self.output_struct_serialize_for_encoding(*encoding)?;
             }
-        }
-        // Deserialize
-        if self.generator.config.serialization {
+
+            // Deserialize
             write!(
                 self.out,
                 "\npublic static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} {{"

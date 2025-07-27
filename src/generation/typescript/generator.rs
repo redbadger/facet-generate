@@ -89,7 +89,7 @@ impl<'a> CodeGenerator<'a> {
             emitter.output_container(&name.name, format)?;
         }
 
-        if self.config.serialization {
+        if self.config.serialization.is_enabled() {
             emitter.output_helpers(registry)?;
         }
 
