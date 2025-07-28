@@ -1,10 +1,13 @@
-use std::{collections::BTreeMap, io::Write};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Write,
+};
 
 use heck::ToUpperCamelCase;
 
 use crate::{
     Registry,
-    generation::{common, typescript::CodeGenerator},
+    generation::{Serialization, common, typescript::CodeGenerator},
     reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
@@ -16,37 +19,38 @@ pub(crate) struct TypeScriptEmitter<'a, T> {
     pub(crate) out: IndentedWriter<T>,
     /// Generator.
     pub(crate) generator: &'a CodeGenerator<'a>,
+    types_used: BTreeSet<String>,
 }
 
-impl<T> TypeScriptEmitter<'_, T>
+impl<'a, T> TypeScriptEmitter<'a, T>
 where
     T: Write,
 {
+    pub fn new(out: IndentedWriter<T>, generator: &'a CodeGenerator<'a>) -> Self {
+        Self {
+            out,
+            generator,
+            types_used: BTreeSet::new(),
+        }
+    }
+
     pub fn output_preamble(&mut self) -> std::io::Result<()> {
         if self.generator.config.serialization.is_enabled() {
-            let (serde, bcs, bincode) = match self.generator.target {
-                InstallTarget::Node => ("serde", "bcs", "bincode"),
-                InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts", "bincode/mod.ts"),
+            let (serde, bcs) = match self.generator.target {
+                InstallTarget::Node => ("serde", "bcs"),
+                InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts"),
             };
             if self.generator.config.serialization.is_enabled() {
                 writeln!(
                     self.out,
-                    r"
-    import {{ Serializer, Deserializer }} from '../{serde}';
-    import {{ Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes }} from '../{serde}';
-    "
+                    r"import {{ Serializer, Deserializer }} from '../{serde}';"
                 )?;
             }
-            match self.generator.config.serialization {
-                crate::generation::Serialization::Bincode => writeln!(
-                    self.out,
-                    r"import {{ BincodeSerializer, BincodeDeserializer }} from '../{bincode}';"
-                )?,
-                crate::generation::Serialization::Bcs => writeln!(
+            if let Serialization::Bcs = self.generator.config.serialization {
+                writeln!(
                     self.out,
                     r"import {{ BcsSerializer, BcsDeserializer }} from '../{bcs}';"
-                )?,
-                crate::generation::Serialization::None => (),
+                )?;
             }
         }
         for namespace in &self.generator.namespaces_to_import {
@@ -68,6 +72,13 @@ where
         Ok(())
     }
 
+    pub fn output_type_aliases(&mut self) -> std::io::Result<()> {
+        let aliases = format_type_aliases(&self.types_used);
+        writeln!(self.out, "{aliases}")?;
+
+        Ok(())
+    }
+
     fn quote_qualified_name(&self, name: &str) -> String {
         self.generator
             .external_qualified_names
@@ -85,48 +96,57 @@ where
         Ok(())
     }
 
-    fn quote_type(&self, format: &Format) -> String {
-        use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-            TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
-        };
-        match format {
-            TypeName(qualified_name) => self.quote_qualified_name(
-                &qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case),
+    fn quote_type(&mut self, format: &Format) -> String {
+        let (quoted, type_) = match format {
+            Format::TypeName(qualified_name) => (
+                self.quote_qualified_name(
+                    &qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case),
+                ),
+                "",
             ),
-            Unit => "unit".into(),
-            Bool => "bool".into(),
-            I8 => "int8".into(),
-            I16 => "int16".into(),
-            I32 => "int32".into(),
-            I64 => "int64".into(),
-            I128 => "int128".into(),
-            U8 => "uint8".into(),
-            U16 => "uint16".into(),
-            U32 => "uint32".into(),
-            U64 => "uint64".into(),
-            U128 => "uint128".into(),
-            F32 => "float32".into(),
-            F64 => "float64".into(),
-            Char => "char".into(),
-            Str => "str".into(),
-            Bytes => "bytes".into(),
+            Format::Unit => ("unit".into(), "unit"),
+            Format::Bool => ("bool".into(), "bool"),
+            Format::I8 => ("int8".into(), "int8"),
+            Format::I16 => ("int16".into(), "int16"),
+            Format::I32 => ("int32".into(), "int32"),
+            Format::I64 => ("int64".into(), "int64"),
+            Format::I128 => ("int128".into(), "int128"),
+            Format::U8 => ("uint8".into(), "uint8"),
+            Format::U16 => ("uint16".into(), "uint16"),
+            Format::U32 => ("uint32".into(), "uint32"),
+            Format::U64 => ("uint64".into(), "uint64"),
+            Format::U128 => ("uint128".into(), "uint128"),
+            Format::F32 => ("float32".into(), "float32"),
+            Format::F64 => ("float64".into(), "float64"),
+            Format::Char => ("char".into(), "char"),
+            Format::Str => ("str".into(), "str"),
+            Format::Bytes => ("bytes".into(), "bytes"),
 
-            Option(format) => format!("Optional<{}>", self.quote_type(format)),
-            Seq(format) => format!("Seq<{}>", self.quote_type(format)),
-            Map { key, value } => {
-                format!("Map<{},{}>", self.quote_type(key), self.quote_type(value))
-            }
-            Tuple(formats) => format!("Tuple<[{}]>", self.quote_types(formats, ", ")),
-            TupleArray {
+            Format::Option(format) => (format!("Optional<{}>", self.quote_type(format)), "option"),
+            Format::Seq(format) => (format!("Seq<{}>", self.quote_type(format)), "seq"),
+            Format::Map { key, value } => (
+                format!("Map<{},{}>", self.quote_type(key), self.quote_type(value)),
+                "map",
+            ),
+            Format::Tuple(formats) => (
+                format!("Tuple<[{}]>", self.quote_types(formats, ", ")),
+                "tuple",
+            ),
+            Format::TupleArray {
                 content,
                 size: _size,
-            } => format!("ListTuple<[{}]>", self.quote_type(content),),
-            Variable(_) => panic!("unexpected value"),
-        }
+            } => (
+                format!("ListTuple<[{}]>", self.quote_type(content)),
+                "list_tuple",
+            ),
+            Format::Variable(_) => panic!("unexpected value"),
+        };
+        self.types_used.insert(type_.to_string());
+
+        quoted
     }
 
-    fn quote_types(&self, formats: &[Format], sep: &str) -> String {
+    fn quote_types(&mut self, formats: &[Format], sep: &str) -> String {
         formats
             .iter()
             .map(|f| self.quote_type(f))
@@ -243,11 +263,11 @@ where
     fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
+        let type_ = self.quote_type(format0);
+        let name = name.to_upper_camel_case();
         write!(
             self.out,
-            "static serialize{}(value: {}, serializer: Serializer): void {{",
-            name.to_upper_camel_case(),
-            self.quote_type(format0)
+            "static serialize{name}(value: {type_}, serializer: Serializer): void {{",
         )?;
         self.out.indent();
         match format0 {
@@ -267,16 +287,16 @@ if (value) {{
             }
 
             Seq(format) => {
+                let type_ = self.quote_type(format);
+                let item = self.quote_serialize_value("item", format, false);
                 write!(
                     self.out,
                     r"
 serializer.serializeLen(value.length);
-value.forEach((item: {}) => {{
-    {}
+value.forEach((item: {type_}) => {{
+    {item}
 }});
-",
-                    self.quote_type(format),
-                    self.quote_serialize_value("item", format, false)
+"
                 )?;
             }
 
@@ -339,11 +359,11 @@ value.forEach((item) =>{{
     ) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
+        let name = name.to_upper_camel_case();
+        let type_ = self.quote_type(format0);
         write!(
             self.out,
-            "static deserialize{}(deserializer: Deserializer): {} {{",
-            name.to_upper_camel_case(),
-            self.quote_type(format0),
+            "static deserialize{name}(deserializer: Deserializer): {type_} {{",
         )?;
         self.out.indent();
         match format0 {
@@ -363,32 +383,34 @@ if (!tag) {{
             }
 
             Seq(format) => {
+                let format0 = self.quote_type(format0);
                 write!(
                     self.out,
                     r"
 const length = deserializer.deserializeLen();
-const list: {} = [];
+const list: {format0} = [];
 for (let i = 0; i < length; i++) {{
     list.push({});
 }}
 return list;
 ",
-                    self.quote_type(format0),
                     self.quote_deserialize(format)
                 )?;
             }
 
             Map { key, value } => {
+                let key_type = self.quote_type(key);
+                let value_type = self.quote_type(value);
                 write!(
                     self.out,
                     r"
 const length = deserializer.deserializeLen();
-const obj = new Map<{0}, {1}>();
+const obj = new Map<{key_type}, {value_type}>();
 let previousKeyStart = 0;
 let previousKeyEnd = 0;
 for (let i = 0; i < length; i++) {{
     const keyStart = deserializer.getBufferOffset();
-    const key = {2};
+    const key = {0};
     const keyEnd = deserializer.getBufferOffset();
     if (i > 0) {{
         deserializer.checkThatKeySlicesAreIncreasing(
@@ -397,13 +419,11 @@ for (let i = 0; i < length; i++) {{
     }}
     previousKeyStart = keyStart;
     previousKeyEnd = keyEnd;
-    const value = {3};
+    const value = {1};
     obj.set(key, value);
 }}
 return obj;
 ",
-                    self.quote_type(key),
-                    self.quote_type(value),
                     self.quote_deserialize(key),
                     self.quote_deserialize(value),
                 )?;
@@ -425,18 +445,17 @@ return [{}
             }
 
             TupleArray { content, size } => {
+                let format0 = self.quote_type(format0);
+                let content = self.quote_deserialize(content);
                 write!(
                     self.out,
                     r"
-const list: {} = [];
-for (let i = 0; i < {}; i++) {{
-    list.push([{}]);
+const list: {format0} = [];
+for (let i = 0; i < {size}; i++) {{
+    list.push([{content}]);
 }}
 return list;
 ",
-                    self.quote_type(format0),
-                    size,
-                    self.quote_deserialize(content)
                 )?;
             }
 
@@ -511,15 +530,12 @@ return list;
             writeln!(self.out)?;
         }
         // Constructor.
-        writeln!(
-            self.out,
-            "constructor ({}) {{",
-            fields
-                .iter()
-                .map(|f| { format!("public {}: {}", &f.name, self.quote_type(&f.value)) })
-                .collect::<Vec<_>>()
-                .join(", ")
-        )?;
+        let args = fields
+            .iter()
+            .map(|f| format!("public {}: {}", &f.name, self.quote_type(&f.value)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        writeln!(self.out, "constructor ({args}) {{")?;
         if let Some(_base) = variant_base {
             self.out.indent();
             writeln!(self.out, "super();")?;
@@ -657,5 +673,97 @@ switch (index) {{",
             }
         };
         self.output_struct_or_variant_container(None, None, name, &fields)
+    }
+}
+
+const TYPE_ALIASES: [(&str, &str); 21] = [
+    ("unit", "type unit = null;"),
+    ("bool", "type bool = boolean;"),
+    ("int8", "type int8 = number;"),
+    ("int16", "type int16 = number;"),
+    ("int32", "type int32 = number;"),
+    ("int64", "type int64 = bigint;"),
+    ("int128", "type int128 = bigint;"),
+    ("uint8", "type uint8 = number;"),
+    ("uint16", "type uint16 = number;"),
+    ("uint32", "type uint32 = number;"),
+    ("uint64", "type uint64 = bigint;"),
+    ("uint128", "type uint128 = bigint;"),
+    ("float32", "type float32 = number;"),
+    ("float64", "type float64 = number;"),
+    ("char", "type char = string;"),
+    ("str", "type str = string;"),
+    ("bytes", "type bytes = Uint8Array;"),
+    ("option", "type Optional<T> = T | null;"),
+    ("seq", "type Seq<T> = T[];"),
+    ("tuple", "type Tuple<T extends any[]> = T;"),
+    (
+        "list_tuple",
+        "type ListTuple<T extends any[]> = Tuple<T>[];",
+    ),
+];
+
+fn format_type_aliases(input: &BTreeSet<String>) -> String {
+    let map = BTreeMap::from(TYPE_ALIASES);
+    input
+        .iter()
+        .filter_map(|k| map.get(k.as_str()).map(|s| (*s).to_string()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_format_type_aliases() {
+        let input = BTreeSet::from([
+            "bool".to_string(),
+            "bytes".to_string(),
+            "char".to_string(),
+            "float32".to_string(),
+            "float64".to_string(),
+            "int128".to_string(),
+            "int16".to_string(),
+            "int32".to_string(),
+            "int64".to_string(),
+            "int8".to_string(),
+            "list_tuple".to_string(),
+            "option".to_string(),
+            "seq".to_string(),
+            "str".to_string(),
+            "tuple".to_string(),
+            "uint128".to_string(),
+            "uint16".to_string(),
+            "uint32".to_string(),
+            "uint64".to_string(),
+            "uint8".to_string(),
+            "unit".to_string(),
+        ]);
+        let actual = format_type_aliases(&input);
+        insta::assert_snapshot!(&actual, @r"
+        type bool = boolean;
+        type bytes = Uint8Array;
+        type char = string;
+        type float32 = number;
+        type float64 = number;
+        type int128 = bigint;
+        type int16 = number;
+        type int32 = number;
+        type int64 = bigint;
+        type int8 = number;
+        type ListTuple<T extends any[]> = Tuple<T>[];
+        type Optional<T> = T | null;
+        type Seq<T> = T[];
+        type str = string;
+        type Tuple<T extends any[]> = T;
+        type uint128 = bigint;
+        type uint16 = number;
+        type uint32 = number;
+        type uint64 = bigint;
+        type uint8 = number;
+        type unit = null;
+        ");
     }
 }

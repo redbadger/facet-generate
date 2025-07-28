@@ -78,16 +78,16 @@ impl<'a> CodeGenerator<'a> {
 
     /// Output class definitions for `registry` in a single source file.
     pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> std::io::Result<()> {
-        let mut emitter = TypeScriptEmitter {
-            out: IndentedWriter::new(out, IndentConfig::Space(2)),
-            generator: self,
-        };
+        let mut emitter =
+            TypeScriptEmitter::new(IndentedWriter::new(out, IndentConfig::Space(2)), self);
 
         emitter.output_preamble()?;
 
         for (name, format) in registry {
             emitter.output_container(&name.name, format)?;
         }
+
+        emitter.output_type_aliases()?;
 
         if self.config.serialization.is_enabled() {
             emitter.output_helpers(registry)?;

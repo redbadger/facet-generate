@@ -15,3 +15,4 @@ constructor (public value: Child) {
 }
 
 }
+type str = string;

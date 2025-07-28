@@ -15,3 +15,4 @@ constructor (public value: Other.OtherChild) {
 }
 
 }
+type str = string;

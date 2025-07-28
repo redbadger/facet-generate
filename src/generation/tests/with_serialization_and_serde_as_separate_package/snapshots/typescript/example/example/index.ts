@@ -1,8 +1,4 @@
-
-    import { Serializer, Deserializer } from '../serde';
-    import { Optional, Seq, Tuple, ListTuple, unit, bool, int8, int16, int32, int64, int128, uint8, uint16, uint32, uint64, uint128, float32, float64, char, str, bytes } from '../serde';
-    
-import { BincodeSerializer, BincodeDeserializer } from '../bincode';
+import { Serializer, Deserializer } from '../serde';
 export class Child {
 
 constructor (public name: str) {
@@ -48,6 +44,7 @@ static load(deserializer: Deserializer): ParentVariantChild {
 }
 
 }
+type str = string;
 export class Helpers {
 }
 
