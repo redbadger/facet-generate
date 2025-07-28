@@ -14,5 +14,9 @@ let package = Package(
             name: "Example",
             dependencies: ["Serde"]
         ),
+        .target(
+            name: "Serde",
+            dependencies: []
+        ),
     ]
 )

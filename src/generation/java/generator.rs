@@ -67,7 +67,7 @@ impl<'a> CodeGenerator<'a> {
         for (name, format) in registry {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
-        if self.config.serialization {
+        if self.config.serialization.is_enabled() {
             self.write_helper_class(&dir_path, current_namespace, registry)?;
         }
         Ok(())

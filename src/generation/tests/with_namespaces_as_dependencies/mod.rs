@@ -2,20 +2,21 @@ use std::{env, fs, path::PathBuf};
 
 use expect_test::expect_file;
 use facet::Facet;
-use tempfile::TempDir;
+use tempfile::tempdir;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, java,
+        ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift,
-        tests::{check, find_files},
-        typescript,
+        tests::{check, read_files_and_create_expect_dirs},
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test() {
     #[derive(Facet)]
     #[facet(namespace = "other")]
@@ -52,7 +53,7 @@ fn test() {
         .join("snapshots");
 
     for target in ["java", "swift", "typescript"] {
-        let tmp_dir = TempDir::new().unwrap();
+        let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
         let snapshot_dir = this_dir.join(target);
@@ -70,7 +71,7 @@ fn test() {
                     } else {
                         &Module::new([package_name, this_module].join("."))
                     };
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -88,23 +89,47 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path);
+                let mut installer = typescript::Installer::new(
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Url(
+                            "https://registry.npmjs.org/other".to_string(),
+                        ),
+                        version: Some("^1.0.0".to_string()),
+                    }],
+                    InstallTarget::Node,
+                );
+                let external_packages: ExternalPackages = vec![ExternalPackage {
+                    for_namespace: "other".to_string(),
+                    location: PackageLocation::Url("https://registry.npmjs.org/other".to_string()),
+                    version: Some("^1.0.0".to_string()),
+                }]
+                .into_iter()
+                .map(|d| (d.for_namespace.clone(), d))
+                .collect();
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_serialization(false);
+                    let config = module
+                        .config()
+                        .clone()
+                        .without_serialization()
+                        .with_import_locations(external_packages.clone());
                     installer.install_module(&config, registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }
 
-        for (actual, expected) in find_files(tmp_path, &snapshot_dir) {
+        for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
             check(&actual, &expect_file!(&expected));
         }
     }

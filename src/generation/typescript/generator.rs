@@ -5,12 +5,11 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{
+        CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
-        typescript::emitter::TypeScriptEmitter,
+        typescript::{InstallTarget, emitter::TypeScriptEmitter},
     },
 };
-
-use super::super::CodeGeneratorConfig;
 
 /// Main configuration object for code-generation in TypeScript, powered by
 /// the Deno runtime.
@@ -22,12 +21,16 @@ pub struct CodeGenerator<'a> {
     pub(crate) external_qualified_names: HashMap<String, String>,
     /// vector of namespaces to import
     pub(crate) namespaces_to_import: Vec<String>,
+    /// Mapping from namespace to import path for external packages
+    pub(crate) external_import_paths: HashMap<String, String>,
+    /// Whether to generate extensionless imports (for React/Node.js compatibility)
+    pub(crate) target: InstallTarget,
 }
 
 impl<'a> CodeGenerator<'a> {
     /// Create a TypeScript code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig, target: InstallTarget) -> Self {
         assert!(
             !config.c_style_enums,
             "TypeScript does not support generating c-style enums"
@@ -41,6 +44,25 @@ impl<'a> CodeGenerator<'a> {
                 );
             }
         }
+        let mut external_import_paths = HashMap::new();
+        for (namespace, external_package) in &config.external_packages {
+            let import_path = match &external_package.location {
+                crate::generation::PackageLocation::Url(url) => {
+                    // Extract package name from URL for npm packages
+                    if let Some(package_name) = url.split('/').next_back() {
+                        package_name.to_string()
+                    } else {
+                        namespace.clone()
+                    }
+                }
+                crate::generation::PackageLocation::Path(path) => {
+                    // For local packages, use relative path
+                    format!("./{}", path.trim_start_matches("../"))
+                }
+            };
+            external_import_paths.insert(namespace.clone(), import_path);
+        }
+
         Self {
             config,
             external_qualified_names,
@@ -49,15 +71,15 @@ impl<'a> CodeGenerator<'a> {
                 .keys()
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>(),
+            external_import_paths,
+            target,
         }
     }
 
     /// Output class definitions for `registry` in a single source file.
     pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> std::io::Result<()> {
-        let mut emitter = TypeScriptEmitter {
-            out: IndentedWriter::new(out, IndentConfig::Space(2)),
-            generator: self,
-        };
+        let mut emitter =
+            TypeScriptEmitter::new(IndentedWriter::new(out, IndentConfig::Space(2)), self);
 
         emitter.output_preamble()?;
 
@@ -65,7 +87,9 @@ impl<'a> CodeGenerator<'a> {
             emitter.output_container(&name.name, format)?;
         }
 
-        if self.config.serialization {
+        emitter.output_type_aliases()?;
+
+        if self.config.serialization.is_enabled() {
             emitter.output_helpers(registry)?;
         }
 

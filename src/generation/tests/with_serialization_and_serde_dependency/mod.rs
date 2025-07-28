@@ -1,19 +1,16 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{env, fs, path::PathBuf};
 
-use expect_test::{ExpectFile, expect_file};
+use expect_test::expect_file;
 use facet::Facet;
-use ignore::WalkBuilder;
-use tempfile::TempDir;
+use tempfile::tempdir;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, java,
+        ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
-        typescript,
+        tests::{check, read_files_and_create_expect_dirs},
+        typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
 };
@@ -41,7 +38,7 @@ fn test() {
         .join("snapshots");
 
     for target in ["java", "swift", "typescript"] {
-        let tmp_dir = TempDir::new().unwrap();
+        let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
         let snapshot_dir = this_dir.join(target);
@@ -79,50 +76,44 @@ fn test() {
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();
-                    installer.install_manifest(package_name).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path);
+                let mut installer = typescript::Installer::new(
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("../serde".to_string()),
+                        version: None,
+                    }],
+                    InstallTarget::Node,
+                );
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
+                let external_packages: ExternalPackages = vec![ExternalPackage {
+                    for_namespace: "serde".to_string(),
+                    location: PackageLocation::Path("../serde".to_string()),
+                    version: None,
+                }]
+                .into_iter()
+                .map(|d| (d.for_namespace.clone(), d))
+                .collect();
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_import_locations(external_packages.clone());
+                    installer.install_module(&config, registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
         }
 
-        for (actual, expected) in find_files(tmp_path, &snapshot_dir) {
+        for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
             check(&actual, &expect_file!(&expected));
         }
     }
-}
-
-fn find_files(tmp_path: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> Vec<(String, PathBuf)> {
-    let mut files = Vec::new();
-    for entry in WalkBuilder::new(&tmp_path)
-        .hidden(false)
-        .follow_links(true)
-        .build()
-    {
-        if let Ok(entry) = entry
-            && let Some(file_type) = entry.file_type()
-            && file_type.is_file()
-        {
-            let relative_path = entry.path().strip_prefix(&tmp_path).unwrap();
-            let expected = out_dir.as_ref().join(relative_path);
-            fs::create_dir_all(out_dir.as_ref().join(expected.parent().unwrap())).unwrap();
-
-            let actual = fs::read_to_string(entry.path()).unwrap();
-
-            files.push((actual, expected));
-        }
-    }
-    files
-}
-
-fn check(actual: &str, expect: &ExpectFile) {
-    expect.assert_eq(actual);
 }

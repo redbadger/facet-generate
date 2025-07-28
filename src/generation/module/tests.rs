@@ -31,7 +31,7 @@ fn single_namespace() {
     let result = split("Root", &registry);
     insta::assert_yaml_snapshot!(result, @r"
     ? module_name: Root
-      serialization: true
+      serialization: Bincode
       encodings: []
       external_definitions: {}
       external_packages: {}
@@ -98,7 +98,7 @@ fn root_namespace_with_two_child_namespaces() {
     let result = split("Root", &registry);
     insta::assert_yaml_snapshot!(result, @r"
     ? module_name: Root
-      serialization: true
+      serialization: Bincode
       encodings: []
       external_definitions:
         one:
@@ -124,7 +124,7 @@ fn root_namespace_with_two_child_namespaces() {
                   NAMED: two
                 name: ChildTwo
     ? module_name: one
-      serialization: true
+      serialization: Bincode
       encodings: []
       external_definitions:
         one:
@@ -149,7 +149,7 @@ fn root_namespace_with_two_child_namespaces() {
       : STRUCT:
           - field: STR
     ? module_name: two
-      serialization: true
+      serialization: Bincode
       encodings: []
       external_definitions: {}
       external_packages: {}

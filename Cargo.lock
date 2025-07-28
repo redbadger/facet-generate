@@ -1228,6 +1228,7 @@ dependencies = [
  "regex",
  "revm",
  "serde",
+ "serde_json",
  "tempfile",
  "textwrap",
  "thiserror 2.0.12",
