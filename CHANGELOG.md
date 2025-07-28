@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.9.0] - 2025-07-28
+
+### 🚀 Features
+
+Improves TypeScript generation to include support for namespaces (internal and external dependencies) and package.json generation.
+
 ## [0.8.0] - 2025-07-25
 
 ### 🚀 Features
