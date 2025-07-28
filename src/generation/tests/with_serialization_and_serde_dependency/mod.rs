@@ -1,11 +1,7 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::{env, fs, path::PathBuf};
 
-use expect_test::{ExpectFile, expect_file};
+use expect_test::expect_file;
 use facet::Facet;
-use ignore::WalkBuilder;
 use tempfile::tempdir;
 
 use crate::{
@@ -13,6 +9,7 @@ use crate::{
         ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
+        tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
@@ -115,35 +112,8 @@ fn test() {
             _ => unreachable!(),
         }
 
-        for (actual, expected) in find_files(tmp_path, &snapshot_dir) {
+        for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
             check(&actual, &expect_file!(&expected));
         }
     }
-}
-
-fn find_files(tmp_path: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> Vec<(String, PathBuf)> {
-    let mut files = Vec::new();
-    for entry in WalkBuilder::new(&tmp_path)
-        .hidden(false)
-        .follow_links(true)
-        .build()
-    {
-        if let Ok(entry) = entry
-            && let Some(file_type) = entry.file_type()
-            && file_type.is_file()
-        {
-            let relative_path = entry.path().strip_prefix(&tmp_path).unwrap();
-            let expected = out_dir.as_ref().join(relative_path);
-            fs::create_dir_all(out_dir.as_ref().join(expected.parent().unwrap())).unwrap();
-
-            let actual = fs::read_to_string(entry.path()).unwrap();
-
-            files.push((actual, expected));
-        }
-    }
-    files
-}
-
-fn check(actual: &str, expect: &ExpectFile) {
-    expect.assert_eq(actual);
 }

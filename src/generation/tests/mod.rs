@@ -15,7 +15,10 @@ mod with_serialization_and_serde_as_separate_package;
 mod with_serialization_and_serde_dependency;
 mod with_serialization_and_serde_target;
 
-fn find_files(tmp_path: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> Vec<(String, PathBuf)> {
+fn read_files_and_create_expect_dirs(
+    tmp_path: impl AsRef<Path>,
+    out_dir: impl AsRef<Path>,
+) -> Vec<(String, PathBuf)> {
     let mut files = Vec::new();
     for entry in WalkBuilder::new(&tmp_path)
         .hidden(false)
@@ -28,7 +31,8 @@ fn find_files(tmp_path: impl AsRef<Path>, out_dir: impl AsRef<Path>) -> Vec<(Str
         {
             let relative_path = entry.path().strip_prefix(&tmp_path).unwrap();
             let expected = out_dir.as_ref().join(relative_path);
-            fs::create_dir_all(out_dir.as_ref().join(expected.parent().unwrap())).unwrap();
+
+            fs::create_dir_all(expected.parent().unwrap()).unwrap();
 
             let actual = fs::read_to_string(entry.path()).unwrap();
 

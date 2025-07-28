@@ -9,7 +9,7 @@ use crate::{
         ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift,
-        tests::{check, find_files},
+        tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
     reflection::RegistryBuilder,
@@ -129,7 +129,7 @@ fn test() {
             _ => unreachable!(),
         }
 
-        for (actual, expected) in find_files(tmp_path, &snapshot_dir) {
+        for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
             check(&actual, &expect_file!(&expected));
         }
     }
