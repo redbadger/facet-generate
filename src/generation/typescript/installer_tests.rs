@@ -1,5 +1,4 @@
 use facet::Facet;
-use serde_json::Value;
 
 use crate::{
     generation::{
@@ -18,15 +17,16 @@ fn simple_manifest() {
     let installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
 
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -38,11 +38,13 @@ fn manifest_with_dependencies() {
         ExternalPackage {
             for_namespace: "lodash".to_string(),
             location: PackageLocation::Url("https://registry.npmjs.org/lodash".to_string()),
+            module_name: None,
             version: Some("^4.17.21".to_string()),
         },
         ExternalPackage {
             for_namespace: "axios".to_string(),
             location: PackageLocation::Url("https://registry.npmjs.org/axios".to_string()),
+            module_name: None,
             version: Some("^1.6.0".to_string()),
         },
     ];
@@ -50,19 +52,20 @@ fn manifest_with_dependencies() {
     let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "dependencies": {
-            "lodash": "^4.17.21",
-            "axios": "^1.6.0"
-        },
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
 
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "dependencies": {
+        "axios": "^1.6.0",
+        "lodash": "^4.17.21"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -73,24 +76,25 @@ fn manifest_with_local_dependencies() {
     let external_packages = vec![ExternalPackage {
         for_namespace: "shared-types".to_string(),
         location: PackageLocation::Path("../shared-types".to_string()),
+        module_name: None,
         version: None,
     }];
 
     let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "dependencies": {
-            "shared-types": "file:../shared-types"
-        },
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "dependencies": {
+        "shared-types": "file:../shared-types"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -102,11 +106,14 @@ fn manifest_with_mixed_dependencies() {
         ExternalPackage {
             for_namespace: "lodash".to_string(),
             location: PackageLocation::Url("https://registry.npmjs.org/lodash".to_string()),
+            module_name: None,
             version: Some("^4.17.21".to_string()),
         },
         ExternalPackage {
             for_namespace: "shared-types".to_string(),
             location: PackageLocation::Path("../shared-types".to_string()),
+            module_name: None,
+
             version: None,
         },
     ];
@@ -114,19 +121,19 @@ fn manifest_with_mixed_dependencies() {
     let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "dependencies": {
-            "lodash": "^4.17.21",
-            "shared-types": "file:../shared-types"
-        },
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "dependencies": {
+        "lodash": "^4.17.21",
+        "shared-types": "file:../shared-types"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -153,15 +160,15 @@ fn manifest_with_serde_module() {
     installer.install_serde_runtime().unwrap();
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -190,15 +197,15 @@ fn manifest_with_namespaces() {
     }
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -222,6 +229,7 @@ fn manifest_with_external_namespace_dependencies() {
     let external_packages = vec![ExternalPackage {
         for_namespace: "external_package".to_string(),
         location: PackageLocation::Url("https://registry.npmjs.org/external-package".to_string()),
+        module_name: None,
         version: Some("^1.0.0".to_string()),
     }];
 
@@ -234,18 +242,18 @@ fn manifest_with_external_namespace_dependencies() {
     }
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "dependencies": {
-            "external-package": "^1.0.0"
-        },
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "dependencies": {
+        "external-package": "^1.0.0"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }
 
 #[test]
@@ -256,22 +264,23 @@ fn manifest_with_scoped_package() {
     let external_packages = vec![ExternalPackage {
         for_namespace: "types".to_string(),
         location: PackageLocation::Url("https://registry.npmjs.org/@types/node".to_string()),
+        module_name: None,
         version: Some("^20.0.0".to_string()),
     }];
 
     let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
-    let expected: Value = serde_json::json!({
-        "name": "my-package",
-        "version": "0.1.0",
-        "dependencies": {
-            "@types/node": "^20.0.0"
-        },
-        "devDependencies": {
-            "typescript": "^5.8.3"
-        }
-    });
-
-    assert_eq!(manifest, expected);
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "name": "my-package",
+      "version": "0.1.0",
+      "dependencies": {
+        "@types/node": "^20.0.0"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      }
+    }
+    "#);
 }

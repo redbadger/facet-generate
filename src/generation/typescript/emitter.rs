@@ -1,85 +1,125 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write,
+    marker::PhantomData,
 };
 
 use heck::ToUpperCamelCase;
 
 use crate::{
     Registry,
-    generation::{Serialization, common, typescript::CodeGenerator},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    generation::{
+        PackageLocation, Serialization, common, indent::IndentedWriter, typescript::CodeGenerator,
+    },
+    reflection::format::{
+        ContainerFormat, Format, FormatHolder as _, Named, Namespace, VariantFormat,
+    },
 };
 
-use super::{super::indent::IndentedWriter, InstallTarget};
+use super::InstallTarget;
 
 /// Shared state for the code generation of a TypeScript source file.
 pub(crate) struct TypeScriptEmitter<'a, T> {
-    /// Writer.
-    pub(crate) out: IndentedWriter<T>,
     /// Generator.
     pub(crate) generator: &'a CodeGenerator<'a>,
+    namespaces_used: BTreeSet<Namespace>,
     types_used: BTreeSet<String>,
+    _data: PhantomData<T>,
 }
 
 impl<'a, T> TypeScriptEmitter<'a, T>
 where
     T: Write,
 {
-    pub fn new(out: IndentedWriter<T>, generator: &'a CodeGenerator<'a>) -> Self {
+    pub fn new(generator: &'a CodeGenerator<'a>) -> Self {
         Self {
-            out,
             generator,
+            namespaces_used: BTreeSet::new(),
             types_used: BTreeSet::new(),
+            _data: PhantomData,
         }
     }
 
-    pub fn output_preamble(&mut self) -> std::io::Result<()> {
+    pub fn output_preamble(&mut self, out: &mut impl Write) -> std::io::Result<()> {
         if self.generator.config.serialization.is_enabled() {
             let (serde, bcs) = match self.generator.target {
                 InstallTarget::Node => ("serde", "bcs"),
                 InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts"),
             };
-            if self.generator.config.serialization.is_enabled() {
-                writeln!(
-                    self.out,
-                    r"import {{ Serializer, Deserializer }} from '../{serde}';"
-                )?;
-            }
+            let import_path =
+                if let Some(path) = self.generator.config.external_packages.get("serde") {
+                    match &path.location {
+                        PackageLocation::Path(_) => {
+                            let name = &path.for_namespace;
+                            if let Some(mod_name) = &path.module_name {
+                                format!("{name}/{mod_name}")
+                            } else {
+                                name.to_string()
+                            }
+                        }
+                        PackageLocation::Url(_) => path.for_namespace.clone(),
+                    }
+                } else {
+                    format!("../{serde}")
+                };
+            writeln!(
+                out,
+                r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
+            )?;
             if let Serialization::Bcs = self.generator.config.serialization {
                 writeln!(
-                    self.out,
-                    r"import {{ BcsSerializer, BcsDeserializer }} from '../{bcs}';"
+                    out,
+                    r#"import {{ BcsSerializer, BcsDeserializer }} from "../{bcs}";"#
                 )?;
             }
         }
-        for namespace in &self.generator.namespaces_to_import {
+
+        let mut import_paths: BTreeMap<String, String> = BTreeMap::new();
+
+        for namespace in self.namespaces_used.iter().filter_map(|ns| match ns {
+            Namespace::Root => None,
+            Namespace::Named(name) => Some(name),
+        }) {
             let import_path =
-                if let Some(path) = self.generator.external_import_paths.get(namespace) {
-                    path.clone()
+                if let Some(path) = self.generator.config.external_packages.get(namespace) {
+                    match &path.location {
+                        PackageLocation::Path(_) => {
+                            let name = &path.for_namespace;
+                            if let Some(mod_name) = &path.module_name {
+                                format!("{name}/{mod_name}")
+                            } else {
+                                name.to_string()
+                            }
+                        }
+                        PackageLocation::Url(_) => path.for_namespace.clone(),
+                    }
                 } else {
-                    format!("./{namespace}")
+                    format!("../{namespace}")
                 };
 
-            writeln!(
-                self.out,
-                "import * as {} from '{}';\n",
-                namespace.to_upper_camel_case(),
-                import_path
-            )?;
+            import_paths.insert(namespace.to_upper_camel_case(), import_path);
         }
 
-        Ok(())
-    }
+        for (namespace, path) in import_paths {
+            writeln!(out, r#"import * as {namespace} from "{path}";"#,)?;
+        }
 
-    pub fn output_type_aliases(&mut self) -> std::io::Result<()> {
         let aliases = format_type_aliases(&self.types_used);
-        writeln!(self.out, "{aliases}")?;
+        writeln!(out, "{aliases}")?;
 
         Ok(())
     }
 
-    fn quote_qualified_name(&self, name: &str) -> String {
+    fn output_comment(&mut self, out: &mut IndentedWriter<T>, name: &str) -> std::io::Result<()> {
+        let path = vec![name.to_string()];
+        if let Some(doc) = self.generator.config.comments.get(&path) {
+            let text = textwrap::indent(doc, " * ").replace("\n\n", "\n *\n");
+            writeln!(out, "/**\n{text} */")?;
+        }
+        Ok(())
+    }
+
+    fn quote_typename(&self, name: &str) -> String {
         self.generator
             .external_qualified_names
             .get(name)
@@ -87,23 +127,14 @@ where
             .unwrap_or_else(|| name.to_string())
     }
 
-    fn output_comment(&mut self, name: &str) -> std::io::Result<()> {
-        let path = vec![name.to_string()];
-        if let Some(doc) = self.generator.config.comments.get(&path) {
-            let text = textwrap::indent(doc, " * ").replace("\n\n", "\n *\n");
-            writeln!(self.out, "/**\n{text} */")?;
-        }
-        Ok(())
-    }
-
     fn quote_type(&mut self, format: &Format) -> String {
         let (quoted, type_) = match format {
-            Format::TypeName(qualified_name) => (
-                self.quote_qualified_name(
-                    &qualified_name.to_legacy_string(ToUpperCamelCase::to_upper_camel_case),
-                ),
-                "",
-            ),
+            Format::TypeName(type_) => {
+                if !self.namespaces_used.contains(&type_.namespace) {
+                    self.namespaces_used.insert(type_.namespace.clone());
+                }
+                (self.quote_typename(&type_.name), "")
+            }
             Format::Unit => ("unit".into(), "unit"),
             Format::Bool => ("bool".into(), "bool"),
             Format::I8 => ("int8".into(), "int8"),
@@ -154,7 +185,11 @@ where
             .join(sep)
     }
 
-    pub fn output_helpers(&mut self, registry: &Registry) -> std::io::Result<()> {
+    pub fn output_helpers(
+        &mut self,
+        out: &mut IndentedWriter<T>,
+        registry: &Registry,
+    ) -> std::io::Result<()> {
         let mut subtypes = BTreeMap::new();
         for format in registry.values() {
             format
@@ -167,15 +202,15 @@ where
                 .unwrap();
         }
 
-        writeln!(self.out, "export class Helpers {{")?;
-        self.out.indent();
+        writeln!(out, "export class Helpers {{")?;
+        out.indent();
         for (mangled_name, subtype) in &subtypes {
-            self.output_serialization_helper(mangled_name, subtype)?;
-            self.output_deserialization_helper(mangled_name, subtype)?;
+            self.output_serialization_helper(out, mangled_name, subtype)?;
+            self.output_deserialization_helper(out, mangled_name, subtype)?;
         }
-        self.out.unindent();
-        writeln!(self.out, "}}")?;
-        writeln!(self.out)
+        out.unindent();
+        writeln!(out, "}}")?;
+        writeln!(out)
     }
 
     fn needs_helper(format: &Format) -> bool {
@@ -230,11 +265,9 @@ where
             U128, Unit,
         };
         match format {
-            TypeName(name) => format!(
+            TypeName(qualified_name) => format!(
                 "{}.deserialize(deserializer)",
-                self.quote_qualified_name(
-                    &name.to_legacy_string(heck::ToUpperCamelCase::to_upper_camel_case)
-                )
+                self.quote_typename(&qualified_name.name)
             ),
             Unit => "deserializer.deserializeUnit()".to_string(),
             Bool => "deserializer.deserializeBool()".to_string(),
@@ -260,20 +293,25 @@ where
         }
     }
 
-    fn output_serialization_helper(&mut self, name: &str, format0: &Format) -> std::io::Result<()> {
+    fn output_serialization_helper(
+        &mut self,
+        out: &mut IndentedWriter<T>,
+        name: &str,
+        format0: &Format,
+    ) -> std::io::Result<()> {
         use Format::{Map, Option, Seq, Tuple, TupleArray};
 
         let type_ = self.quote_type(format0);
         let name = name.to_upper_camel_case();
         write!(
-            self.out,
+            out,
             "static serialize{name}(value: {type_}, serializer: Serializer): void {{",
         )?;
-        self.out.indent();
+        out.indent();
         match format0 {
             Option(format) => {
                 write!(
-                    self.out,
+                    out,
                     r"
 if (value) {{
     serializer.serializeOptionTag(true);
@@ -290,7 +328,7 @@ if (value) {{
                 let type_ = self.quote_type(format);
                 let item = self.quote_serialize_value("item", format, false);
                 write!(
-                    self.out,
+                    out,
                     r"
 serializer.serializeLen(value.length);
 value.forEach((item: {type_}) => {{
@@ -302,7 +340,7 @@ value.forEach((item: {type_}) => {{
 
             Map { key, value } => {
                 write!(
-                    self.out,
+                    out,
                     r"
 serializer.serializeLen(value.size);
 const offsets: number[] = [];
@@ -319,14 +357,10 @@ serializer.sortMapEntries(offsets);
             }
 
             Tuple(format_list) => {
-                writeln!(self.out)?;
+                writeln!(out)?;
                 for (index, format) in format_list.iter().enumerate() {
                     let expr = format!("value[{index}]");
-                    writeln!(
-                        self.out,
-                        "{}",
-                        self.quote_serialize_value(&expr, format, false)
-                    )?;
+                    writeln!(out, "{}", self.quote_serialize_value(&expr, format, false))?;
                 }
             }
 
@@ -335,7 +369,7 @@ serializer.sortMapEntries(offsets);
                 size: _size,
             } => {
                 write!(
-                    self.out,
+                    out,
                     r"
 value.forEach((item) =>{{
     {}
@@ -347,13 +381,14 @@ value.forEach((item) =>{{
 
             _ => panic!("unexpected case"),
         }
-        self.out.unindent();
-        writeln!(self.out, "}}\n")
+        out.unindent();
+        writeln!(out, "}}\n")
     }
 
     #[allow(clippy::too_many_lines)]
     fn output_deserialization_helper(
         &mut self,
+        out: &mut IndentedWriter<T>,
         name: &str,
         format0: &Format,
     ) -> std::io::Result<()> {
@@ -362,14 +397,14 @@ value.forEach((item) =>{{
         let name = name.to_upper_camel_case();
         let type_ = self.quote_type(format0);
         write!(
-            self.out,
+            out,
             "static deserialize{name}(deserializer: Deserializer): {type_} {{",
         )?;
-        self.out.indent();
+        out.indent();
         match format0 {
             Option(format) => {
                 write!(
-                    self.out,
+                    out,
                     r"
 const tag = deserializer.deserializeOptionTag();
 if (!tag) {{
@@ -385,7 +420,7 @@ if (!tag) {{
             Seq(format) => {
                 let format0 = self.quote_type(format0);
                 write!(
-                    self.out,
+                    out,
                     r"
 const length = deserializer.deserializeLen();
 const list: {format0} = [];
@@ -402,7 +437,7 @@ return list;
                 let key_type = self.quote_type(key);
                 let value_type = self.quote_type(value);
                 write!(
-                    self.out,
+                    out,
                     r"
 const length = deserializer.deserializeLen();
 const obj = new Map<{key_type}, {value_type}>();
@@ -431,7 +466,7 @@ return obj;
 
             Tuple(format_list) => {
                 write!(
-                    self.out,
+                    out,
                     r"
 return [{}
 ];
@@ -448,7 +483,7 @@ return [{}
                 let format0 = self.quote_type(format0);
                 let content = self.quote_deserialize(content);
                 write!(
-                    self.out,
+                    out,
                     r"
 const list: {format0} = [];
 for (let i = 0; i < {size}; i++) {{
@@ -461,12 +496,13 @@ return list;
 
             _ => panic!("unexpected case"),
         }
-        self.out.unindent();
-        writeln!(self.out, "}}\n")
+        out.unindent();
+        writeln!(out, "}}\n")
     }
 
     fn output_variant(
         &mut self,
+        out: &mut IndentedWriter<T>,
         base: &str,
         index: u32,
         name: &str,
@@ -490,22 +526,24 @@ return list;
             Struct(fields) => fields.clone(),
             Variable(_) => panic!("incorrect value"),
         };
-        self.output_struct_or_variant_container(Some(base), Some(index), name, &fields)
+        self.output_struct_or_variant_container(out, Some(base), Some(index), name, &fields)
     }
 
     fn output_variants(
         &mut self,
+        out: &mut IndentedWriter<T>,
         base: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
     ) -> std::io::Result<()> {
         for (index, variant) in variants {
-            self.output_variant(base, *index, &variant.name, &variant.value)?;
+            self.output_variant(out, base, *index, &variant.name, &variant.value)?;
         }
         Ok(())
     }
 
     fn output_struct_or_variant_container(
         &mut self,
+        out: &mut IndentedWriter<T>,
         variant_base: Option<&str>,
         variant_index: Option<u32>,
         name: &str,
@@ -515,19 +553,17 @@ return list;
 
         // Beginning of class
         if let Some(base) = variant_base {
-            writeln!(self.out)?;
-            self.output_comment(name)?;
-            writeln!(
-                self.out,
-                "export class {base}Variant{name} extends {base} {{"
-            )?;
+            writeln!(out)?;
+            self.output_comment(out, name)?;
+            writeln!(out, "export class {base}Variant{name} extends {base} {{")?;
             variant_base_name = format!("{base}Variant");
         } else {
-            self.output_comment(name)?;
-            writeln!(self.out, "export class {name} {{")?;
+            self.output_comment(out, name)?;
+            writeln!(out, "export class {name} {{")?;
         }
+        out.indent();
         if !fields.is_empty() {
-            writeln!(self.out)?;
+            writeln!(out)?;
         }
         // Constructor.
         let args = fields
@@ -535,57 +571,54 @@ return list;
             .map(|f| format!("public {}: {}", &f.name, self.quote_type(&f.value)))
             .collect::<Vec<_>>()
             .join(", ");
-        writeln!(self.out, "constructor ({args}) {{")?;
+        writeln!(out, "constructor ({args}) {{")?;
+        out.indent();
         if let Some(_base) = variant_base {
-            self.out.indent();
-            writeln!(self.out, "super();")?;
-            self.out.unindent();
+            writeln!(out, "super();")?;
         }
-        writeln!(self.out, "}}\n")?;
+        out.unindent();
+        writeln!(out, "}}\n")?;
         // Serialize
         if self.generator.config.serialization.is_enabled() {
-            writeln!(
-                self.out,
-                "public serialize(serializer: Serializer): void {{",
-            )?;
-            self.out.indent();
+            writeln!(out, "public serialize(serializer: Serializer): void {{",)?;
+            out.indent();
             if let Some(index) = variant_index {
-                writeln!(self.out, "serializer.serializeVariantIndex({index});")?;
+                writeln!(out, "serializer.serializeVariantIndex({index});")?;
             }
             for field in fields {
                 writeln!(
-                    self.out,
+                    out,
                     "{}",
                     self.quote_serialize_value(&field.name, &field.value, true)
                 )?;
             }
-            self.out.unindent();
-            writeln!(self.out, "}}\n")?;
+            out.unindent();
+            writeln!(out, "}}\n")?;
         }
         // Deserialize (struct) or Load (variant)
         if self.generator.config.serialization.is_enabled() {
             if variant_index.is_none() {
                 writeln!(
-                    self.out,
+                    out,
                     "static deserialize(deserializer: Deserializer): {name} {{",
                 )?;
             } else {
                 writeln!(
-                    self.out,
+                    out,
                     "static load(deserializer: Deserializer): {variant_base_name}{name} {{",
                 )?;
             }
-            self.out.indent();
+            out.indent();
             for field in fields {
                 writeln!(
-                    self.out,
+                    out,
                     "const {} = {};",
                     field.name,
                     self.quote_deserialize(&field.value)
                 )?;
             }
             writeln!(
-                self.out,
+                out,
                 r"return new {0}{1}({2});",
                 variant_base_name,
                 name,
@@ -595,59 +628,61 @@ return list;
                     .collect::<Vec<_>>()
                     .join(",")
             )?;
-            self.out.unindent();
-            writeln!(self.out, "}}\n")?;
+            out.unindent();
+            writeln!(out, "}}\n")?;
         }
-        writeln!(self.out, "}}")
+        out.unindent();
+        writeln!(out, "}}")
     }
 
     fn output_enum_container(
         &mut self,
+        out: &mut IndentedWriter<T>,
         name: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
     ) -> std::io::Result<()> {
-        self.output_comment(name)?;
-        writeln!(self.out, "export abstract class {name} {{")?;
+        self.output_comment(out, name)?;
+        writeln!(out, "export abstract class {name} {{")?;
+        out.indent();
         if self.generator.config.serialization.is_enabled() {
-            writeln!(
-                self.out,
-                "abstract serialize(serializer: Serializer): void;\n"
-            )?;
+            writeln!(out, "abstract serialize(serializer: Serializer): void;\n")?;
             write!(
-                self.out,
+                out,
                 "static deserialize(deserializer: Deserializer): {name} {{"
             )?;
-            self.out.indent();
+            out.indent();
             writeln!(
-                self.out,
+                out,
                 r"
 const index = deserializer.deserializeVariantIndex();
 switch (index) {{",
             )?;
-            self.out.indent();
+            out.indent();
             for (index, variant) in variants {
                 writeln!(
-                    self.out,
+                    out,
                     "case {}: return {}Variant{}.load(deserializer);",
                     index, name, variant.name,
                 )?;
             }
             writeln!(
-                self.out,
+                out,
                 "default: throw new Error(\"Unknown variant index for {name}: \" + index);",
             )?;
-            self.out.unindent();
-            writeln!(self.out, "}}")?;
-            self.out.unindent();
-            writeln!(self.out, "}}")?;
+            out.unindent();
+            writeln!(out, "}}")?;
+            out.unindent();
+            writeln!(out, "}}")?;
         }
-        writeln!(self.out, "}}\n")?;
-        self.output_variants(name, variants)?;
+        out.unindent();
+        writeln!(out, "}}\n")?;
+        self.output_variants(out, name, variants)?;
         Ok(())
     }
 
     pub fn output_container(
         &mut self,
+        out: &mut IndentedWriter<T>,
         name: &str,
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
@@ -668,11 +703,11 @@ switch (index) {{",
                 .collect::<Vec<_>>(),
             Struct(fields) => fields.clone(),
             Enum(variants) => {
-                self.output_enum_container(name, variants)?;
+                self.output_enum_container(out, name, variants)?;
                 return Ok(());
             }
         };
-        self.output_struct_or_variant_container(None, None, name, &fields)
+        self.output_struct_or_variant_container(out, None, None, name, &fields)
     }
 }
 

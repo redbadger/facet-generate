@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
@@ -69,6 +69,7 @@ fn test() {
                     &[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../Serde".to_string()),
+                        module_name: None,
                         version: None,
                     }],
                 );
@@ -86,26 +87,15 @@ fn test() {
                     &[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../serde".to_string()),
+                        module_name: None,
                         version: None,
                     }],
                     InstallTarget::Node,
                 );
                 installer.install_serde_runtime().unwrap(); // also installs bcs and bincode
-                let external_packages: ExternalPackages = vec![ExternalPackage {
-                    for_namespace: "serde".to_string(),
-                    location: PackageLocation::Path("../serde".to_string()),
-                    version: None,
-                }]
-                .into_iter()
-                .map(|d| (d.for_namespace.clone(), d))
-                .collect();
 
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .config()
-                        .clone()
-                        .with_import_locations(external_packages.clone());
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

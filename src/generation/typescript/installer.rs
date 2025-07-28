@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    fs::{File, create_dir_all},
     io::Write as _,
     path::{Path, PathBuf},
 };
@@ -61,10 +62,10 @@ impl Installer {
         path: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let dir_path = self.install_dir.join(path);
-        std::fs::create_dir_all(&dir_path)?;
+        create_dir_all(&dir_path)?;
         for entry in source_dir.files() {
             let (file_name, content) = self.transform_runtime_file(entry)?;
-            let mut file = std::fs::File::create(dir_path.join(file_name))?;
+            let mut file = File::create(dir_path.join(file_name))?;
             file.write_all(&content)?;
         }
         Ok(())
@@ -132,16 +133,35 @@ impl Installer {
             let mut dependencies = BTreeMap::new();
 
             for external_package in self.external_packages.values() {
-                let package_name = Self::package_name_from_location(&external_package.location);
-                let version = match &external_package.location {
-                    PackageLocation::Path(path) => format!("file:{path}"),
-                    PackageLocation::Url(_) => external_package
-                        .version
-                        .as_ref()
-                        .unwrap_or(&"*".to_string())
-                        .clone(),
+                let (name, version) = match &external_package.location {
+                    PackageLocation::Path(path) => (
+                        external_package.for_namespace.clone(),
+                        format!("file:{path}"),
+                    ),
+                    PackageLocation::Url(url) => (
+                        {
+                            // Extract package name from URL
+                            // For npm packages, the URL might be like "https://registry.npmjs.org/package-name"
+                            // or "https://registry.npmjs.org/@scope/package-name"
+                            let parts: Vec<&str> = url.split('/').collect();
+                            if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
+                                // Scoped package: @scope/package-name
+                                format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
+                            } else if let Some(last_segment) = parts.last() {
+                                // Regular package: package-name
+                                (*last_segment).to_string()
+                            } else {
+                                url.clone()
+                            }
+                        },
+                        external_package
+                            .version
+                            .as_ref()
+                            .unwrap_or(&"*".to_string())
+                            .clone(),
+                    ),
                 };
-                dependencies.insert(package_name, version);
+                dependencies.insert(name, version);
             }
 
             manifest["dependencies"] = json!(dependencies);
@@ -154,34 +174,6 @@ impl Installer {
 
         manifest
     }
-
-    fn package_name_from_location(location: &PackageLocation) -> String {
-        match location {
-            PackageLocation::Url(url) => {
-                // Extract package name from URL
-                // For npm packages, the URL might be like "https://registry.npmjs.org/package-name"
-                // or "https://registry.npmjs.org/@scope/package-name"
-                let parts: Vec<&str> = url.split('/').collect();
-                if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
-                    // Scoped package: @scope/package-name
-                    format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
-                } else if let Some(last_segment) = parts.last() {
-                    // Regular package: package-name
-                    (*last_segment).to_string()
-                } else {
-                    url.clone()
-                }
-            }
-            PackageLocation::Path(path) => {
-                // For local packages, use the directory name
-                if let Some(last_segment) = path.split('/').next_back() {
-                    last_segment.to_string()
-                } else {
-                    path.clone()
-                }
-            }
-        }
-    }
 }
 
 impl SourceInstaller for Installer {
@@ -192,21 +184,32 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> Result<(), Self::Error> {
-        let should_install_module = !self.external_packages.contains_key(config.module_name());
-
-        if should_install_module {
-            let dir_path = self.install_dir.join(&config.module_name);
-            std::fs::create_dir_all(&dir_path)?;
-            let file_name = match self.target {
-                InstallTarget::Node => "index.ts",
-                InstallTarget::Deno => "mod.ts",
-            };
-            let source_path = dir_path.join(file_name);
-            let mut file = std::fs::File::create(source_path)?;
-
-            let generator = CodeGenerator::new(config, self.target);
-            generator.output(&mut file, registry)?;
+        let skip_module = self.external_packages.contains_key(config.module_name());
+        if skip_module {
+            return Ok(());
         }
+        let file_name = match self.target {
+            InstallTarget::Node => {
+                create_dir_all(&self.install_dir)?;
+
+                let module_name = config.module_name();
+                self.install_dir.join(format!("{module_name}.ts"))
+            }
+            InstallTarget::Deno => {
+                let dir_path = self.install_dir.join(&config.module_name);
+                create_dir_all(&dir_path)?;
+
+                dir_path.join("mod.ts")
+            }
+        };
+        let mut file = File::create(file_name)?;
+
+        // Update config with external packages from installer
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+
+        let generator = CodeGenerator::new(&updated_config, self.target);
+        generator.output(&mut file, registry)?;
 
         Ok(())
     }
@@ -240,7 +243,7 @@ impl SourceInstaller for Installer {
         let manifest = serde_json::to_string_pretty(&manifest)?;
 
         let manifest_path = self.install_dir.join("package.json");
-        let mut file = std::fs::File::create(manifest_path)?;
+        let mut file = File::create(manifest_path)?;
         file.write_all(manifest.as_bytes())?;
 
         Ok(())

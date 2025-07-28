@@ -1,4 +1,7 @@
-use std::{collections::HashMap, io::Write};
+use std::{
+    collections::HashMap,
+    io::{Cursor, Write},
+};
 
 use heck::ToUpperCamelCase as _;
 
@@ -19,10 +22,6 @@ pub struct CodeGenerator<'a> {
     /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
     /// Derived from `config.external_definitions`.
     pub(crate) external_qualified_names: HashMap<String, String>,
-    /// vector of namespaces to import
-    pub(crate) namespaces_to_import: Vec<String>,
-    /// Mapping from namespace to import path for external packages
-    pub(crate) external_import_paths: HashMap<String, String>,
     /// Whether to generate extensionless imports (for React/Node.js compatibility)
     pub(crate) target: InstallTarget,
 }
@@ -56,42 +55,39 @@ impl<'a> CodeGenerator<'a> {
                     }
                 }
                 crate::generation::PackageLocation::Path(path) => {
-                    // For local packages, use relative path
-                    format!("./{}", path.trim_start_matches("../"))
+                    // For local packages, use path
+                    path.clone()
                 }
             };
-            external_import_paths.insert(namespace.clone(), import_path);
+            external_import_paths.insert(namespace.to_lowercase(), import_path);
         }
 
         Self {
             config,
             external_qualified_names,
-            namespaces_to_import: config
-                .external_definitions
-                .keys()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>(),
-            external_import_paths,
             target,
         }
     }
 
     /// Output class definitions for `registry` in a single source file.
-    pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> std::io::Result<()> {
-        let mut emitter =
-            TypeScriptEmitter::new(IndentedWriter::new(out, IndentConfig::Space(2)), self);
+    pub fn output<B: Write>(&self, out: &mut B, registry: &Registry) -> std::io::Result<()> {
+        let mut emitter = TypeScriptEmitter::new(self);
 
-        emitter.output_preamble()?;
-
+        let mut body = Cursor::new(Vec::new());
+        let mut writer = IndentedWriter::new(&mut body, IndentConfig::Space(2));
         for (name, format) in registry {
-            emitter.output_container(&name.name, format)?;
+            emitter.output_container(&mut writer, &name.name, format)?;
         }
-
-        emitter.output_type_aliases()?;
 
         if self.config.serialization.is_enabled() {
-            emitter.output_helpers(registry)?;
+            emitter.output_helpers(&mut writer, registry)?;
         }
+
+        let mut preamble = Cursor::new(Vec::new());
+        emitter.output_preamble(&mut preamble)?;
+
+        out.write_all(&preamble.into_inner())?;
+        out.write_all(&body.into_inner())?;
 
         Ok(())
     }

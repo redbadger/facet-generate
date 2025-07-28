@@ -107,6 +107,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
         &[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Url("https://github.com/serde-rs/serde".to_string()),
+            module_name: None,
             version: Some("1.0.137".to_string()),
         }],
     );
@@ -165,6 +166,7 @@ fn manifest_with_serde_as_a_local_dependency() {
         &[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Path("../Serde".to_string()),
+            module_name: None,
             version: None,
         }],
     );
@@ -323,6 +325,7 @@ fn manifest_with_remote_dependencies() {
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
             ),
+            module_name: None,
             version: Some("1.0".to_string()),
         }],
     );
@@ -382,6 +385,7 @@ fn manifest_with_namespaces_and_dependencies() {
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
             ),
+            module_name: None,
             version: Some("1.0".to_string()),
         }],
     );
@@ -450,6 +454,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
             ),
+            module_name: None,
             version: Some("1.0".to_string()),
         }],
     );
