@@ -147,13 +147,6 @@ impl CodeGeneratorConfig {
         self
     }
 
-    /// Import locations for external dependencies.
-    #[must_use]
-    pub fn with_import_locations(mut self, import_locations: ExternalPackages) -> Self {
-        self.external_packages = import_locations;
-        self
-    }
-
     /// Comments attached to particular entity.
     #[must_use]
     pub fn with_comments(mut self, mut comments: DocComments) -> Self {
@@ -265,5 +258,6 @@ pub enum PackageLocation {
 pub struct ExternalPackage {
     pub for_namespace: String,
     pub location: PackageLocation,
+    pub module_name: Option<String>,
     pub version: Option<String>,
 }

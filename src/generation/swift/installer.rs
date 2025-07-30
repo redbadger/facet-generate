@@ -196,28 +196,35 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let should_install_module = !self.external_packages.contains_key(config.module_name());
+        let skip_module = self.external_packages.contains_key(config.module_name());
 
-        if should_install_module {
-            let module_name = config.module_name().to_upper_camel_case();
-
-            let targets = self.targets.entry(module_name.clone()).or_default();
-            for target in config.external_definitions.keys() {
-                targets.insert(target.clone());
-            }
-
-            if config.serialization.is_enabled() {
-                targets.insert("Serde".to_string());
-            }
-
-            let dir_path = self.install_dir.join("Sources").join(&module_name);
-            std::fs::create_dir_all(&dir_path)?;
-            let source_path = dir_path.join(format!("{module_name}.swift"));
-
-            let mut file = std::fs::File::create(source_path)?;
-            let generator = CodeGenerator::new(config);
-            generator.output(&mut file, registry)?;
+        if skip_module {
+            return Ok(());
         }
+
+        let module_name = config.module_name().to_upper_camel_case();
+
+        let targets = self.targets.entry(module_name.clone()).or_default();
+        for target in config.external_definitions.keys() {
+            targets.insert(target.clone());
+        }
+
+        if config.serialization.is_enabled() {
+            targets.insert("Serde".to_string());
+        }
+
+        let dir_path = self.install_dir.join("Sources").join(&module_name);
+        std::fs::create_dir_all(&dir_path)?;
+        let source_path = dir_path.join(format!("{module_name}.swift"));
+
+        let mut file = std::fs::File::create(source_path)?;
+
+        // Update config with external packages from installer
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+
+        let generator = CodeGenerator::new(&updated_config);
+        generator.output(&mut file, registry)?;
 
         Ok(())
     }

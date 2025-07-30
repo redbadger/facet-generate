@@ -42,6 +42,7 @@ mod tests {
             location: PackageLocation::Url(
                 "https://github.com/stephencelis/SQLite.swift.git".to_string(),
             ),
+            module_name: None,
             version: Some("0.12.2".to_string()),
         };
 
@@ -58,6 +59,7 @@ mod tests {
         let dependency = ExternalPackage {
             for_namespace: "SQLite.swift".to_string(),
             location: PackageLocation::Path("path/to/SQLite.swift".to_string()),
+            module_name: None,
             version: None,
         };
 

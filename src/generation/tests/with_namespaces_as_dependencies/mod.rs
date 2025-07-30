@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        ExternalPackage, ExternalPackages, PackageLocation, SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift,
         tests::{check, read_files_and_create_expect_dirs},
@@ -85,6 +85,7 @@ fn test() {
                         location: PackageLocation::Url(
                             "https://github.com/example/other".to_string(),
                         ),
+                        module_name: None,
                         version: Some("1.0.0".to_string()),
                     }],
                 );
@@ -103,25 +104,14 @@ fn test() {
                         location: PackageLocation::Url(
                             "https://registry.npmjs.org/other".to_string(),
                         ),
+                        module_name: None,
                         version: Some("^1.0.0".to_string()),
                     }],
                     InstallTarget::Node,
                 );
-                let external_packages: ExternalPackages = vec![ExternalPackage {
-                    for_namespace: "other".to_string(),
-                    location: PackageLocation::Url("https://registry.npmjs.org/other".to_string()),
-                    version: Some("^1.0.0".to_string()),
-                }]
-                .into_iter()
-                .map(|d| (d.for_namespace.clone(), d))
-                .collect();
 
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .config()
-                        .clone()
-                        .without_serialization()
-                        .with_import_locations(external_packages.clone());
+                    let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();

@@ -34,6 +34,7 @@ where
             .map(AsUpperCamelCase)
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
+
         imports.sort();
         imports.dedup();
 
@@ -77,7 +78,7 @@ where
             TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(qualified_name) => self.quote_typename(&qualified_name.name),
+            TypeName(type_) => self.quote_typename(&type_.name),
             Unit => "Unit".into(),
             Bool => "Bool".into(),
             I8 => "Int8".into(),

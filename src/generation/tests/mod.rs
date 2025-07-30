@@ -7,7 +7,6 @@ use expect_test::ExpectFile;
 use ignore::WalkBuilder;
 
 mod basic;
-mod with_imported_dependencies;
 mod with_namespaces_as_dependencies;
 mod with_namespaces_as_targets;
 mod with_serialization;
