@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
@@ -47,7 +47,17 @@ fn test() {
         match target {
             "java" => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = java::Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("com.novi.serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
+                installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
                     let is_root_package = package_name == this_module;
@@ -56,25 +66,46 @@ fn test() {
                     } else {
                         &Module::new([package_name, this_module].join("."))
                     };
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    let config = module.config();
+                    installer.install_module(config, registry).unwrap();
                 }
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("../Serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
+                installer.install_serde_runtime().unwrap();
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    let config = module.config();
+                    installer.install_module(config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
+                let mut installer = typescript::Installer::new(
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("./serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                    InstallTarget::Node,
+                );
+                installer.install_serde_runtime().unwrap();
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

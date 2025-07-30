@@ -95,9 +95,7 @@ where
             TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
         };
         match format {
-            TypeName(qualified_name) => {
-                self.quote_qualified_name(&qualified_name.to_legacy_string(ToString::to_string))
-            }
+            TypeName(qualified_name) => self.quote_qualified_name(&qualified_name.name),
             Unit => "com.novi.serde.Unit".into(),
             Bool => "Boolean".into(),
             I8 => "Byte".into(),
@@ -242,9 +240,7 @@ where
             TypeName(qualified_name) => {
                 format!(
                     "{}.deserialize(deserializer)",
-                    self.quote_qualified_name(
-                        &qualified_name.to_legacy_string(ToString::to_string)
-                    )
+                    self.quote_qualified_name(&qualified_name.name)
                 )
             }
             Unit => "deserializer.deserialize_unit()".to_string(),

@@ -7,19 +7,33 @@ use include_dir::include_dir;
 
 use crate::{
     Registry,
-    generation::{CodeGeneratorConfig, SourceInstaller, java::CodeGenerator},
+    generation::{
+        CodeGeneratorConfig, ExternalPackage, ExternalPackages, SourceInstaller,
+        java::CodeGenerator,
+    },
 };
 
 /// Installer for generated source files in Java.
 pub struct Installer {
     install_dir: PathBuf,
+    external_packages: ExternalPackages,
 }
 
 impl Installer {
     #[must_use]
-    pub fn new(install_dir: impl AsRef<Path>) -> Self {
+    pub fn new(
+        _package_name: &str,
+        install_dir: impl AsRef<Path>,
+        external_packages: &[ExternalPackage],
+    ) -> Self {
+        let external_packages = external_packages
+            .iter()
+            .map(|dependency| (dependency.for_namespace.clone(), dependency.clone()))
+            .collect();
+
         Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
+            external_packages,
         }
     }
 
@@ -46,7 +60,20 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let generator = CodeGenerator::new(config);
+        // Extract the namespace from the module name to check if it's external
+        let module_parts: Vec<&str> = config.module_name().split('.').collect();
+        let namespace = module_parts.last().map_or("", |v| *v);
+        let skip_module = self.external_packages.contains_key(namespace);
+
+        if skip_module {
+            return Ok(());
+        }
+
+        // Update config with external packages from installer
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+
+        let generator = CodeGenerator::new(&updated_config);
         generator.write_source_files(self.install_dir.clone(), registry)?;
         Ok(())
     }

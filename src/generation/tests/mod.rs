@@ -7,12 +7,13 @@ use expect_test::ExpectFile;
 use ignore::WalkBuilder;
 
 mod basic;
-mod with_namespaces_as_dependencies;
-mod with_namespaces_as_targets;
+mod with_namespaces_as_external;
+mod with_namespaces_as_internal;
 mod with_serialization;
-mod with_serialization_and_serde_as_separate_package;
-mod with_serialization_and_serde_dependency;
-mod with_serialization_and_serde_target;
+mod with_serialization_and_namespaces_as_external;
+mod with_serialization_and_serde_external;
+mod with_serialization_and_serde_internal;
+mod with_serialization_and_serde_local;
 
 fn read_files_and_create_expect_dirs(
     tmp_path: impl AsRef<Path>,

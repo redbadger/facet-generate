@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java,
         module::{self, Module},
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test() {
     #[derive(Facet)]
     struct Child {
@@ -44,10 +45,21 @@ fn test() {
         let snapshot_dir = this_dir.join(target);
         fs::create_dir_all(&snapshot_dir).unwrap();
 
+        #[allow(clippy::match_same_arms)]
         match target {
             "java" => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = java::Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("com.novi.serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
+                installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
                     let is_root_package = package_name == this_module;
@@ -62,20 +74,52 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = Installer::new(
+                    package_name,
+                    tmp_path.join(package_name),
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("../Serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config();
                     installer.install_module(config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
+
+                let package_name = "Serde";
+                let mut installer = Installer::new(package_name, tmp_path.join(package_name), &[]);
+                installer.install_serde_runtime().unwrap();
+                installer.install_manifest(package_name).unwrap();
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
+                let mut installer = typescript::Installer::new(
+                    tmp_path.join(package_name),
+                    &[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("../serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                    InstallTarget::Node,
+                );
+
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
+                installer.install_manifest(package_name).unwrap();
+
+                let package_name = "serde";
+                let mut installer = typescript::Installer::new(
+                    tmp_path.join(package_name),
+                    &[],
+                    InstallTarget::Node,
+                );
+                installer.install_serde_runtime().unwrap();
                 installer.install_manifest(package_name).unwrap();
             }
             _ => unreachable!(),
