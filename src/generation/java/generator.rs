@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use crate::{
     Registry,
@@ -28,13 +28,25 @@ impl<'a> CodeGenerator<'a> {
             "Java does not support generating c-style enums"
         );
         let mut external_qualified_names = HashMap::new();
-        let root_module = config.module_name();
         for (namespace, names) in &config.external_definitions {
+            // Get the external package for this namespace to determine the correct package location
+            let package_name =
+                if let Some(external_package) = config.external_packages.get(namespace) {
+                    // Use the external package location for the qualified name
+                    match &external_package.location {
+                        crate::generation::PackageLocation::Path(path) => path.clone(),
+                        crate::generation::PackageLocation::Url(_) => {
+                            // Fallback to using the current module name + namespace for URLs
+                            format!("{}.{}", config.module_name(), namespace)
+                        }
+                    }
+                } else {
+                    // Fallback to using the current module name + namespace if no external package is defined
+                    format!("{}.{}", config.module_name(), namespace)
+                };
+
             for name in names {
-                external_qualified_names.insert(
-                    name.to_string(),
-                    format!("{root_module}.{namespace}.{name}"),
-                );
+                external_qualified_names.insert(name.to_string(), format!("{package_name}.{name}"));
             }
         }
         Self {
@@ -48,7 +60,7 @@ impl<'a> CodeGenerator<'a> {
     /// package name (if any, otherwise `install_dir` it self).
     pub fn write_source_files(
         &self,
-        install_dir: std::path::PathBuf,
+        install_dir: PathBuf,
         registry: &Registry,
     ) -> std::io::Result<()> {
         let current_namespace = self

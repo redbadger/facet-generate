@@ -8,7 +8,7 @@ use crate::{
     generation::{
         SourceInstaller as _, java,
         module::{self, Module},
-        swift::Installer,
+        swift,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
@@ -18,8 +18,22 @@ use crate::{
 #[test]
 fn test() {
     #[derive(Facet)]
-    struct Child {
+    #[facet(namespace = "other")]
+    pub struct OtherChild {
         name: String,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(namespace = "other")]
+    #[allow(unused)]
+    pub enum OtherParent {
+        Child(OtherChild),
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        external: OtherParent,
     }
 
     #[derive(Facet)]
@@ -62,7 +76,7 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = swift::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();

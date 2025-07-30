@@ -6,9 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
-        module::{self, Module},
-        swift::Installer,
+        ExternalPackage, PackageLocation, SourceInstaller as _, java, module, swift,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
@@ -16,10 +14,25 @@ use crate::{
 };
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test() {
     #[derive(Facet)]
-    struct Child {
+    #[facet(namespace = "other")]
+    pub struct OtherChild {
         name: String,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(namespace = "other")]
+    #[allow(unused)]
+    pub enum OtherParent {
+        Child(OtherChild),
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        external: OtherParent,
     }
 
     #[derive(Facet)]
@@ -47,14 +60,23 @@ fn test() {
         match target {
             "java" => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = java::Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Path("com.example2.other".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
                 for (module, registry) in &module::split(package_name, &registry) {
                     let this_module = &module.config().module_name;
                     let is_root_package = package_name == this_module;
                     let module = if is_root_package {
                         module
                     } else {
-                        &Module::new([package_name, this_module].join("."))
+                        &module::Module::new([package_name, this_module].join("."))
                     };
                     let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
@@ -62,7 +84,18 @@ fn test() {
             }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = swift::Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Url(
+                            "https://github.com/example/other".to_string(),
+                        ),
+                        module_name: None,
+                        version: Some("1.0.0".to_string()),
+                    }],
+                );
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();
@@ -71,7 +104,19 @@ fn test() {
             }
             "typescript" => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
+                let mut installer = typescript::Installer::new(
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Url(
+                            "https://registry.npmjs.org/other".to_string(),
+                        ),
+                        module_name: None,
+                        version: Some("^1.0.0".to_string()),
+                    }],
+                    InstallTarget::Node,
+                );
+
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();

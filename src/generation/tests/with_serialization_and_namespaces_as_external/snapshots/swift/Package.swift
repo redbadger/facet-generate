@@ -9,10 +9,16 @@ let package = Package(
             targets: ["Example"]
         )
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/example/other",
+            from: "1.0.0"
+        )
+    ],
     targets: [
         .target(
             name: "Example",
-            dependencies: ["Serde"]
+            dependencies: ["Other", "Serde"]
         ),
     ]
 )
