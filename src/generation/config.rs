@@ -250,14 +250,21 @@ impl ConfigBuilder {
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PackageLocation {
+    /// Either a local file path or, for Java, a dot-separated package name.
     Path(String),
+    // The URL of a remote package.
     Url(String),
 }
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExternalPackage {
+    /// The namespace as specified in `#[facet(namespace = "namespace")]`.
     pub for_namespace: String,
+    /// The location of the package.
     pub location: PackageLocation,
+    /// The name of the module, if you are importing one from a package.
+    /// e.g. in TypeScript: `import { Foo } from 'package_name/module_name';`
     pub module_name: Option<String>,
+    /// An optional string to specify the version of a published package.
     pub version: Option<String>,
 }

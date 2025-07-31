@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.10.1] - 2025-07-31
+
+### 🚀 Features
+
+- removes some unneeded dependencies, adds some doc comments, and tidies up a bit
+
 ## [0.10.0] - 2025-07-30
 
 ### 🚀 Features
