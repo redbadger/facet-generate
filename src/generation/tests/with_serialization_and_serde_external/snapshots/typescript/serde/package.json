@@ -1,7 +1,7 @@
 {
-  "name": "serde",
-  "version": "0.1.0",
   "devDependencies": {
     "typescript": "^5.8.3"
-  }
+  },
+  "name": "serde",
+  "version": "0.1.0"
 }

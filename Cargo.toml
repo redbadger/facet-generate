@@ -10,33 +10,24 @@ edition = "2024"
 rust-version = "1.87"
 
 [dependencies]
-anyhow = "1.0.98"
 derive_builder = "0.20.2"
-erased-discriminant = "1"
 facet = "0.28.0"
 heck = "0.5.0"
 include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
 indoc = "2.0.6"
-once_cell = "1.21.3"
-phf = { version = "0.12.1", features = ["macros"], optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.141"
 textwrap = "0.16.2"
 thiserror = "2.0.12"
-typeid = "1"
 
 [dev-dependencies]
 insta = { version = "1.43.1", features = ["yaml", "json"] }
-alloy-sol-types = "1.3.0"
 bcs = "0.1.6"
 bincode = "=1"
-hex = "0.4.3"
 maplit = "1.0.2"
 regex = "1.11.1"
-revm = "27.1.0"
 tempfile = "3.20.0"
-which = "8.0.0"
 expect-test = "1.5.1"
 ignore = "0.4.23"
 

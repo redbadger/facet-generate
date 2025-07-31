@@ -20,11 +20,11 @@ fn simple_manifest() {
 
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -55,15 +55,15 @@ fn manifest_with_dependencies() {
 
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "dependencies": {
         "axios": "^1.6.0",
         "lodash": "^4.17.21"
       },
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -85,14 +85,14 @@ fn manifest_with_local_dependencies() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "dependencies": {
         "shared-types": "file:../shared-types"
       },
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -123,15 +123,15 @@ fn manifest_with_mixed_dependencies() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "dependencies": {
         "lodash": "^4.17.21",
         "shared-types": "file:../shared-types"
       },
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -162,11 +162,11 @@ fn manifest_with_serde_module() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -199,11 +199,11 @@ fn manifest_with_namespaces() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -244,14 +244,14 @@ fn manifest_with_external_namespace_dependencies() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "dependencies": {
         "external-package": "^1.0.0"
       },
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }
@@ -273,14 +273,14 @@ fn manifest_with_scoped_package() {
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
     {
-      "name": "my-package",
-      "version": "0.1.0",
       "dependencies": {
         "@types/node": "^20.0.0"
       },
       "devDependencies": {
         "typescript": "^5.8.3"
-      }
+      },
+      "name": "my-package",
+      "version": "0.1.0"
     }
     "#);
 }

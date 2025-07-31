@@ -1,10 +1,10 @@
 {
-  "name": "example",
-  "version": "0.1.0",
   "dependencies": {
     "serde": "file:./serde"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
-  }
+  },
+  "name": "example",
+  "version": "0.1.0"
 }

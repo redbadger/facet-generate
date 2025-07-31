@@ -19,11 +19,12 @@ pub mod swift;
 pub mod typescript;
 
 /// Common logic for codegen.
+#[cfg(any(feature = "java", feature = "swift", feature = "typescript"))]
 mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
 pub use config::*;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "java", feature = "swift", feature = "typescript"))]
 mod tests;

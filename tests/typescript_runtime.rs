@@ -1,3 +1,4 @@
+#![cfg(all(test, feature = "typescript"))]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 mod common;
