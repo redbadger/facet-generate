@@ -6,34 +6,30 @@ use std::string::ToString;
 use crate::reflection::format::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
-    use Format::{
-        Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Map, Option, Seq, Str, Tuple,
-        TupleArray, TypeName, U8, U16, U32, U64, U128, Unit, Variable,
-    };
     match format {
-        TypeName(qualified_name) => qualified_name.to_legacy_string(ToString::to_string),
-        Unit => "unit".into(),
-        Bool => "bool".into(),
-        I8 => "i8".into(),
-        I16 => "i16".into(),
-        I32 => "i32".into(),
-        I64 => "i64".into(),
-        I128 => "i128".into(),
-        U8 => "u8".into(),
-        U16 => "u16".into(),
-        U32 => "u32".into(),
-        U64 => "u64".into(),
-        U128 => "u128".into(),
-        F32 => "f32".into(),
-        F64 => "f64".into(),
-        Char => "char".into(),
-        Str => "str".into(),
-        Bytes => "bytes".into(),
+        Format::TypeName(qualified_name) => qualified_name.to_legacy_string(ToString::to_string),
+        Format::Unit => "unit".into(),
+        Format::Bool => "bool".into(),
+        Format::I8 => "i8".into(),
+        Format::I16 => "i16".into(),
+        Format::I32 => "i32".into(),
+        Format::I64 => "i64".into(),
+        Format::I128 => "i128".into(),
+        Format::U8 => "u8".into(),
+        Format::U16 => "u16".into(),
+        Format::U32 => "u32".into(),
+        Format::U64 => "u64".into(),
+        Format::U128 => "u128".into(),
+        Format::F32 => "f32".into(),
+        Format::F64 => "f64".into(),
+        Format::Char => "char".into(),
+        Format::Str => "str".into(),
+        Format::Bytes => "bytes".into(),
 
-        Option(format) => format!("option_{}", mangle_type(format)),
-        Seq(format) => format!("vector_{}", mangle_type(format)),
-        Map { key, value } => format!("map_{}_to_{}", mangle_type(key), mangle_type(value)),
-        Tuple(formats) => format!(
+        Format::Option(format) => format!("option_{}", mangle_type(format)),
+        Format::Seq(format) => format!("vector_{}", mangle_type(format)),
+        Format::Map { key, value } => format!("map_{}_to_{}", mangle_type(key), mangle_type(value)),
+        Format::Tuple(formats) => format!(
             "tuple{}_{}",
             formats.len(),
             formats
@@ -42,7 +38,9 @@ pub(crate) fn mangle_type(format: &Format) -> String {
                 .collect::<Vec<_>>()
                 .join("_")
         ),
-        TupleArray { content, size } => format!("array{}_{}_array", size, mangle_type(content)),
-        Variable(_) => panic!("unexpected value"),
+        Format::TupleArray { content, size } => {
+            format!("array{}_{}_array", size, mangle_type(content))
+        }
+        Format::Variable(_) => panic!("unexpected value"),
     }
 }

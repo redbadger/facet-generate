@@ -10,13 +10,11 @@ impl Error {
     /// Provides a longer description of the possible cause of an error during tracing.
     #[must_use]
     pub fn explanation(&self) -> String {
-        use Error::UnknownFormat;
-
         match self {
-            UnknownFormat => r"
-An internal error that indicates an incomplete reflection of the annotated types.
-"
-            .to_string(),
+            Error::UnknownFormat => {
+                "An internal error that indicates an incomplete reflection of the annotated types."
+                    .to_string()
+            }
         }
     }
 }

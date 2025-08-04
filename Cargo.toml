@@ -17,7 +17,7 @@ include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
 indoc = "2.0.6"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.141"
+serde_json = "1.0.142"
 textwrap = "0.16.2"
 thiserror = "2.0.12"
 

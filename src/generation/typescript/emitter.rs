@@ -214,42 +214,41 @@ where
     }
 
     fn needs_helper(format: &Format) -> bool {
-        use Format::{Map, Option, Seq, Tuple, TupleArray};
         matches!(
             format,
-            Option(_) | Seq(_) | Map { .. } | Tuple(_) | TupleArray { .. }
+            Format::Option(_)
+                | Format::Seq(_)
+                | Format::Map { .. }
+                | Format::Tuple(_)
+                | Format::TupleArray { .. }
         )
     }
 
     #[allow(clippy::unused_self)]
     fn quote_serialize_value(&self, value: &str, format: &Format, use_this: bool) -> String {
-        use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
-        };
         let this_str = if use_this { "this." } else { "" };
 
         match format {
-            TypeName(_) => {
+            Format::TypeName(_) => {
                 format!("{this_str}{value}.serialize(serializer);")
             }
-            Unit => format!("serializer.serializeUnit({this_str}{value});"),
-            Bool => format!("serializer.serializeBool({this_str}{value});"),
-            I8 => format!("serializer.serializeI8({this_str}{value});"),
-            I16 => format!("serializer.serializeI16({this_str}{value});"),
-            I32 => format!("serializer.serializeI32({this_str}{value});"),
-            I64 => format!("serializer.serializeI64({this_str}{value});"),
-            I128 => format!("serializer.serializeI128({this_str}{value});"),
-            U8 => format!("serializer.serializeU8({this_str}{value});"),
-            U16 => format!("serializer.serializeU16({this_str}{value});"),
-            U32 => format!("serializer.serializeU32({this_str}{value});"),
-            U64 => format!("serializer.serializeU64({this_str}{value});"),
-            U128 => format!("serializer.serializeU128({this_str}{value});"),
-            F32 => format!("serializer.serializeF32({this_str}{value});"),
-            F64 => format!("serializer.serializeF64({this_str}{value});"),
-            Char => format!("serializer.serializeChar({this_str}{value});"),
-            Str => format!("serializer.serializeStr({this_str}{value});"),
-            Bytes => format!("serializer.serializeBytes({this_str}{value});"),
+            Format::Unit => format!("serializer.serializeUnit({this_str}{value});"),
+            Format::Bool => format!("serializer.serializeBool({this_str}{value});"),
+            Format::I8 => format!("serializer.serializeI8({this_str}{value});"),
+            Format::I16 => format!("serializer.serializeI16({this_str}{value});"),
+            Format::I32 => format!("serializer.serializeI32({this_str}{value});"),
+            Format::I64 => format!("serializer.serializeI64({this_str}{value});"),
+            Format::I128 => format!("serializer.serializeI128({this_str}{value});"),
+            Format::U8 => format!("serializer.serializeU8({this_str}{value});"),
+            Format::U16 => format!("serializer.serializeU16({this_str}{value});"),
+            Format::U32 => format!("serializer.serializeU32({this_str}{value});"),
+            Format::U64 => format!("serializer.serializeU64({this_str}{value});"),
+            Format::U128 => format!("serializer.serializeU128({this_str}{value});"),
+            Format::F32 => format!("serializer.serializeF32({this_str}{value});"),
+            Format::F64 => format!("serializer.serializeF64({this_str}{value});"),
+            Format::Char => format!("serializer.serializeChar({this_str}{value});"),
+            Format::Str => format!("serializer.serializeStr({this_str}{value});"),
+            Format::Bytes => format!("serializer.serializeBytes({this_str}{value});"),
             _ => format!(
                 "Helpers.serialize{}({}{}, serializer);",
                 common::mangle_type(format).to_upper_camel_case(),
@@ -260,32 +259,28 @@ where
     }
 
     fn quote_deserialize(&self, format: &Format) -> String {
-        use Format::{
-            Bool, Bytes, Char, F32, F64, I8, I16, I32, I64, I128, Str, TypeName, U8, U16, U32, U64,
-            U128, Unit,
-        };
         match format {
-            TypeName(qualified_name) => format!(
+            Format::TypeName(qualified_name) => format!(
                 "{}.deserialize(deserializer)",
                 self.quote_typename(&qualified_name.name)
             ),
-            Unit => "deserializer.deserializeUnit()".to_string(),
-            Bool => "deserializer.deserializeBool()".to_string(),
-            I8 => "deserializer.deserializeI8()".to_string(),
-            I16 => "deserializer.deserializeI16()".to_string(),
-            I32 => "deserializer.deserializeI32()".to_string(),
-            I64 => "deserializer.deserializeI64()".to_string(),
-            I128 => "deserializer.deserializeI128()".to_string(),
-            U8 => "deserializer.deserializeU8()".to_string(),
-            U16 => "deserializer.deserializeU16()".to_string(),
-            U32 => "deserializer.deserializeU32()".to_string(),
-            U64 => "deserializer.deserializeU64()".to_string(),
-            U128 => "deserializer.deserializeU128()".to_string(),
-            F32 => "deserializer.deserializeF32()".to_string(),
-            F64 => "deserializer.deserializeF64()".to_string(),
-            Char => "deserializer.deserializeChar()".to_string(),
-            Str => "deserializer.deserializeStr()".to_string(),
-            Bytes => "deserializer.deserializeBytes()".to_string(),
+            Format::Unit => "deserializer.deserializeUnit()".to_string(),
+            Format::Bool => "deserializer.deserializeBool()".to_string(),
+            Format::I8 => "deserializer.deserializeI8()".to_string(),
+            Format::I16 => "deserializer.deserializeI16()".to_string(),
+            Format::I32 => "deserializer.deserializeI32()".to_string(),
+            Format::I64 => "deserializer.deserializeI64()".to_string(),
+            Format::I128 => "deserializer.deserializeI128()".to_string(),
+            Format::U8 => "deserializer.deserializeU8()".to_string(),
+            Format::U16 => "deserializer.deserializeU16()".to_string(),
+            Format::U32 => "deserializer.deserializeU32()".to_string(),
+            Format::U64 => "deserializer.deserializeU64()".to_string(),
+            Format::U128 => "deserializer.deserializeU128()".to_string(),
+            Format::F32 => "deserializer.deserializeF32()".to_string(),
+            Format::F64 => "deserializer.deserializeF64()".to_string(),
+            Format::Char => "deserializer.deserializeChar()".to_string(),
+            Format::Str => "deserializer.deserializeStr()".to_string(),
+            Format::Bytes => "deserializer.deserializeBytes()".to_string(),
             _ => format!(
                 "Helpers.deserialize{}(deserializer)",
                 common::mangle_type(format).to_upper_camel_case(),
@@ -299,8 +294,6 @@ where
         name: &str,
         format0: &Format,
     ) -> std::io::Result<()> {
-        use Format::{Map, Option, Seq, Tuple, TupleArray};
-
         let type_ = self.quote_type(format0);
         let name = name.to_upper_camel_case();
         write!(
@@ -309,7 +302,7 @@ where
         )?;
         out.indent();
         match format0 {
-            Option(format) => {
+            Format::Option(format) => {
                 write!(
                     out,
                     r"
@@ -324,7 +317,7 @@ if (value) {{
                 )?;
             }
 
-            Seq(format) => {
+            Format::Seq(format) => {
                 let type_ = self.quote_type(format);
                 let item = self.quote_serialize_value("item", format, false);
                 write!(
@@ -338,7 +331,7 @@ value.forEach((item: {type_}) => {{
                 )?;
             }
 
-            Map { key, value } => {
+            Format::Map { key, value } => {
                 write!(
                     out,
                     r"
@@ -356,7 +349,7 @@ serializer.sortMapEntries(offsets);
                 )?;
             }
 
-            Tuple(format_list) => {
+            Format::Tuple(format_list) => {
                 writeln!(out)?;
                 for (index, format) in format_list.iter().enumerate() {
                     let expr = format!("value[{index}]");
@@ -364,7 +357,7 @@ serializer.sortMapEntries(offsets);
                 }
             }
 
-            TupleArray {
+            Format::TupleArray {
                 content,
                 size: _size,
             } => {
@@ -392,8 +385,6 @@ value.forEach((item) =>{{
         name: &str,
         format0: &Format,
     ) -> std::io::Result<()> {
-        use Format::{Map, Option, Seq, Tuple, TupleArray};
-
         let name = name.to_upper_camel_case();
         let type_ = self.quote_type(format0);
         write!(
@@ -402,7 +393,7 @@ value.forEach((item) =>{{
         )?;
         out.indent();
         match format0 {
-            Option(format) => {
+            Format::Option(format) => {
                 write!(
                     out,
                     r"
@@ -417,7 +408,7 @@ if (!tag) {{
                 )?;
             }
 
-            Seq(format) => {
+            Format::Seq(format) => {
                 let format0 = self.quote_type(format0);
                 write!(
                     out,
@@ -433,7 +424,7 @@ return list;
                 )?;
             }
 
-            Map { key, value } => {
+            Format::Map { key, value } => {
                 let key_type = self.quote_type(key);
                 let value_type = self.quote_type(value);
                 write!(
@@ -464,7 +455,7 @@ return obj;
                 )?;
             }
 
-            Tuple(format_list) => {
+            Format::Tuple(format_list) => {
                 write!(
                     out,
                     r"
@@ -479,7 +470,7 @@ return [{}
                 )?;
             }
 
-            TupleArray { content, size } => {
+            Format::TupleArray { content, size } => {
                 let format0 = self.quote_type(format0);
                 let content = self.quote_deserialize(content);
                 write!(
@@ -508,14 +499,13 @@ return list;
         name: &str,
         variant: &VariantFormat,
     ) -> std::io::Result<()> {
-        use VariantFormat::{NewType, Struct, Tuple, Unit, Variable};
         let fields = match variant {
-            Unit => Vec::new(),
-            NewType(format) => vec![Named {
+            VariantFormat::Unit => Vec::new(),
+            VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
                 value: format.as_ref().clone(),
             }],
-            Tuple(formats) => formats
+            VariantFormat::Tuple(formats) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -523,8 +513,8 @@ return list;
                     value: f.clone(),
                 })
                 .collect(),
-            Struct(fields) => fields.clone(),
-            Variable(_) => panic!("incorrect value"),
+            VariantFormat::Struct(fields) => fields.clone(),
+            VariantFormat::Variable(_) => panic!("incorrect value"),
         };
         self.output_struct_or_variant_container(out, Some(base), Some(index), name, &fields)
     }
@@ -686,14 +676,13 @@ switch (index) {{",
         name: &str,
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
-        use ContainerFormat::{Enum, NewTypeStruct, Struct, TupleStruct, UnitStruct};
         let fields = match format {
-            UnitStruct => Vec::new(),
-            NewTypeStruct(format) => vec![Named {
+            ContainerFormat::UnitStruct => Vec::new(),
+            ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
                 value: format.as_ref().clone(),
             }],
-            TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -701,8 +690,8 @@ switch (index) {{",
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),
-            Struct(fields) => fields.clone(),
-            Enum(variants) => {
+            ContainerFormat::Struct(fields) => fields.clone(),
+            ContainerFormat::Enum(variants) => {
                 self.output_enum_container(out, name, variants)?;
                 return Ok(());
             }

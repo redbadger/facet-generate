@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    io::{Cursor, Write},
-};
+use std::{collections::HashMap, io::Write};
 
 use heck::ToUpperCamelCase as _;
 
@@ -73,7 +70,7 @@ impl<'a> CodeGenerator<'a> {
     pub fn output<B: Write>(&self, out: &mut B, registry: &Registry) -> std::io::Result<()> {
         let mut emitter = TypeScriptEmitter::new(self);
 
-        let mut body = Cursor::new(Vec::new());
+        let mut body = Vec::new();
         let mut writer = IndentedWriter::new(&mut body, IndentConfig::Space(2));
         for (name, format) in registry {
             emitter.output_container(&mut writer, &name.name, format)?;
@@ -83,11 +80,11 @@ impl<'a> CodeGenerator<'a> {
             emitter.output_helpers(&mut writer, registry)?;
         }
 
-        let mut preamble = Cursor::new(Vec::new());
+        let mut preamble = Vec::new();
         emitter.output_preamble(&mut preamble)?;
 
-        out.write_all(&preamble.into_inner())?;
-        out.write_all(&body.into_inner())?;
+        out.write_all(&preamble)?;
+        out.write_all(&body)?;
 
         Ok(())
     }
