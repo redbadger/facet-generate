@@ -11,6 +11,9 @@ pub mod module;
 /// Support for code-generation in Java
 #[cfg(feature = "java")]
 pub mod java;
+/// Support for code-generation in Kotlin
+#[cfg(feature = "kotlin")]
+pub mod kotlin;
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
@@ -19,7 +22,12 @@ pub mod swift;
 pub mod typescript;
 
 /// Common logic for codegen.
-#[cfg(any(feature = "java", feature = "swift", feature = "typescript"))]
+#[cfg(any(
+    feature = "java",
+    feature = "kotlin",
+    feature = "swift",
+    feature = "typescript"
+))]
 mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
@@ -44,5 +52,13 @@ pub trait Language<'a> {
     ) -> std::io::Result<()>;
 }
 
-#[cfg(all(test, feature = "java", feature = "swift", feature = "typescript"))]
+#[cfg(all(test, feature = "generate"))]
 mod tests;
+
+pub trait Emitter<Language> {
+    /// Write the code to the provided `writer`.
+    ///
+    /// # Errors
+    /// This function may fail if the writer encounters an error while writing the generated code.
+    fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<()>;
+}

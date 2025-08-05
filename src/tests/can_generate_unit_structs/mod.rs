@@ -6,5 +6,5 @@ use facet::Facet;
 struct UnitStruct;
 
 crate::test! {
-    UnitStruct for java
+    UnitStruct for java, kotlin
 }
