@@ -1,4 +1,4 @@
-package com.photoroom.engine
+package com.example
 
 import kotlinx.serialization.*
 import kotlinx.serialization.builtins.*
@@ -6,26 +6,15 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
-import com.photoroom.engine.photogossip.interfaces.*
-import com.photoroom.engine.photogossip.extensions.*
-import com.photoroom.engine.misc.EngineSerialization
-import com.photoroom.engine.photogossip.PatchOperation
 
-@Serializable
-data class ItemDetailsFieldValue (
-    val hello: String
-)
+@Serializable data class ItemDetailsFieldValue(val hello: String)
 
 @Serializable
 @JsonClassDiscriminator("t")
 sealed interface AdvancedColors {
-    @Serializable
-    @SerialName("Str")
-    data class Str(val c: String) : AdvancedColors
+    @Serializable @SerialName("Str") data class Str(val c: String) : AdvancedColors
 
-    @Serializable
-    @SerialName("Number")
-    data class Number(val c: Int) : AdvancedColors
+    @Serializable @SerialName("Number") data class Number(val c: Int) : AdvancedColors
 
     @Serializable
     @SerialName("NumberArray")
@@ -43,4 +32,3 @@ sealed interface AdvancedColors {
     @SerialName("DictionaryReallyCoolType")
     data class DictionaryReallyCoolType(val c: Map<String, ItemDetailsFieldValue>) : AdvancedColors
 }
-

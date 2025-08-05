@@ -1,4 +1,4 @@
-package com.photoroom.engine
+package com.example
 
 import kotlinx.serialization.*
 import kotlinx.serialization.builtins.*
@@ -6,19 +6,13 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
-import com.photoroom.engine.photogossip.interfaces.*
-import com.photoroom.engine.photogossip.extensions.*
-import com.photoroom.engine.misc.EngineSerialization
-import com.photoroom.engine.photogossip.PatchOperation
 
 typealias SimpleAlias1 = String
 
 typealias SimpleAlias2 = String
 
 @Serializable(with = BrandedStringAlias.Serializer::class)
-data class BrandedStringAlias (
-    val value: String
-) {
+data class BrandedStringAlias(val value: String) {
     object Serializer : KSerializer<BrandedStringAlias> {
         override val descriptor: SerialDescriptor = String.serializer().descriptor
 
@@ -33,9 +27,7 @@ data class BrandedStringAlias (
 }
 
 @Serializable(with = BrandedOptionalStringAlias.Serializer::class)
-data class BrandedOptionalStringAlias (
-    val value: String?
-) {
+data class BrandedOptionalStringAlias(val value: String?) {
     object Serializer : KSerializer<BrandedOptionalStringAlias> {
         override val descriptor: SerialDescriptor = String.serializer().descriptor
 
@@ -44,15 +36,15 @@ data class BrandedOptionalStringAlias (
         }
 
         override fun deserialize(decoder: Decoder): BrandedOptionalStringAlias {
-            return BrandedOptionalStringAlias(decoder.decodeNullableSerializableValue(String.serializer()))
+            return BrandedOptionalStringAlias(
+                    decoder.decodeNullableSerializableValue(String.serializer())
+            )
         }
     }
 }
 
 @Serializable(with = BrandedU32Alias.Serializer::class)
-data class BrandedU32Alias (
-    val value: UInt
-) {
+data class BrandedU32Alias(val value: UInt) {
     object Serializer : KSerializer<BrandedU32Alias> {
         override val descriptor: SerialDescriptor = UInt.serializer().descriptor
 
@@ -66,16 +58,10 @@ data class BrandedU32Alias (
     }
 }
 
-@Serializable
-data class MyStruct (
-    val field: UInt,
-    val other_field: String
-)
+@Serializable data class MyStruct(val field: UInt, val other_field: String)
 
 @Serializable(with = BrandedStructAlias.Serializer::class)
-data class BrandedStructAlias (
-    val value: MyStruct
-) {
+data class BrandedStructAlias(val value: MyStruct) {
     object Serializer : KSerializer<BrandedStructAlias> {
         override val descriptor: SerialDescriptor = MyStruct.serializer().descriptor
 
@@ -88,4 +74,3 @@ data class BrandedStructAlias (
         }
     }
 }
-

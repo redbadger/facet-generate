@@ -1,4 +1,4 @@
-package com.photoroom.engine
+package com.example
 
 import kotlinx.serialization.*
 import kotlinx.serialization.builtins.*
@@ -6,19 +6,11 @@ import kotlinx.serialization.descriptors.*
 import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
-import com.photoroom.engine.photogossip.interfaces.*
-import com.photoroom.engine.photogossip.extensions.*
-import com.photoroom.engine.misc.EngineSerialization
-import com.photoroom.engine.photogossip.PatchOperation
 
 /// This is a comment.
 @Serializable
-data class Things (
-    @SerialName("bla")
-    val bla: String,
-    @SerialName("label")
-    val label: String? = null,
-    @SerialName("label-left")
-    val label_left: String? = null
+data class Things(
+        @SerialName("bla") val bla: String,
+        @SerialName("label") val label: String? = null,
+        @SerialName("label-left") val label_left: String? = null
 )
-
