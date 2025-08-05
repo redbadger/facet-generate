@@ -4,6 +4,9 @@ pub mod error;
 pub mod generation;
 pub mod reflection;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::BTreeMap;
 
 use crate::{

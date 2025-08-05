@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig,
+        CodeGeneratorConfig, Language,
         indent::{IndentConfig, IndentedWriter},
         java::emitter::JavaEmitter,
     },
@@ -17,6 +17,44 @@ pub struct CodeGenerator<'a> {
     /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
     /// Derived from `config.external_definitions`.
     pub(crate) external_qualified_names: HashMap<String, String>,
+}
+
+impl<'a> Language<'a> for CodeGenerator<'a> {
+    fn new(config: &'a CodeGeneratorConfig) -> Self {
+        CodeGenerator::new(config)
+    }
+
+    fn write_output<W: std::io::Write>(
+        &mut self,
+        writer: &mut W,
+        registry: &Registry,
+    ) -> std::io::Result<()> {
+        let current_namespace = self
+            .config
+            .module_name
+            .split('.')
+            .map(String::from)
+            .collect::<Vec<_>>();
+
+        let mut emitter = JavaEmitter {
+            out: IndentedWriter::new(writer, IndentConfig::Space(4)),
+            generator: self,
+            current_namespace,
+            current_reserved_names: HashMap::new(),
+        };
+
+        emitter.output_preamble()?;
+
+        for (name, format) in registry {
+            emitter.output_container(&name.name, format)?;
+        }
+
+        if self.config.serialization.is_enabled() {
+            emitter.output_trait_helpers(registry)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> CodeGenerator<'a> {
@@ -79,9 +117,11 @@ impl<'a> CodeGenerator<'a> {
         for (name, format) in registry {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
+
         if self.config.serialization.is_enabled() {
             self.write_helper_class(&dir_path, current_namespace, registry)?;
         }
+
         Ok(())
     }
 

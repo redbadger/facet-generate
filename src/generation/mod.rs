@@ -24,7 +24,25 @@ mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
+use std::io::Write;
+
 pub use config::*;
+
+use crate::Registry;
+
+pub trait Language<'a> {
+    fn new(config: &'a CodeGeneratorConfig) -> Self;
+
+    /// Generate code for the given [`Registry`] and write it to the provided `writer`.
+    ///
+    /// # Errors
+    /// This function may fail if the writer encounters an error while writing the generated code.
+    fn write_output<W: Write>(
+        &mut self,
+        writer: &mut W,
+        registry: &Registry,
+    ) -> std::io::Result<()>;
+}
 
 #[cfg(all(test, feature = "java", feature = "swift", feature = "typescript"))]
 mod tests;

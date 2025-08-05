@@ -8,7 +8,7 @@ use heck::{AsUpperCamelCase, ToUpperCamelCase};
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig,
+        CodeGeneratorConfig, Language,
         indent::{IndentConfig, IndentedWriter},
         swift::emitter::SwiftEmitter,
     },
@@ -21,6 +21,20 @@ pub struct CodeGenerator<'a> {
     /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" ->`com.my_org.my_package.MyClass`").
     /// Derived from `config.external_definitions`.
     pub external_qualified_names: HashMap<String, String>,
+}
+
+impl<'a> Language<'a> for CodeGenerator<'a> {
+    fn new(config: &'a CodeGeneratorConfig) -> Self {
+        CodeGenerator::new(config)
+    }
+
+    fn write_output<W: std::io::Write>(
+        &mut self,
+        writer: &mut W,
+        registry: &Registry,
+    ) -> std::io::Result<()> {
+        self.output(writer, registry)
+    }
 }
 
 impl<'a> CodeGenerator<'a> {

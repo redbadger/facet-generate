@@ -5,7 +5,7 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig,
+        CodeGeneratorConfig, Language,
         indent::{IndentConfig, IndentedWriter},
         typescript::{InstallTarget, emitter::TypeScriptEmitter},
     },
@@ -21,6 +21,20 @@ pub struct CodeGenerator<'a> {
     pub(crate) external_qualified_names: HashMap<String, String>,
     /// Whether to generate extensionless imports (for React/Node.js compatibility)
     pub(crate) target: InstallTarget,
+}
+
+impl<'a> Language<'a> for CodeGenerator<'a> {
+    fn new(config: &'a CodeGeneratorConfig) -> Self {
+        CodeGenerator::new(config, InstallTarget::Node)
+    }
+
+    fn write_output<W: std::io::Write>(
+        &mut self,
+        writer: &mut W,
+        registry: &Registry,
+    ) -> std::io::Result<()> {
+        self.output(writer, registry)
+    }
 }
 
 impl<'a> CodeGenerator<'a> {

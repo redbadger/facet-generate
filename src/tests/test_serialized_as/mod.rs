@@ -1,0 +1,22 @@
+#![expect(unused)]
+
+use facet::Facet;
+
+#[derive(Facet)]
+#[facet(serialized_as = "String")]
+pub struct ItemId {
+    inner: i64,
+}
+
+/// Options that you could pick
+#[derive(Facet)]
+#[facet(serialized_as = "String")]
+#[repr(C)]
+pub enum Options {
+    /// Affirmative Response
+    Yes,
+    No,
+    Maybe,
+    /// Sends a string along
+    Cool(String),
+}
