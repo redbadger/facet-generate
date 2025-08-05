@@ -22,14 +22,19 @@ textwrap = "0.16.2"
 thiserror = "2.0.12"
 
 [dev-dependencies]
-insta = { version = "1.43.1", features = ["yaml", "json"] }
 bcs = "0.1.6"
 bincode = "=1"
+chrono = "0.4.41"
+difficient = "0.1.0"
+expect-test = "1.5.1"
+facet = { version = "0.28.0", features = ["chrono", "url"] }
+ignore = "0.4.23"
+insta = { version = "1.43.1", features = ["yaml", "json"] }
 maplit = "1.0.2"
 regex = "1.11.1"
+strum = { version = "0.27.2", features = ["derive"] }
 tempfile = "3.20.0"
-expect-test = "1.5.1"
-ignore = "0.4.23"
+url = "2.5.4"
 
 [features]
 default = ["java", "swift", "typescript"]
