@@ -1,6 +1,6 @@
 pub mod format;
 #[cfg(test)]
-pub mod panic_tests;
+pub mod regression_tests;
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -202,7 +202,7 @@ impl RegistryBuilder {
                 self.handle_pointer(inner_shape(), namespace);
             }
             Def::Pointer(PointerDef { pointee: None, .. }) => {
-                self.handle_null_pointer(shape, namespace);
+                self.handle_opaque_pointee(shape, namespace);
             }
             Def::Undefined => {
                 self.handle_undefined_def(shape, namespace);
@@ -879,10 +879,9 @@ impl RegistryBuilder {
         self.process_nested_types(element_shape, namespace);
     }
 
-    fn handle_null_pointer(&mut self, _shape: &Shape, _namespace: Option<&str>) {
-        // For null pointers (void* or similar), treat as a generic pointer type
-        // This could be represented as a unit type or a special pointer format
-        let format = Format::Unit; // or could be Format::TypeName for a generic pointer type
+    fn handle_opaque_pointee(&mut self, _shape: &Shape, _namespace: Option<&str>) {
+        // For pointers that point to opaque types, treat as unit type for now
+        let format = Format::Unit;
         self.update_container_format(format);
     }
 
