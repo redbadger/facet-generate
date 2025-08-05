@@ -1,3 +1,76 @@
+use crate::{Registry, generation::Language};
+use anyhow::Result;
+use expect_test::ExpectFile;
+
+fn check<'a, L: Language<'a>>(registry: &Registry, mut lang: L, expect: &ExpectFile) -> Result<()> {
+    let mut output: Vec<u8> = Vec::new();
+
+    lang.write_output(&mut output, registry)?;
+
+    let actual = String::from_utf8(output)?;
+    expect.assert_eq(&actual);
+
+    Ok(())
+}
+
+/// Register the given types and output code for the given languages.
+/// e.g.
+/// ```rust
+/// test! {
+///    UnitStruct, AnotherType for java, swift, typescript
+/// }
+/// ```
+#[macro_export]
+macro_rules! test {
+    ($($ty:ident),* for $($language:ident),*) => {
+        mod tests {
+            use $crate::{tests::check, test};
+            use super::*;
+
+            use anyhow::Result;
+            use expect_test::expect_file;
+            use $crate::{
+                generation::{CodeGeneratorConfig, Language},
+                reflection::RegistryBuilder,
+            };
+            use $crate::generation::{$($language),*};
+
+            test!(@generate_tests [$($ty),*] $($language),*);
+        }
+    };
+
+    (@generate_tests [$($ty:ident),*] $language:ident $(, $rest:ident)*) => {
+        #[test]
+        fn $language() -> Result<()> {
+            let registry = RegistryBuilder::new()
+                $(.add_type::<$ty>())*
+                .build();
+            let package_name = test!(@package $language).to_string();
+            let cfg = CodeGeneratorConfig::new(package_name).without_serialization();
+            let generator = <$language::CodeGenerator as Language>::new(&cfg);
+            let expect = expect_file!(test!(@out $language));
+
+            check(&registry, generator, &expect)?;
+
+            Ok(())
+        }
+
+        test!(@generate_tests [$($ty),*] $($rest),*);
+    };
+
+    (@generate_tests [$($ty:ident),*]) => {};
+
+    (@package java) => { "example.com" };
+    (@package kotlin) => { "example.com" };
+    (@package swift) => { "ExamplePackage" };
+    (@package typescript) => { "example_package" };
+
+    (@out java) => { "output.java" };
+    (@out kotlin) => { "output.kt" };
+    (@out swift) => { "output.swift" };
+    (@out typescript) => { "output.ts" };
+}
+
 mod adjacently_tagged_enum_decorator;
 mod anonymous_struct_with_rename;
 mod can_apply_namespace_correctly;

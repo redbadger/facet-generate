@@ -12,3 +12,7 @@ pub enum Colors {
     /// Green is a cool color
     Green = 2,
 }
+
+// crate::tests! {
+//     Colors for java, swift, typescript
+// }

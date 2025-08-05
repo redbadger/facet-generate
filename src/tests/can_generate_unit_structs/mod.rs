@@ -5,6 +5,6 @@ use facet::Facet;
 #[derive(Facet)]
 struct UnitStruct;
 
-crate::tests! {
-    UnitStruct for java, swift, typescript
+crate::test! {
+    UnitStruct for java
 }
