@@ -1,3 +1,5 @@
+#![expect(unused)]
+
 use facet::Facet;
 
 /// Enum keeping track of who autofilled a field

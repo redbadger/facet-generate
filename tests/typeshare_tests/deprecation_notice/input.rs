@@ -1,4 +1,5 @@
 #![expect(deprecated)]
+#![expect(unused)]
 
 use facet::Facet;
 

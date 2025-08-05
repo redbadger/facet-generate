@@ -1,6 +1,8 @@
-use facet::Facet;
+#![expect(unused)]
 
+use facet::Facet;
 #[derive(Facet)]
+
 pub struct ItemDetailsFieldValue {}
 
 #[derive(Facet)]

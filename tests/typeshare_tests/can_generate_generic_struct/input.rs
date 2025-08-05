@@ -1,3 +1,4 @@
+#![expect(unused)]
 #![expect(clippy::struct_field_names)]
 
 use facet::Facet;

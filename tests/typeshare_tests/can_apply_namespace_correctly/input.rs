@@ -1,3 +1,5 @@
+#![expect(unused)]
+
 use std::collections::HashMap;
 
 use facet::Facet;

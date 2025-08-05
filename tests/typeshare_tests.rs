@@ -1,4 +1,6 @@
-#![allow(unused)]
+use anyhow::Result;
+use expect_test::ExpectFile;
+use facet_generate::{Registry, generation::Language};
 
 #[path = "typeshare_tests/adjacently_tagged_enum_decorator/input.rs"]
 mod adjacently_tagged_enum_decorator;
@@ -150,3 +152,14 @@ mod unit_enum_is_properly_named_with_serde_overrides;
 mod use_correct_decoded_variable_name;
 #[path = "typeshare_tests/use_correct_integer_types/input.rs"]
 mod use_correct_integer_types;
+
+fn check<'a, L: Language<'a>>(registry: &Registry, mut lang: L, expect: &ExpectFile) -> Result<()> {
+    let mut output: Vec<u8> = Vec::new();
+
+    lang.write_output(&mut output, registry)?;
+
+    let actual = String::from_utf8(output)?;
+    expect.assert_eq(&actual);
+
+    Ok(())
+}

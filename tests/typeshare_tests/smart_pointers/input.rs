@@ -1,4 +1,5 @@
 #![expect(clippy::box_collection)]
+#![expect(unused)]
 
 use std::{
     borrow::Cow,

@@ -1,3 +1,5 @@
+#![expect(unused)]
+
 use facet::Facet;
 use serde::Serialize;
 

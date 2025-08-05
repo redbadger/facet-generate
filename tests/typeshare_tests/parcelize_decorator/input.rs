@@ -1,4 +1,6 @@
 #![expect(clippy::enum_variant_names)]
+#![expect(unused)]
+
 use facet::Facet;
 
 #[derive(Facet)]
