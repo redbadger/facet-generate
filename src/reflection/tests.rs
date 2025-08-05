@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use super::*;
 
@@ -1119,6 +1119,75 @@ fn map_of_string_and_bool() {
                 KEY: STR
                 VALUE: BOOL
     ");
+}
+
+#[test]
+fn set_of_string() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Set(BTreeSet<String>),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          Set:
+            NEWTYPE:
+              SEQ: STR
+    ");
+}
+
+#[test]
+fn test_fixed_issues() {
+    // Test 1: Set types (previously caused panic due to Def::Set being unhandled)
+    #[derive(Facet)]
+    struct WithSet {
+        set_field: std::collections::BTreeSet<u32>,
+    }
+
+    // Test 2: Nested collections with sets
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(unused)]
+    enum EnumWithSet {
+        SetVariant(std::collections::HashSet<String>),
+        Regular(u32),
+    }
+
+    // Test 3: Complex nested structures that could hit multiple problematic paths
+    #[derive(Facet)]
+    struct ComplexNested {
+        sets: Vec<std::collections::BTreeSet<String>>,
+        optional_set: Option<std::collections::HashSet<u64>>,
+    }
+
+    let builder = RegistryBuilder::new();
+    let builder = builder.add_type::<WithSet>();
+    let builder = builder.add_type::<EnumWithSet>();
+    let builder = builder.add_type::<ComplexNested>();
+
+    // This should not panic - all Variable placeholders should be resolved
+    let registry = builder.build();
+
+    // Verify all types were processed
+    assert!(!registry.is_empty());
+
+    // The registry should contain our types
+    let mut found_types = 0;
+    for key in registry.keys() {
+        if key.name.contains("WithSet")
+            || key.name.contains("EnumWithSet")
+            || key.name.contains("ComplexNested")
+        {
+            found_types += 1;
+        }
+    }
+    assert!(found_types >= 3, "Should have processed all test types");
 }
 
 #[test]

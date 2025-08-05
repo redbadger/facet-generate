@@ -1,4 +1,6 @@
 pub mod format;
+#[cfg(test)]
+pub mod panic_tests;
 
 use std::{
     collections::{BTreeMap, HashSet},
@@ -7,7 +9,7 @@ use std::{
 
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
-    PointerDef, PointerType, PrimitiveType, SequenceType, Shape, ShapeAttribute, SliceDef,
+    PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape, ShapeAttribute, SliceDef,
     StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
 };
 use format::{
@@ -32,6 +34,12 @@ impl RegistryBuilder {
 
     #[must_use]
     pub fn build(self) -> Registry {
+        for format in self.registry.values() {
+            match format.visit(&mut |_| Ok(())) {
+                Ok(()) => (),
+                Err(err) => panic!("should not have any remaining placeholders: {err}"),
+            }
+        }
         self.registry
     }
 
@@ -144,22 +152,35 @@ impl RegistryBuilder {
         namespace: Option<&str>,
     ) -> bool {
         match sequence_type {
-            SequenceType::Slice(_slice_type) => {
+            SequenceType::Slice(slice_type) => {
                 // For slices, use the Def::Slice if available
                 if let Def::Slice(slice_def) = shape.def {
                     self.format_slice(slice_def, namespace);
                     true
                 } else {
-                    false
+                    // Fallback: create a slice format from the sequence type info
+                    let target_shape = slice_type.t;
+                    let inner_format = get_inner_format(target_shape);
+                    let slice_format = Format::Seq(Box::new(inner_format));
+                    self.update_container_format(slice_format);
+                    self.process_nested_types(target_shape, namespace);
+                    true
                 }
             }
-            SequenceType::Array(_array_type) => {
+            SequenceType::Array(array_type) => {
                 // For arrays, use the Def::Array if available
                 if let Def::Array(array_def) = shape.def {
                     self.format_array(array_def, namespace);
                     true
                 } else {
-                    false
+                    // Fallback: create an array format from the sequence type info
+                    let target_shape = array_type.t;
+                    let inner_format = get_inner_format(target_shape);
+                    // For arrays without size info, treat as sequences
+                    let array_format = Format::Seq(Box::new(inner_format));
+                    self.update_container_format(array_format);
+                    self.process_nested_types(target_shape, namespace);
+                    true
                 }
             }
         }
@@ -173,16 +194,19 @@ impl RegistryBuilder {
             Def::Slice(slice_def) => self.format_slice(slice_def, namespace),
             Def::Array(array_def) => self.format_array(array_def, namespace),
             Def::Option(option_def) => self.format_option(option_def, namespace),
+            Def::Set(set_def) => self.format_set(set_def, namespace),
             Def::Pointer(PointerDef {
                 pointee: Some(inner_shape),
                 ..
             }) => {
                 self.handle_pointer(inner_shape(), namespace);
             }
+            Def::Pointer(PointerDef { pointee: None, .. }) => {
+                self.handle_null_pointer(shape, namespace);
+            }
             Def::Undefined => {
                 self.handle_undefined_def(shape, namespace);
             }
-            _ => {}
         }
     }
 
@@ -202,9 +226,18 @@ impl RegistryBuilder {
         // For primitives, we can try to infer the type
         match &shape.ty {
             Type::Primitive(primitive) => match primitive {
-                PrimitiveType::Boolean
-                | PrimitiveType::Numeric(NumericType::Float)
-                | PrimitiveType::Textual(TextualType::Str) => {}
+                PrimitiveType::Boolean => {
+                    let format = Format::Bool;
+                    self.update_container_format(format);
+                }
+                PrimitiveType::Numeric(NumericType::Float) => {
+                    let format = Format::F32; // or F64, but F32 is more common
+                    self.update_container_format(format);
+                }
+                PrimitiveType::Textual(TextualType::Str) => {
+                    let format = Format::Str;
+                    self.update_container_format(format);
+                }
                 p => {
                     unimplemented!("Unknown primitive type: {p:?}");
                 }
@@ -825,8 +858,32 @@ impl RegistryBuilder {
         // Update the current container with the option format
         self.update_container_format(option_format);
 
-        // Also process nested types
+        // Process any user-defined types in the nested structure
         self.process_nested_types(inner_shape, namespace);
+    }
+
+    fn format_set(&mut self, set_def: SetDef, namespace: Option<&str>) {
+        // Get the element type of the Set
+        let element_shape = set_def.t();
+
+        // Get the format for the element type recursively
+        let element_format = get_inner_format(element_shape);
+
+        // Sets are represented as sequences in the format system
+        let set_format = Format::Seq(Box::new(element_format));
+
+        // Update the current container with the set format
+        self.update_container_format(set_format);
+
+        // Process any user-defined types in the nested structure
+        self.process_nested_types(element_shape, namespace);
+    }
+
+    fn handle_null_pointer(&mut self, _shape: &Shape, _namespace: Option<&str>) {
+        // For null pointers (void* or similar), treat as a generic pointer type
+        // This could be represented as a unit type or a special pointer format
+        let format = Format::Unit; // or could be Format::TypeName for a generic pointer type
+        self.update_container_format(format);
     }
 
     fn update_container_format(&mut self, format: Format) {
@@ -1135,7 +1192,11 @@ fn get_inner_format(shape: &Shape) -> Format {
                 Format::TypeName(name)
             }
         }
-        Def::Set(_set_def) => todo!(),
+        Def::Set(set_def) => {
+            // Handle Set<T> -> SEQ: T (sets are represented as sequences)
+            let element_shape = set_def.t();
+            Format::Seq(Box::new(get_inner_format(element_shape)))
+        }
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();
