@@ -60,8 +60,8 @@ macro_rules! test {
 
     (@generate_tests [$($ty:ident),*]) => {};
 
-    (@package java) => { "example.com" };
-    (@package kotlin) => { "example.com" };
+    (@package java) => { "com.example" };
+    (@package kotlin) => { "com.example" };
     (@package swift) => { "ExamplePackage" };
     (@package typescript) => { "example_package" };
 

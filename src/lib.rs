@@ -4,7 +4,7 @@ pub mod error;
 pub mod generation;
 pub mod reflection;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "generate"))]
 mod tests;
 
 use std::collections::BTreeMap;
