@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::io::{Result, Write};
+use std::io::Result;
 
 use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
@@ -8,14 +8,14 @@ use crate::generation::swift::generator::CodeGenerator;
 use crate::reflection::format::{ContainerFormat, Named, VariantFormat};
 use crate::{
     Registry,
-    generation::{common, indent::IndentedWriter},
+    generation::{common, indent::IndentWrite},
     reflection::format::{Format, FormatHolder as _},
 };
 
 /// Shared state for the code generation of a Swift source file.
 pub struct SwiftEmitter<'a, T> {
     /// Writer.
-    pub out: IndentedWriter<T>,
+    pub out: T,
     /// Generator.
     pub generator: &'a CodeGenerator<'a>,
     /// Current namespace (e.g. vec!["Package", "`MyClass`"])
@@ -24,7 +24,7 @@ pub struct SwiftEmitter<'a, T> {
 
 impl<T> SwiftEmitter<'_, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub fn output_preamble(&mut self) -> Result<()> {
         let mut imports = ["Serde".to_string()]

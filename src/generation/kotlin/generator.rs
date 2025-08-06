@@ -1,4 +1,4 @@
-use std::io::Result;
+use std::io::{Result, Write as _};
 
 use crate::{
     Registry,
@@ -33,6 +33,8 @@ impl<'a> Language<'a> for CodeGenerator<'a> {
         for item in registry {
             item.write(w)?;
         }
+
+        writeln!(w)?;
 
         Ok(())
     }

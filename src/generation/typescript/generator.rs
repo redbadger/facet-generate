@@ -85,6 +85,7 @@ impl<'a> CodeGenerator<'a> {
         let mut emitter = TypeScriptEmitter::new(self);
 
         let mut body = Vec::new();
+
         let mut writer = IndentedWriter::new(&mut body, IndentConfig::Space(2));
         for (name, format) in registry {
             emitter.output_container(&mut writer, &name.name, format)?;
@@ -95,7 +96,9 @@ impl<'a> CodeGenerator<'a> {
         }
 
         let mut preamble = Vec::new();
-        emitter.output_preamble(&mut preamble)?;
+
+        let mut writer = IndentedWriter::new(&mut preamble, IndentConfig::Space(2));
+        emitter.output_preamble(&mut writer)?;
 
         out.write_all(&preamble)?;
         out.write_all(&body)?;

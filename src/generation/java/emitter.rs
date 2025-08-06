@@ -1,20 +1,17 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::Write,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{Encoding, common, indent::IndentedWriter, java::generator::CodeGenerator},
+    generation::{Encoding, common, indent::IndentWrite, java::generator::CodeGenerator},
     reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Java source file.
 pub(crate) struct JavaEmitter<'a, T> {
     /// Writer.
-    pub(crate) out: IndentedWriter<T>,
+    pub(crate) out: T,
     /// Generator.
     pub(crate) generator: &'a CodeGenerator<'a>,
     #[allow(clippy::doc_markdown)]
@@ -29,7 +26,7 @@ pub(crate) struct JavaEmitter<'a, T> {
 
 impl<T> JavaEmitter<'_, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub(crate) fn output_preamble(&mut self) -> std::io::Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
