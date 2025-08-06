@@ -17,6 +17,7 @@
 mod tests;
 
 use crate::{Result, error::Error};
+use facet::Shape;
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -91,6 +92,33 @@ impl QualifiedTypeName {
     }
 }
 
+#[derive(Serialize, Deserialize, Default, Debug, Eq, Clone, PartialEq)]
+#[serde(transparent)]
+pub struct Doc(Vec<String>);
+
+impl Doc {
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn push(&mut self, comment: String) {
+        self.0.push(comment);
+    }
+
+    #[must_use]
+    pub fn comments(&self) -> &Vec<String> {
+        &self.0
+    }
+}
+
+impl From<&Shape> for Doc {
+    fn from(shape: &Shape) -> Self {
+        let doc = shape.doc.iter().map(|c| c.trim().to_string()).collect();
+        Self(doc)
+    }
+}
+
 /// Serde-based serialization format for anonymous "value" types.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -148,13 +176,13 @@ pub enum Format {
 #[serde(rename_all = "UPPERCASE")]
 pub enum ContainerFormat {
     /// An empty struct, e.g. `struct A`.
-    UnitStruct,
+    UnitStruct(Doc),
     /// A struct with a single unnamed parameter, e.g. `struct A(u16)`
     NewTypeStruct(Box<Format>),
     /// A struct with several unnamed parameters, e.g. `struct A(u16, u32)`
     TupleStruct(Vec<Format>),
     /// A struct with named parameters, e.g. `struct A { a: Foo }`.
-    Struct(Vec<Named<Format>>),
+    Struct(Vec<Named<Format>>, Doc),
     /// An enum, that is, an enumeration of variants.
     /// Each variant has a unique name and index within the enum.
     Enum(BTreeMap<u32, Named<VariantFormat>>),
@@ -386,14 +414,14 @@ where
 impl FormatHolder for ContainerFormat {
     fn visit<'a>(&'a self, f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
         match self {
-            Self::UnitStruct => (),
+            Self::UnitStruct(_doc) => (),
             Self::NewTypeStruct(format) => format.visit(f)?,
             Self::TupleStruct(formats) => {
                 for format in formats {
                     format.visit(f)?;
                 }
             }
-            Self::Struct(named_formats) => {
+            Self::Struct(named_formats, _doc) => {
                 for format in named_formats {
                     format.visit(f)?;
                 }
@@ -409,14 +437,14 @@ impl FormatHolder for ContainerFormat {
 
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
         match self {
-            Self::UnitStruct => (),
+            Self::UnitStruct(_doc) => (),
             Self::NewTypeStruct(format) => format.visit_mut(f)?,
             Self::TupleStruct(formats) => {
                 for format in formats {
                     format.visit_mut(f)?;
                 }
             }
-            Self::Struct(named_formats) => {
+            Self::Struct(named_formats, _doc) => {
                 for format in named_formats {
                     format.visit_mut(f)?;
                 }

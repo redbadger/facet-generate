@@ -635,16 +635,17 @@ fn test_get_simple_registry() {
     ? namespace: ROOT
       name: Test
     : STRUCT:
-        - a:
-            SEQ: U32
-        - b:
-            TUPLE:
-              - I64
-              - U64
-        - c:
-            TYPENAME:
-              namespace: ROOT
-              name: Choice
+        - - a:
+              SEQ: U32
+          - b:
+              TUPLE:
+                - I64
+                - U64
+          - c:
+              TYPENAME:
+                namespace: ROOT
+                name: Choice
+        - []
     ");
 }
 
@@ -686,60 +687,62 @@ fn test_get_registry() {
     ? namespace: ROOT
       name: OtherTypes
     : STRUCT:
-        - f_string: STR
-        - f_bytes: BYTES
-        - f_option:
-            OPTION:
-              TYPENAME:
-                namespace: ROOT
-                name: Struct
-        - f_unit: UNIT
-        - f_seq:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: Struct
-        - f_opt_seq:
-            OPTION:
-              SEQ: I32
-        - f_tuple:
-            TUPLE:
-              - U8
-              - U16
-        - f_stringmap:
-            MAP:
-              KEY: STR
-              VALUE: U32
-        - f_intset:
-            MAP:
-              KEY: U64
-              VALUE: UNIT
-        - f_nested_seq:
-            SEQ:
+        - - f_string: STR
+          - f_bytes: BYTES
+          - f_option:
+              OPTION:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Struct
+          - f_unit: UNIT
+          - f_seq:
               SEQ:
                 TYPENAME:
                   namespace: ROOT
                   name: Struct
+          - f_opt_seq:
+              OPTION:
+                SEQ: I32
+          - f_tuple:
+              TUPLE:
+                - U8
+                - U16
+          - f_stringmap:
+              MAP:
+                KEY: STR
+                VALUE: U32
+          - f_intset:
+              MAP:
+                KEY: U64
+                VALUE: UNIT
+          - f_nested_seq:
+              SEQ:
+                SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Struct
+        - []
     ? namespace: ROOT
       name: PrimitiveTypes
     : STRUCT:
-        - f_bool: BOOL
-        - f_u8: U8
-        - f_u16: U16
-        - f_u32: U32
-        - f_u64: U64
-        - f_u128: U128
-        - f_i8: I8
-        - f_i16: I16
-        - f_i32: I32
-        - f_i64: I64
-        - f_i128: I128
-        - f_f32:
-            OPTION: F32
-        - f_f64:
-            OPTION: F64
-        - f_char:
-            OPTION: CHAR
+        - - f_bool: BOOL
+          - f_u8: U8
+          - f_u16: U16
+          - f_u32: U32
+          - f_u64: U64
+          - f_u128: U128
+          - f_i8: I8
+          - f_i16: I16
+          - f_i32: I32
+          - f_i64: I64
+          - f_i128: I128
+          - f_f32:
+              OPTION: F32
+          - f_f64:
+              OPTION: F64
+          - f_char:
+              OPTION: CHAR
+        - []
     ? namespace: ROOT
       name: SerdeData
     : ENUM:
@@ -843,20 +846,22 @@ fn test_get_registry() {
     ? namespace: ROOT
       name: Struct
     : STRUCT:
-        - x: U32
-        - y: U64
+        - - x: U32
+          - y: U64
+        - []
     ? namespace: ROOT
       name: Tree
     : STRUCT:
-        - value:
-            TYPENAME:
-              namespace: ROOT
-              name: SerdeData
-        - children:
-            SEQ:
+        - - value:
               TYPENAME:
                 namespace: ROOT
-                name: Tree
+                name: SerdeData
+          - children:
+              SEQ:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Tree
+        - []
     ? namespace: ROOT
       name: TupleStruct
     : TUPLESTRUCT:
@@ -864,7 +869,7 @@ fn test_get_registry() {
         - U64
     ? namespace: ROOT
       name: UnitStruct
-    : UNITSTRUCT
+    : UNITSTRUCT: []
     ");
 }
 

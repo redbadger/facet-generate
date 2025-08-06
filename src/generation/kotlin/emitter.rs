@@ -4,7 +4,7 @@ use indoc::writedoc;
 
 use crate::{
     generation::{Emitter, indent::IndentWrite, module::Module},
-    reflection::format::{ContainerFormat, Format, Named, QualifiedTypeName},
+    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
 };
 
 pub struct Kotlin;
@@ -34,18 +34,18 @@ impl Emitter<Kotlin> for Module {
 impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
     fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
         match self {
-            (name, ContainerFormat::UnitStruct) => {
+            (name, ContainerFormat::UnitStruct(doc)) => {
                 let name = &name.name;
-                data_object(writer, name)?;
+                data_object(writer, name, doc)?;
             }
             (_name, ContainerFormat::NewTypeStruct(_format)) => {}
             (_name, ContainerFormat::TupleStruct(_formats)) => {}
-            (name, ContainerFormat::Struct(nameds)) => {
+            (name, ContainerFormat::Struct(nameds, doc)) => {
                 let name = &name.name;
                 if nameds.is_empty() {
-                    data_object(writer, name)?;
+                    data_object(writer, name, doc)?;
                 } else {
-                    data_class(writer, name, nameds)?;
+                    data_class(writer, name, nameds, doc)?;
                 }
             }
             (_name, ContainerFormat::Enum(_btree_map)) => {}
@@ -134,7 +134,10 @@ impl Emitter<Kotlin> for Format {
     }
 }
 
-fn data_object<W: Write>(writer: &mut W, name: &String) -> Result<()> {
+fn data_object<W: Write>(writer: &mut W, name: &String, doc: &Doc) -> Result<()> {
+    for comment in doc.comments() {
+        writeln!(writer, "/// {comment}")?;
+    }
     writedoc!(
         writer,
         "
@@ -149,11 +152,14 @@ fn data_class<W: IndentWrite>(
     writer: &mut W,
     name: &String,
     nameds: &[Named<Format>],
+    doc: &Doc,
 ) -> Result<()> {
+    for comment in doc.comments() {
+        writeln!(writer, "/// {comment}")?;
+    }
     writedoc!(
         writer,
         "
-            /// This is a comment.
             @Serializable
             data class {name} (
         "

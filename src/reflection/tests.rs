@@ -11,7 +11,24 @@ fn unit_struct() {
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyUnitStruct
-    : UNITSTRUCT
+    : UNITSTRUCT: []
+    ");
+}
+
+#[test]
+fn unit_struct_with_doc() {
+    /// This is a unit struct with a doc comment.
+    /// And this is the second line of the doc comment.
+    #[derive(Facet)]
+    struct MyUnitStruct;
+
+    let registry = RegistryBuilder::new().add_type::<MyUnitStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyUnitStruct
+    : UNITSTRUCT:
+        - This is a unit struct with a doc comment.
+        - And this is the second line of the doc comment.
     ");
 }
 
@@ -393,8 +410,9 @@ fn option_of_unit() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            OPTION: UNIT
+        - - a:
+              OPTION: UNIT
+        - []
     ");
 }
 
@@ -410,9 +428,10 @@ fn option_of_list() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            OPTION:
-              SEQ: I32
+        - - a:
+              OPTION:
+                SEQ: I32
+        - []
     ");
 }
 
@@ -428,10 +447,11 @@ fn option_of_nested_list() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            OPTION:
-              SEQ:
-                SEQ: I32
+        - - a:
+              OPTION:
+                SEQ:
+                  SEQ: I32
+        - []
     ");
 }
 
@@ -453,12 +473,13 @@ fn option_of_list_of_named_type() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            OPTION:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Inner
+        - - a:
+              OPTION:
+                SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Inner
+        - []
     ");
 }
 
@@ -474,9 +495,10 @@ fn list_of_options() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            SEQ:
-              OPTION: I32
+        - - a:
+              SEQ:
+                OPTION: I32
+        - []
     ");
 }
 
@@ -498,12 +520,13 @@ fn list_of_options_of_named_type() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            SEQ:
-              OPTION:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Inner
+        - - a:
+              SEQ:
+                OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Inner
+        - []
     ");
 }
 
@@ -519,10 +542,11 @@ fn nested_list_with_options() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            SEQ:
+        - - a:
               SEQ:
-                OPTION: I32
+                SEQ:
+                  OPTION: I32
+        - []
     ");
 }
 
@@ -577,6 +601,26 @@ fn nested_tuple_struct_2() {
 }
 
 #[test]
+fn struct_with_doc() {
+    /// This is a doc comment
+    #[derive(Facet)]
+    /// and another doc comment
+    struct MyStruct {
+        a: u8,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a: U8
+        - - This is a doc comment
+          - and another doc comment
+    ");
+}
+
+#[test]
 fn struct_with_vec_of_u8() {
     #[derive(Facet)]
     struct MyStruct {
@@ -588,8 +632,9 @@ fn struct_with_vec_of_u8() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            SEQ: U8
+        - - a:
+              SEQ: U8
+        - []
     ");
 }
 
@@ -606,7 +651,8 @@ fn struct_with_vec_of_u8_to_bytes() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a: BYTES
+        - - a: BYTES
+        - []
     ");
 }
 
@@ -622,8 +668,9 @@ fn struct_with_slice_of_u8() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            SEQ: U8
+        - - a:
+              SEQ: U8
+        - []
     ");
 }
 
@@ -640,7 +687,8 @@ fn struct_with_slice_of_u8_to_bytes() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a: BYTES
+        - - a: BYTES
+        - []
     ");
 }
 
@@ -659,10 +707,11 @@ fn struct_with_scalar_fields() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a: U8
-        - b: I32
-        - c: BOOL
-        - d: UNIT
+        - - a: U8
+          - b: I32
+          - c: BOOL
+          - d: UNIT
+        - []
     ");
 }
 
@@ -678,10 +727,11 @@ fn struct_with_tuple_field() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            TUPLE:
-              - U8
-              - I32
+        - - a:
+              TUPLE:
+                - U8
+                - I32
+        - []
     ");
 }
 
@@ -704,20 +754,22 @@ fn struct_with_option_fields() {
     ? namespace: ROOT
       name: Inner
     : STRUCT:
-        - a:
-            OPTION: BOOL
-        - b:
-            OPTION: U8
+        - - a:
+              OPTION: BOOL
+          - b:
+              OPTION: U8
+        - []
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            OPTION:
-              TYPENAME:
-                namespace: ROOT
-                name: Inner
-        - b:
-            OPTION: U8
+        - - a:
+              OPTION:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+          - b:
+              OPTION: U8
+        - []
     ");
 }
 
@@ -748,14 +800,15 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - a:
-            TYPENAME:
-              namespace: ROOT
-              name: Inner1
-        - b:
-            TYPENAME:
-              namespace: ROOT
-              name: Inner2
+        - - a:
+              TYPENAME:
+                namespace: ROOT
+                name: Inner1
+          - b:
+              TYPENAME:
+                namespace: ROOT
+                name: Inner2
+        - []
     ");
 }
 
@@ -948,7 +1001,8 @@ fn enum_with_inline_struct_variants() {
     ? namespace: ROOT
       name: Inner
     : STRUCT:
-        - a: STR
+        - - a: STR
+        - []
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1094,7 +1148,8 @@ fn transparent() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - inner: I32
+        - - inner: I32
+        - []
     ");
 }
 
@@ -1213,34 +1268,36 @@ fn map_with_user_defined_types() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - user_map:
-            MAP:
-              KEY:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UserId
-              VALUE:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UserProfile
-        - id_to_count:
-            MAP:
-              KEY: I32
-              VALUE:
-                SEQ: STR
-        - nested_map:
-            MAP:
-              KEY: STR
-              VALUE:
-                OPTION: U64
+        - - user_map:
+              MAP:
+                KEY:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: UserId
+                VALUE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: UserProfile
+          - id_to_count:
+              MAP:
+                KEY: I32
+                VALUE:
+                  SEQ: STR
+          - nested_map:
+              MAP:
+                KEY: STR
+                VALUE:
+                  OPTION: U64
+        - []
     ? namespace: ROOT
       name: UserId
     : NEWTYPESTRUCT: U32
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - name: STR
-        - active: BOOL
+        - - name: STR
+          - active: BOOL
+        - []
     ");
 }
 
@@ -1293,15 +1350,17 @@ fn struct_with_box_of_t() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - boxed:
-            TYPENAME:
-              namespace: ROOT
-              name: UserProfile
+        - - boxed:
+              TYPENAME:
+                namespace: ROOT
+                name: UserProfile
+        - []
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - name: STR
-        - active: BOOL
+        - - name: STR
+          - active: BOOL
+        - []
     ");
 }
 
@@ -1323,15 +1382,17 @@ fn struct_with_arc_of_t() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - boxed:
-            TYPENAME:
-              namespace: ROOT
-              name: UserProfile
+        - - boxed:
+              TYPENAME:
+                namespace: ROOT
+                name: UserProfile
+        - []
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - name: STR
-        - active: BOOL
+        - - name: STR
+          - active: BOOL
+        - []
     ");
 }
 
@@ -1392,18 +1453,20 @@ fn own_result_enum() {
     ? namespace: ROOT
       name: HttpHeader
     : STRUCT:
-        - name: STR
-        - value: STR
+        - - name: STR
+          - value: STR
+        - []
     ? namespace: ROOT
       name: HttpResponse
     : STRUCT:
-        - status: U16
-        - headers:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: HttpHeader
-        - body: BYTES
+        - - status: U16
+          - headers:
+              SEQ:
+                TYPENAME:
+                  namespace: ROOT
+                  name: HttpHeader
+          - body: BYTES
+        - []
     ? namespace: ROOT
       name: HttpResult
     : ENUM:
@@ -1436,8 +1499,9 @@ fn struct_rename() {
     ? namespace: ROOT
       name: Effect
     : STRUCT:
-        - name: STR
-        - active: BOOL
+        - - name: STR
+          - active: BOOL
+        - []
     ");
 }
 
@@ -1483,15 +1547,17 @@ fn struct_rename_with_named_type() {
     ? namespace: ROOT
       name: Effect
     : STRUCT:
-        - inner: STR
+        - - inner: STR
+        - []
     ? namespace: ROOT
       name: Request
     : STRUCT:
-        - id: U32
-        - effect:
-            TYPENAME:
-              namespace: ROOT
-              name: Effect
+        - - id: U32
+          - effect:
+              TYPENAME:
+                namespace: ROOT
+                name: Effect
+        - []
     ");
 }
 
@@ -1557,6 +1623,9 @@ fn complex_self_referencing_type() {
                     ),
                 },
             ],
+            Doc(
+                [],
+            ),
         ),
     }
     "#);
@@ -1625,6 +1694,9 @@ fn tree_struct_with_mutual_recursion() {
                     ),
                 },
             ],
+            Doc(
+                [],
+            ),
         ),
     }
     "#);
@@ -1663,6 +1735,9 @@ fn tree_enum_with_mutual_recursion() {
                     ),
                 },
             ],
+            Doc(
+                [],
+            ),
         ),
         QualifiedTypeName {
             namespace: Root,
