@@ -9,6 +9,11 @@ pub enum IndentConfig {
     Space(usize),
 }
 
+pub trait IndentWrite: Write {
+    fn indent(&mut self) {}
+    fn unindent(&mut self) {}
+}
+
 pub struct IndentedWriter<T> {
     out: T,
     indentation: Vec<u8>,
@@ -25,8 +30,10 @@ impl<T> IndentedWriter<T> {
             at_beginning_of_line: true,
         }
     }
+}
 
-    pub fn indent(&mut self) {
+impl<T: Write> IndentWrite for IndentedWriter<T> {
+    fn indent(&mut self) {
         match self.config {
             IndentConfig::Tab => {
                 self.indentation.push(b'\t');
@@ -37,7 +44,7 @@ impl<T> IndentedWriter<T> {
         }
     }
 
-    pub fn unindent(&mut self) {
+    fn unindent(&mut self) {
         match self.config {
             IndentConfig::Tab => {
                 self.indentation.pop();
