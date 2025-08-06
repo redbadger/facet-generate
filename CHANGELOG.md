@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.10.2] - 2025-08-06
+
+### 🚀 Features
+
+- support for sets (e.g. HashSet, BTreeSet, as sequences, following serde, for now) https://github.com/redbadger/facet-generate/pull/24
+
 ## [0.10.1] - 2025-07-31
 
 ### 🚀 Features
