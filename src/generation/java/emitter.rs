@@ -810,7 +810,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
                 value: format.as_ref().clone(),
@@ -823,7 +823,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),
-            ContainerFormat::Struct(fields) => fields.clone(),
+            ContainerFormat::Struct(fields, _doc) => fields.clone(),
             ContainerFormat::Enum(variants) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());

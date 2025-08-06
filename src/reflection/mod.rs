@@ -123,7 +123,7 @@ impl RegistryBuilder {
     }
 
     fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
-        match &shape.ty {
+        match &dbg!(shape).ty {
             Type::User(UserType::Struct(struct_def)) => {
                 self.handle_user_struct(shape, struct_def, namespace);
                 true
@@ -298,7 +298,7 @@ impl RegistryBuilder {
 
         match struct_type.kind {
             StructKind::Unit => {
-                self.push(struct_name, ContainerFormat::UnitStruct);
+                self.push(struct_name, ContainerFormat::UnitStruct(shape.into()));
                 self.pop();
             }
             StructKind::TupleStruct => {
@@ -335,7 +335,7 @@ impl RegistryBuilder {
                 }
             }
             StructKind::Struct => {
-                let container = ContainerFormat::Struct(vec![]);
+                let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push(struct_name, container);
                 for field in struct_type.fields {
                     self.handle_struct_field(field, current_namespace.as_deref());
@@ -386,7 +386,7 @@ impl RegistryBuilder {
             get_inner_format(field_shape)
         };
 
-        if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
             named_formats.push(Named {
                 name: field.name.to_string(),
                 value: field_format,
@@ -402,7 +402,7 @@ impl RegistryBuilder {
             if let Def::List(list_def) = field_shape.def {
                 let inner_shape = list_def.t();
                 if inner_shape.type_identifier == "u8" {
-                    if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                    if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                         named_formats.push(Named {
                             name: field.name.to_string(),
                             value: Format::Bytes,
@@ -425,7 +425,7 @@ impl RegistryBuilder {
                 if let Def::Slice(slice_def) = target_shape.def {
                     let element_shape = slice_def.t();
                     if element_shape.type_identifier == "u8" {
-                        if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                             named_formats.push(Named {
                                 name: field.name.to_string(),
                                 value: Format::Bytes,
@@ -454,7 +454,7 @@ impl RegistryBuilder {
                 let inner_format = get_inner_format(inner_shape);
                 let option_format = Format::Option(Box::new(inner_format));
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
                         value: option_format,
@@ -488,7 +488,7 @@ impl RegistryBuilder {
                     tuple_formats.push(field_format);
                 }
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     let tuple_format = if tuple_formats.is_empty() {
                         Format::Unit
                     } else {
@@ -525,7 +525,7 @@ impl RegistryBuilder {
                     get_inner_format(inner_field_shape)
                 };
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
                         value: inner_format,
@@ -706,7 +706,10 @@ impl RegistryBuilder {
         shape: &Shape,
         _parent_namespace: Option<&str>,
     ) -> VariantFormat {
-        let temp = self.push_temporary(variant.name.to_string(), ContainerFormat::Struct(vec![]));
+        let temp = self.push_temporary(
+            variant.name.to_string(),
+            ContainerFormat::Struct(vec![], shape.into()),
+        );
 
         // Process all fields with their names
         for field in variant.data.fields {
@@ -724,7 +727,7 @@ impl RegistryBuilder {
                 };
 
                 // Add Named TypeName format to the struct
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
                         value,
@@ -737,7 +740,7 @@ impl RegistryBuilder {
                 }
             } else {
                 // For non-struct types, add unknown format and let format() fill it
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
                         value: Format::unknown(),
@@ -750,7 +753,7 @@ impl RegistryBuilder {
 
         // Extract the formats from the temporary container
         let variant_format =
-            if let Some(ContainerFormat::Struct(named_formats)) = self.registry.get(&temp) {
+            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.registry.get(&temp) {
                 VariantFormat::Struct(named_formats.clone())
             } else {
                 VariantFormat::Unit
@@ -912,7 +915,7 @@ impl RegistryBuilder {
     fn update_container_format_with_mode(&mut self, format: Format, mode: UpdateMode) {
         if let Some(container_format) = self.get_mut() {
             match container_format {
-                ContainerFormat::UnitStruct => {}
+                ContainerFormat::UnitStruct(_doc) => {}
                 ContainerFormat::NewTypeStruct(inner_format) => match mode {
                     UpdateMode::Force => {
                         **inner_format = format;
@@ -934,7 +937,7 @@ impl RegistryBuilder {
                         }
                     }
                 }
-                ContainerFormat::Struct(fields) => {
+                ContainerFormat::Struct(fields, _doc) => {
                     if let Some(last_named) = fields.last_mut() {
                         match mode {
                             UpdateMode::Force => {

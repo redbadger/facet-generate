@@ -702,7 +702,7 @@ switch index {{",
 
     pub fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
                 value: format.as_ref().clone(),
@@ -715,7 +715,7 @@ switch index {{",
                     value: f.clone(),
                 })
                 .collect(),
-            ContainerFormat::Struct(fields) => fields
+            ContainerFormat::Struct(fields, _doc) => fields
                 .iter()
                 .map(|f| Named {
                     name: f.name.to_lower_camel_case(),

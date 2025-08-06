@@ -51,6 +51,7 @@ macro_rules! test {
             let expect = expect_file!(test!(@out $language));
 
             check(&registry, generator, &expect)?;
+            // panic!("This test should fail");
 
             Ok(())
         }
