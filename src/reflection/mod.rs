@@ -329,6 +329,12 @@ impl RegistryBuilder {
                     let container = ContainerFormat::TupleStruct(vec![]);
                     self.push(struct_name, container);
                     for field in struct_type.fields {
+                        let skip = field.attributes.iter().any(|attr| match attr {
+                            FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                        });
+                        if skip {
+                            continue;
+                        }
                         self.process_type(field.shape(), current_namespace.as_deref());
                     }
                     self.pop();
@@ -338,6 +344,12 @@ impl RegistryBuilder {
                 let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push(struct_name, container);
                 for field in struct_type.fields {
+                    let skip = field.attributes.iter().any(|attr| match attr {
+                        FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                    });
+                    if skip {
+                        continue;
+                    }
                     self.handle_struct_field(field, current_namespace.as_deref());
                 }
                 self.pop();

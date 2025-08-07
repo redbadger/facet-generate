@@ -1212,6 +1212,46 @@ fn enum_with_struct_variant() {
 }
 
 #[test]
+fn struct_with_skip_serializing() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: u8,
+        #[facet(skip)]
+        b: u8,
+        c: u8,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - U8
+              - []
+          - c:
+              - U8
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn tuple_struct_with_skip_serializing() {
+    #[derive(Facet)]
+    struct MyStruct(u8, #[facet(skip)] u16, u32);
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : TUPLESTRUCT:
+        - U8
+        - U32
+    ");
+}
+
+#[test]
 fn enum_with_skip_serializing() {
     #[derive(Facet)]
     #[repr(u8)]
