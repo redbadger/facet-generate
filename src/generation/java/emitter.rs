@@ -5,7 +5,7 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{Encoding, common, indent::IndentWrite, java::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Java source file.
@@ -473,6 +473,7 @@ return obj;
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -480,6 +481,7 @@ return obj;
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -813,6 +815,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             ContainerFormat::TupleStruct(formats) => formats
@@ -820,6 +823,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),

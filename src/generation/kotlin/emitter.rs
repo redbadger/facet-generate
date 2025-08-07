@@ -58,6 +58,9 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
 impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
         let name = &self.name;
+        for comment in self.doc.comments() {
+            writeln!(writer, "/// {comment}")?;
+        }
         match &self.value {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -78,7 +81,7 @@ impl Emitter<Kotlin> for Named<Format> {
             Format::F32 => todo!(),
             Format::F64 => todo!(),
             Format::Char => todo!(),
-            Format::Str => write!(writer, "/// This is another comment\nval {name}: String"),
+            Format::Str => write!(writer, "val {name}: String"),
             Format::Bytes => todo!(),
             Format::Option(format) => {
                 write!(writer, "val {name}: ")?;

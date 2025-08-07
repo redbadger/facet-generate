@@ -17,7 +17,7 @@
 mod tests;
 
 use crate::{Result, error::Error};
-use facet::Shape;
+use facet::{Field, Shape};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -119,6 +119,13 @@ impl From<&Shape> for Doc {
     }
 }
 
+impl From<&Field> for Doc {
+    fn from(field: &Field) -> Self {
+        let doc = field.doc.iter().map(|c| c.trim().to_string()).collect();
+        Self(doc)
+    }
+}
+
 /// Serde-based serialization format for anonymous "value" types.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -193,6 +200,7 @@ pub enum ContainerFormat {
 /// Used for named parameters or variants.
 pub struct Named<T> {
     pub name: String,
+    pub doc: Doc,
     pub value: T,
 }
 
@@ -596,7 +604,7 @@ impl Default for VariantFormat {
 }
 
 // For better rendering in human readable formats, we wish to serialize
-// `Named { key: x, value: y }` as a map `{ x: y }`.
+// `Named { name: x, value: y, doc: z }` as a map `{ x: (y, z) }`.
 impl<T> Serialize for Named<T>
 where
     T: Serialize,
@@ -607,12 +615,13 @@ where
     {
         if serializer.is_human_readable() {
             let mut map = serializer.serialize_map(Some(1))?;
-            map.serialize_entry(&self.name, &self.value)?;
+            map.serialize_entry(&self.name, &(&self.value, &self.doc))?;
             map.end()
         } else {
-            let mut inner = serializer.serialize_struct("Named", 2)?;
+            let mut inner = serializer.serialize_struct("Named", 3)?;
             inner.serialize_field("name", &self.name)?;
             inner.serialize_field("value", &self.value)?;
+            inner.serialize_field("doc", &self.doc)?;
             inner.end()
         }
     }
@@ -645,7 +654,11 @@ where
         M: de::MapAccess<'de>,
     {
         let named_value = match access.next_entry::<String, T>()? {
-            Some((name, value)) => Named { name, value },
+            Some((name, value)) => Named {
+                name,
+                doc: Doc::new(),
+                value,
+            },
             _ => {
                 return Err(de::Error::custom("Missing entry"));
             }
@@ -662,6 +675,7 @@ where
 #[serde(rename = "Named")]
 struct NamedInternal<T> {
     name: String,
+    doc: Doc,
     value: T,
 }
 
@@ -676,8 +690,8 @@ where
         if deserializer.is_human_readable() {
             deserializer.deserialize_map(NamedVisitor::new())
         } else {
-            let NamedInternal { name, value } = NamedInternal::deserialize(deserializer)?;
-            Ok(Self { name, value })
+            let NamedInternal { name, doc, value } = NamedInternal::deserialize(deserializer)?;
+            Ok(Self { name, doc, value })
         }
     }
 }

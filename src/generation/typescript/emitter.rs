@@ -11,7 +11,7 @@ use crate::{
         PackageLocation, Serialization, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
-        ContainerFormat, Format, FormatHolder as _, Named, Namespace, VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
     },
 };
 
@@ -498,6 +498,7 @@ return list;
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -505,6 +506,7 @@ return list;
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -675,6 +677,7 @@ switch (index) {{",
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             ContainerFormat::TupleStruct(formats) => formats
@@ -682,6 +685,7 @@ switch (index) {{",
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),

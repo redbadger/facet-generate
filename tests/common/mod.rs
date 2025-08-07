@@ -624,27 +624,36 @@ fn test_get_simple_registry() {
       name: Choice
     : ENUM:
         0:
-          A: UNIT
+          A:
+            - UNIT
+            - []
         1:
           B:
-            NEWTYPE: U64
+            - NEWTYPE: U64
+            - []
         2:
           C:
-            STRUCT:
-              - x: U8
+            - STRUCT:
+                - x:
+                    - U8
+                    - []
+            - []
     ? namespace: ROOT
       name: Test
     : STRUCT:
         - - a:
-              SEQ: U32
+              - SEQ: U32
+              - []
           - b:
-              TUPLE:
-                - I64
-                - U64
+              - TUPLE:
+                  - I64
+                  - U64
+              - []
           - c:
-              TYPENAME:
-                namespace: ROOT
-                name: Choice
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Choice
+              - []
         - []
     ");
 }
@@ -658,184 +667,255 @@ fn test_get_registry() {
       name: CStyleEnum
     : ENUM:
         0:
-          A: UNIT
+          A:
+            - UNIT
+            - []
         1:
-          B: UNIT
+          B:
+            - UNIT
+            - []
         2:
-          C: UNIT
+          C:
+            - UNIT
+            - []
         3:
-          D: UNIT
+          D:
+            - UNIT
+            - []
         4:
-          E: UNIT
+          E:
+            - UNIT
+            - []
     ? namespace: ROOT
       name: List
     : ENUM:
         0:
-          Empty: UNIT
+          Empty:
+            - UNIT
+            - []
         1:
           Node:
-            TUPLE:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SerdeData
-              - TYPENAME:
-                  namespace: ROOT
-                  name: List
+            - TUPLE:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: SerdeData
+                - TYPENAME:
+                    namespace: ROOT
+                    name: List
+            - []
     ? namespace: ROOT
       name: NewTypeStruct
     : NEWTYPESTRUCT: U64
     ? namespace: ROOT
       name: OtherTypes
     : STRUCT:
-        - - f_string: STR
-          - f_bytes: BYTES
+        - - f_string:
+              - STR
+              - []
+          - f_bytes:
+              - BYTES
+              - []
           - f_option:
-              OPTION:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Struct
-          - f_unit: UNIT
-          - f_seq:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Struct
-          - f_opt_seq:
-              OPTION:
-                SEQ: I32
-          - f_tuple:
-              TUPLE:
-                - U8
-                - U16
-          - f_stringmap:
-              MAP:
-                KEY: STR
-                VALUE: U32
-          - f_intset:
-              MAP:
-                KEY: U64
-                VALUE: UNIT
-          - f_nested_seq:
-              SEQ:
-                SEQ:
+              - OPTION:
                   TYPENAME:
                     namespace: ROOT
                     name: Struct
+              - []
+          - f_unit:
+              - UNIT
+              - []
+          - f_seq:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Struct
+              - []
+          - f_opt_seq:
+              - OPTION:
+                  SEQ: I32
+              - []
+          - f_tuple:
+              - TUPLE:
+                  - U8
+                  - U16
+              - []
+          - f_stringmap:
+              - MAP:
+                  KEY: STR
+                  VALUE: U32
+              - []
+          - f_intset:
+              - MAP:
+                  KEY: U64
+                  VALUE: UNIT
+              - []
+          - f_nested_seq:
+              - SEQ:
+                  SEQ:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Struct
+              - []
         - []
     ? namespace: ROOT
       name: PrimitiveTypes
     : STRUCT:
-        - - f_bool: BOOL
-          - f_u8: U8
-          - f_u16: U16
-          - f_u32: U32
-          - f_u64: U64
-          - f_u128: U128
-          - f_i8: I8
-          - f_i16: I16
-          - f_i32: I32
-          - f_i64: I64
-          - f_i128: I128
+        - - f_bool:
+              - BOOL
+              - []
+          - f_u8:
+              - U8
+              - []
+          - f_u16:
+              - U16
+              - []
+          - f_u32:
+              - U32
+              - []
+          - f_u64:
+              - U64
+              - []
+          - f_u128:
+              - U128
+              - []
+          - f_i8:
+              - I8
+              - []
+          - f_i16:
+              - I16
+              - []
+          - f_i32:
+              - I32
+              - []
+          - f_i64:
+              - I64
+              - []
+          - f_i128:
+              - I128
+              - []
           - f_f32:
-              OPTION: F32
+              - OPTION: F32
+              - []
           - f_f64:
-              OPTION: F64
+              - OPTION: F64
+              - []
           - f_char:
-              OPTION: CHAR
+              - OPTION: CHAR
+              - []
         - []
     ? namespace: ROOT
       name: SerdeData
     : ENUM:
         0:
           PrimitiveTypes:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: PrimitiveTypes
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: PrimitiveTypes
+            - []
         1:
           OtherTypes:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: OtherTypes
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: OtherTypes
+            - []
         2:
-          UnitVariant: UNIT
+          UnitVariant:
+            - UNIT
+            - []
         3:
           NewTypeVariant:
-            NEWTYPE: STR
+            - NEWTYPE: STR
+            - []
         4:
           TupleVariant:
-            TUPLE:
-              - U32
-              - U64
+            - TUPLE:
+                - U32
+                - U64
+            - []
         5:
           StructVariant:
-            STRUCT:
-              - f0:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: UnitStruct
-              - f1:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: NewTypeStruct
-              - f2:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: TupleStruct
-              - f3:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Struct
+            - STRUCT:
+                - f0:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: UnitStruct
+                    - []
+                - f1:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: NewTypeStruct
+                    - []
+                - f2:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: TupleStruct
+                    - []
+                - f3:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: Struct
+                    - []
+            - []
         6:
           ListWithMutualRecursion:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: List
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: List
+            - []
         7:
           TreeWithMutualRecursion:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: Tree
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Tree
+            - []
         8:
           TupleArray:
-            NEWTYPE:
-              TUPLEARRAY:
-                CONTENT: U32
-                SIZE: 3
+            - NEWTYPE:
+                TUPLEARRAY:
+                  CONTENT: U32
+                  SIZE: 3
+            - []
         9:
           UnitVector:
-            NEWTYPE:
-              SEQ: UNIT
+            - NEWTYPE:
+                SEQ: UNIT
+            - []
         10:
           SimpleList:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: SimpleList
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: SimpleList
+            - []
         11:
           CStyleEnum:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: CStyleEnum
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: CStyleEnum
+            - []
         12:
           ComplexMap:
-            NEWTYPE:
-              MAP:
-                KEY:
-                  TUPLE:
-                    - TUPLEARRAY:
-                        CONTENT: U32
-                        SIZE: 2
-                    - TUPLEARRAY:
-                        CONTENT: U8
-                        SIZE: 4
-                VALUE: UNIT
+            - NEWTYPE:
+                MAP:
+                  KEY:
+                    TUPLE:
+                      - TUPLEARRAY:
+                          CONTENT: U32
+                          SIZE: 2
+                      - TUPLEARRAY:
+                          CONTENT: U8
+                          SIZE: 4
+                  VALUE: UNIT
+            - []
         13:
-          EmptyStructVariant: UNIT
+          EmptyStructVariant:
+            - UNIT
+            - []
     ? namespace: ROOT
       name: SimpleList
     : NEWTYPESTRUCT:
@@ -846,21 +926,27 @@ fn test_get_registry() {
     ? namespace: ROOT
       name: Struct
     : STRUCT:
-        - - x: U32
-          - y: U64
+        - - x:
+              - U32
+              - []
+          - y:
+              - U64
+              - []
         - []
     ? namespace: ROOT
       name: Tree
     : STRUCT:
         - - value:
-              TYPENAME:
-                namespace: ROOT
-                name: SerdeData
-          - children:
-              SEQ:
-                TYPENAME:
+              - TYPENAME:
                   namespace: ROOT
-                  name: Tree
+                  name: SerdeData
+              - []
+          - children:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Tree
+              - []
         - []
     ? namespace: ROOT
       name: TupleStruct

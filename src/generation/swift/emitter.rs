@@ -5,7 +5,7 @@ use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
 use crate::generation::Encoding;
 use crate::generation::swift::generator::CodeGenerator;
-use crate::reflection::format::{ContainerFormat, Named, VariantFormat};
+use crate::reflection::format::{ContainerFormat, Doc, Named, VariantFormat};
 use crate::{
     Registry,
     generation::{common, indent::IndentWrite},
@@ -422,6 +422,7 @@ return obj
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "x".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -430,6 +431,7 @@ return obj
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("x{i}"),
+                    doc: Doc::new(),
                     value: f,
                 })
                 .collect(),
@@ -705,6 +707,7 @@ switch index {{",
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             ContainerFormat::TupleStruct(formats) => formats
@@ -712,6 +715,7 @@ switch index {{",
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -719,6 +723,7 @@ switch index {{",
                 .iter()
                 .map(|f| Named {
                     name: f.name.to_lower_camel_case(),
+                    doc: Doc::new(),
                     value: f.value.clone(),
                 })
                 .collect(),
