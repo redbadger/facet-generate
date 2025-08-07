@@ -1444,20 +1444,26 @@ fn sequence_and_map_types() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - vec:
-            SEQ: STR
-        - hash_map:
-            MAP:
-              KEY: STR
-              VALUE: STR
-        - hash_set:
-            SEQ: STR
-        - btree_map:
-            MAP:
-              KEY: STR
-              VALUE: STR
-        - btree_set:
-            SEQ: STR
+        - - vec:
+              - SEQ: STR
+              - []
+          - hash_map:
+              - MAP:
+                  KEY: STR
+                  VALUE: STR
+              - []
+          - hash_set:
+              - SEQ: STR
+              - []
+          - btree_map:
+              - MAP:
+                  KEY: STR
+                  VALUE: STR
+              - []
+          - btree_set:
+              - SEQ: STR
+              - []
+        - []
     ");
 }
 
@@ -2042,4 +2048,294 @@ fn tree_enum_with_mutual_recursion() {
         ),
     }
     "#);
+}
+
+// Reference type tests
+
+#[test]
+fn newtype_str_ref() {
+    #[derive(Facet)]
+    struct MyNewType<'a>(&'a str);
+
+    let registry = RegistryBuilder::new().add_type::<MyNewType>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: STR
+    ");
+}
+
+#[test]
+fn struct_with_str_ref() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a str,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn newtype_slice_ref() {
+    #[derive(Facet)]
+    struct MyNewType<'a>(&'a [u8]);
+
+    let registry = RegistryBuilder::new().add_type::<MyNewType>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
+        SEQ: U8
+    ");
+}
+
+#[test]
+fn struct_with_slice_ref() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a [u8],
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - SEQ: U8
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn newtype_mut_ref() {
+    #[derive(Facet)]
+    struct MyNewType<'a>(&'a mut str);
+
+    let registry = RegistryBuilder::new().add_type::<MyNewType>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: STR
+    ");
+}
+
+#[test]
+fn struct_with_mut_ref() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a mut [u8],
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - SEQ: U8
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn newtype_struct_ref() {
+    #[derive(Facet)]
+    struct Inner {
+        value: i32,
+    }
+
+    #[derive(Facet)]
+    struct MyNewType<'a>(&'a Inner);
+
+    let registry = RegistryBuilder::new().add_type::<MyNewType>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
+        - - value:
+              - I32
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT:
+        TYPENAME:
+          namespace: ROOT
+          name: Inner
+    ");
+}
+
+#[test]
+fn struct_with_struct_ref() {
+    #[derive(Facet)]
+    struct Inner {
+        value: i32,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a Inner,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
+        - - value:
+              - I32
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_with_ref_variants() {
+    #[derive(Facet)]
+    struct Inner {
+        value: i32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused, clippy::enum_variant_names)]
+    enum MyEnum<'a> {
+        StrRef(&'a str),
+        SliceRef(&'a [u8]),
+        StructRef(&'a Inner),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
+        - - value:
+              - I32
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          StrRef:
+            - NEWTYPE: STR
+            - []
+        1:
+          SliceRef:
+            - NEWTYPE:
+                SEQ: U8
+            - []
+        2:
+          StructRef:
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+            - []
+    ");
+}
+
+#[test]
+fn struct_with_vec_ref() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: &'a Vec<i32>,
+        b: &'a [Vec<String>],
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - SEQ: I32
+              - []
+          - b:
+              - SEQ:
+                  SEQ: STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn references_with_options() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        a: Option<&'a str>,
+        b: &'a Option<String>,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - OPTION: STR
+              - []
+          - b:
+              - OPTION: STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn tuple_struct_with_multiple_refs() {
+    #[derive(Facet)]
+    struct MyTupleStruct<'a>(&'a str, &'a [u8], &'a i32);
+
+    let registry = RegistryBuilder::new().add_type::<MyTupleStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyTupleStruct
+    : TUPLESTRUCT:
+        - STR
+        - SEQ: U8
+        - I32
+    ");
+}
+
+#[test]
+fn struct_with_rc() {
+    use std::rc::Rc;
+    #[derive(Facet)]
+    struct MyStruct {
+        a: Rc<String>,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - STR
+              - []
+        - []
+    ");
 }
