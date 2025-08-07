@@ -125,7 +125,7 @@ impl RegistryBuilder {
     fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
         match &shape.ty {
             Type::User(UserType::Struct(struct_def)) => {
-                self.handle_user_struct(shape, struct_def, namespace);
+                self.handle_user_struct(shape, struct_def);
                 true
             }
             Type::User(UserType::Enum(enum_def)) => {
@@ -139,12 +139,7 @@ impl RegistryBuilder {
         }
     }
 
-    fn handle_user_struct(
-        &mut self,
-        shape: &Shape,
-        struct_def: &StructType,
-        namespace: Option<&str>,
-    ) {
+    fn handle_user_struct(&mut self, shape: &Shape, struct_def: &StructType) {
         let type_name = get_name(shape);
 
         // Update container with the struct format
@@ -154,7 +149,7 @@ impl RegistryBuilder {
             Format::TypeName(type_name.clone())
         };
         self.update_container_format_if_unknown(format);
-        self.format_struct(struct_def, shape, namespace);
+        self.format_struct(struct_def, shape);
     }
 
     fn handle_sequence_type(
@@ -266,12 +261,7 @@ impl RegistryBuilder {
         self.update_container_format(format);
     }
 
-    fn format_struct(
-        &mut self,
-        struct_type: &StructType,
-        shape: &Shape,
-        _parent_namespace: Option<&str>,
-    ) {
+    fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) {
         let struct_name = get_name(shape);
 
         // Check if already processed using the full namespaced name
@@ -385,17 +375,16 @@ impl RegistryBuilder {
 
         // For user-defined types (structs/enums), get the renamed name before mutable borrow
         // But skip primitives like String, which are also Type::User but should use scalar format
-        let field_format = if let Type::User(user_type) = &field_shape.ty {
-            match user_type {
-                UserType::Struct(_) | UserType::Enum(_) => {
-                    let renamed_name = get_name(field_shape);
-
-                    Format::TypeName(renamed_name)
-                }
-                _ => get_inner_format(field_shape),
+        let field_format = match &field_shape.ty {
+            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
+                let renamed_name = get_name(field_shape);
+                Format::TypeName(renamed_name)
             }
-        } else {
-            get_inner_format(field_shape)
+            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
+                let target_shape = (pt.target)();
+                get_inner_format(target_shape)
+            }
+            _ => get_inner_format(field_shape),
         };
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {

@@ -62,6 +62,19 @@ fn newtype_unit() {
 }
 
 #[test]
+fn newtype_static_str() {
+    #[derive(Facet)]
+    struct MyNewType(&'static str);
+
+    let registry = RegistryBuilder::new().add_type::<MyNewType>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyNewType
+    : NEWTYPESTRUCT: STR
+    ");
+}
+
+#[test]
 fn newtype_u8() {
     #[derive(Facet)]
     struct MyNewType(u8);
@@ -648,6 +661,25 @@ fn struct_with_field_doc() {
         - - a:
               - U8
               - - This is a doc comment
+        - []
+    ");
+}
+
+#[test]
+fn struct_with_static_str() {
+    #[derive(Facet)]
+    struct MyStruct {
+        a: &'static str,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - STR
+              - []
         - []
     ");
 }

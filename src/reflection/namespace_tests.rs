@@ -404,6 +404,7 @@ fn namespaced_maps() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn complex_namespaced_enums() {
     mod events {
         use facet::Facet;
@@ -1067,6 +1068,7 @@ fn collections_with_explicit_namespace() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn enums_with_explicit_namespace() {
     // Test that enum variant types go to root namespace when no explicit namespace is given
     #[derive(Facet)]
