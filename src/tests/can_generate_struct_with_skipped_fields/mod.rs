@@ -12,5 +12,5 @@ pub struct MyStruct {
 }
 
 crate::test! {
-    MyStruct for java
+    MyStruct for java, kotlin
 }

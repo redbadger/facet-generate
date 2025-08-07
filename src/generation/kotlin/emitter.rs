@@ -61,35 +61,37 @@ impl Emitter<Kotlin> for Named<Format> {
         for comment in self.doc.comments() {
             writeln!(writer, "/// {comment}")?;
         }
+        write!(writer, "val {name}: ")?;
         match &self.value {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
-                write!(writer, "val {name}: {ty}", ty = qualified_type_name.name)
+                write!(writer, "{ty}", ty = qualified_type_name.name)
             }
-            Format::Unit => todo!(),
-            Format::Bool => todo!(),
-            Format::I8 => todo!(),
-            Format::I16 => todo!(),
-            Format::I32 => todo!(),
-            Format::I64 => todo!(),
-            Format::I128 => todo!(),
-            Format::U8 => write!(writer, "val {name}: UByte"),
-            Format::U16 => todo!(),
-            Format::U32 => todo!(),
-            Format::U64 => todo!(),
-            Format::U128 => todo!(),
-            Format::F32 => todo!(),
-            Format::F64 => todo!(),
-            Format::Char => todo!(),
-            Format::Str => write!(writer, "val {name}: String"),
+            Format::Unit => write!(writer, "Unit"),
+            Format::Bool => write!(writer, "Boolean"),
+            Format::I8 => write!(writer, "Byte"),
+            Format::I16 => write!(writer, "Short"),
+            Format::I32 => write!(writer, "Int"),
+            Format::I64 => write!(writer, "Long"),
+            Format::I128 => write!(writer, "java.math.@com.novi.serde.Int128 BigInteger"),
+            Format::U8 => write!(writer, "UByte"),
+            Format::U16 => write!(writer, "UShort"),
+            Format::U32 => write!(writer, "UInt"),
+            Format::U64 => write!(writer, "ULong"),
+            Format::U128 => write!(
+                writer,
+                "java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger"
+            ),
+            Format::F32 => write!(writer, "Float"),
+            Format::F64 => write!(writer, "Double"),
+            Format::Char | Format::Str => write!(writer, "String"),
             Format::Bytes => todo!(),
             Format::Option(format) => {
-                write!(writer, "val {name}: ")?;
                 format.write(writer)?;
                 write!(writer, "? = null")
             }
             Format::Seq(format) => {
-                write!(writer, "val {name}: List<")?;
+                write!(writer, "List<")?;
                 format.write(writer)?;
                 write!(writer, ">")
             }
@@ -124,7 +126,7 @@ impl Emitter<Kotlin> for Format {
             Format::F64 => todo!(),
             Format::Char => todo!(),
             Format::Str => write!(writer, "String"),
-            Format::Bytes => todo!(),
+            Format::Bytes => write!(writer, "ByteArray"),
             Format::Option(_format) => todo!(),
             Format::Seq(_format) => todo!(),
             Format::Map { key: _, value: _ } => todo!(),
