@@ -109,7 +109,10 @@ impl Emitter<Kotlin> for Format {
     fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-            Format::TypeName(_qualified_type_name) => todo!(),
+            Format::TypeName(qualified_type_name) => {
+                let name = &qualified_type_name.name;
+                write!(writer, "{name}")
+            }
             Format::Unit => todo!(),
             Format::Bool => todo!(),
             Format::I8 => todo!(),
