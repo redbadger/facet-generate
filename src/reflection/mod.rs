@@ -207,7 +207,7 @@ impl RegistryBuilder {
 
     fn handle_pointer(&mut self, inner_shape: &Shape, namespace: Option<&str>) {
         // For Pointer, we need to update the current container with the inner type's format
-        let inner_format = get_inner_format(inner_shape);
+        let inner_format = get_format_for_shape(inner_shape);
 
         // Update the current container with the Pointer's inner format
         self.update_container_format_if_unknown(inner_format);
@@ -441,7 +441,8 @@ impl RegistryBuilder {
             if let Def::Option(option_def) = field_shape.def {
                 // Handle Option types directly
                 let inner_shape = option_def.t();
-                let inner_format = get_inner_format(inner_shape);
+                // Handle pointer types specially
+                let inner_format = get_format_for_shape(inner_shape);
                 let option_format = Format::Option(Box::new(inner_format));
 
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
@@ -829,7 +830,19 @@ impl RegistryBuilder {
     }
 
     fn format_slice(&mut self, slice_def: SliceDef, namespace: Option<&str>) {
-        self.process_type(slice_def.t(), namespace);
+        // Get the inner type of the slice
+        let inner_shape = slice_def.t();
+
+        // Get the format for the inner type
+        let inner_format = get_format_for_shape(inner_shape);
+
+        let slice_format = Format::Seq(Box::new(inner_format));
+
+        // Update the current container with the slice format
+        self.update_container_format(slice_format);
+
+        // Process any user-defined types in the nested structure
+        self.process_nested_types(inner_shape, namespace);
     }
 
     fn format_array(&mut self, array_def: ArrayDef, namespace: Option<&str>) {
@@ -859,7 +872,7 @@ impl RegistryBuilder {
         let inner_shape = option_def.t();
 
         // We need to determine what format to use for the Option based on the inner type
-        let inner_format = get_inner_format(inner_shape);
+        let inner_format = get_format_for_shape(inner_shape);
         let option_format = Format::Option(Box::new(inner_format));
 
         // Update the current container with the option format
@@ -985,6 +998,11 @@ impl RegistryBuilder {
                     self.process_nested_types(value_shape, namespace);
                 }
             }
+            Def::Slice(slice_def) => {
+                // Recursively process slice inner types
+                let inner_shape = slice_def.t();
+                self.process_nested_types(inner_shape, namespace);
+            }
             _ => {
                 // For other user-defined types, process them
                 if should_process_nested_type(shape) {
@@ -1040,6 +1058,17 @@ fn get_name(shape: &Shape) -> QualifiedTypeName {
         QualifiedTypeName::namespaced(ns, base_name)
     } else {
         QualifiedTypeName::root(base_name)
+    }
+}
+
+fn get_format_for_shape(shape: &Shape) -> Format {
+    // Handle pointer types specially for container inner types
+    if let Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) = &shape.ty {
+        // For pointer types like &'static str, get the format of the target type
+        let target_shape = (pt.target)();
+        get_inner_format(target_shape)
+    } else {
+        get_inner_format(shape)
     }
 }
 
@@ -1188,9 +1217,14 @@ fn get_inner_format(shape: &Shape) -> Format {
             }
 
             // Special case for unit type
-            // For user-defined types, use TypeName
             if shape.type_identifier == "()" {
                 Format::Unit
+            } else if let Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) =
+                &shape.ty
+            {
+                // For pointer types like &'static str, get the format of the target type
+                let target_shape = (pt.target)();
+                get_inner_format(target_shape)
             } else {
                 // For user-defined types, use TypeName with renamed name if applicable
                 let name = get_name(shape);
