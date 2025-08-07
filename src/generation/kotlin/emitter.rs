@@ -95,18 +95,28 @@ impl Emitter<Kotlin> for Named<Format> {
                 format.write(writer)?;
                 write!(writer, ">")
             }
-            Format::Map { key: _, value: _ } => todo!(),
+            Format::Map { key, value } => {
+                write!(writer, "Map<")?;
+                key.write(writer)?;
+                write!(writer, ", ")?;
+                value.write(writer)?;
+                write!(writer, ">")
+            }
             Format::Tuple(_formats) => todo!(),
             Format::TupleArray {
-                content: _,
+                content: format,
                 size: _,
-            } => todo!(),
+            } => {
+                write!(writer, "List<")?;
+                format.write(writer)?;
+                write!(writer, ">")
+            }
         }
     }
 }
 
 impl Emitter<Kotlin> for Format {
-    fn write<W: Write>(&self, writer: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -117,7 +127,7 @@ impl Emitter<Kotlin> for Format {
             Format::Bool => todo!(),
             Format::I8 => todo!(),
             Format::I16 => todo!(),
-            Format::I32 => todo!(),
+            Format::I32 => write!(writer, "Int"),
             Format::I64 => todo!(),
             Format::I128 => todo!(),
             Format::U8 => todo!(),
@@ -132,7 +142,13 @@ impl Emitter<Kotlin> for Format {
             Format::Bytes => write!(writer, "ByteArray"),
             Format::Option(_format) => todo!(),
             Format::Seq(_format) => todo!(),
-            Format::Map { key: _, value: _ } => todo!(),
+            Format::Map { key, value } => {
+                write!(writer, "Map<")?;
+                key.write(writer)?;
+                write!(writer, ", ")?;
+                value.write(writer)?;
+                write!(writer, ">")
+            }
             Format::Tuple(_formats) => todo!(),
             Format::TupleArray {
                 content: _,

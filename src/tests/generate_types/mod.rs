@@ -18,3 +18,7 @@ pub struct Types {
     pub optional_dictionary: Option<HashMap<String, i32>>,
     pub custom_type: CustomType,
 }
+
+crate::test! {
+    Types for java, kotlin
+}
