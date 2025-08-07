@@ -8,3 +8,7 @@ pub struct Video<'a> {
 
 #[derive(Facet, Serialize)]
 pub struct Tag;
+
+crate::test! {
+    Video for java, kotlin
+}
