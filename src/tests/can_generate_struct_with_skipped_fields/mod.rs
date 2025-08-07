@@ -10,3 +10,7 @@ pub struct MyStruct {
     #[facet(skip)]
     d: i32,
 }
+
+crate::test! {
+    MyStruct for java
+}
