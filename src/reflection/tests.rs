@@ -414,7 +414,8 @@ fn option_of_unit() {
       name: MyStruct
     : STRUCT:
         - - a:
-              OPTION: UNIT
+              - OPTION: UNIT
+              - []
         - []
     ");
 }
@@ -432,8 +433,9 @@ fn option_of_list() {
       name: MyStruct
     : STRUCT:
         - - a:
-              OPTION:
-                SEQ: I32
+              - OPTION:
+                  SEQ: I32
+              - []
         - []
     ");
 }
@@ -451,9 +453,10 @@ fn option_of_nested_list() {
       name: MyStruct
     : STRUCT:
         - - a:
-              OPTION:
-                SEQ:
-                  SEQ: I32
+              - OPTION:
+                  SEQ:
+                    SEQ: I32
+              - []
         - []
     ");
 }
@@ -477,11 +480,12 @@ fn option_of_list_of_named_type() {
       name: MyStruct
     : STRUCT:
         - - a:
-              OPTION:
-                SEQ:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Inner
+              - OPTION:
+                  SEQ:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Inner
+              - []
         - []
     ");
 }
@@ -499,8 +503,9 @@ fn list_of_options() {
       name: MyStruct
     : STRUCT:
         - - a:
-              SEQ:
-                OPTION: I32
+              - SEQ:
+                  OPTION: I32
+              - []
         - []
     ");
 }
@@ -524,11 +529,12 @@ fn list_of_options_of_named_type() {
       name: MyStruct
     : STRUCT:
         - - a:
-              SEQ:
-                OPTION:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Inner
+              - SEQ:
+                  OPTION:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Inner
+              - []
         - []
     ");
 }
@@ -546,9 +552,10 @@ fn nested_list_with_options() {
       name: MyStruct
     : STRUCT:
         - - a:
-              SEQ:
-                SEQ:
-                  OPTION: I32
+              - SEQ:
+                  SEQ:
+                    OPTION: I32
+              - []
         - []
     ");
 }
@@ -617,9 +624,31 @@ fn struct_with_doc() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - - a: U8
+        - - a:
+              - U8
+              - []
         - - This is a doc comment
           - and another doc comment
+    ");
+}
+
+#[test]
+fn struct_with_field_doc() {
+    #[derive(Facet)]
+    struct MyStruct {
+        /// This is a doc comment
+        a: u8,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - U8
+              - - This is a doc comment
+        - []
     ");
 }
 
@@ -636,7 +665,8 @@ fn struct_with_vec_of_u8() {
       name: MyStruct
     : STRUCT:
         - - a:
-              SEQ: U8
+              - SEQ: U8
+              - []
         - []
     ");
 }
@@ -654,7 +684,9 @@ fn struct_with_vec_of_u8_to_bytes() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - - a: BYTES
+        - - a:
+              - BYTES
+              - []
         - []
     ");
 }
@@ -672,7 +704,8 @@ fn struct_with_slice_of_u8() {
       name: MyStruct
     : STRUCT:
         - - a:
-              SEQ: U8
+              - SEQ: U8
+              - []
         - []
     ");
 }
@@ -690,7 +723,9 @@ fn struct_with_slice_of_u8_to_bytes() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - - a: BYTES
+        - - a:
+              - BYTES
+              - []
         - []
     ");
 }
@@ -710,10 +745,18 @@ fn struct_with_scalar_fields() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - - a: U8
-          - b: I32
-          - c: BOOL
-          - d: UNIT
+        - - a:
+              - U8
+              - []
+          - b:
+              - I32
+              - []
+          - c:
+              - BOOL
+              - []
+          - d:
+              - UNIT
+              - []
         - []
     ");
 }
@@ -731,9 +774,10 @@ fn struct_with_tuple_field() {
       name: MyStruct
     : STRUCT:
         - - a:
-              TUPLE:
-                - U8
-                - I32
+              - TUPLE:
+                  - U8
+                  - I32
+              - []
         - []
     ");
 }
@@ -758,20 +802,24 @@ fn struct_with_option_fields() {
       name: Inner
     : STRUCT:
         - - a:
-              OPTION: BOOL
+              - OPTION: BOOL
+              - []
           - b:
-              OPTION: U8
+              - OPTION: U8
+              - []
         - []
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
         - - a:
-              OPTION:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Inner
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Inner
+              - []
           - b:
-              OPTION: U8
+              - OPTION: U8
+              - []
         - []
     ");
 }
@@ -804,13 +852,15 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
       name: MyStruct
     : STRUCT:
         - - a:
-              TYPENAME:
-                namespace: ROOT
-                name: Inner1
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Inner1
+              - []
           - b:
-              TYPENAME:
-                namespace: ROOT
-                name: Inner2
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Inner2
+              - []
         - []
     ");
 }
@@ -831,9 +881,13 @@ fn enum_with_unit_variants() {
       name: MyEnum
     : ENUM:
         0:
-          Variant1: UNIT
+          Variant1:
+            - UNIT
+            - []
         1:
-          Variant2: UNIT
+          Variant2:
+            - UNIT
+            - []
     ");
 }
 
@@ -859,25 +913,32 @@ fn enum_with_newtype_variants() {
     : ENUM:
         0:
           Variant1:
-            NEWTYPE: U8
+            - NEWTYPE: U8
+            - []
         1:
           Variant2:
-            NEWTYPE: I32
+            - NEWTYPE: I32
+            - []
         2:
           Variant3:
-            NEWTYPE: F64
+            - NEWTYPE: F64
+            - []
         3:
           Variant4:
-            NEWTYPE: CHAR
+            - NEWTYPE: CHAR
+            - []
         4:
           Variant5:
-            NEWTYPE: STR
+            - NEWTYPE: STR
+            - []
         5:
           Variant6:
-            NEWTYPE: BOOL
+            - NEWTYPE: BOOL
+            - []
         6:
           Variant7:
-            NEWTYPE: UNIT
+            - NEWTYPE: UNIT
+            - []
     ");
 }
 
@@ -904,13 +965,15 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
     : ENUM:
         0:
           Variant1:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: Inner
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+            - []
         1:
           Variant2:
-            NEWTYPE: U8
+            - NEWTYPE: U8
+            - []
     ");
 }
 
@@ -931,19 +994,21 @@ fn enum_with_tuple_struct_variants() {
     : ENUM:
         0:
           Variant1:
-            TUPLE:
-              - U8
-              - I32
-              - F64
-              - CHAR
-              - STR
-              - BOOL
-              - UNIT
+            - TUPLE:
+                - U8
+                - I32
+                - F64
+                - CHAR
+                - STR
+                - BOOL
+                - UNIT
+            - []
         1:
           Variant2:
-            TUPLE:
-              - I8
-              - U32
+            - TUPLE:
+                - I8
+                - U32
+            - []
     ");
 }
 
@@ -970,18 +1035,20 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
     : ENUM:
         0:
           Variant1:
-            TUPLE:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: Inner
-              - U8
+            - TUPLE:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: Inner
+                - U8
+            - []
         1:
           Variant2:
-            TUPLE:
-              - I8
-              - TYPENAME:
-                  namespace: ROOT
-                  name: Inner
+            - TUPLE:
+                - I8
+                - TYPENAME:
+                    namespace: ROOT
+                    name: Inner
+            - []
     ");
 }
 
@@ -1004,26 +1071,35 @@ fn enum_with_inline_struct_variants() {
     ? namespace: ROOT
       name: Inner
     : STRUCT:
-        - - a: STR
+        - - a:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
         0:
           Variant1:
-            STRUCT:
-              - a:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Inner
-              - b: U8
-              - c: BOOL
+            - STRUCT:
+                - a:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: Inner
+                    - []
+                - b:
+                    - U8
+                    - []
+                - c:
+                    - BOOL
+                    - []
+            - []
         1:
           Variant2:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: Inner
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+            - []
     ");
 }
 
@@ -1061,25 +1137,43 @@ fn enum_with_struct_variants_mixed_types() {
     : ENUM:
         0:
           Variant1:
-            STRUCT:
-              - a:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Inner
-              - b: U8
-              - c: F32
-              - d: STR
-              - e: CHAR
-              - f: BOOL
-              - g: UNIT
+            - STRUCT:
+                - a:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: Inner
+                    - []
+                - b:
+                    - U8
+                    - []
+                - c:
+                    - F32
+                    - []
+                - d:
+                    - STR
+                    - []
+                - e:
+                    - CHAR
+                    - []
+                - f:
+                    - BOOL
+                    - []
+                - g:
+                    - UNIT
+                    - []
+            - []
         1:
           Variant2:
-            STRUCT:
-              - x: I32
-              - y:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Inner
+            - STRUCT:
+                - x:
+                    - I32
+                    - []
+                - y:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: Inner
+                    - []
+            - []
     ");
 }
 
@@ -1100,14 +1194,20 @@ fn enum_with_struct_variant() {
       name: MyEnum
     : ENUM:
         0:
-          A: UNIT
+          A:
+            - UNIT
+            - []
         1:
           B:
-            NEWTYPE: U64
+            - NEWTYPE: U64
+            - []
         2:
           C:
-            STRUCT:
-              - x: U8
+            - STRUCT:
+                - x:
+                    - U8
+                    - []
+            - []
     ");
 }
 
@@ -1129,9 +1229,13 @@ fn enum_with_skip_serializing() {
       name: MyEnum
     : ENUM:
         0:
-          Variant1: UNIT
+          Variant1:
+            - UNIT
+            - []
         1:
-          Variant3: UNIT
+          Variant3:
+            - UNIT
+            - []
     ");
 }
 
@@ -1151,7 +1255,9 @@ fn transparent() {
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
-        - - inner: I32
+        - - inner:
+              - I32
+              - []
         - []
     ");
 }
@@ -1172,10 +1278,11 @@ fn map_of_string_and_bool() {
     : ENUM:
         0:
           Map:
-            NEWTYPE:
-              MAP:
-                KEY: STR
-                VALUE: BOOL
+            - NEWTYPE:
+                MAP:
+                  KEY: STR
+                  VALUE: BOOL
+            - []
     ");
 }
 
@@ -1195,8 +1302,9 @@ fn set_of_string() {
     : ENUM:
         0:
           Set:
-            NEWTYPE:
-              SEQ: STR
+            - NEWTYPE:
+                SEQ: STR
+            - []
     ");
 }
 
@@ -1305,25 +1413,28 @@ fn map_with_user_defined_types() {
       name: MyStruct
     : STRUCT:
         - - user_map:
-              MAP:
-                KEY:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: UserId
-                VALUE:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: UserProfile
+              - MAP:
+                  KEY:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UserId
+                  VALUE:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UserProfile
+              - []
           - id_to_count:
-              MAP:
-                KEY: I32
-                VALUE:
-                  SEQ: STR
+              - MAP:
+                  KEY: I32
+                  VALUE:
+                    SEQ: STR
+              - []
           - nested_map:
-              MAP:
-                KEY: STR
-                VALUE:
-                  OPTION: U64
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    OPTION: U64
+              - []
         - []
     ? namespace: ROOT
       name: UserId
@@ -1331,8 +1442,12 @@ fn map_with_user_defined_types() {
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - - name: STR
-          - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
         - []
     ");
 }
@@ -1354,17 +1469,18 @@ fn complex_map() {
     : ENUM:
         0:
           Map:
-            NEWTYPE:
-              MAP:
-                KEY:
-                  TUPLE:
-                    - TUPLEARRAY:
-                        CONTENT: U32
-                        SIZE: 2
-                    - TUPLEARRAY:
-                        CONTENT: U8
-                        SIZE: 4
-                VALUE: UNIT
+            - NEWTYPE:
+                MAP:
+                  KEY:
+                    TUPLE:
+                      - TUPLEARRAY:
+                          CONTENT: U32
+                          SIZE: 2
+                      - TUPLEARRAY:
+                          CONTENT: U8
+                          SIZE: 4
+                  VALUE: UNIT
+            - []
     ");
 }
 
@@ -1387,15 +1503,20 @@ fn struct_with_box_of_t() {
       name: MyStruct
     : STRUCT:
         - - boxed:
-              TYPENAME:
-                namespace: ROOT
-                name: UserProfile
+              - TYPENAME:
+                  namespace: ROOT
+                  name: UserProfile
+              - []
         - []
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - - name: STR
-          - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
         - []
     ");
 }
@@ -1419,15 +1540,20 @@ fn struct_with_arc_of_t() {
       name: MyStruct
     : STRUCT:
         - - boxed:
-              TYPENAME:
-                namespace: ROOT
-                name: UserProfile
+              - TYPENAME:
+                  namespace: ROOT
+                  name: UserProfile
+              - []
         - []
     ? namespace: ROOT
       name: UserProfile
     : STRUCT:
-        - - name: STR
-          - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
         - []
     ");
 }
@@ -1480,44 +1606,59 @@ fn own_result_enum() {
     : ENUM:
         0:
           Url:
-            NEWTYPE: STR
+            - NEWTYPE: STR
+            - []
         1:
           Io:
-            NEWTYPE: STR
+            - NEWTYPE: STR
+            - []
         2:
-          Timeout: UNIT
+          Timeout:
+            - UNIT
+            - []
     ? namespace: ROOT
       name: HttpHeader
     : STRUCT:
-        - - name: STR
-          - value: STR
+        - - name:
+              - STR
+              - []
+          - value:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: HttpResponse
     : STRUCT:
-        - - status: U16
+        - - status:
+              - U16
+              - []
           - headers:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: HttpHeader
-          - body: BYTES
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: HttpHeader
+              - []
+          - body:
+              - BYTES
+              - []
         - []
     ? namespace: ROOT
       name: HttpResult
     : ENUM:
         0:
           Ok:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: HttpResponse
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: HttpResponse
+            - []
         1:
           Err:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: HttpError
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: HttpError
+            - []
     ");
 }
 
@@ -1535,8 +1676,12 @@ fn struct_rename() {
     ? namespace: ROOT
       name: Effect
     : STRUCT:
-        - - name: STR
-          - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
         - []
     ");
 }
@@ -1558,9 +1703,13 @@ fn enum_rename() {
       name: Effect
     : ENUM:
         0:
-          One: UNIT
+          One:
+            - UNIT
+            - []
         1:
-          Two: UNIT
+          Two:
+            - UNIT
+            - []
     ");
 }
 
@@ -1583,16 +1732,21 @@ fn struct_rename_with_named_type() {
     ? namespace: ROOT
       name: Effect
     : STRUCT:
-        - - inner: STR
+        - - inner:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: Request
     : STRUCT:
-        - - id: U32
+        - - id:
+              - U32
+              - []
           - effect:
-              TYPENAME:
-                namespace: ROOT
-                name: Effect
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Effect
+              - []
         - []
     ");
 }
@@ -1643,10 +1797,16 @@ fn complex_self_referencing_type() {
             [
                 Named {
                     name: "value",
+                    doc: Doc(
+                        [],
+                    ),
                     value: I32,
                 },
                 Named {
                     name: "children",
+                    doc: Doc(
+                        [],
+                    ),
                     value: Option(
                         Seq(
                             TypeName(
@@ -1693,6 +1853,9 @@ fn tree_struct_with_mutual_recursion() {
             {
                 0: Named {
                     name: "TreeWithMutualRecursion",
+                    doc: Doc(
+                        [],
+                    ),
                     value: NewType(
                         TypeName(
                             QualifiedTypeName {
@@ -1711,6 +1874,9 @@ fn tree_struct_with_mutual_recursion() {
             [
                 Named {
                     name: "value",
+                    doc: Doc(
+                        [],
+                    ),
                     value: TypeName(
                         QualifiedTypeName {
                             namespace: Root,
@@ -1720,6 +1886,9 @@ fn tree_struct_with_mutual_recursion() {
                 },
                 Named {
                     name: "children",
+                    doc: Doc(
+                        [],
+                    ),
                     value: Seq(
                         TypeName(
                             QualifiedTypeName {
@@ -1763,6 +1932,9 @@ fn tree_enum_with_mutual_recursion() {
             [
                 Named {
                     name: "tree_with_mutual_recursion",
+                    doc: Doc(
+                        [],
+                    ),
                     value: TypeName(
                         QualifiedTypeName {
                             namespace: Root,
@@ -1782,6 +1954,9 @@ fn tree_enum_with_mutual_recursion() {
             {
                 0: Named {
                     name: "Value",
+                    doc: Doc(
+                        [],
+                    ),
                     value: NewType(
                         TypeName(
                             QualifiedTypeName {

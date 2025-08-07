@@ -202,6 +202,7 @@ mod tests {
             0,
             crate::reflection::format::Named {
                 name: "UnresolvedVariant".to_string(),
+                doc: Doc::new(),
                 value: VariantFormat::unknown(), // Unresolved Variable
             },
         );
@@ -227,6 +228,7 @@ mod tests {
         // Create a struct with an unresolved field Variable
         let fields = vec![crate::reflection::format::Named {
             name: "unresolved_field".to_string(),
+            doc: Doc::new(),
             value: Format::unknown(), // Unresolved Variable
         }];
 

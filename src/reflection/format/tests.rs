@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, string::ToString};
 
-use crate::reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat};
+use crate::reflection::format::{ContainerFormat, Doc, Format, FormatHolder, Named, VariantFormat};
 
 #[test]
 fn test_format_visiting() {
@@ -14,6 +14,7 @@ fn test_format_visiting() {
             0,
             Named {
                 name: "foo".into(),
+                doc: Doc::new(),
                 value: VariantFormat::Tuple(vec![
                     TypeName("foo".into()),
                     TypeName("bar".into()),

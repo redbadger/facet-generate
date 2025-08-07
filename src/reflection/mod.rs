@@ -123,7 +123,7 @@ impl RegistryBuilder {
     }
 
     fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
-        match &dbg!(shape).ty {
+        match &shape.ty {
             Type::User(UserType::Struct(struct_def)) => {
                 self.handle_user_struct(shape, struct_def, namespace);
                 true
@@ -357,15 +357,15 @@ impl RegistryBuilder {
             FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
         });
 
-        if has_bytes_attribute && self.try_handle_bytes_attribute(field, field_shape) {
+        if has_bytes_attribute && self.try_handle_bytes_attribute(field) {
             return;
         }
 
-        if self.try_handle_option_field(field, field_shape, namespace) {
+        if self.try_handle_option_field(field, namespace) {
             return;
         }
 
-        if self.try_handle_tuple_struct_field(field, field_shape, namespace) {
+        if self.try_handle_tuple_struct_field(field, namespace) {
             return;
         }
 
@@ -387,15 +387,18 @@ impl RegistryBuilder {
         };
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-            named_formats.push(Named {
+            let format = Named {
                 name: field.name.to_string(),
+                doc: field.into(),
                 value: field_format,
-            });
+            };
+            named_formats.push(format);
         }
         self.process_type(field_shape, namespace);
     }
 
-    fn try_handle_bytes_attribute(&mut self, field: &Field, field_shape: &Shape) -> bool {
+    fn try_handle_bytes_attribute(&mut self, field: &Field) -> bool {
+        let field_shape = field.shape();
         // Handle bytes attribute for Vec<u8>
         if field_shape.type_identifier == "Vec" {
             // Check if it's actually Vec<u8> by examining the definition
@@ -405,6 +408,7 @@ impl RegistryBuilder {
                     if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                         named_formats.push(Named {
                             name: field.name.to_string(),
+                            doc: field.shape().into(),
                             value: Format::Bytes,
                         });
                     }
@@ -428,6 +432,7 @@ impl RegistryBuilder {
                         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                             named_formats.push(Named {
                                 name: field.name.to_string(),
+                                doc: field.into(),
                                 value: Format::Bytes,
                             });
                         }
@@ -440,12 +445,8 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_option_field(
-        &mut self,
-        field: &Field,
-        field_shape: &Shape,
-        namespace: Option<&str>,
-    ) -> bool {
+    fn try_handle_option_field(&mut self, field: &Field, namespace: Option<&str>) -> bool {
+        let field_shape = field.shape();
         // Check if the field is an Option
         if field_shape.type_identifier == "Option" {
             if let Def::Option(option_def) = field_shape.def {
@@ -457,6 +458,7 @@ impl RegistryBuilder {
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: option_format,
                     });
                 }
@@ -471,12 +473,8 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_tuple_struct_field(
-        &mut self,
-        field: &Field,
-        field_shape: &Shape,
-        _namespace: Option<&str>,
-    ) -> bool {
+    fn try_handle_tuple_struct_field(&mut self, field: &Field, _namespace: Option<&str>) -> bool {
+        let field_shape = field.shape();
         // Check if the field is a tuple struct
         if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
             if inner_struct.kind == StructKind::Tuple {
@@ -496,6 +494,7 @@ impl RegistryBuilder {
                     };
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: tuple_format,
                     });
                 }
@@ -528,6 +527,7 @@ impl RegistryBuilder {
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: inner_format,
                     });
                 }
@@ -591,6 +591,7 @@ impl RegistryBuilder {
                 variant_index,
                 Named {
                     name: variant.name.to_string(),
+                    doc: shape.into(),
                     value: variant_format,
                 },
             );
@@ -730,6 +731,7 @@ impl RegistryBuilder {
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value,
                     });
                 }
@@ -743,6 +745,7 @@ impl RegistryBuilder {
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: Format::unknown(),
                     });
                 }

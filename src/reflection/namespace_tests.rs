@@ -41,36 +41,43 @@ fn nested_namespaced_structs() {
     ? namespace: ROOT
       name: GrandChild
     : STRUCT:
-        - - field: STR
+        - - field:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: Parent
     : STRUCT:
         - - one:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: Child
+              - TYPENAME:
+                  namespace:
+                    NAMED: one
+                  name: Child
+              - []
           - two:
-              TYPENAME:
-                namespace:
-                  NAMED: two
-                name: Child
+              - TYPENAME:
+                  namespace:
+                    NAMED: two
+                  name: Child
+              - []
         - []
     ? namespace:
         NAMED: one
       name: Child
     : STRUCT:
         - - child:
-              TYPENAME:
-                namespace: ROOT
-                name: GrandChild
+              - TYPENAME:
+                  namespace: ROOT
+                  name: GrandChild
+              - []
         - []
     ? namespace:
         NAMED: two
       name: Child
     : STRUCT:
-        - - field: STR
+        - - field:
+              - STR
+              - []
         - []
     ");
 }
@@ -121,41 +128,47 @@ fn nested_namespaced_enums() {
       name: GrandChild
     : ENUM:
         0:
-          None: UNIT
+          None:
+            - UNIT
+            - []
     ? namespace: ROOT
       name: Parent
     : ENUM:
         0:
           One:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: Child
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: one
+                  name: Child
+            - []
         1:
           Two:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: two
-                name: Child
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: two
+                  name: Child
+            - []
     ? namespace:
         NAMED: one
       name: Child
     : ENUM:
         0:
           Data:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: GrandChild
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: GrandChild
+            - []
     ? namespace:
         NAMED: two
       name: Child
     : ENUM:
         0:
           Data:
-            NEWTYPE: STR
+            - NEWTYPE: STR
+            - []
     ");
 }
 
@@ -199,36 +212,43 @@ fn nested_namespaced_renamed_structs() {
     ? namespace: ROOT
       name: GrandKid
     : STRUCT:
-        - - field: STR
+        - - field:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: Parent
     : STRUCT:
         - - one:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: Kid
+              - TYPENAME:
+                  namespace:
+                    NAMED: one
+                  name: Kid
+              - []
           - two:
-              TYPENAME:
-                namespace:
-                  NAMED: two
-                name: Kid
+              - TYPENAME:
+                  namespace:
+                    NAMED: two
+                  name: Kid
+              - []
         - []
     ? namespace:
         NAMED: one
       name: Kid
     : STRUCT:
         - - child:
-              TYPENAME:
-                namespace: ROOT
-                name: GrandKid
+              - TYPENAME:
+                  namespace: ROOT
+                  name: GrandKid
+              - []
         - []
     ? namespace:
         NAMED: two
       name: Kid
     : STRUCT:
-        - - field: STR
+        - - field:
+              - STR
+              - []
         - []
     ");
 }
@@ -262,49 +282,58 @@ fn namespaced_collections() {
       name: Response
     : STRUCT:
         - - users:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: User
-          - user_arrays:
-              TUPLEARRAY:
-                CONTENT:
+              - SEQ:
                   TYPENAME:
                     namespace:
                       NAMED: api
                     name: User
-                SIZE: 5
+              - []
+          - user_arrays:
+              - TUPLEARRAY:
+                  CONTENT:
+                    TYPENAME:
+                      namespace:
+                        NAMED: api
+                      name: User
+                  SIZE: 5
+              - []
           - optional_user:
-              OPTION:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: User
+              - OPTION:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
           - groups:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: Group
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: Group
+              - []
         - []
     ? namespace:
         NAMED: api
       name: Group
     : STRUCT:
         - - users:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: User
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
         - []
     ? namespace:
         NAMED: api
       name: User
     : STRUCT:
-        - - id: STR
-          - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
         - []
     ");
 }
@@ -338,21 +367,23 @@ fn namespaced_maps() {
       name: Database
     : STRUCT:
         - - user_profiles:
-              MAP:
-                KEY:
-                  TYPENAME:
-                    namespace:
-                      NAMED: models
-                    name: UserId
-                VALUE:
-                  TYPENAME:
-                    namespace:
-                      NAMED: models
-                    name: UserProfile
+              - MAP:
+                  KEY:
+                    TYPENAME:
+                      namespace:
+                        NAMED: models
+                      name: UserId
+                  VALUE:
+                    TYPENAME:
+                      namespace:
+                        NAMED: models
+                      name: UserProfile
+              - []
           - user_counts:
-              MAP:
-                KEY: STR
-                VALUE: U32
+              - MAP:
+                  KEY: STR
+                  VALUE: U32
+              - []
         - []
     ? namespace:
         NAMED: models
@@ -362,8 +393,12 @@ fn namespaced_maps() {
         NAMED: models
       name: UserProfile
     : STRUCT:
-        - - name: STR
-          - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
         - []
     ");
 }
@@ -410,11 +445,12 @@ fn complex_namespaced_enums() {
       name: EventLog
     : STRUCT:
         - - events:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: Event
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: Event
+              - []
         - []
     ? namespace:
         NAMED: events
@@ -422,45 +458,58 @@ fn complex_namespaced_enums() {
     : ENUM:
         0:
           UserCreated:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: UserData
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: UserData
+            - []
         1:
           UserUpdated:
-            STRUCT:
-              - old:
-                  TYPENAME:
-                    namespace:
-                      NAMED: events
-                    name: UserData
-              - new:
-                  TYPENAME:
-                    namespace:
-                      NAMED: events
-                    name: UserData
+            - STRUCT:
+                - old:
+                    - TYPENAME:
+                        namespace:
+                          NAMED: events
+                        name: UserData
+                    - []
+                - new:
+                    - TYPENAME:
+                        namespace:
+                          NAMED: events
+                        name: UserData
+                    - []
+            - []
         2:
           SystemEvent:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: SystemData
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: SystemData
+            - []
         3:
-          Simple: UNIT
+          Simple:
+            - UNIT
+            - []
     ? namespace:
         NAMED: events
       name: SystemData
     : STRUCT:
-        - - timestamp: U64
+        - - timestamp:
+              - U64
+              - []
         - []
     ? namespace:
         NAMED: events
       name: UserData
     : STRUCT:
-        - - id: STR
-          - email: STR
+        - - id:
+              - STR
+              - []
+          - email:
+              - STR
+              - []
         - []
     ");
 }
@@ -488,15 +537,17 @@ fn namespaced_transparent_structs() {
       name: Container
     : STRUCT:
         - - direct_id:
-              TYPENAME:
-                namespace:
-                  NAMED: wrappers
-                name: UserId
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrappers
+                  name: UserId
+              - []
           - wrapped_id:
-              TYPENAME:
-                namespace:
-                  NAMED: wrappers
-                name: UserId
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrappers
+                  name: UserId
+              - []
         - []
     ? namespace:
         NAMED: wrappers
@@ -538,43 +589,51 @@ fn cross_namespace_references() {
       name: System
     : STRUCT:
         - - records:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: storage
-                  name: Record
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: storage
+                    name: Record
+              - []
         - []
     ? namespace:
         NAMED: api
       name: Request
     : STRUCT:
         - - entity:
-              TYPENAME:
-                namespace:
-                  NAMED: entities
-                name: Entity
-          - metadata: STR
+              - TYPENAME:
+                  namespace:
+                    NAMED: entities
+                  name: Entity
+              - []
+          - metadata:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: entities
       name: Entity
     : STRUCT:
-        - - id: STR
+        - - id:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: storage
       name: Record
     : STRUCT:
         - - entity:
-              TYPENAME:
-                namespace:
-                  NAMED: entities
-                name: Entity
+              - TYPENAME:
+                  namespace:
+                    NAMED: entities
+                  name: Entity
+              - []
           - request:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: Request
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: Request
+              - []
         - []
     ");
 }
@@ -606,18 +665,25 @@ fn namespace_with_byte_attributes() {
       name: Document
     : STRUCT:
         - - binary:
-              TYPENAME:
-                namespace:
-                  NAMED: data
-                name: BinaryData
+              - TYPENAME:
+                  namespace:
+                    NAMED: data
+                  name: BinaryData
+              - []
         - []
     ? namespace:
         NAMED: data
       name: BinaryData
     : STRUCT:
-        - - content: BYTES
-          - header: BYTES
-          - metadata: STR
+        - - content:
+              - BYTES
+              - []
+          - header:
+              - BYTES
+              - []
+          - metadata:
+              - STR
+              - []
         - []
     ");
 }
@@ -656,31 +722,36 @@ fn deeply_nested_namespaces() {
       name: RootStruct
     : STRUCT:
         - - middle:
-              TYPENAME:
-                namespace:
-                  NAMED: level1
-                name: MiddleStruct
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1
+                  name: MiddleStruct
+              - []
           - deep_direct:
-              TYPENAME:
-                namespace:
-                  NAMED: level1.level2
-                name: DeepStruct
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1.level2
+                  name: DeepStruct
+              - []
         - []
     ? namespace:
         NAMED: level1
       name: MiddleStruct
     : STRUCT:
         - - deep:
-              TYPENAME:
-                namespace:
-                  NAMED: level1.level2
-                name: DeepStruct
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1.level2
+                  name: DeepStruct
+              - []
         - []
     ? namespace:
         NAMED: level1.level2
       name: DeepStruct
     : STRUCT:
-        - - value: STR
+        - - value:
+              - STR
+              - []
         - []
     ");
 }
@@ -711,9 +782,10 @@ fn transparent_struct_explicit_namespace() {
       name: Container
     : STRUCT:
         - - wrapped_id:
-              TYPENAME:
-                namespace: ROOT
-                name: UserId
+              - TYPENAME:
+                  namespace: ROOT
+                  name: UserId
+              - []
         - []
     ? namespace: ROOT
       name: UserId
@@ -797,65 +869,80 @@ fn explicit_namespace_declarations() {
       name: ApiContainer
     : STRUCT:
         - - user:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: User
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: User
+              - []
           - group:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: Group
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: Group
+              - []
         - []
     ? namespace: ROOT
       name: RootContainer
     : STRUCT:
         - - api_data:
-              TYPENAME:
-                namespace: ROOT
-                name: ApiContainer
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ApiContainer
+              - []
           - event:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: Event
+              - TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: Event
+              - []
           - efficient:
-              TYPENAME:
-                namespace: ROOT
-                name: RootGroup
+              - TYPENAME:
+                  namespace: ROOT
+                  name: RootGroup
+              - []
         - []
     ? namespace: ROOT
       name: RootGroup
     : STRUCT:
         - - users:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: RootUser
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: RootUser
+              - []
         - []
     ? namespace: ROOT
       name: RootUser
     : STRUCT:
-        - - id: STR
-          - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: api
       name: Group
     : STRUCT:
         - - users:
-              SEQ:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: User
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
         - []
     ? namespace:
         NAMED: api
       name: User
     : STRUCT:
-        - - id: STR
-          - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: events
@@ -863,29 +950,35 @@ fn explicit_namespace_declarations() {
     : ENUM:
         0:
           UserCreated:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: UserData
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: UserData
+            - []
         1:
           SystemEvent:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: SystemData
+            - NEWTYPE:
+                TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: SystemData
+            - []
     ? namespace:
         NAMED: events
       name: SystemData
     : STRUCT:
-        - - timestamp: U64
+        - - timestamp:
+              - U64
+              - []
         - []
     ? namespace:
         NAMED: events
       name: UserData
     : STRUCT:
-        - - id: STR
+        - - id:
+              - STR
+              - []
         - []
     ");
 }
@@ -920,47 +1013,55 @@ fn collections_with_explicit_namespace() {
       name: UnnamedRole
     : STRUCT:
         - - permissions:
-              SEQ: STR
+              - SEQ: STR
+              - []
         - []
     ? namespace: ROOT
       name: UnnamedUser
     : STRUCT:
-        - - name: STR
+        - - name:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: system
       name: UserManager
     : STRUCT:
         - - users:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UnnamedUser
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: UnnamedUser
+              - []
           - admins:
-              TUPLEARRAY:
-                CONTENT:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: UnnamedUser
-                SIZE: 2
+              - TUPLEARRAY:
+                  CONTENT:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedUser
+                  SIZE: 2
+              - []
           - optional_user:
-              OPTION:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UnnamedUser
-          - role_map:
-              MAP:
-                KEY: STR
-                VALUE:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: UnnamedRole
-          - nested_lists:
-              SEQ:
-                SEQ:
+              - OPTION:
                   TYPENAME:
                     namespace: ROOT
                     name: UnnamedUser
+              - []
+          - role_map:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedRole
+              - []
+          - nested_lists:
+              - SEQ:
+                  SEQ:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedUser
+              - []
         - []
     ");
 }
@@ -1006,22 +1107,31 @@ fn enums_with_explicit_namespace() {
     ? namespace: ROOT
       name: ErrorData
     : STRUCT:
-        - - code: U32
-          - message: STR
+        - - code:
+              - U32
+              - []
+          - message:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: ProcessingData
     : STRUCT:
-        - - progress: F32
+        - - progress:
+              - F32
+              - []
           - estimate:
-              TYPENAME:
-                namespace: ROOT
-                name: ErrorData
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ErrorData
+              - []
         - []
     ? namespace: ROOT
       name: SuccessData
     : STRUCT:
-        - - result: STR
+        - - result:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: api
@@ -1029,38 +1139,46 @@ fn enums_with_explicit_namespace() {
     : ENUM:
         0:
           Success:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: SuccessData
-        1:
-          Error:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: ErrorData
-        2:
-          Processing:
-            STRUCT:
-              - data:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: ProcessingData
-              - extra:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: SuccessData
-        3:
-          Multipart:
-            TUPLE:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: ErrorData
-              - TYPENAME:
+            - NEWTYPE:
+                TYPENAME:
                   namespace: ROOT
                   name: SuccessData
+            - []
+        1:
+          Error:
+            - NEWTYPE:
+                TYPENAME:
+                  namespace: ROOT
+                  name: ErrorData
+            - []
+        2:
+          Processing:
+            - STRUCT:
+                - data:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: ProcessingData
+                    - []
+                - extra:
+                    - TYPENAME:
+                        namespace: ROOT
+                        name: SuccessData
+                    - []
+            - []
+        3:
+          Multipart:
+            - TUPLE:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: ErrorData
+                - TYPENAME:
+                    namespace: ROOT
+                    name: SuccessData
+            - []
         4:
-          Empty: UNIT
+          Empty:
+            - UNIT
+            - []
     ");
 }
 
@@ -1098,49 +1216,58 @@ fn nested_structs_with_explicit_namespace() {
     ? namespace: ROOT
       name: DeepInner
     : STRUCT:
-        - - value: I32
+        - - value:
+              - I32
+              - []
         - []
     ? namespace: ROOT
       name: MiddleLayer
     : STRUCT:
         - - inner:
-              TYPENAME:
-                namespace: ROOT
-                name: DeepInner
-          - inner_list:
-              SEQ:
-                TYPENAME:
+              - TYPENAME:
                   namespace: ROOT
                   name: DeepInner
+              - []
+          - inner_list:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: DeepInner
+              - []
         - []
     ? namespace: ROOT
       name: TopLayer
     : STRUCT:
         - - middle:
-              TYPENAME:
-                namespace: ROOT
-                name: MiddleLayer
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MiddleLayer
+              - []
           - direct_inner:
-              TYPENAME:
-                namespace: ROOT
-                name: DeepInner
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeepInner
+              - []
         - []
     ? namespace:
         NAMED: nested
       name: Container
     : STRUCT:
         - - top:
-              TYPENAME:
-                namespace: ROOT
-                name: TopLayer
+              - TYPENAME:
+                  namespace: ROOT
+                  name: TopLayer
+              - []
           - middle_direct:
-              TYPENAME:
-                namespace: ROOT
-                name: MiddleLayer
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MiddleLayer
+              - []
           - inner_direct:
-              TYPENAME:
-                namespace: ROOT
-                name: DeepInner
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeepInner
+              - []
         - []
     ");
 }
@@ -1178,10 +1305,11 @@ fn transparent_struct_chains() {
       name: IdContainer
     : STRUCT:
         - - id:
-              TYPENAME:
-                namespace:
-                  NAMED: identity
-                name: NamespacedWrapper
+              - TYPENAME:
+                  namespace:
+                    NAMED: identity
+                  name: NamespacedWrapper
+              - []
         - []
     ? namespace:
         NAMED: identity
@@ -1218,54 +1346,63 @@ fn mixed_containers_with_explicit_namespace() {
     ? namespace: ROOT
       name: Item
     : STRUCT:
-        - - id: STR
+        - - id:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: storage
       name: MixedContainer
     : STRUCT:
         - - single:
-              TYPENAME:
-                namespace: ROOT
-                name: Item
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Item
+              - []
           - vector:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Item
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Item
+              - []
           - array:
-              TUPLEARRAY:
-                CONTENT:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: Item
-                SIZE: 3
+              - TUPLEARRAY:
+                  CONTENT:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Item
+                  SIZE: 3
+              - []
           - option:
-              OPTION:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Item
-          - tuple:
-              TUPLE:
-                - TYPENAME:
-                    namespace: ROOT
-                    name: Item
-                - STR
-          - nested_option:
-              OPTION:
-                SEQ:
+              - OPTION:
                   TYPENAME:
                     namespace: ROOT
                     name: Item
-          - complex_map:
-              MAP:
-                KEY: STR
-                VALUE:
+              - []
+          - tuple:
+              - TUPLE:
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: Item
+                  - STR
+              - []
+          - nested_option:
+              - OPTION:
                   SEQ:
-                    OPTION:
-                      TYPENAME:
-                        namespace: ROOT
-                        name: Item
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Item
+              - []
+          - complex_map:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    SEQ:
+                      OPTION:
+                        TYPENAME:
+                          namespace: ROOT
+                          name: Item
+              - []
         - []
     ");
 }
@@ -1303,42 +1440,49 @@ fn no_namespace_pollution() {
       name: RootContainer
     : STRUCT:
         - - alpha:
-              TYPENAME:
-                namespace:
-                  NAMED: alpha
-                name: AlphaContainer
+              - TYPENAME:
+                  namespace:
+                    NAMED: alpha
+                  name: AlphaContainer
+              - []
           - beta:
-              TYPENAME:
-                namespace:
-                  NAMED: beta
-                name: BetaContainer
+              - TYPENAME:
+                  namespace:
+                    NAMED: beta
+                  name: BetaContainer
+              - []
           - unnamespaced:
-              TYPENAME:
-                namespace: ROOT
-                name: SharedType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
         - []
     ? namespace: ROOT
       name: SharedType
     : STRUCT:
-        - - value: STR
+        - - value:
+              - STR
+              - []
         - []
     ? namespace:
         NAMED: alpha
       name: AlphaContainer
     : STRUCT:
         - - shared:
-              TYPENAME:
-                namespace: ROOT
-                name: SharedType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
         - []
     ? namespace:
         NAMED: beta
       name: BetaContainer
     : STRUCT:
         - - shared:
-              TYPENAME:
-                namespace: ROOT
-                name: SharedType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
         - []
     ");
 }
@@ -1374,43 +1518,50 @@ fn explicit_namespace_behavior_summary() {
     ? namespace: ROOT
       name: BaseType
     : STRUCT:
-        - - value: STR
+        - - value:
+              - STR
+              - []
         - []
     ? namespace: ROOT
       name: Root
     : STRUCT:
         - - first:
-              TYPENAME:
-                namespace:
-                  NAMED: first
-                name: FirstContainer
+              - TYPENAME:
+                  namespace:
+                    NAMED: first
+                  name: FirstContainer
+              - []
           - second:
-              TYPENAME:
-                namespace:
-                  NAMED: second
-                name: SecondContainer
+              - TYPENAME:
+                  namespace:
+                    NAMED: second
+                  name: SecondContainer
+              - []
           - direct:
-              TYPENAME:
-                namespace: ROOT
-                name: BaseType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
         - []
     ? namespace:
         NAMED: first
       name: FirstContainer
     : STRUCT:
         - - item:
-              TYPENAME:
-                namespace: ROOT
-                name: BaseType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
         - []
     ? namespace:
         NAMED: second
       name: SecondContainer
     : STRUCT:
         - - item:
-              TYPENAME:
-                namespace: ROOT
-                name: BaseType
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
         - []
     ");
 }
