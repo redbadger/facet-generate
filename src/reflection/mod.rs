@@ -37,7 +37,19 @@ impl RegistryBuilder {
         for format in self.registry.values() {
             match format.visit(&mut |_| Ok(())) {
                 Ok(()) => (),
-                Err(err) => panic!("should not have any remaining placeholders: {err}"),
+                Err(err) => panic!(
+                    "
+                    There was a problem building the registry: {err}
+                    Note: Most types with generic parameters are currently not yet supported.
+                    The only supported generic types are:
+                    - Option<T>
+                    - Vec<T>
+                    - HashMap<K, V>
+                    - HashSet<T>
+                    - BTreeMap<K, V>
+                    - BTreeSet<T>
+                    "
+                ),
             }
         }
         self.registry

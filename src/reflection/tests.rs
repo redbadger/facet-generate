@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use super::*;
 
@@ -1188,6 +1191,39 @@ fn test_fixed_issues() {
         }
     }
     assert!(found_types >= 3, "Should have processed all test types");
+}
+
+#[test]
+fn sequence_and_map_types() {
+    #[derive(Facet)]
+    struct MyStruct {
+        vec: Vec<String>,
+        hash_map: HashMap<String, String>,
+        hash_set: HashSet<String>,
+        btree_map: BTreeMap<String, String>,
+        btree_set: BTreeSet<String>,
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    insta::assert_yaml_snapshot!(&registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - vec:
+            SEQ: STR
+        - hash_map:
+            MAP:
+              KEY: STR
+              VALUE: STR
+        - hash_set:
+            SEQ: STR
+        - btree_map:
+            MAP:
+              KEY: STR
+              VALUE: STR
+        - btree_set:
+            SEQ: STR
+    ");
 }
 
 #[test]
