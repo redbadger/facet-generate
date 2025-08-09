@@ -11,6 +11,8 @@ use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
+    use crate::reflection::format::Doc;
+
     use super::*;
     use facet::Facet;
 
@@ -200,6 +202,7 @@ mod tests {
             0,
             crate::reflection::format::Named {
                 name: "UnresolvedVariant".to_string(),
+                doc: Doc::new(),
                 value: VariantFormat::unknown(), // Unresolved Variable
             },
         );
@@ -225,10 +228,11 @@ mod tests {
         // Create a struct with an unresolved field Variable
         let fields = vec![crate::reflection::format::Named {
             name: "unresolved_field".to_string(),
+            doc: Doc::new(),
             value: Format::unknown(), // Unresolved Variable
         }];
 
-        let struct_container = ContainerFormat::Struct(fields);
+        let struct_container = ContainerFormat::Struct(fields, Doc::new());
         let type_name = crate::reflection::format::QualifiedTypeName {
             namespace: crate::reflection::format::Namespace::Named("test".to_string()),
             name: "StructWithUnresolvedField".to_string(),

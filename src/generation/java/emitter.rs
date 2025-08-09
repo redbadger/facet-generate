@@ -1,20 +1,17 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::Write,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{Encoding, common, indent::IndentedWriter, java::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    generation::{Encoding, common, indent::IndentWrite, java::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Java source file.
 pub(crate) struct JavaEmitter<'a, T> {
     /// Writer.
-    pub(crate) out: IndentedWriter<T>,
+    pub(crate) out: T,
     /// Generator.
     pub(crate) generator: &'a CodeGenerator<'a>,
     #[allow(clippy::doc_markdown)]
@@ -29,7 +26,7 @@ pub(crate) struct JavaEmitter<'a, T> {
 
 impl<T> JavaEmitter<'_, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub(crate) fn output_preamble(&mut self) -> std::io::Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
@@ -476,6 +473,7 @@ return obj;
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -483,6 +481,7 @@ return obj;
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -813,9 +812,10 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             ContainerFormat::TupleStruct(formats) => formats
@@ -823,10 +823,11 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),
-            ContainerFormat::Struct(fields) => fields.clone(),
+            ContainerFormat::Struct(fields, _doc) => fields.clone(),
             ContainerFormat::Enum(variants) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());

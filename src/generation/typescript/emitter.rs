@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    io::Write,
     marker::PhantomData,
 };
 
@@ -9,10 +8,10 @@ use heck::ToUpperCamelCase;
 use crate::{
     Registry,
     generation::{
-        PackageLocation, Serialization, common, indent::IndentedWriter, typescript::CodeGenerator,
+        PackageLocation, Serialization, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
-        ContainerFormat, Format, FormatHolder as _, Named, Namespace, VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
     },
 };
 
@@ -29,7 +28,7 @@ pub(crate) struct TypeScriptEmitter<'a, T> {
 
 impl<'a, T> TypeScriptEmitter<'a, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub fn new(generator: &'a CodeGenerator<'a>) -> Self {
         Self {
@@ -40,7 +39,7 @@ where
         }
     }
 
-    pub fn output_preamble(&mut self, out: &mut impl Write) -> std::io::Result<()> {
+    pub fn output_preamble(&mut self, out: &mut T) -> std::io::Result<()> {
         if self.generator.config.serialization.is_enabled() {
             let (serde, bcs) = match self.generator.target {
                 InstallTarget::Node => ("serde", "bcs"),
@@ -110,7 +109,7 @@ where
         Ok(())
     }
 
-    fn output_comment(&mut self, out: &mut IndentedWriter<T>, name: &str) -> std::io::Result<()> {
+    fn output_comment(&mut self, out: &mut T, name: &str) -> std::io::Result<()> {
         let path = vec![name.to_string()];
         if let Some(doc) = self.generator.config.comments.get(&path) {
             let text = textwrap::indent(doc, " * ").replace("\n\n", "\n *\n");
@@ -185,11 +184,7 @@ where
             .join(sep)
     }
 
-    pub fn output_helpers(
-        &mut self,
-        out: &mut IndentedWriter<T>,
-        registry: &Registry,
-    ) -> std::io::Result<()> {
+    pub fn output_helpers(&mut self, out: &mut T, registry: &Registry) -> std::io::Result<()> {
         let mut subtypes = BTreeMap::new();
         for format in registry.values() {
             format
@@ -290,7 +285,7 @@ where
 
     fn output_serialization_helper(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         name: &str,
         format0: &Format,
     ) -> std::io::Result<()> {
@@ -381,7 +376,7 @@ value.forEach((item) =>{{
     #[allow(clippy::too_many_lines)]
     fn output_deserialization_helper(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         name: &str,
         format0: &Format,
     ) -> std::io::Result<()> {
@@ -493,7 +488,7 @@ return list;
 
     fn output_variant(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         base: &str,
         index: u32,
         name: &str,
@@ -503,6 +498,7 @@ return list;
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -510,6 +506,7 @@ return list;
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -521,7 +518,7 @@ return list;
 
     fn output_variants(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         base: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
     ) -> std::io::Result<()> {
@@ -533,7 +530,7 @@ return list;
 
     fn output_struct_or_variant_container(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         variant_base: Option<&str>,
         variant_index: Option<u32>,
         name: &str,
@@ -627,7 +624,7 @@ return list;
 
     fn output_enum_container(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         name: &str,
         variants: &BTreeMap<u32, Named<VariantFormat>>,
     ) -> std::io::Result<()> {
@@ -672,14 +669,15 @@ switch (index) {{",
 
     pub fn output_container(
         &mut self,
-        out: &mut IndentedWriter<T>,
+        out: &mut T,
         name: &str,
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
             ContainerFormat::NewTypeStruct(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             ContainerFormat::TupleStruct(formats) => formats
@@ -687,10 +685,11 @@ switch (index) {{",
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),
-            ContainerFormat::Struct(fields) => fields.clone(),
+            ContainerFormat::Struct(fields, _doc) => fields.clone(),
             ContainerFormat::Enum(variants) => {
                 self.output_enum_container(out, name, variants)?;
                 return Ok(());

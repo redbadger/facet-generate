@@ -13,3 +13,7 @@ pub struct Person {
     pub emails: Vec<String>,
     pub location: Location,
 }
+
+crate::test! {
+    Person for kotlin
+}
