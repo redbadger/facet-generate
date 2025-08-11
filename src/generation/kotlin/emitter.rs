@@ -159,7 +159,22 @@ impl Emitter<Kotlin> for Format {
                 value.write(writer)?;
                 write!(writer, ">")
             }
-            Format::Tuple(_formats) => todo!(),
+            Format::Tuple(formats) => {
+                let len = formats.len();
+                match len {
+                    1 => return formats[0].write(writer),
+                    2 => write!(writer, "Pair<")?,
+                    3 => write!(writer, "Triple<")?,
+                    _ => write!(writer, "NTuple{len}<")?,
+                }
+                for (i, format) in formats.iter().enumerate() {
+                    if i > 0 {
+                        write!(writer, ", ")?;
+                    }
+                    format.write(writer)?;
+                }
+                write!(writer, ">")
+            }
             Format::TupleArray {
                 content: format,
                 size: _,

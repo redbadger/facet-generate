@@ -1,4 +1,4 @@
-use std::io::{Result, Write as _};
+use std::io::Result;
 
 use crate::{
     Registry,
