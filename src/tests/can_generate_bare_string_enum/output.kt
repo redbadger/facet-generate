@@ -16,4 +16,6 @@ enum class Colors {
 
     val serialName: String
         get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+
 }
+

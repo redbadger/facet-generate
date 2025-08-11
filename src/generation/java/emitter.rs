@@ -813,12 +813,12 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
     ) -> std::io::Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
                 doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -828,7 +828,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
                 })
                 .collect::<Vec<_>>(),
             ContainerFormat::Struct(fields, _doc) => fields.clone(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());
             }

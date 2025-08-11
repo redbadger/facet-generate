@@ -1,10 +1,13 @@
-use std::io::{Result, Write};
+use std::{
+    collections::BTreeMap,
+    io::{Result, Write},
+};
 
 use indoc::writedoc;
 
 use crate::{
     generation::{Emitter, indent::IndentWrite, module::Module},
-    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
+    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
 pub struct Kotlin;
@@ -38,8 +41,8 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
                 let name = &name.name;
                 data_object(writer, name, doc)?;
             }
-            (_name, ContainerFormat::NewTypeStruct(_format)) => {}
-            (_name, ContainerFormat::TupleStruct(_formats)) => {}
+            (_name, ContainerFormat::NewTypeStruct(_format, _doc)) => {}
+            (_name, ContainerFormat::TupleStruct(_formats, _doc)) => {}
             (name, ContainerFormat::Struct(nameds, doc)) => {
                 let name = &name.name;
                 if nameds.is_empty() {
@@ -48,7 +51,10 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
                     data_class(writer, name, nameds, doc)?;
                 }
             }
-            (_name, ContainerFormat::Enum(_btree_map)) => {}
+            (name, ContainerFormat::Enum(btree_map, doc)) => {
+                let name = &name.name;
+                enum_class(writer, name, btree_map, doc)?;
+            }
         }
 
         Ok(())
@@ -112,6 +118,34 @@ impl Emitter<Kotlin> for Named<Format> {
                 write!(writer, ">")
             }
         }
+    }
+}
+
+impl Emitter<Kotlin> for Named<VariantFormat> {
+    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+        let name = &self.name;
+        let comments = self.doc.comments();
+        if !comments.is_empty() {
+            writeln!(writer)?;
+            for comment in comments {
+                writeln!(writer, "/// {comment}")?;
+            }
+        }
+
+        match &self.value {
+            VariantFormat::Variable(_variable) => {
+                unreachable!("placeholders should not get this far")
+            }
+            VariantFormat::Unit => {
+                let name_upper = name.to_uppercase();
+                write!(writer, r#"@SerialName("{name}") {name_upper}"#)?;
+            }
+            VariantFormat::NewType(_format) => todo!(),
+            VariantFormat::Tuple(_formats) => todo!(),
+            VariantFormat::Struct(_nameds) => todo!(),
+        }
+
+        Ok(())
     }
 }
 
@@ -200,6 +234,48 @@ fn data_class<W: IndentWrite>(
 
     writeln!(writer)?;
     writeln!(writer, ")")?;
+
+    Ok(())
+}
+
+fn enum_class<W: IndentWrite>(
+    writer: &mut W,
+    name: &str,
+    variants: &BTreeMap<u32, Named<VariantFormat>>,
+    doc: &Doc,
+) -> Result<()> {
+    for comment in doc.comments() {
+        writeln!(writer, "/// {comment}")?;
+    }
+    writedoc!(
+        writer,
+        "
+            @Serializable
+            enum class {name} {{
+        "
+    )?;
+
+    writer.indent();
+    for (i, named) in variants {
+        if *i > 0 {
+            writeln!(writer, ",")?;
+        }
+        named.write(writer)?;
+    }
+    writeln!(writer, ";")?;
+    writeln!(writer)?;
+
+    writedoc!(
+        writer,
+        "
+        val serialName: String
+            get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+    "
+    )?;
+    writer.unindent();
+
+    writeln!(writer)?;
+    writeln!(writer, "}}")?;
 
     Ok(())
 }

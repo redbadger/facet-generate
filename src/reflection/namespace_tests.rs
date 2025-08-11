@@ -127,48 +127,52 @@ fn nested_namespaced_enums() {
     ? namespace: ROOT
       name: GrandChild
     : ENUM:
-        0:
-          None:
-            - UNIT
-            - []
+        - 0:
+            None:
+              - UNIT
+              - []
+        - []
     ? namespace: ROOT
       name: Parent
     : ENUM:
-        0:
-          One:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: one
-                  name: Child
-            - []
-        1:
-          Two:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: two
-                  name: Child
-            - []
+        - 0:
+            One:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: one
+                    name: Child
+              - []
+          1:
+            Two:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: two
+                    name: Child
+              - []
+        - []
     ? namespace:
         NAMED: one
       name: Child
     : ENUM:
-        0:
-          Data:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace: ROOT
-                  name: GrandChild
-            - []
+        - 0:
+            Data:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: GrandChild
+              - []
+        - []
     ? namespace:
         NAMED: two
       name: Child
     : ENUM:
-        0:
-          Data:
-            - NEWTYPE: STR
-            - []
+        - 0:
+            Data:
+              - NEWTYPE: STR
+              - []
+        - []
     ");
 }
 
@@ -388,7 +392,9 @@ fn namespaced_maps() {
     ? namespace:
         NAMED: models
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ? namespace:
         NAMED: models
       name: UserProfile
@@ -457,42 +463,43 @@ fn complex_namespaced_enums() {
         NAMED: events
       name: Event
     : ENUM:
-        0:
-          UserCreated:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: UserData
-            - []
-        1:
-          UserUpdated:
-            - STRUCT:
-                - old:
-                    - TYPENAME:
-                        namespace:
-                          NAMED: events
-                        name: UserData
-                    - []
-                - new:
-                    - TYPENAME:
-                        namespace:
-                          NAMED: events
-                        name: UserData
-                    - []
-            - []
-        2:
-          SystemEvent:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: SystemData
-            - []
-        3:
-          Simple:
-            - UNIT
-            - []
+        - 0:
+            UserCreated:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: UserData
+              - []
+          1:
+            UserUpdated:
+              - STRUCT:
+                  - old:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: events
+                          name: UserData
+                      - []
+                  - new:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: events
+                          name: UserData
+                      - []
+              - []
+          2:
+            SystemEvent:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: SystemData
+              - []
+          3:
+            Simple:
+              - UNIT
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: SystemData
@@ -553,7 +560,9 @@ fn namespaced_transparent_structs() {
     ? namespace:
         NAMED: wrappers
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ");
 }
 
@@ -790,7 +799,9 @@ fn transparent_struct_explicit_namespace() {
         - []
     ? namespace: ROOT
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ");
 }
 
@@ -949,22 +960,23 @@ fn explicit_namespace_declarations() {
         NAMED: events
       name: Event
     : ENUM:
-        0:
-          UserCreated:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: UserData
-            - []
-        1:
-          SystemEvent:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace:
-                    NAMED: events
-                  name: SystemData
-            - []
+        - 0:
+            UserCreated:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: UserData
+              - []
+          1:
+            SystemEvent:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: SystemData
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: SystemData
@@ -1139,48 +1151,49 @@ fn enums_with_explicit_namespace() {
         NAMED: api
       name: Response
     : ENUM:
-        0:
-          Success:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace: ROOT
-                  name: SuccessData
-            - []
-        1:
-          Error:
-            - NEWTYPE:
-                TYPENAME:
-                  namespace: ROOT
-                  name: ErrorData
-            - []
-        2:
-          Processing:
-            - STRUCT:
-                - data:
-                    - TYPENAME:
-                        namespace: ROOT
-                        name: ProcessingData
-                    - []
-                - extra:
-                    - TYPENAME:
-                        namespace: ROOT
-                        name: SuccessData
-                    - []
-            - []
-        3:
-          Multipart:
-            - TUPLE:
-                - TYPENAME:
-                    namespace: ROOT
-                    name: ErrorData
-                - TYPENAME:
+        - 0:
+            Success:
+              - NEWTYPE:
+                  TYPENAME:
                     namespace: ROOT
                     name: SuccessData
-            - []
-        4:
-          Empty:
-            - UNIT
-            - []
+              - []
+          1:
+            Error:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: ErrorData
+              - []
+          2:
+            Processing:
+              - STRUCT:
+                  - data:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: ProcessingData
+                      - []
+                  - extra:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: SuccessData
+                      - []
+              - []
+          3:
+            Multipart:
+              - TUPLE:
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: ErrorData
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: SuccessData
+              - []
+          4:
+            Empty:
+              - UNIT
+              - []
+        - []
     ");
 }
 
@@ -1302,7 +1315,9 @@ fn transparent_struct_chains() {
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: CoreId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ? namespace: ROOT
       name: IdContainer
     : STRUCT:
@@ -1317,9 +1332,10 @@ fn transparent_struct_chains() {
         NAMED: identity
       name: NamespacedWrapper
     : NEWTYPESTRUCT:
-        TYPENAME:
-          namespace: ROOT
-          name: DoubleWrapperId
+        - TYPENAME:
+            namespace: ROOT
+            name: DoubleWrapperId
+        - []
     ");
 }
 

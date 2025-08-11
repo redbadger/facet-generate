@@ -11,7 +11,7 @@ use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
-    use crate::reflection::format::Doc;
+    use crate::reflection::format::{Doc, Namespace, QualifiedTypeName};
 
     use super::*;
     use facet::Facet;
@@ -78,8 +78,8 @@ mod tests {
         assert!(!registry.is_empty());
 
         // Verify the type was processed correctly
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Root,
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Root,
             name: "SimpleStruct".to_string(),
         };
         assert!(registry.contains_key(&type_name));
@@ -178,12 +178,12 @@ mod tests {
         let mut builder = RegistryBuilder::new();
 
         // Manually insert an unresolved Variable (simulating the old bug)
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "UnresolvedType".to_string(),
         };
 
-        let unresolved_container = ContainerFormat::NewTypeStruct(Box::default());
+        let unresolved_container = ContainerFormat::NewTypeStruct(Box::default(), Doc::new());
         builder.registry.insert(type_name, unresolved_container);
 
         // This should still panic - the safety check works
@@ -207,9 +207,9 @@ mod tests {
             },
         );
 
-        let enum_container = ContainerFormat::Enum(variants);
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let enum_container = ContainerFormat::Enum(variants, Doc::new());
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "EnumWithUnresolvedVariant".to_string(),
         };
 
@@ -233,8 +233,8 @@ mod tests {
         }];
 
         let struct_container = ContainerFormat::Struct(fields, Doc::new());
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "StructWithUnresolvedField".to_string(),
         };
 
@@ -266,8 +266,8 @@ mod tests {
         assert!(!registry.is_empty());
 
         // Should contain the enum type
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Root,
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Root,
             name: "MyEnum".to_string(),
         };
         assert!(registry.contains_key(&type_name));

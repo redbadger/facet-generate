@@ -7,4 +7,7 @@ import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
 
-@Serializable data object MyEmptyStruct
+@Serializable
+data object MyEmptyStruct
+
+

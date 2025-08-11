@@ -17,7 +17,7 @@
 mod tests;
 
 use crate::{Result, error::Error};
-use facet::{Field, Shape};
+use facet::{Field, Shape, Variant};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -112,17 +112,28 @@ impl Doc {
     }
 }
 
+impl From<&[&str]> for Doc {
+    fn from(comments: &[&str]) -> Self {
+        let doc = comments.iter().map(|c| c.trim().to_string()).collect();
+        Self(doc)
+    }
+}
+
 impl From<&Shape> for Doc {
     fn from(shape: &Shape) -> Self {
-        let doc = shape.doc.iter().map(|c| c.trim().to_string()).collect();
-        Self(doc)
+        shape.doc.into()
     }
 }
 
 impl From<&Field> for Doc {
     fn from(field: &Field) -> Self {
-        let doc = field.doc.iter().map(|c| c.trim().to_string()).collect();
-        Self(doc)
+        field.doc.into()
+    }
+}
+
+impl From<&Variant> for Doc {
+    fn from(variant: &Variant) -> Self {
+        variant.doc.into()
     }
 }
 
@@ -185,14 +196,14 @@ pub enum ContainerFormat {
     /// An empty struct, e.g. `struct A`.
     UnitStruct(Doc),
     /// A struct with a single unnamed parameter, e.g. `struct A(u16)`
-    NewTypeStruct(Box<Format>),
+    NewTypeStruct(Box<Format>, Doc),
     /// A struct with several unnamed parameters, e.g. `struct A(u16, u32)`
-    TupleStruct(Vec<Format>),
+    TupleStruct(Vec<Format>, Doc),
     /// A struct with named parameters, e.g. `struct A { a: Foo }`.
     Struct(Vec<Named<Format>>, Doc),
     /// An enum, that is, an enumeration of variants.
     /// Each variant has a unique name and index within the enum.
-    Enum(BTreeMap<u32, Named<VariantFormat>>),
+    Enum(BTreeMap<u32, Named<VariantFormat>>, Doc),
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -423,8 +434,8 @@ impl FormatHolder for ContainerFormat {
     fn visit<'a>(&'a self, f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
         match self {
             Self::UnitStruct(_doc) => (),
-            Self::NewTypeStruct(format) => format.visit(f)?,
-            Self::TupleStruct(formats) => {
+            Self::NewTypeStruct(format, _doc) => format.visit(f)?,
+            Self::TupleStruct(formats, _doc) => {
                 for format in formats {
                     format.visit(f)?;
                 }
@@ -434,7 +445,7 @@ impl FormatHolder for ContainerFormat {
                     format.visit(f)?;
                 }
             }
-            Self::Enum(variants) => {
+            Self::Enum(variants, _doc) => {
                 for variant in variants {
                     variant.1.visit(f)?;
                 }
@@ -446,8 +457,8 @@ impl FormatHolder for ContainerFormat {
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
         match self {
             Self::UnitStruct(_doc) => (),
-            Self::NewTypeStruct(format) => format.visit_mut(f)?,
-            Self::TupleStruct(formats) => {
+            Self::NewTypeStruct(format, _doc) => format.visit_mut(f)?,
+            Self::TupleStruct(formats, _doc) => {
                 for format in formats {
                     format.visit_mut(f)?;
                 }
@@ -457,7 +468,7 @@ impl FormatHolder for ContainerFormat {
                     format.visit_mut(f)?;
                 }
             }
-            Self::Enum(variants) => {
+            Self::Enum(variants, _doc) => {
                 for variant in variants {
                     variant.1.visit_mut(f)?;
                 }
