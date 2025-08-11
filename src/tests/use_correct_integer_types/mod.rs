@@ -10,3 +10,7 @@ pub struct Foo {
     pub f: u16,
     pub g: u32,
 }
+
+crate::test! {
+    Foo for kotlin
+}

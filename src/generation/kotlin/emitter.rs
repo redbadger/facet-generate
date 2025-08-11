@@ -41,8 +41,23 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
                 let name = &name.name;
                 data_object(writer, name, doc)?;
             }
-            (_name, ContainerFormat::NewTypeStruct(_format, _doc)) => {}
-            (_name, ContainerFormat::TupleStruct(_formats, _doc)) => {}
+            (name, ContainerFormat::NewTypeStruct(format, doc)) => {
+                let name = &name.name;
+                type_alias(writer, name, format, doc)?;
+            }
+            (name, ContainerFormat::TupleStruct(formats, doc)) => {
+                let name = &name.name;
+                let nameds = formats
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| Named {
+                        name: format!("field_{i}"),
+                        doc: Doc::new(),
+                        value: f.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                data_class(writer, name, &nameds, doc)?;
+            }
             (name, ContainerFormat::Struct(nameds, doc)) => {
                 let name = &name.name;
                 if nameds.is_empty() {
@@ -57,18 +72,54 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
             }
         }
 
+        writeln!(writer)?;
+
         Ok(())
     }
 }
 
 impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        let name = &self.name;
         for comment in self.doc.comments() {
             writeln!(writer, "/// {comment}")?;
         }
+
+        let name = &self.name;
         write!(writer, "val {name}: ")?;
+
+        self.value.write(writer)?;
+
+        Ok(())
+    }
+}
+
+impl Emitter<Kotlin> for Named<VariantFormat> {
+    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+        for comment in self.doc.comments() {
+            writeln!(writer, "/// {comment}")?;
+        }
+
+        let name = &self.name;
         match &self.value {
+            VariantFormat::Variable(_variable) => {
+                unreachable!("placeholders should not get this far")
+            }
+            VariantFormat::Unit => {
+                let name_upper = name.to_uppercase();
+                write!(writer, r#"@SerialName("{name}") {name_upper}"#)?;
+            }
+            VariantFormat::NewType(_format) => todo!(),
+            VariantFormat::Tuple(_formats) => todo!(),
+            VariantFormat::Struct(_nameds) => todo!(),
+        }
+
+        Ok(())
+    }
+}
+
+impl Emitter<Kotlin> for Format {
+    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+        match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
                 write!(writer, "{ty}", ty = qualified_type_name.name)
@@ -121,89 +172,18 @@ impl Emitter<Kotlin> for Named<Format> {
     }
 }
 
-impl Emitter<Kotlin> for Named<VariantFormat> {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        let name = &self.name;
-        let comments = self.doc.comments();
-        if !comments.is_empty() {
-            writeln!(writer)?;
-            for comment in comments {
-                writeln!(writer, "/// {comment}")?;
-            }
-        }
-
-        match &self.value {
-            VariantFormat::Variable(_variable) => {
-                unreachable!("placeholders should not get this far")
-            }
-            VariantFormat::Unit => {
-                let name_upper = name.to_uppercase();
-                write!(writer, r#"@SerialName("{name}") {name_upper}"#)?;
-            }
-            VariantFormat::NewType(_format) => todo!(),
-            VariantFormat::Tuple(_formats) => todo!(),
-            VariantFormat::Struct(_nameds) => todo!(),
-        }
-
-        Ok(())
-    }
-}
-
-impl Emitter<Kotlin> for Format {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        match &self {
-            Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-            Format::TypeName(qualified_type_name) => {
-                let name = &qualified_type_name.name;
-                write!(writer, "{name}")
-            }
-            Format::Unit => todo!(),
-            Format::Bool => todo!(),
-            Format::I8 => todo!(),
-            Format::I16 => todo!(),
-            Format::I32 => write!(writer, "Int"),
-            Format::I64 => todo!(),
-            Format::I128 => todo!(),
-            Format::U8 => todo!(),
-            Format::U16 => todo!(),
-            Format::U32 => todo!(),
-            Format::U64 => todo!(),
-            Format::U128 => todo!(),
-            Format::F32 => todo!(),
-            Format::F64 => todo!(),
-            Format::Char => todo!(),
-            Format::Str => write!(writer, "String"),
-            Format::Bytes => write!(writer, "ByteArray"),
-            Format::Option(_format) => todo!(),
-            Format::Seq(_format) => todo!(),
-            Format::Map { key, value } => {
-                write!(writer, "Map<")?;
-                key.write(writer)?;
-                write!(writer, ", ")?;
-                value.write(writer)?;
-                write!(writer, ">")
-            }
-            Format::Tuple(_formats) => todo!(),
-            Format::TupleArray {
-                content: _,
-                size: _,
-            } => todo!(),
-        }
-    }
-}
-
 fn data_object<W: Write>(writer: &mut W, name: &String, doc: &Doc) -> Result<()> {
     for comment in doc.comments() {
         writeln!(writer, "/// {comment}")?;
     }
+
     writedoc!(
         writer,
         "
             @Serializable
             data object {name}
         "
-    )?;
-    writeln!(writer)
+    )
 }
 
 fn data_class<W: IndentWrite>(
@@ -215,6 +195,7 @@ fn data_class<W: IndentWrite>(
     for comment in doc.comments() {
         writeln!(writer, "/// {comment}")?;
     }
+
     writedoc!(
         writer,
         "
@@ -247,6 +228,7 @@ fn enum_class<W: IndentWrite>(
     for comment in doc.comments() {
         writeln!(writer, "/// {comment}")?;
     }
+
     writedoc!(
         writer,
         "
@@ -279,3 +261,24 @@ fn enum_class<W: IndentWrite>(
 
     Ok(())
 }
+
+fn type_alias<W: IndentWrite>(
+    writer: &mut W,
+    name: &str,
+    format: &Format,
+    doc: &Doc,
+) -> Result<()> {
+    for comment in doc.comments() {
+        writeln!(writer, "/// {comment}")?;
+    }
+
+    write!(writer, "typealias {name} = ")?;
+    format.write(writer)?;
+    writeln!(writer)?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "emitter_tests.rs"]
+mod tests;

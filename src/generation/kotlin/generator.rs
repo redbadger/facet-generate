@@ -34,8 +34,6 @@ impl<'a> Language<'a> for CodeGenerator<'a> {
             item.write(w)?;
         }
 
-        writeln!(w)?;
-
         Ok(())
     }
 }
