@@ -7,4 +7,11 @@ import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
 
-@Serializable data class Video(val tags: List<Tag>)
+@Serializable
+data object Tag
+
+@Serializable
+data class Video (
+    val tags: List<Tag>
+)
+

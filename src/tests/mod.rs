@@ -51,6 +51,7 @@ macro_rules! test {
             let expect = expect_file!(test!(@out $language));
 
             check(&registry, generator, &expect)?;
+            // panic!("This test should fail");
 
             Ok(())
         }
@@ -60,8 +61,8 @@ macro_rules! test {
 
     (@generate_tests [$($ty:ident),*]) => {};
 
-    (@package java) => { "example.com" };
-    (@package kotlin) => { "example.com" };
+    (@package java) => { "com.example" };
+    (@package kotlin) => { "com.example" };
     (@package swift) => { "ExamplePackage" };
     (@package typescript) => { "example_package" };
 

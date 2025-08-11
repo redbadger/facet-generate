@@ -3,7 +3,7 @@
 //! These tests verify that the Variable resolution problems in `RegistryBuilder` have been fixed
 //! and serve as regression tests to prevent these issues from reoccurring.
 //!
-//! Previously, these scenarios would cause panics with "should not have any remaining placeholders".
+//! Previously, these scenarios would cause panics with "There was a problem building the registry".
 //! Now they should all work correctly, demonstrating that the underlying issues have been resolved.
 
 use crate::reflection::RegistryBuilder;
@@ -11,6 +11,8 @@ use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
+    use crate::reflection::format::Doc;
+
     use super::*;
     use facet::Facet;
 
@@ -171,7 +173,7 @@ mod tests {
     /// Diagnostic test: Manually create unresolved Variables to verify `build()` catches them
     /// This simulates what used to happen in the problematic code paths
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_build_catches_unresolved_variables() {
         let mut builder = RegistryBuilder::new();
 
@@ -190,7 +192,7 @@ mod tests {
 
     /// Test with enum variants that have unresolved Variables
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_enum_with_unresolved_variant_caught() {
         let mut builder = RegistryBuilder::new();
 
@@ -200,6 +202,7 @@ mod tests {
             0,
             crate::reflection::format::Named {
                 name: "UnresolvedVariant".to_string(),
+                doc: Doc::new(),
                 value: VariantFormat::unknown(), // Unresolved Variable
             },
         );
@@ -218,17 +221,18 @@ mod tests {
 
     /// Test with struct fields that have unresolved Variables
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_struct_with_unresolved_field_caught() {
         let mut builder = RegistryBuilder::new();
 
         // Create a struct with an unresolved field Variable
         let fields = vec![crate::reflection::format::Named {
             name: "unresolved_field".to_string(),
+            doc: Doc::new(),
             value: Format::unknown(), // Unresolved Variable
         }];
 
-        let struct_container = ContainerFormat::Struct(fields);
+        let struct_container = ContainerFormat::Struct(fields, Doc::new());
         let type_name = crate::reflection::format::QualifiedTypeName {
             namespace: crate::reflection::format::Namespace::Named("test".to_string()),
             name: "StructWithUnresolvedField".to_string(),
@@ -267,5 +271,47 @@ mod tests {
             name: "MyEnum".to_string(),
         };
         assert!(registry.contains_key(&type_name));
+    }
+
+    /// This will pass eventually, once we fully support generic types.
+    #[test]
+    #[should_panic(expected = "There was a problem building the registry")]
+    fn test_enum_with_anon_struct_variants_with_result_of_t() {
+        use thiserror::Error;
+
+        #[derive(Facet, Clone, PartialEq, Eq, Error, Debug)]
+        #[error("AnotherError")]
+        struct AnotherError;
+
+        #[derive(Facet, Clone, PartialEq, Eq, Error, Debug)]
+        #[repr(C)]
+        #[allow(unused)]
+        pub enum MyError {
+            #[error("disconnected")]
+            Disconnect(#[from] AnotherError),
+            #[error("the data for key `{0}` is not available")]
+            Redaction(String),
+            #[error("invalid header (expected {expected:?}, found {found:?})")]
+            InvalidHeader { expected: String, found: String },
+            #[error("unknown data store error")]
+            Unknown,
+        }
+        #[derive(Facet, Debug, Clone, PartialEq, Eq)]
+        #[repr(C)]
+        #[allow(unused)]
+        pub enum MyResult<T> {
+            Ok(T),
+            Err(MyError),
+        }
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(unused)]
+        enum MyEnum {
+            Variant1 { result: MyResult<String> },
+            Variant2 { result: MyResult<i32> },
+        }
+
+        let _registry = RegistryBuilder::new().add_type::<MyEnum>().build();
     }
 }

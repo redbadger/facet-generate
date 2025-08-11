@@ -7,4 +7,9 @@ import kotlinx.serialization.encoding.*
 import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
 
-@Serializable data class MyStruct(val a: Int, val c: Int)
+@Serializable
+data class MyStruct (
+    val a: Int,
+    val c: Int
+)
+
