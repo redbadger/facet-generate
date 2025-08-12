@@ -475,6 +475,7 @@ fn struct_with_vec_field() {
 #[test]
 fn struct_with_option_field() {
     #[derive(Facet)]
+    #[allow(clippy::struct_field_names)]
     struct MyStruct {
         optional_string: Option<String>,
         optional_number: Option<i32>,
@@ -534,6 +535,7 @@ fn struct_with_nested_generics() {
 #[test]
 fn struct_with_array_field() {
     #[derive(Facet)]
+    #[allow(clippy::struct_field_names)]
     struct MyStruct {
         fixed_array: [i32; 5],
         byte_array: [u8; 32],
@@ -569,10 +571,8 @@ fn struct_with_btreemap_field() {
 
 #[test]
 fn struct_with_hashset_field() {
-    // NOTE: HashSet<T> maps to List<T> in Kotlin because the reflection system
-    // treats all set types as Format::Seq. This is functionally correct since
-    // Lists can represent sets, though we lose the uniqueness constraint.
-    // Future enhancement: Add Format::Set variant to generate Set<T> in Kotlin.
+    // NOTE: HashSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
+    // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
         string_set: std::collections::HashSet<String>,
@@ -582,16 +582,16 @@ fn struct_with_hashset_field() {
     insta::assert_snapshot!(emit!(MyStruct), @r"
     @Serializable
     data class MyStruct (
-        val string_set: List<String>,
-        val int_set: List<Int>
+        val string_set: Set<String>,
+        val int_set: Set<Int>
     )
     ");
 }
 
 #[test]
 fn struct_with_btreeset_field() {
-    // NOTE: BTreeSet<T> maps to List<T> in Kotlin for the same reason as HashSet.
-    // See comment in struct_with_hashset_field test above.
+    // NOTE: BTreeSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
+    // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
         string_set: std::collections::BTreeSet<String>,
@@ -601,8 +601,8 @@ fn struct_with_btreeset_field() {
     insta::assert_snapshot!(emit!(MyStruct), @r"
     @Serializable
     data class MyStruct (
-        val string_set: List<String>,
-        val int_set: List<Int>
+        val string_set: Set<String>,
+        val int_set: Set<Int>
     )
     ");
 }
@@ -672,7 +672,7 @@ fn struct_with_mixed_collections_and_pointers() {
     insta::assert_snapshot!(emit!(MyStruct), @r"
     @Serializable
     data class MyStruct (
-        val vec_of_sets: List<List<String>>,
+        val vec_of_sets: List<Set<String>>,
         val optional_btree: Map<String, Int>? = null,
         val boxed_vec: List<String>,
         val arc_option: String? = null,

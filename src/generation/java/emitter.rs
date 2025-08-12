@@ -110,7 +110,9 @@ where
             Format::Bytes => "com.novi.serde.Bytes".into(),
 
             Format::Option(format) => format!("java.util.Optional<{}>", self.quote_type(format)),
-            Format::Seq(format) => format!("java.util.List<{}>", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => {
+                format!("java.util.List<{}>", self.quote_type(format))
+            }
             Format::Map { key, value } => format!(
                 "java.util.Map<{}, {}>",
                 self.quote_type(key),
@@ -190,6 +192,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -282,7 +285,7 @@ if (value.isPresent()) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -377,7 +380,7 @@ if (!tag) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"

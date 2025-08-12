@@ -1393,7 +1393,7 @@ fn set_of_string() {
         - 0:
             Set:
               - NEWTYPE:
-                  SEQ: STR
+                  SET: STR
               - []
         - []
     ");
@@ -1466,7 +1466,7 @@ fn sequence_and_map_types() {
                   VALUE: STR
               - []
           - hash_set:
-              - SEQ: STR
+              - SET: STR
               - []
           - btree_map:
               - MAP:
@@ -1474,7 +1474,7 @@ fn sequence_and_map_types() {
                   VALUE: STR
               - []
           - btree_set:
-              - SEQ: STR
+              - SET: STR
               - []
         - []
     ");

@@ -898,8 +898,8 @@ impl RegistryBuilder {
         // Get the format for the element type recursively
         let element_format = get_inner_format(element_shape);
 
-        // Sets are represented as sequences in the format system
-        let set_format = Format::Seq(Box::new(element_format));
+        // Sets are represented as sets in the format system
+        let set_format = Format::Set(Box::new(element_format));
 
         // Update the current container with the set format
         self.update_container_format(set_format);
@@ -1201,6 +1201,11 @@ fn get_inner_format(shape: &Shape) -> Format {
                 value: Box::new(value_format),
             }
         }
+        Def::Set(set_def) => {
+            // Handle Set<T> -> SET: T
+            let inner_shape = set_def.t();
+            Format::Set(Box::new(get_inner_format(inner_shape)))
+        }
         Def::Array(array_def) => {
             // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
             let inner_shape = array_def.t();
@@ -1241,11 +1246,7 @@ fn get_inner_format(shape: &Shape) -> Format {
                 Format::TypeName(name)
             }
         }
-        Def::Set(set_def) => {
-            // Handle Set<T> -> SEQ: T (sets are represented as sequences)
-            let element_shape = set_def.t();
-            Format::Seq(Box::new(get_inner_format(element_shape)))
-        }
+
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();

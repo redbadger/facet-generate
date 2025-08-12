@@ -170,6 +170,8 @@ pub enum Format {
     Option(Box<Format>),
     /// A sequence, e.g. the format of `Vec<Foo>`.
     Seq(Box<Format>),
+    /// A set, e.g. the format of `HashSet<Foo>`.
+    Set(Box<Format>),
     /// A map, e.g. the format of `BTreeMap<K, V>`.
     #[serde(rename_all = "UPPERCASE")]
     Map {
@@ -507,6 +509,7 @@ impl FormatHolder for Format {
 
             Self::Option(format)
             | Self::Seq(format)
+            | Self::Set(format)
             | Self::TupleArray {
                 content: format, ..
             } => {
@@ -558,6 +561,7 @@ impl FormatHolder for Format {
 
             Self::Option(format)
             | Self::Seq(format)
+            | Self::Set(format)
             | Self::TupleArray {
                 content: format, ..
             } => {

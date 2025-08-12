@@ -94,7 +94,7 @@ where
             Format::Bytes => "[UInt8]".into(),
 
             Format::Option(format) => format!("{}?", self.quote_type(format)),
-            Format::Seq(format) => format!("[{}]", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => format!("[{}]", self.quote_type(format)),
             Format::Map { key, value } => {
                 format!("[{}: {}]", self.quote_type(key), self.quote_type(value))
             }
@@ -156,6 +156,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -218,7 +219,7 @@ if let value = value {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -299,7 +300,7 @@ if tag {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"

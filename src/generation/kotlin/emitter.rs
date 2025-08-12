@@ -269,6 +269,11 @@ impl Emitter<Kotlin> for Format {
                 format.write(writer)?;
                 write!(writer, ">")
             }
+            Format::Set(format) => {
+                write!(writer, "Set<")?;
+                format.write(writer)?;
+                write!(writer, ">")
+            }
             Format::Map { key, value } => {
                 write!(writer, "Map<")?;
                 key.write(writer)?;
