@@ -236,3 +236,219 @@ fn struct_with_field_that_is_a_4_tuple() {
     )
     ");
 }
+
+#[test]
+fn enum_with_unit_variants() {
+    /// line one
+    #[derive(Facet)]
+    #[repr(C)]
+    /// line two
+    #[allow(unused)]
+    enum EnumWithUnitVariants {
+        /// variant one
+        Variant1,
+        /// variant two
+        Variant2,
+        /// variant three
+        Variant3,
+    }
+
+    insta::assert_snapshot!(emit!(EnumWithUnitVariants), @r#"
+    /// line one
+    /// line two
+    @Serializable
+    enum class EnumWithUnitVariants {
+        /// variant one
+        @SerialName("Variant1") VARIANT1,
+        /// variant two
+        @SerialName("Variant2") VARIANT2,
+        /// variant three
+        @SerialName("Variant3") VARIANT3;
+
+        val serialName: String
+            get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_unit_struct_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1 {},
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    enum class MyEnum {
+        @SerialName("Variant1") VARIANT1;
+
+        val serialName: String
+            get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_1_tuple_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1(String),
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    sealed interface MyEnum {
+        val serialName: String
+        @Serializable
+        @SerialName("Variant1")
+        data class Variant1(val value: String) : MyEnum {
+            override val serialName: String = "Variant1"
+        }
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_newtype_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1(String),
+        Variant2(i32),
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    sealed interface MyEnum {
+        val serialName: String
+        @Serializable
+        @SerialName("Variant1")
+        data class Variant1(val value: String) : MyEnum {
+            override val serialName: String = "Variant1"
+        }
+
+        @Serializable
+        @SerialName("Variant2")
+        data class Variant2(val value: Int) : MyEnum {
+            override val serialName: String = "Variant2"
+        }
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_tuple_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1(String, i32),
+        Variant2(bool, f64, u8),
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    sealed interface MyEnum {
+        val serialName: String
+        @Serializable
+        @SerialName("Variant1")
+        data class Variant1(
+            val field_0: String,
+            val field_1: Int
+        ) : MyEnum {
+            override val serialName: String = "Variant1"
+        }
+
+        @Serializable
+        @SerialName("Variant2")
+        data class Variant2(
+            val field_0: Boolean,
+            val field_1: Double,
+            val field_2: UByte
+        ) : MyEnum {
+            override val serialName: String = "Variant2"
+        }
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_struct_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1 { field1: String, field2: i32 },
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    sealed interface MyEnum {
+        val serialName: String
+        @Serializable
+        @SerialName("Variant1")
+        data class Variant1(
+            val field1: String,
+            val field2: Int
+        ) : MyEnum {
+            override val serialName: String = "Variant1"
+        }
+    }
+    "#);
+}
+
+#[test]
+fn enum_with_mixed_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Unit,
+        NewType(String),
+        Tuple(String, i32),
+        Struct { field: bool },
+    }
+
+    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    @Serializable
+    sealed interface MyEnum {
+        val serialName: String
+        @Serializable
+        @SerialName("Unit")
+        data object Unit : MyEnum {
+            override val serialName: String = "Unit"
+        }
+
+        @Serializable
+        @SerialName("NewType")
+        data class NewType(val value: String) : MyEnum {
+            override val serialName: String = "NewType"
+        }
+
+        @Serializable
+        @SerialName("Tuple")
+        data class Tuple(
+            val field_0: String,
+            val field_1: Int
+        ) : MyEnum {
+            override val serialName: String = "Tuple"
+        }
+
+        @Serializable
+        @SerialName("Struct")
+        data class Struct(
+            val field: Boolean
+        ) : MyEnum {
+            override val serialName: String = "Struct"
+        }
+    }
+    "#);
+}

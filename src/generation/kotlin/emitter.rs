@@ -68,7 +68,17 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
             }
             (name, ContainerFormat::Enum(btree_map, doc)) => {
                 let name = &name.name;
-                enum_class(writer, name, btree_map, doc)?;
+
+                // Check if all variants are unit variants
+                let all_unit_variants = btree_map
+                    .values()
+                    .all(|variant| matches!(variant.value, VariantFormat::Unit));
+
+                if all_unit_variants {
+                    enum_class(writer, name, btree_map, doc)?;
+                } else {
+                    sealed_interface(writer, name, btree_map, doc)?;
+                }
             }
         }
 
@@ -93,27 +103,129 @@ impl Emitter<Kotlin> for Named<Format> {
     }
 }
 
-impl Emitter<Kotlin> for Named<VariantFormat> {
+pub enum VariantContext {
+    EnumClass,
+    SealedInterface { interface_name: String },
+}
+
+impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
+    #[allow(clippy::too_many_lines)]
     fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        for comment in self.doc.comments() {
+        let (variant, context) = self;
+
+        for comment in variant.doc.comments() {
             writeln!(writer, "/// {comment}")?;
         }
 
-        let name = &self.name;
-        match &self.value {
-            VariantFormat::Variable(_variable) => {
+        let name = &variant.name;
+        match (&variant.value, context) {
+            (VariantFormat::Variable(_variable), _) => {
                 unreachable!("placeholders should not get this far")
             }
-            VariantFormat::Unit => {
+            (VariantFormat::Unit, VariantContext::EnumClass) => {
                 let name_upper = name.to_uppercase();
                 write!(writer, r#"@SerialName("{name}") {name_upper}"#)?;
             }
-            VariantFormat::NewType(_format) => todo!(),
-            VariantFormat::Tuple(_formats) => todo!(),
-            VariantFormat::Struct(_nameds) => todo!(),
+            (VariantFormat::Unit, VariantContext::SealedInterface { interface_name }) => {
+                writedoc!(
+                    writer,
+                    r#"
+                        @Serializable
+                        @SerialName("{name}")
+                        data object {name} : {interface_name} {{
+                    "#
+                )?;
+                writer.indent();
+                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
+                writer.unindent();
+                writeln!(writer, "}}")?;
+            }
+            (
+                VariantFormat::NewType(format),
+                VariantContext::SealedInterface { interface_name },
+            ) => {
+                writedoc!(
+                    writer,
+                    r#"
+                        @Serializable
+                        @SerialName("{name}")
+                        data class {name}(val value: "#
+                )?;
+                format.write(writer)?;
+                writeln!(writer, ") : {interface_name} {{")?;
+                writer.indent();
+                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
+                writer.unindent();
+                writeln!(writer, "}}")?;
+            }
+            (VariantFormat::Tuple(formats), VariantContext::SealedInterface { interface_name }) => {
+                writedoc!(
+                    writer,
+                    r#"
+                        @Serializable
+                        @SerialName("{name}")
+                        data class {name}(
+                    "#
+                )?;
+                writer.indent();
+                for (j, format) in formats.iter().enumerate() {
+                    if j > 0 {
+                        writeln!(writer, ",")?;
+                    }
+                    write!(writer, "val field_{j}: ")?;
+                    format.write(writer)?;
+                }
+                writeln!(writer)?;
+                writer.unindent();
+                writeln!(writer, ") : {interface_name} {{")?;
+                writer.indent();
+                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
+                writer.unindent();
+                writeln!(writer, "}}")?;
+            }
+            (VariantFormat::Struct(nameds), VariantContext::SealedInterface { interface_name }) => {
+                writedoc!(
+                    writer,
+                    r#"
+                        @Serializable
+                        @SerialName("{name}")
+                        data class {name}(
+                    "#
+                )?;
+                writer.indent();
+                for (j, named) in nameds.iter().enumerate() {
+                    if j > 0 {
+                        writeln!(writer, ",")?;
+                    }
+                    named.write(writer)?;
+                }
+                writeln!(writer)?;
+                writer.unindent();
+                writeln!(writer, ") : {interface_name} {{")?;
+                writer.indent();
+                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
+                writer.unindent();
+                writeln!(writer, "}}")?;
+            }
+            (VariantFormat::NewType(_), VariantContext::EnumClass) => {
+                unreachable!("NewType variants should use sealed interface")
+            }
+            (VariantFormat::Tuple(_), VariantContext::EnumClass) => {
+                unreachable!("Tuple variants should use sealed interface")
+            }
+            (VariantFormat::Struct(_), VariantContext::EnumClass) => {
+                unreachable!("Struct variants should use sealed interface")
+            }
         }
 
         Ok(())
+    }
+}
+
+impl Emitter<Kotlin> for Named<VariantFormat> {
+    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+        let context = VariantContext::EnumClass;
+        (self, &context).write(writer)
     }
 }
 
@@ -253,11 +365,11 @@ fn enum_class<W: IndentWrite>(
     )?;
 
     writer.indent();
-    for (i, named) in variants {
+    for (i, variant) in variants {
         if *i > 0 {
             writeln!(writer, ",")?;
         }
-        named.write(writer)?;
+        variant.write(writer)?;
     }
     writeln!(writer, ";")?;
     writeln!(writer)?;
@@ -272,6 +384,43 @@ fn enum_class<W: IndentWrite>(
     writer.unindent();
 
     writeln!(writer)?;
+    writeln!(writer, "}}")?;
+
+    Ok(())
+}
+
+fn sealed_interface<W: IndentWrite>(
+    writer: &mut W,
+    name: &str,
+    variants: &BTreeMap<u32, Named<VariantFormat>>,
+    doc: &Doc,
+) -> Result<()> {
+    for comment in doc.comments() {
+        writeln!(writer, "/// {comment}")?;
+    }
+
+    writedoc!(
+        writer,
+        "
+            @Serializable
+            sealed interface {name} {{
+                val serialName: String
+        "
+    )?;
+
+    writer.indent();
+    let context = VariantContext::SealedInterface {
+        interface_name: name.to_string(),
+    };
+
+    for (i, variant) in variants.values().enumerate() {
+        if i > 0 {
+            writeln!(writer)?;
+        }
+        (variant, &context).write(writer)?;
+    }
+    writer.unindent();
+
     writeln!(writer, "}}")?;
 
     Ok(())
