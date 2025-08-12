@@ -259,7 +259,7 @@ impl Emitter<Kotlin> for Format {
             Format::F32 => write!(writer, "Float"),
             Format::F64 => write!(writer, "Double"),
             Format::Char | Format::Str => write!(writer, "String"),
-            Format::Bytes => todo!(),
+            Format::Bytes => write!(writer, "ByteArray"),
             Format::Option(format) => {
                 format.write(writer)?;
                 write!(writer, "?")

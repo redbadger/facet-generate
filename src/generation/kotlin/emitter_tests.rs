@@ -680,3 +680,47 @@ fn struct_with_mixed_collections_and_pointers() {
     )
     ");
 }
+
+#[test]
+fn struct_with_bytes_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        #[facet(bytes)]
+        data: Vec<u8>,
+        name: String,
+        #[facet(bytes)]
+        header: Vec<u8>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val data: ByteArray,
+        val name: String,
+        val header: ByteArray
+    )
+    ");
+}
+
+#[test]
+fn struct_with_bytes_field_and_slice() {
+    #[derive(Facet)]
+    struct MyStruct<'a> {
+        #[facet(bytes)]
+        data: &'a [u8],
+        name: String,
+        #[facet(bytes)]
+        header: Vec<u8>,
+        optional_bytes: Option<Vec<u8>>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val data: ByteArray,
+        val name: String,
+        val header: ByteArray,
+        val optional_bytes: List<UByte>? = null
+    )
+    ");
+}
