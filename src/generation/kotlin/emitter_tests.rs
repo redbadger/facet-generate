@@ -452,3 +452,81 @@ fn enum_with_mixed_variants() {
     }
     "#);
 }
+
+#[test]
+fn struct_with_vec_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        items: Vec<String>,
+        numbers: Vec<i32>,
+        nested_items: Vec<Vec<String>>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val items: List<String>,
+        val numbers: List<Int>,
+        val nested_items: List<List<String>>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_option_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        optional_string: Option<String>,
+        optional_number: Option<i32>,
+        optional_bool: Option<bool>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val optional_string: String? = null,
+        val optional_number: Int? = null,
+        val optional_bool: Boolean? = null
+    )
+    ");
+}
+
+#[test]
+fn struct_with_hashmap_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        string_to_int: std::collections::HashMap<String, i32>,
+        int_to_bool: std::collections::HashMap<i32, bool>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val string_to_int: Map<String, Int>,
+        val int_to_bool: Map<Int, Boolean>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_nested_generics() {
+    #[derive(Facet)]
+    struct MyStruct {
+        optional_list: Option<Vec<String>>,
+        list_of_optionals: Vec<Option<i32>>,
+        map_to_list: std::collections::HashMap<String, Vec<bool>>,
+        optional_map: Option<std::collections::HashMap<String, i32>>,
+        complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val optional_list: List<String>? = null,
+        val list_of_optionals: List<Int?>,
+        val map_to_list: Map<String, List<Boolean>>,
+        val optional_map: Map<String, Int>? = null,
+        val complex: List<Map<String, List<Boolean>>?>
+    )
+    ");
+}

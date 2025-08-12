@@ -99,6 +99,11 @@ impl Emitter<Kotlin> for Named<Format> {
 
         self.value.write(writer)?;
 
+        // Add = null default only for top-level Option types
+        if matches!(self.value, Format::Option(_)) {
+            write!(writer, " = null")?;
+        }
+
         Ok(())
     }
 }
@@ -257,7 +262,7 @@ impl Emitter<Kotlin> for Format {
             Format::Bytes => todo!(),
             Format::Option(format) => {
                 format.write(writer)?;
-                write!(writer, "? = null")
+                write!(writer, "?")
             }
             Format::Seq(format) => {
                 write!(writer, "List<")?;
