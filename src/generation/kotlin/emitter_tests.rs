@@ -530,3 +530,153 @@ fn struct_with_nested_generics() {
     )
     ");
 }
+
+#[test]
+fn struct_with_array_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        fixed_array: [i32; 5],
+        byte_array: [u8; 32],
+        string_array: [String; 3],
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val fixed_array: List<Int>,
+        val byte_array: List<UByte>,
+        val string_array: List<String>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_btreemap_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        string_to_int: std::collections::BTreeMap<String, i32>,
+        int_to_bool: std::collections::BTreeMap<i32, bool>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val string_to_int: Map<String, Int>,
+        val int_to_bool: Map<Int, Boolean>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_hashset_field() {
+    // NOTE: HashSet<T> maps to List<T> in Kotlin because the reflection system
+    // treats all set types as Format::Seq. This is functionally correct since
+    // Lists can represent sets, though we lose the uniqueness constraint.
+    // Future enhancement: Add Format::Set variant to generate Set<T> in Kotlin.
+    #[derive(Facet)]
+    struct MyStruct {
+        string_set: std::collections::HashSet<String>,
+        int_set: std::collections::HashSet<i32>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val string_set: List<String>,
+        val int_set: List<Int>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_btreeset_field() {
+    // NOTE: BTreeSet<T> maps to List<T> in Kotlin for the same reason as HashSet.
+    // See comment in struct_with_hashset_field test above.
+    #[derive(Facet)]
+    struct MyStruct {
+        string_set: std::collections::BTreeSet<String>,
+        int_set: std::collections::BTreeSet<i32>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val string_set: List<String>,
+        val int_set: List<Int>
+    )
+    ");
+}
+
+#[test]
+fn struct_with_box_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        boxed_string: Box<String>,
+        boxed_int: Box<i32>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val boxed_string: String,
+        val boxed_int: Int
+    )
+    ");
+}
+
+#[test]
+fn struct_with_rc_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        rc_string: std::rc::Rc<String>,
+        rc_int: std::rc::Rc<i32>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val rc_string: String,
+        val rc_int: Int
+    )
+    ");
+}
+
+#[test]
+fn struct_with_arc_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        arc_string: std::sync::Arc<String>,
+        arc_int: std::sync::Arc<i32>,
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val arc_string: String,
+        val arc_int: Int
+    )
+    ");
+}
+
+#[test]
+fn struct_with_mixed_collections_and_pointers() {
+    #[derive(Facet)]
+    struct MyStruct {
+        vec_of_sets: Vec<std::collections::HashSet<String>>,
+        optional_btree: Option<std::collections::BTreeMap<String, i32>>,
+        boxed_vec: Box<Vec<String>>,
+        arc_option: std::sync::Arc<Option<String>>,
+        array_of_boxes: [Box<i32>; 3],
+    }
+
+    insta::assert_snapshot!(emit!(MyStruct), @r"
+    @Serializable
+    data class MyStruct (
+        val vec_of_sets: List<List<String>>,
+        val optional_btree: Map<String, Int>? = null,
+        val boxed_vec: List<String>,
+        val arc_option: String? = null,
+        val array_of_boxes: List<Int>
+    )
+    ");
+}
