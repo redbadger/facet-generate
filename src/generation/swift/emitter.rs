@@ -94,7 +94,7 @@ where
             Format::Bytes => "[UInt8]".into(),
 
             Format::Option(format) => format!("{}?", self.quote_type(format)),
-            Format::Seq(format) => format!("[{}]", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => format!("[{}]", self.quote_type(format)),
             Format::Map { key, value } => {
                 format!("[{}: {}]", self.quote_type(key), self.quote_type(value))
             }
@@ -156,6 +156,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -218,7 +219,7 @@ if let value = value {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -299,7 +300,7 @@ if tag {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -705,12 +706,12 @@ switch index {{",
     pub fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
                 doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -727,7 +728,7 @@ switch index {{",
                     value: f.value.clone(),
                 })
                 .collect(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());
             }

@@ -13,10 +13,11 @@ import kotlinx.serialization.modules.*
 enum class Colors {
     @SerialName("Red") RED,
     @SerialName("Blue") BLUE,
-
     /// Green is a cool color
     @SerialName("Green") GREEN;
 
     val serialName: String
         get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+
 }
+

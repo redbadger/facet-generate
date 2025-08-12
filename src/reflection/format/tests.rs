@@ -24,6 +24,7 @@ fn test_format_visiting() {
         )]
         .into_iter()
         .collect(),
+        Doc::new(),
     );
     let mut names = HashSet::new();
     format

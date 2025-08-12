@@ -10,3 +10,7 @@ pub enum Colors {
     Blue,
     Green,
 }
+
+crate::test! {
+    Colors for kotlin
+}

@@ -110,7 +110,9 @@ where
             Format::Bytes => "com.novi.serde.Bytes".into(),
 
             Format::Option(format) => format!("java.util.Optional<{}>", self.quote_type(format)),
-            Format::Seq(format) => format!("java.util.List<{}>", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => {
+                format!("java.util.List<{}>", self.quote_type(format))
+            }
             Format::Map { key, value } => format!(
                 "java.util.Map<{}, {}>",
                 self.quote_type(key),
@@ -190,6 +192,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -282,7 +285,7 @@ if (value.isPresent()) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -377,7 +380,7 @@ if (!tag) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -813,12 +816,12 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
     ) -> std::io::Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
                 doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -828,7 +831,7 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
                 })
                 .collect::<Vec<_>>(),
             ContainerFormat::Struct(fields, _doc) => fields.clone(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());
             }

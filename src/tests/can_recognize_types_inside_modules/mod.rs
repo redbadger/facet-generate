@@ -2,6 +2,11 @@
 
 use facet::Facet;
 
+use a::{
+    A,
+    b::{AB, c::ABC},
+};
+
 mod a {
     use facet::Facet;
 
@@ -9,10 +14,11 @@ mod a {
     pub struct A {
         field: u32,
     }
-    mod b {
+
+    pub mod b {
         use facet::Facet;
 
-        mod c {
+        pub mod c {
             use facet::Facet;
 
             #[derive(Facet)]
@@ -20,6 +26,7 @@ mod a {
                 field: u32,
             }
         }
+
         #[derive(Facet)]
         pub struct AB {
             field: u32,
@@ -30,4 +37,8 @@ mod a {
 #[derive(Facet)]
 pub struct OutsideOfModules {
     field: u32,
+}
+
+crate::test! {
+    A, AB, ABC, OutsideOfModules for kotlin
 }

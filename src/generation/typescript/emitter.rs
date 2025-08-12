@@ -153,7 +153,9 @@ where
             Format::Bytes => ("bytes".into(), "bytes"),
 
             Format::Option(format) => (format!("Optional<{}>", self.quote_type(format)), "option"),
-            Format::Seq(format) => (format!("Seq<{}>", self.quote_type(format)), "seq"),
+            Format::Seq(format) | Format::Set(format) => {
+                (format!("Seq<{}>", self.quote_type(format)), "seq")
+            }
             Format::Map { key, value } => (
                 format!("Map<{},{}>", self.quote_type(key), self.quote_type(value)),
                 "map",
@@ -213,6 +215,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -312,7 +315,7 @@ if (value) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 let type_ = self.quote_type(format);
                 let item = self.quote_serialize_value("item", format, false);
                 write!(
@@ -403,7 +406,7 @@ if (!tag) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 let format0 = self.quote_type(format0);
                 write!(
                     out,
@@ -675,12 +678,12 @@ switch (index) {{",
     ) -> std::io::Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
                 doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
@@ -690,7 +693,7 @@ switch (index) {{",
                 })
                 .collect::<Vec<_>>(),
             ContainerFormat::Struct(fields, _doc) => fields.clone(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(out, name, variants)?;
                 return Ok(());
             }
