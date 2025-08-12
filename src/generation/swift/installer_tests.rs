@@ -5,7 +5,7 @@ use crate::{
         ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
         swift::installer::Installer,
     },
-    reflection::RegistryBuilder,
+    reflect,
 };
 
 #[test]
@@ -46,7 +46,7 @@ fn manifest_with_serde_as_target() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -96,7 +96,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -155,7 +155,7 @@ fn manifest_with_serde_as_a_local_dependency() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -218,7 +218,7 @@ fn manifest_with_namespaces() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -270,10 +270,7 @@ fn manifest_with_disjoint_namespaces() {
         id: u32,
     }
 
-    let registry = RegistryBuilder::new()
-        .add_type::<Root>()
-        .add_type::<Another>()
-        .build();
+    let registry = reflect!(Root, Another);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -372,7 +369,7 @@ fn manifest_with_namespaces_and_dependencies() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -438,10 +435,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
         id: u32,
     }
 
-    let registry = RegistryBuilder::new()
-        .add_type::<Root>()
-        .add_type::<Another>()
-        .build();
+    let registry = reflect!(Root, Another);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();

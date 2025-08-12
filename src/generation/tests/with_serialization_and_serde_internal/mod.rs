@@ -12,7 +12,7 @@ use crate::{
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
-    reflection::RegistryBuilder,
+    reflect,
 };
 
 #[test]
@@ -29,7 +29,7 @@ fn test() {
         Child(Child),
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
+    let registry = reflect!(Parent);
 
     let this_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .join(file!())

@@ -1,6 +1,6 @@
 use facet::Facet;
 
-use crate::reflection::RegistryBuilder;
+use crate::reflect;
 
 use super::*;
 
@@ -27,9 +27,8 @@ fn single_namespace() {
         two: ChildTwo,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", &registry);
-    insta::assert_yaml_snapshot!(result, @r"
+    let registries = split("Root", &reflect!(Parent));
+    insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
       serialization: Bincode
       encodings: []
@@ -105,9 +104,8 @@ fn root_namespace_with_two_child_namespaces() {
         two: ChildTwo,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", &registry);
-    insta::assert_yaml_snapshot!(result, @r"
+    let registries = split("Root", &reflect!(Parent));
+    insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
       serialization: Bincode
       encodings: []
