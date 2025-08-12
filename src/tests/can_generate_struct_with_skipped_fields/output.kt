@@ -8,8 +8,7 @@ import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
 
 @Serializable
-data class MyStruct (
+data class MyStruct(
     val a: Int,
-    val c: Int
+    val c: Int,
 )
-

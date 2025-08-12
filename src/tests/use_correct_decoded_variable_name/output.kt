@@ -9,4 +9,3 @@ import kotlinx.serialization.modules.*
 
 @Serializable
 data object MyEmptyStruct
-

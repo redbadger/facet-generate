@@ -1,4 +1,4 @@
-use std::io::Result;
+use std::io::{Result, Write};
 
 use crate::{
     Registry,
@@ -25,16 +25,7 @@ impl<'a> Language<'a> for CodeGenerator<'a> {
         writer: &mut W,
         registry: &Registry,
     ) -> Result<()> {
-        let w = &mut IndentedWriter::new(writer, IndentConfig::Space(4));
-
-        let module = Module::new(self.config.module_name.clone());
-        module.write(w)?;
-
-        for item in registry {
-            item.write(w)?;
-        }
-
-        Ok(())
+        self.output(writer, registry)
     }
 }
 
@@ -43,5 +34,24 @@ impl<'a> CodeGenerator<'a> {
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
+    }
+
+    /// Output type definitions for `registry`.
+    /// # Errors
+    /// This function may fail if the writer encounters an error while writing the generated code.
+    pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> Result<()> {
+        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+
+        let module = Module::new(self.config.module_name.clone());
+        module.write(w)?;
+
+        for (i, container) in registry.iter().enumerate() {
+            if i > 0 {
+                writeln!(w)?;
+            }
+            container.write(w)?;
+        }
+
+        Ok(())
     }
 }

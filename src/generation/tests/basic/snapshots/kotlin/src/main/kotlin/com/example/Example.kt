@@ -8,15 +8,19 @@ import kotlinx.serialization.json.*
 import kotlinx.serialization.modules.*
 
 @Serializable
-data object Location
-
-/// This is a comment.
-@Serializable
-data class Person(
-    /// This is another comment
+data class Child(
     val name: String,
-    val age: UByte,
-    val info: String? = null,
-    val emails: List<String>,
-    val location: Location,
 )
+
+@Serializable
+sealed interface Parent {
+    val serialName: String
+
+    @Serializable
+    @SerialName("Child")
+    data class Child(
+        val value: Child,
+    ) : Parent {
+        override val serialName: String = "Child"
+    }
+}

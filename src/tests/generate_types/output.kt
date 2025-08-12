@@ -11,7 +11,7 @@ import kotlinx.serialization.modules.*
 data object CustomType
 
 @Serializable
-data class Types (
+data class Types(
     val s: String,
     val static_s: String,
     val int8: Byte,
@@ -21,6 +21,5 @@ data class Types (
     val fixed_length_array: List<String>,
     val dictionary: Map<String, Int>,
     val optional_dictionary: Map<String, Int>? = null,
-    val custom_type: CustomType
+    val custom_type: CustomType,
 )
-

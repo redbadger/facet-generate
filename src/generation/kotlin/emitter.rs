@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    io::{Result, Write},
-};
+use std::{collections::BTreeMap, io::Result};
 
 use indoc::writedoc;
 
@@ -13,13 +10,15 @@ use crate::{
 pub struct Kotlin;
 
 impl Emitter<Kotlin> for Module {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
         let name = &self.config().module_name;
-        writedoc!(
-            writer,
-            "
-                package {name}
 
+        writeln!(w, "package {name}")?;
+        writeln!(w)?;
+
+        writedoc!(
+            w,
+            "
                 import kotlinx.serialization.*
                 import kotlinx.serialization.builtins.*
                 import kotlinx.serialization.descriptors.*
@@ -35,18 +34,16 @@ impl Emitter<Kotlin> for Module {
 }
 
 impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            (name, ContainerFormat::UnitStruct(doc)) => {
-                let name = &name.name;
-                data_object(writer, name, doc)?;
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        let (name, format) = self;
+        match format {
+            ContainerFormat::UnitStruct(doc) => {
+                data_object(w, &name.name, doc)?;
             }
-            (name, ContainerFormat::NewTypeStruct(format, doc)) => {
-                let name = &name.name;
-                type_alias(writer, name, format, doc)?;
+            ContainerFormat::NewTypeStruct(format, doc) => {
+                type_alias(w, &name.name, format, doc)?;
             }
-            (name, ContainerFormat::TupleStruct(formats, doc)) => {
-                let name = &name.name;
+            ContainerFormat::TupleStruct(formats, doc) => {
                 let nameds = formats
                     .iter()
                     .enumerate()
@@ -56,170 +53,192 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
                         value: f.clone(),
                     })
                     .collect::<Vec<_>>();
-                data_class(writer, name, &nameds, doc)?;
+                data_class(w, &name.name, &nameds, doc)?;
             }
-            (name, ContainerFormat::Struct(nameds, doc)) => {
-                let name = &name.name;
-                if nameds.is_empty() {
-                    data_object(writer, name, doc)?;
+            ContainerFormat::Struct(fields, doc) => {
+                if fields.is_empty() {
+                    data_object(w, &name.name, doc)?;
                 } else {
-                    data_class(writer, name, nameds, doc)?;
+                    data_class(w, &name.name, fields, doc)?;
                 }
             }
-            (name, ContainerFormat::Enum(btree_map, doc)) => {
-                let name = &name.name;
+            ContainerFormat::Enum(variants, doc) => {
+                let variant_list: Vec<_> = variants.values().cloned().collect();
 
-                // Check if all variants are unit variants
-                let all_unit_variants = btree_map
+                let all_unit_variants = variants
                     .values()
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));
 
                 if all_unit_variants {
-                    enum_class(writer, name, btree_map, doc)?;
+                    enum_class(w, &name.name, variants, doc)?;
                 } else {
-                    sealed_interface(writer, name, btree_map, doc)?;
+                    sealed_interface(w, &name.name, &variant_list, doc)?;
                 }
             }
         }
-
-        writeln!(writer)?;
 
         Ok(())
     }
 }
 
 impl Emitter<Kotlin> for Named<Format> {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        for comment in self.doc.comments() {
-            writeln!(writer, "/// {comment}")?;
-        }
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        self.doc.write(w)?;
 
         let name = &self.name;
-        write!(writer, "val {name}: ")?;
+        write!(w, "val {name}: ")?;
 
-        self.value.write(writer)?;
+        self.value.write(w)?;
 
         // Add = null default only for top-level Option types
         if matches!(self.value, Format::Option(_)) {
-            write!(writer, " = null")?;
+            write!(w, " = null")?;
+        }
+
+        writeln!(w, ",")?;
+
+        Ok(())
+    }
+}
+
+impl Emitter<Kotlin> for &Named<Format> {
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        self.doc.write(w)?;
+
+        let name = &self.name;
+        write!(w, "val {name}: ")?;
+
+        self.value.write(w)?;
+
+        // Add = null default only for top-level Option types
+        if matches!(self.value, Format::Option(_)) {
+            write!(w, " = null")?;
+        }
+
+        writeln!(w, ",")?;
+
+        Ok(())
+    }
+}
+
+impl Emitter<Kotlin> for Doc {
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        for comment in self.comments() {
+            writeln!(w, "/// {comment}")?;
         }
 
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub enum VariantContext {
+    SealedInterface(String),
     EnumClass,
-    SealedInterface { interface_name: String },
 }
 
 impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     #[allow(clippy::too_many_lines)]
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        let (variant, context) = self;
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        let (variant, context) = *self;
 
-        for comment in variant.doc.comments() {
-            writeln!(writer, "/// {comment}")?;
-        }
+        variant.doc.write(w)?;
 
         let name = &variant.name;
         match (&variant.value, context) {
-            (VariantFormat::Variable(_variable), _) => {
+            (VariantFormat::Variable(_), _) => {
                 unreachable!("placeholders should not get this far")
             }
-            (VariantFormat::Unit, VariantContext::EnumClass) => {
-                let name_upper = name.to_uppercase();
-                write!(writer, r#"@SerialName("{name}") {name_upper}"#)?;
-            }
-            (VariantFormat::Unit, VariantContext::SealedInterface { interface_name }) => {
+            (VariantFormat::Unit, VariantContext::SealedInterface(interface_name)) => {
                 writedoc!(
-                    writer,
+                    w,
                     r#"
                         @Serializable
                         @SerialName("{name}")
                         data object {name} : {interface_name} {{
+                            override val serialName: String = "{name}"
+                        }}
                     "#
                 )?;
-                writer.indent();
-                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
-                writer.unindent();
-                writeln!(writer, "}}")?;
             }
-            (
-                VariantFormat::NewType(format),
-                VariantContext::SealedInterface { interface_name },
-            ) => {
+            (VariantFormat::Unit, VariantContext::EnumClass) => {
+                let name_upper = variant.name.to_uppercase();
+                write!(
+                    w,
+                    r#"@SerialName("{name}") {name_upper}"#,
+                    name = variant.name
+                )?;
+            }
+            (VariantFormat::NewType(format), VariantContext::SealedInterface(interface_name)) => {
                 writedoc!(
-                    writer,
+                    w,
                     r#"
                         @Serializable
                         @SerialName("{name}")
-                        data class {name}(val value: "#
+                        data class {name}(
+                            val value: "#
                 )?;
-                format.write(writer)?;
-                writeln!(writer, ") : {interface_name} {{")?;
-                writer.indent();
-                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
-                writer.unindent();
-                writeln!(writer, "}}")?;
+                format.write(w)?;
+                writeln!(w, ",")?;
+                writeln!(w, ") : {interface_name} {{")?;
+                w.indent();
+                writeln!(w, r#"override val serialName: String = "{name}""#)?;
+                w.unindent();
+                writeln!(w, "}}")?;
             }
-            (VariantFormat::Tuple(formats), VariantContext::SealedInterface { interface_name }) => {
+            (VariantFormat::NewType(_format), VariantContext::EnumClass) => {
+                unreachable!("NewType variants are not supported in enum classes")
+            }
+            (VariantFormat::Tuple(formats), VariantContext::SealedInterface(interface_name)) => {
                 writedoc!(
-                    writer,
+                    w,
                     r#"
                         @Serializable
                         @SerialName("{name}")
                         data class {name}(
                     "#
                 )?;
-                writer.indent();
-                for (j, format) in formats.iter().enumerate() {
-                    if j > 0 {
-                        writeln!(writer, ",")?;
-                    }
-                    write!(writer, "val field_{j}: ")?;
-                    format.write(writer)?;
+
+                w.indent();
+                for (i, format) in formats.iter().enumerate() {
+                    write!(w, "val field_{i}: ")?;
+                    format.write(w)?;
+                    writeln!(w, ",")?;
                 }
-                writeln!(writer)?;
-                writer.unindent();
-                writeln!(writer, ") : {interface_name} {{")?;
-                writer.indent();
-                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
-                writer.unindent();
-                writeln!(writer, "}}")?;
+                w.unindent();
+                writeln!(w, ") : {interface_name} {{")?;
+                w.indent();
+                writeln!(w, r#"override val serialName: String = "{name}""#)?;
+                w.unindent();
+                writeln!(w, "}}")?;
             }
-            (VariantFormat::Struct(nameds), VariantContext::SealedInterface { interface_name }) => {
+            (VariantFormat::Tuple(_formats), VariantContext::EnumClass) => {
+                unreachable!("Tuple variants are not supported in enum classes")
+            }
+            (VariantFormat::Struct(fields), VariantContext::SealedInterface(interface_name)) => {
                 writedoc!(
-                    writer,
+                    w,
                     r#"
                         @Serializable
                         @SerialName("{name}")
                         data class {name}(
                     "#
                 )?;
-                writer.indent();
-                for (j, named) in nameds.iter().enumerate() {
-                    if j > 0 {
-                        writeln!(writer, ",")?;
-                    }
-                    named.write(writer)?;
+
+                w.indent();
+                for field in fields {
+                    field.write(w)?;
+                    writeln!(w)?;
                 }
-                writeln!(writer)?;
-                writer.unindent();
-                writeln!(writer, ") : {interface_name} {{")?;
-                writer.indent();
-                writeln!(writer, r#"override val serialName: String = "{name}""#)?;
-                writer.unindent();
-                writeln!(writer, "}}")?;
+                w.unindent();
+                writeln!(w, ") : {interface_name} {{")?;
+                w.indent();
+                writeln!(w, r#"override val serialName: String = "{name}""#)?;
+                w.unindent();
+                writeln!(w, "}}")?;
             }
-            (VariantFormat::NewType(_), VariantContext::EnumClass) => {
-                unreachable!("NewType variants should use sealed interface")
-            }
-            (VariantFormat::Tuple(_), VariantContext::EnumClass) => {
-                unreachable!("Tuple variants should use sealed interface")
-            }
-            (VariantFormat::Struct(_), VariantContext::EnumClass) => {
-                unreachable!("Struct variants should use sealed interface")
+            (VariantFormat::Struct(_fields), VariantContext::EnumClass) => {
+                unreachable!("Struct variants are not supported in enum classes")
             }
         }
 
@@ -227,95 +246,105 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     }
 }
 
-impl Emitter<Kotlin> for Named<VariantFormat> {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
-        let context = VariantContext::EnumClass;
-        (self, &context).write(writer)
-    }
-}
-
 impl Emitter<Kotlin> for Format {
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
-                write!(writer, "{ty}", ty = qualified_type_name.name)
+                write!(w, "{ty}", ty = qualified_type_name.name)
             }
-            Format::Unit => write!(writer, "Unit"),
-            Format::Bool => write!(writer, "Boolean"),
-            Format::I8 => write!(writer, "Byte"),
-            Format::I16 => write!(writer, "Short"),
-            Format::I32 => write!(writer, "Int"),
-            Format::I64 => write!(writer, "Long"),
-            Format::I128 => write!(writer, "java.math.@com.novi.serde.Int128 BigInteger"),
-            Format::U8 => write!(writer, "UByte"),
-            Format::U16 => write!(writer, "UShort"),
-            Format::U32 => write!(writer, "UInt"),
-            Format::U64 => write!(writer, "ULong"),
+            Format::Unit => write!(w, "Unit"),
+            Format::Bool => write!(w, "Boolean"),
+            Format::I8 => write!(w, "Byte"),
+            Format::I16 => write!(w, "Short"),
+            Format::I32 => write!(w, "Int"),
+            Format::I64 => write!(w, "Long"),
+            Format::I128 => write!(w, "java.math.@com.novi.serde.Int128 BigInteger"),
+            Format::U8 => write!(w, "UByte"),
+            Format::U16 => write!(w, "UShort"),
+            Format::U32 => write!(w, "UInt"),
+            Format::U64 => write!(w, "ULong"),
             Format::U128 => write!(
-                writer,
+                w,
                 "java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger"
             ),
-            Format::F32 => write!(writer, "Float"),
-            Format::F64 => write!(writer, "Double"),
-            Format::Char | Format::Str => write!(writer, "String"),
-            Format::Bytes => write!(writer, "ByteArray"),
+            Format::F32 => write!(w, "Float"),
+            Format::F64 => write!(w, "Double"),
+            Format::Char | Format::Str => write!(w, "String"),
+            Format::Bytes => write!(w, "ByteArray"),
+
             Format::Option(format) => {
-                format.write(writer)?;
-                write!(writer, "?")
+                format.write(w)?;
+                write!(w, "?")
             }
             Format::Seq(format) => {
-                write!(writer, "List<")?;
-                format.write(writer)?;
-                write!(writer, ">")
+                write!(w, "List<")?;
+                format.write(w)?;
+                write!(w, ">")
             }
             Format::Set(format) => {
-                write!(writer, "Set<")?;
-                format.write(writer)?;
-                write!(writer, ">")
+                write!(w, "Set<")?;
+                format.write(w)?;
+                write!(w, ">")
             }
             Format::Map { key, value } => {
-                write!(writer, "Map<")?;
-                key.write(writer)?;
-                write!(writer, ", ")?;
-                value.write(writer)?;
-                write!(writer, ">")
+                write!(w, "Map<")?;
+                key.write(w)?;
+                write!(w, ", ")?;
+                value.write(w)?;
+                write!(w, ">")
             }
             Format::Tuple(formats) => {
                 let len = formats.len();
                 match len {
-                    1 => return formats[0].write(writer),
-                    2 => write!(writer, "Pair<")?,
-                    3 => write!(writer, "Triple<")?,
-                    _ => write!(writer, "NTuple{len}<")?,
-                }
-                for (i, format) in formats.iter().enumerate() {
-                    if i > 0 {
-                        write!(writer, ", ")?;
+                    0 => write!(w, "Unit"),
+                    1 => {
+                        // A single-element tuple is just the element itself
+                        formats[0].write(w)
                     }
-                    format.write(writer)?;
+                    2 => {
+                        write!(w, "Pair<")?;
+                        formats[0].write(w)?;
+                        write!(w, ", ")?;
+                        formats[1].write(w)?;
+                        write!(w, ">")
+                    }
+                    3 => {
+                        write!(w, "Triple<")?;
+                        formats[0].write(w)?;
+                        write!(w, ", ")?;
+                        formats[1].write(w)?;
+                        write!(w, ", ")?;
+                        formats[2].write(w)?;
+                        write!(w, ">")
+                    }
+                    _ => {
+                        // For larger tuples, we'll use a data class NTupleN
+                        write!(w, "NTuple{len}<")?;
+                        for (i, format) in formats.iter().enumerate() {
+                            if i > 0 {
+                                write!(w, ", ")?;
+                            }
+                            format.write(w)?;
+                        }
+                        write!(w, ">")
+                    }
                 }
-                write!(writer, ">")
             }
-            Format::TupleArray {
-                content: format,
-                size: _,
-            } => {
-                write!(writer, "List<")?;
-                format.write(writer)?;
-                write!(writer, ">")
+            Format::TupleArray { content, size: _ } => {
+                write!(w, "List<")?;
+                content.write(w)?;
+                write!(w, ">")
             }
         }
     }
 }
 
-fn data_object<W: Write>(writer: &mut W, name: &String, doc: &Doc) -> Result<()> {
-    for comment in doc.comments() {
-        writeln!(writer, "/// {comment}")?;
-    }
+fn data_object<W: IndentWrite>(w: &mut W, name: &str, doc: &Doc) -> Result<()> {
+    doc.write(w)?;
 
     writedoc!(
-        writer,
+        w,
         "
             @Serializable
             data object {name}
@@ -323,134 +352,102 @@ fn data_object<W: Write>(writer: &mut W, name: &String, doc: &Doc) -> Result<()>
     )
 }
 
+fn type_alias<W: IndentWrite>(w: &mut W, name: &str, format: &Format, doc: &Doc) -> Result<()> {
+    doc.write(w)?;
+
+    write!(w, "typealias {name} = ")?;
+    format.write(w)?;
+    writeln!(w)
+}
+
 fn data_class<W: IndentWrite>(
-    writer: &mut W,
-    name: &String,
-    nameds: &[Named<Format>],
+    w: &mut W,
+    name: &str,
+    fields: &[Named<Format>],
     doc: &Doc,
 ) -> Result<()> {
-    for comment in doc.comments() {
-        writeln!(writer, "/// {comment}")?;
+    doc.write(w)?;
+
+    writeln!(w, "@Serializable")?;
+    writeln!(w, "data class {name}(")?;
+
+    w.indent();
+    for field in fields {
+        field.write(w)?;
     }
+    w.unindent();
 
-    writedoc!(
-        writer,
-        "
-            @Serializable
-            data class {name} (
-        "
-    )?;
-
-    writer.indent();
-    for (i, named) in nameds.iter().enumerate() {
-        if i > 0 {
-            writeln!(writer, ",")?;
-        }
-        named.write(writer)?;
-    }
-    writer.unindent();
-
-    writeln!(writer)?;
-    writeln!(writer, ")")?;
-
-    Ok(())
+    writeln!(w, ")")
 }
 
 fn enum_class<W: IndentWrite>(
-    writer: &mut W,
+    w: &mut W,
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
 ) -> Result<()> {
-    for comment in doc.comments() {
-        writeln!(writer, "/// {comment}")?;
-    }
+    doc.write(w)?;
 
     writedoc!(
-        writer,
+        w,
         "
             @Serializable
             enum class {name} {{
         "
     )?;
 
-    writer.indent();
+    w.indent();
     for (i, variant) in variants {
         if *i > 0 {
-            writeln!(writer, ",")?;
+            writeln!(w, ",")?;
         }
-        variant.write(writer)?;
+
+        (variant, &VariantContext::EnumClass).write(w)?;
     }
-    writeln!(writer, ";")?;
-    writeln!(writer)?;
+    writeln!(w, ";")?;
+    writeln!(w)?;
 
     writedoc!(
-        writer,
+        w,
         "
         val serialName: String
             get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
     "
     )?;
-    writer.unindent();
+    w.unindent();
 
-    writeln!(writer)?;
-    writeln!(writer, "}}")?;
-
-    Ok(())
+    writeln!(w, "}}")
 }
 
 fn sealed_interface<W: IndentWrite>(
-    writer: &mut W,
+    w: &mut W,
     name: &str,
-    variants: &BTreeMap<u32, Named<VariantFormat>>,
+    variants: &[Named<VariantFormat>],
     doc: &Doc,
 ) -> Result<()> {
-    for comment in doc.comments() {
-        writeln!(writer, "/// {comment}")?;
-    }
+    doc.write(w)?;
 
     writedoc!(
-        writer,
+        w,
         "
             @Serializable
             sealed interface {name} {{
                 val serialName: String
+
         "
     )?;
 
-    writer.indent();
-    let context = VariantContext::SealedInterface {
-        interface_name: name.to_string(),
-    };
-
-    for (i, variant) in variants.values().enumerate() {
-        if i > 0 {
-            writeln!(writer)?;
+    w.indent();
+    for (index, variant) in variants.iter().enumerate() {
+        if index > 0 {
+            writeln!(w)?;
         }
-        (variant, &context).write(writer)?;
+        let ctx = VariantContext::SealedInterface(name.to_string());
+        (variant, &ctx).write(w)?;
     }
-    writer.unindent();
+    w.unindent();
 
-    writeln!(writer, "}}")?;
-
-    Ok(())
-}
-
-fn type_alias<W: IndentWrite>(
-    writer: &mut W,
-    name: &str,
-    format: &Format,
-    doc: &Doc,
-) -> Result<()> {
-    for comment in doc.comments() {
-        writeln!(writer, "/// {comment}")?;
-    }
-
-    write!(writer, "typealias {name} = ")?;
-    format.write(writer)?;
-    writeln!(writer)?;
-
-    Ok(())
+    writeln!(w, "}}")
 }
 
 #[cfg(test)]

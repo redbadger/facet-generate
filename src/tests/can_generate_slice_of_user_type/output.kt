@@ -11,7 +11,6 @@ import kotlinx.serialization.modules.*
 data object Tag
 
 @Serializable
-data class Video (
-    val tags: List<Tag>
+data class Video(
+    val tags: List<Tag>,
 )
-

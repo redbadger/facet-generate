@@ -10,7 +10,8 @@ fn unit_struct_1() {
     /// line 2
     struct UnitStruct;
 
-    insta::assert_snapshot!(emit!(UnitStruct), @r"
+    let actual = emit!(UnitStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     /// line 1
     /// line 2
     @Serializable
@@ -25,7 +26,8 @@ fn unit_struct_2() {
     /// line 2
     struct UnitStruct {}
 
-    insta::assert_snapshot!(emit!(UnitStruct), @r"
+    let actual = emit!(UnitStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     /// line 1
     /// line 2
     @Serializable
@@ -40,7 +42,8 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    insta::assert_snapshot!(emit!(NewType), @r"
+    let actual = emit!(NewType).unwrap();
+    insta::assert_snapshot!(actual, @r"
     /// line 1
     /// line 2
     typealias NewType = String
@@ -54,13 +57,14 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    insta::assert_snapshot!(emit!(TupleStruct), @r"
+    let actual = emit!(TupleStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     /// line 1
     /// line 2
     @Serializable
-    data class TupleStruct (
+    data class TupleStruct(
         val field_0: String,
-        val field_1: Int
+        val field_1: Int,
     )
     ");
 }
@@ -105,11 +109,12 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    insta::assert_snapshot!(emit!(StructWithFields), @r"
+    let actual = emit!(StructWithFields).unwrap();
+    insta::assert_snapshot!(actual, @r"
     /// line 1
     /// line 2
     @Serializable
-    data class StructWithFields (
+    data class StructWithFields(
         /// unit
         val unit: Unit,
         /// bool
@@ -141,7 +146,7 @@ fn struct_with_fields_of_primitive_types() {
         /// char
         val char: String,
         /// string
-        val string: String
+        val string: String,
     )
     ");
 }
@@ -166,25 +171,26 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    insta::assert_snapshot!(emit!(Outer), @r"
+    let actual = emit!(Outer).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class Inner1 (
-        val field1: String
+    data class Inner1(
+        val field1: String,
     )
 
     typealias Inner2 = String
 
     @Serializable
-    data class Inner3 (
+    data class Inner3(
         val field_0: String,
-        val field_1: Int
+        val field_1: Int,
     )
 
     @Serializable
-    data class Outer (
+    data class Outer(
         val one: Inner1,
         val two: Inner2,
-        val three: Inner3
+        val three: Inner3,
     )
     ");
 }
@@ -196,10 +202,11 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
-        val one: Pair<String, Int>
+    data class MyStruct(
+        val one: Pair<String, Int>,
     )
     ");
 }
@@ -211,10 +218,11 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
-        val one: Triple<String, Int, UShort>
+    data class MyStruct(
+        val one: Triple<String, Int, UShort>,
     )
     ");
 }
@@ -229,10 +237,11 @@ fn struct_with_field_that_is_a_4_tuple() {
     // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
-        val one: NTuple4<String, Int, UShort, Float>
+    data class MyStruct(
+        val one: NTuple4<String, Int, UShort, Float>,
     )
     ");
 }
@@ -253,7 +262,8 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    insta::assert_snapshot!(emit!(EnumWithUnitVariants), @r#"
+    let actual = emit!(EnumWithUnitVariants).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     /// line one
     /// line two
     @Serializable
@@ -267,7 +277,6 @@ fn enum_with_unit_variants() {
 
         val serialName: String
             get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
-
     }
     "#);
 }
@@ -281,14 +290,14 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     enum class MyEnum {
         @SerialName("Variant1") VARIANT1;
 
         val serialName: String
             get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
-
     }
     "#);
 }
@@ -302,13 +311,17 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     sealed interface MyEnum {
         val serialName: String
+
         @Serializable
         @SerialName("Variant1")
-        data class Variant1(val value: String) : MyEnum {
+        data class Variant1(
+            val value: String,
+        ) : MyEnum {
             override val serialName: String = "Variant1"
         }
     }
@@ -325,19 +338,25 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     sealed interface MyEnum {
         val serialName: String
+
         @Serializable
         @SerialName("Variant1")
-        data class Variant1(val value: String) : MyEnum {
+        data class Variant1(
+            val value: String,
+        ) : MyEnum {
             override val serialName: String = "Variant1"
         }
 
         @Serializable
         @SerialName("Variant2")
-        data class Variant2(val value: Int) : MyEnum {
+        data class Variant2(
+            val value: Int,
+        ) : MyEnum {
             override val serialName: String = "Variant2"
         }
     }
@@ -354,15 +373,17 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     sealed interface MyEnum {
         val serialName: String
+
         @Serializable
         @SerialName("Variant1")
         data class Variant1(
             val field_0: String,
-            val field_1: Int
+            val field_1: Int,
         ) : MyEnum {
             override val serialName: String = "Variant1"
         }
@@ -372,7 +393,7 @@ fn enum_with_tuple_variants() {
         data class Variant2(
             val field_0: Boolean,
             val field_1: Double,
-            val field_2: UByte
+            val field_2: UByte,
         ) : MyEnum {
             override val serialName: String = "Variant2"
         }
@@ -389,15 +410,19 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     sealed interface MyEnum {
         val serialName: String
+
         @Serializable
         @SerialName("Variant1")
         data class Variant1(
             val field1: String,
-            val field2: Int
+
+            val field2: Int,
+
         ) : MyEnum {
             override val serialName: String = "Variant1"
         }
@@ -417,10 +442,12 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    insta::assert_snapshot!(emit!(MyEnum), @r#"
+    let actual = emit!(MyEnum).unwrap();
+    insta::assert_snapshot!(actual, @r#"
     @Serializable
     sealed interface MyEnum {
         val serialName: String
+
         @Serializable
         @SerialName("Unit")
         data object Unit : MyEnum {
@@ -429,7 +456,9 @@ fn enum_with_mixed_variants() {
 
         @Serializable
         @SerialName("NewType")
-        data class NewType(val value: String) : MyEnum {
+        data class NewType(
+            val value: String,
+        ) : MyEnum {
             override val serialName: String = "NewType"
         }
 
@@ -437,7 +466,7 @@ fn enum_with_mixed_variants() {
         @SerialName("Tuple")
         data class Tuple(
             val field_0: String,
-            val field_1: Int
+            val field_1: Int,
         ) : MyEnum {
             override val serialName: String = "Tuple"
         }
@@ -445,7 +474,8 @@ fn enum_with_mixed_variants() {
         @Serializable
         @SerialName("Struct")
         data class Struct(
-            val field: Boolean
+            val field: Boolean,
+
         ) : MyEnum {
             override val serialName: String = "Struct"
         }
@@ -462,12 +492,13 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val items: List<String>,
         val numbers: List<Int>,
-        val nested_items: List<List<String>>
+        val nested_items: List<List<String>>,
     )
     ");
 }
@@ -482,12 +513,13 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val optional_string: String? = null,
         val optional_number: Int? = null,
-        val optional_bool: Boolean? = null
+        val optional_bool: Boolean? = null,
     )
     ");
 }
@@ -500,11 +532,12 @@ fn struct_with_hashmap_field() {
         int_to_bool: std::collections::HashMap<i32, bool>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>
+        val int_to_bool: Map<Int, Boolean>,
     )
     ");
 }
@@ -520,14 +553,15 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val optional_list: List<String>? = null,
         val list_of_optionals: List<Int?>,
         val map_to_list: Map<String, List<Boolean>>,
         val optional_map: Map<String, Int>? = null,
-        val complex: List<Map<String, List<Boolean>>?>
+        val complex: List<Map<String, List<Boolean>>?>,
     )
     ");
 }
@@ -542,12 +576,13 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val fixed_array: List<Int>,
         val byte_array: List<UByte>,
-        val string_array: List<String>
+        val string_array: List<String>,
     )
     ");
 }
@@ -560,11 +595,12 @@ fn struct_with_btreemap_field() {
         int_to_bool: std::collections::BTreeMap<i32, bool>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>
+        val int_to_bool: Map<Int, Boolean>,
     )
     ");
 }
@@ -579,11 +615,12 @@ fn struct_with_hashset_field() {
         int_set: std::collections::HashSet<i32>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val string_set: Set<String>,
-        val int_set: Set<Int>
+        val int_set: Set<Int>,
     )
     ");
 }
@@ -598,11 +635,12 @@ fn struct_with_btreeset_field() {
         int_set: std::collections::BTreeSet<i32>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val string_set: Set<String>,
-        val int_set: Set<Int>
+        val int_set: Set<Int>,
     )
     ");
 }
@@ -610,16 +648,18 @@ fn struct_with_btreeset_field() {
 #[test]
 fn struct_with_box_field() {
     #[derive(Facet)]
+    #[allow(clippy::box_collection)]
     struct MyStruct {
         boxed_string: Box<String>,
         boxed_int: Box<i32>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val boxed_string: String,
-        val boxed_int: Int
+        val boxed_int: Int,
     )
     ");
 }
@@ -632,11 +672,12 @@ fn struct_with_rc_field() {
         rc_int: std::rc::Rc<i32>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val rc_string: String,
-        val rc_int: Int
+        val rc_int: Int,
     )
     ");
 }
@@ -649,11 +690,12 @@ fn struct_with_arc_field() {
         arc_int: std::sync::Arc<i32>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val arc_string: String,
-        val arc_int: Int
+        val arc_int: Int,
     )
     ");
 }
@@ -661,6 +703,7 @@ fn struct_with_arc_field() {
 #[test]
 fn struct_with_mixed_collections_and_pointers() {
     #[derive(Facet)]
+    #[allow(clippy::box_collection)]
     struct MyStruct {
         vec_of_sets: Vec<std::collections::HashSet<String>>,
         optional_btree: Option<std::collections::BTreeMap<String, i32>>,
@@ -669,14 +712,15 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val vec_of_sets: List<Set<String>>,
         val optional_btree: Map<String, Int>? = null,
         val boxed_vec: List<String>,
         val arc_option: String? = null,
-        val array_of_boxes: List<Int>
+        val array_of_boxes: List<Int>,
     )
     ");
 }
@@ -692,12 +736,13 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val data: ByteArray,
         val name: String,
-        val header: ByteArray
+        val header: ByteArray,
     )
     ");
 }
@@ -714,13 +759,14 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    insta::assert_snapshot!(emit!(MyStruct), @r"
+    let actual = emit!(MyStruct).unwrap();
+    insta::assert_snapshot!(actual, @r"
     @Serializable
-    data class MyStruct (
+    data class MyStruct(
         val data: ByteArray,
         val name: String,
         val header: ByteArray,
-        val optional_bytes: List<UByte>? = null
+        val optional_bytes: List<UByte>? = null,
     )
     ");
 }
