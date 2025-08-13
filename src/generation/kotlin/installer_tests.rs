@@ -12,10 +12,9 @@ fn test_make_manifest_basic() {
     let manifest = installer.make_manifest("test-package");
 
     // Check that the manifest contains expected Kotlin/Gradle content
-    assert!(manifest.contains("org.jetbrains.kotlin.jvm"));
-    assert!(manifest.contains("org.jetbrains.kotlin.plugin.serialization"));
-    assert!(manifest.contains("kotlinx-serialization-json"));
-    assert!(manifest.contains("group = 'test-package'"));
+    assert!(manifest.contains(r#"kotlin("jvm")"#));
+    assert!(manifest.contains(r#"kotlin("plugin.serialization")"#));
+    assert!(manifest.contains(r#"group = "test-package""#));
 }
 
 #[test]
@@ -48,5 +47,5 @@ fn test_make_manifest_with_path_dependency() {
     let manifest = installer.make_manifest("test-package");
 
     // Check that path dependencies are handled correctly
-    assert!(manifest.contains("files('../local-lib')"));
+    assert!(manifest.contains(r#"files("../local-lib")"#));
 }

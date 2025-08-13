@@ -16,18 +16,9 @@ impl Emitter<Kotlin> for Module {
         writeln!(w, "package {name}")?;
         writeln!(w)?;
 
-        writedoc!(
-            w,
-            "
-                import kotlinx.serialization.*
-                import kotlinx.serialization.builtins.*
-                import kotlinx.serialization.descriptors.*
-                import kotlinx.serialization.encoding.*
-                import kotlinx.serialization.json.*
-                import kotlinx.serialization.modules.*
-
-            "
-        )?;
+        writeln!(w, "import kotlinx.serialization.Serializable")?;
+        writeln!(w, "import kotlinx.serialization.SerialName")?;
+        writeln!(w)?;
 
         Ok(())
     }

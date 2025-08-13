@@ -6,7 +6,7 @@ use std::{
 use std::collections::BTreeSet;
 
 use heck::ToPascalCase;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 
 use crate::{
     Registry,
@@ -63,13 +63,16 @@ impl Installer {
 
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
+        // TODO: this should come from somehwere
+        const VERSION: &str = "1.0.0";
+
         let mut dependencies = Vec::new();
 
         // Add kotlinx.serialization only if not using bincode
         let uses_bincode = self.used_encodings.contains(&Encoding::Bincode);
         if !uses_bincode {
             dependencies.push(
-                "    implementation 'org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0'"
+                r#"    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")"#
                     .to_string(),
             );
         }
@@ -78,7 +81,7 @@ impl Installer {
         for external_package in self.external_packages.values() {
             match &external_package.location {
                 PackageLocation::Path(path) => {
-                    dependencies.push(format!("    implementation files('{path}')"));
+                    dependencies.push(format!(r#"    implementation(files("{path}"))"#));
                 }
                 PackageLocation::Url(url) => {
                     let default_version = "1.0.0".to_string();
@@ -93,31 +96,30 @@ impl Installer {
                         ToString::to_string,
                     );
 
-                    dependencies.push(format!("    implementation '{artifact_name}:{version}'"));
+                    dependencies.push(format!(
+                        r#"    implementation("{artifact_name}:{version}")"#
+                    ));
                 }
             }
         }
 
         let dependencies_str = dependencies.join("\n");
-        let uses_bincode = self.used_encodings.contains(&Encoding::Bincode);
 
-        let plugins = if uses_bincode {
-            r"plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.9.20'
-}"
-        } else {
-            r"plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.9.20'
-    id 'org.jetbrains.kotlin.plugin.serialization' version '1.9.20'
-}"
-        };
+        let plugins = indoc!(
+            r#"
+            plugins {
+                kotlin("jvm") version "2.2.0"
+                kotlin("plugin.serialization") version "2.2.0"
+                `java-library`
+            }"#
+        );
 
         formatdoc!(
             r#"
                 {plugins}
 
-                group = '{package_name}'
-                version = '1.0.0'
+                group = "{package_name}"
+                version = "{VERSION}"
 
                 repositories {{
                     mavenCentral()
@@ -127,16 +129,11 @@ impl Installer {
                 {dependencies_str}
                 }}
 
-                compileKotlin {{
-                    kotlinOptions {{
-                        jvmTarget = "1.8"
-                    }}
-                }}
-
-                compileTestKotlin {{
-                    kotlinOptions {{
-                        jvmTarget = "1.8"
-                    }}
+                tasks.withType<Jar> {{
+                  manifest {{
+                    attributes["Implementation-Title"] = "{package_name}"
+                    attributes["Implementation-Version"] = "{VERSION}"
+                  }}
                 }}
             "#
         )
@@ -227,7 +224,7 @@ impl SourceInstaller for Installer {
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {
         let manifest = self.make_manifest(package_name);
 
-        let manifest_path = self.install_dir.join("build.gradle");
+        let manifest_path = self.install_dir.join("build.gradle.kts");
         let mut file = std::fs::File::create(manifest_path)?;
         file.write_all(manifest.as_bytes())?;
 
