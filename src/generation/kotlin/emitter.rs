@@ -16,9 +16,34 @@ impl Emitter<Kotlin> for Module {
         writeln!(w, "package {name}")?;
         writeln!(w)?;
 
-        writeln!(w, "import kotlinx.serialization.Serializable")?;
-        writeln!(w, "import kotlinx.serialization.SerialName")?;
+        let mut imports = vec![
+            "import kotlinx.serialization.Serializable",
+            "import kotlinx.serialization.SerialName",
+        ];
+
+        if self.config().has_bigint {
+            imports.extend_from_slice(&[
+                "import java.math.BigInteger",
+                "import kotlinx.serialization.KSerializer",
+                "import kotlinx.serialization.descriptors.PrimitiveKind",
+                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
+                "import kotlinx.serialization.encoding.Decoder",
+                "import kotlinx.serialization.encoding.Encoder",
+                "import kotlinx.serialization.json.JsonDecoder",
+                "import kotlinx.serialization.json.JsonEncoder",
+                "import kotlinx.serialization.json.JsonUnquotedLiteral",
+                "import kotlinx.serialization.json.jsonPrimitive",
+            ]);
+        }
+
+        imports.sort_unstable();
+
+        writeln!(w, "{}", imports.join("\n"))?;
         writeln!(w)?;
+
+        if self.config().has_bigint {
+            emit_bigint_serializer(w)?;
+        }
 
         Ok(())
     }
@@ -250,15 +275,11 @@ impl Emitter<Kotlin> for Format {
             Format::I16 => write!(w, "Short"),
             Format::I32 => write!(w, "Int"),
             Format::I64 => write!(w, "Long"),
-            Format::I128 => write!(w, "java.math.@com.novi.serde.Int128 BigInteger"),
             Format::U8 => write!(w, "UByte"),
             Format::U16 => write!(w, "UShort"),
             Format::U32 => write!(w, "UInt"),
             Format::U64 => write!(w, "ULong"),
-            Format::U128 => write!(
-                w,
-                "java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger"
-            ),
+            Format::I128 | Format::U128 => write!(w, "BigIntegerJson"),
             Format::F32 => write!(w, "Float"),
             Format::F64 => write!(w, "Double"),
             Format::Char | Format::Str => write!(w, "String"),
@@ -439,6 +460,31 @@ fn sealed_interface<W: IndentWrite>(
     w.unindent();
 
     writeln!(w, "}}")
+}
+
+fn emit_bigint_serializer<W: IndentWrite>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r#"
+        typealias BigIntegerJson = @Serializable(with = BigIntegerSerializer::class) BigInteger
+
+        private object BigIntegerSerializer : KSerializer<BigInteger> {{
+            override val descriptor = PrimitiveSerialDescriptor("java.math.BigInteger", PrimitiveKind.STRING)
+
+            override fun deserialize(decoder: Decoder): BigInteger =
+                when (decoder) {{
+                    is JsonDecoder -> decoder.decodeJsonElement().jsonPrimitive.content.toBigInteger()
+                    else -> decoder.decodeString().toBigInteger()
+                }}
+
+            override fun serialize(encoder: Encoder, value: BigInteger) =
+                when (encoder) {{
+                    is JsonEncoder -> encoder.encodeJsonElement(JsonUnquotedLiteral(value.toString()))
+                    else -> encoder.encodeString(value.toString())
+                }}
+        }}
+        "#
+    )
 }
 
 #[cfg(test)]

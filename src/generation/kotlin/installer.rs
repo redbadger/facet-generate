@@ -130,10 +130,10 @@ impl Installer {
                 }}
 
                 tasks.withType<Jar> {{
-                  manifest {{
-                    attributes["Implementation-Title"] = "{package_name}"
-                    attributes["Implementation-Version"] = "{VERSION}"
-                  }}
+                    manifest {{
+                        attributes["Implementation-Title"] = "{package_name}"
+                        attributes["Implementation-Version"] = "{VERSION}"
+                    }}
                 }}
             "#
         )

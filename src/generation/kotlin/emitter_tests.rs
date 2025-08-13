@@ -128,7 +128,7 @@ fn struct_with_fields_of_primitive_types() {
         /// i64
         val i64: Long,
         /// i128
-        val i128: java.math.@com.novi.serde.Int128 BigInteger,
+        val i128: BigIntegerJson,
         /// u8
         val u8: UByte,
         /// u16
@@ -138,7 +138,7 @@ fn struct_with_fields_of_primitive_types() {
         /// u64
         val u64: ULong,
         /// u128
-        val u128: java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger,
+        val u128: BigIntegerJson,
         /// f32
         val f32: Float,
         /// f64

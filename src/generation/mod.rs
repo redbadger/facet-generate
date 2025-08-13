@@ -28,7 +28,7 @@ pub mod typescript;
     feature = "swift",
     feature = "typescript"
 ))]
-mod common;
+pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 

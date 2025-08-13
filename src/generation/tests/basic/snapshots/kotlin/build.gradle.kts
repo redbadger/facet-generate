@@ -16,8 +16,8 @@ dependencies {
 }
 
 tasks.withType<Jar> {
-  manifest {
-    attributes["Implementation-Title"] = "com.example"
-    attributes["Implementation-Version"] = "1.0.0"
-  }
+    manifest {
+        attributes["Implementation-Title"] = "com.example"
+        attributes["Implementation-Version"] = "1.0.0"
+    }
 }

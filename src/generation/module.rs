@@ -13,13 +13,24 @@ pub struct Module(CodeGeneratorConfig);
 
 impl Module {
     #[must_use]
-    pub fn new(module_name: String) -> Self {
-        Module(CodeGeneratorConfig::new(module_name))
+    pub fn new(config: CodeGeneratorConfig) -> Self {
+        Module(config)
     }
 
     #[must_use]
     pub fn config(&self) -> &CodeGeneratorConfig {
         &self.0
+    }
+
+    /// for Java: updates the module name to be a child of the specified parent
+    #[must_use]
+    pub fn with_parent(&self, parent: &str) -> Self {
+        if parent == self.config().module_name() {
+            return self.clone();
+        }
+        let mut config = self.config().clone();
+        config.module_name = format!("{}.{}", parent, self.config().module_name());
+        Self(config)
     }
 }
 

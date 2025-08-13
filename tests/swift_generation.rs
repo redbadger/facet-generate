@@ -1,8 +1,8 @@
-#![cfg(all(test, feature = "swift"))]
+#![cfg(feature = "swift")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-mod common;
+pub mod common;
 
 use facet_generate::{
     Registry,

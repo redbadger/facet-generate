@@ -1,7 +1,7 @@
-#![cfg(all(test, feature = "java"))]
+#![cfg(feature = "java")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
-mod common;
+pub mod common;
 
 use common::{Choice, Runtime, Test};
 use facet_generate::generation::{CodeGeneratorConfig, java};

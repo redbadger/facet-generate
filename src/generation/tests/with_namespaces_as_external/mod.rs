@@ -71,14 +71,11 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let this_module = &module.config().module_name;
-                    let is_root_package = package_name == this_module;
-                    let module = if is_root_package {
-                        module
-                    } else {
-                        &module::Module::new([package_name, this_module].join("."))
-                    };
-                    let config = module.config().clone().without_serialization();
+                    let config = module
+                        .with_parent(package_name)
+                        .config()
+                        .clone()
+                        .without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
             }

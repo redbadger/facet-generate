@@ -43,11 +43,24 @@ jobs:
 
       - name: Clippy (pedantic)
         shell: bash
-        run: cargo clippy -- --no-deps -Dclippy::pedantic -Dwarnings
+        run: cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
+
+      - name: ktlint
+        uses: lucasnlm/ktlint-action@master
+        with:
+          args: "src/generation/tests/"
 
       - name: Build
         shell: bash
         run: cargo build --all-features
+
+      - name: Setup Additional Languages for codegen tests (java)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: 17
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Setup Additional Languages for codegen tests (deno)
         uses: denoland/setup-deno@v2

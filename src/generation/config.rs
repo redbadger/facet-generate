@@ -10,7 +10,10 @@ use std::{
 use derive_builder::Builder;
 use serde::Serialize;
 
-use crate::Registry;
+use crate::{
+    Registry,
+    reflection::format::{Format, FormatHolder},
+};
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize)]
 pub enum Serialization {
@@ -39,6 +42,7 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
     pub package_manifest: bool,
+    pub has_bigint: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
@@ -108,6 +112,7 @@ impl CodeGeneratorConfig {
             custom_code: BTreeMap::new(),
             c_style_enums: false,
             package_manifest: true,
+            has_bigint: false,
         }
     }
 
@@ -178,6 +183,20 @@ impl CodeGeneratorConfig {
     pub fn with_package_manifest(mut self, package_manifest: bool) -> Self {
         self.package_manifest = package_manifest;
         self
+    }
+
+    pub fn update_from(&mut self, registry: &Registry) {
+        for format in registry.values() {
+            format
+                .visit(&mut |f| {
+                    match f {
+                        Format::I128 | Format::U128 => self.has_bigint = true,
+                        _ => (),
+                    }
+                    Ok(())
+                })
+                .unwrap();
+        }
     }
 }
 

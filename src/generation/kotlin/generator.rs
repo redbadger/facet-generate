@@ -42,7 +42,9 @@ impl<'a> CodeGenerator<'a> {
     pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
 
-        let module = Module::new(self.config.module_name.clone());
+        let mut config = self.config.clone();
+        config.update_from(registry);
+        let module = Module::new(config);
         module.write(w)?;
 
         for (i, container) in registry.iter().enumerate() {

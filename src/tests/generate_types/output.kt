@@ -1,7 +1,7 @@
 package com.example
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 @Serializable
 data object CustomType
