@@ -6,9 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
-        module::{self, Module},
-        swift::Installer,
+        SourceInstaller as _, java, kotlin, module, swift,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
@@ -37,7 +35,7 @@ fn test() {
         .unwrap()
         .join("snapshots");
 
-    for target in ["java", "swift", "typescript"] {
+    for target in ["java", "kotlin", "swift", "typescript"] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
@@ -49,20 +47,26 @@ fn test() {
                 let package_name = "com.example";
                 let mut installer = java::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let this_module = &module.config().module_name;
-                    let is_root_package = package_name == this_module;
-                    let module = if is_root_package {
-                        module
-                    } else {
-                        &Module::new([package_name, this_module].join("."))
-                    };
-                    let config = module.config().clone().without_serialization();
+                    let config = module
+                        .with_parent(package_name)
+                        .config()
+                        .clone()
+                        .without_serialization();
                     installer.install_module(&config, registry).unwrap();
                 }
             }
+            "kotlin" => {
+                let package_name = "com.example";
+                let mut installer = kotlin::Installer::new(package_name, tmp_path, &[]);
+                for (module, registry) in &module::split(package_name, &registry) {
+                    let config = module.config().clone().without_serialization();
+                    installer.install_module(&config, registry).unwrap();
+                }
+                installer.install_manifest(package_name).unwrap();
+            }
             "swift" => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = swift::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().without_serialization();
                     installer.install_module(&config, registry).unwrap();

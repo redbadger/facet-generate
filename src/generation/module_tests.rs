@@ -5,6 +5,19 @@ use crate::reflect;
 use super::*;
 
 #[test]
+fn with_parent() {
+    let root_package = "root";
+    let root = Module::new(CodeGeneratorConfig::new(root_package.to_string()));
+    assert_eq!(root.with_parent(root_package), root);
+
+    let child = Module::new(CodeGeneratorConfig::new("child".to_string()));
+    assert_eq!(
+        child.with_parent(root_package),
+        Module::new(CodeGeneratorConfig::new("root.child".to_string()))
+    );
+}
+
+#[test]
 fn single_namespace() {
     #[derive(Facet)]
     struct ChildOne {
@@ -38,6 +51,7 @@ fn single_namespace() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      has_bigint: false
     : ? namespace: ROOT
         name: ChildOne
       : STRUCT:
@@ -79,6 +93,7 @@ fn single_namespace() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn root_namespace_with_two_child_namespaces() {
     #[derive(Facet)]
     #[facet(namespace = "one")]
@@ -119,6 +134,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      has_bigint: false
     : ? namespace: ROOT
         name: Parent
       : STRUCT:
@@ -146,6 +162,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      has_bigint: false
     : ? namespace:
           NAMED: one
         name: ChildOne
@@ -174,6 +191,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      has_bigint: false
     : ? namespace:
           NAMED: two
         name: ChildTwo

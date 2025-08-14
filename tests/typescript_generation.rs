@@ -1,8 +1,8 @@
-#![cfg(all(test, feature = "typescript"))]
+#![cfg(feature = "typescript")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-mod common;
+pub mod common;
 
 use facet_generate::generation::{
     CodeGeneratorConfig, Encoding, Serialization, SourceInstaller,

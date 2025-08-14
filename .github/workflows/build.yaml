@@ -37,13 +37,19 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
       - name: Format check
         shell: bash
         run: cargo fmt --all --check
 
       - name: Clippy (pedantic)
         shell: bash
-        run: cargo clippy -- --no-deps -Dclippy::pedantic -Dwarnings
+        run: cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
 
       - name: Build
         shell: bash
@@ -63,3 +69,8 @@ jobs:
       - name: Test with latest nextest release
         shell: bash
         run: cargo nextest run --all-features
+
+      - name: ktlint
+        uses: lucasnlm/ktlint-action@master
+        with:
+          args: "src/generation/tests/"

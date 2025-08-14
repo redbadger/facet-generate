@@ -1,2 +1,5 @@
 /target
 .build
+build/
+.gradle
+.kotlin

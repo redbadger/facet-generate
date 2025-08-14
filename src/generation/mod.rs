@@ -28,7 +28,7 @@ pub mod typescript;
     feature = "swift",
     feature = "typescript"
 ))]
-mod common;
+pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
@@ -53,7 +53,7 @@ pub trait Language<'a> {
 mod tests;
 
 pub trait Emitter<Language> {
-    /// Write the code to the provided `writer`.
+    /// Write the code to the provided `IndentWrite`.
     ///
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
