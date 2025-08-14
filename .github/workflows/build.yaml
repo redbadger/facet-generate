@@ -37,6 +37,12 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+          cache: "gradle"
+
       - name: Format check
         shell: bash
         run: cargo fmt --all --check
@@ -45,22 +51,9 @@ jobs:
         shell: bash
         run: cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
 
-      - name: ktlint
-        uses: lucasnlm/ktlint-action@master
-        with:
-          args: "src/generation/tests/"
-
       - name: Build
         shell: bash
         run: cargo build --all-features
-
-      - name: Setup Additional Languages for codegen tests (java)
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: 17
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Setup Additional Languages for codegen tests (deno)
         uses: denoland/setup-deno@v2
@@ -76,3 +69,8 @@ jobs:
       - name: Test with latest nextest release
         shell: bash
         run: cargo nextest run --all-features
+
+      - name: ktlint
+        uses: lucasnlm/ktlint-action@master
+        with:
+          args: "src/generation/tests/"

@@ -28,8 +28,19 @@ fn test_that_kotlin_code_compiles() {
     }
     installer.install_manifest(package_name).unwrap();
 
+    let args = ["--configuration-cache"];
+
     let status = Command::new("gradle")
-        .arg("jar")
+        .args(args)
+        .arg("--version")
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let status = Command::new("gradle")
+        .args(args)
+        .arg("build")
         .current_dir(&dir)
         .status()
         .unwrap();
