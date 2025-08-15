@@ -3,12 +3,10 @@ use std::io::Result;
 
 use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
-use crate::generation::swift::generator::CodeGenerator;
-use crate::reflection::format::{ContainerFormat, Doc, Named, VariantFormat};
 use crate::{
     Registry,
-    generation::{common, indent::IndentWrite},
-    reflection::format::{Format, FormatHolder as _},
+    generation::{common, indent::IndentWrite, swift::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Swift source file.

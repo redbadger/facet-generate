@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.10.3] - 2025-08-15
+
+### 🐛 Bug Fixes
+
+- fixes a bug when reflecting over enums that have tuple variants with more than one value _and_ are user structs nested within option or sequence types.
+
 ## [0.10.2] - 2025-08-06
 
 ### 🚀 Features
