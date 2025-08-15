@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, java, module, swift,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, module, swift,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
@@ -71,7 +71,11 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.with_parent(package_name).config().clone();
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_parent(package_name)
+                        .with_encoding(Encoding::Bincode);
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -90,7 +94,8 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    installer.install_module(module.config(), registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
@@ -110,7 +115,8 @@ fn test() {
                 );
 
                 for (module, registry) in &module::split(package_name, &registry) {
-                    installer.install_module(module.config(), registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

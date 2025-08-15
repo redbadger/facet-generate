@@ -5,19 +5,6 @@ use crate::reflect;
 use super::*;
 
 #[test]
-fn with_parent() {
-    let root_package = "root";
-    let root = Module::new(CodeGeneratorConfig::new(root_package.to_string()));
-    assert_eq!(root.with_parent(root_package), root);
-
-    let child = Module::new(CodeGeneratorConfig::new("child".to_string()));
-    assert_eq!(
-        child.with_parent(root_package),
-        Module::new(CodeGeneratorConfig::new("root.child".to_string()))
-    );
-}
-
-#[test]
 fn single_namespace() {
     #[derive(Facet)]
     struct ChildOne {
@@ -43,8 +30,7 @@ fn single_namespace() {
     let registries = split("Root", &reflect!(Parent));
     insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions: {}
       external_packages: {}
       comments: {}
@@ -122,8 +108,7 @@ fn root_namespace_with_two_child_namespaces() {
     let registries = split("Root", &reflect!(Parent));
     insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions:
         one:
           - ChildOne
@@ -152,8 +137,7 @@ fn root_namespace_with_two_child_namespaces() {
                 - []
           - []
     ? module_name: one
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions:
         one:
           - GrandChild
@@ -183,8 +167,7 @@ fn root_namespace_with_two_child_namespaces() {
                 - []
           - []
     ? module_name: two
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions: {}
       external_packages: {}
       comments: {}

@@ -71,11 +71,7 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .with_parent(package_name)
-                        .config()
-                        .clone()
-                        .without_serialization();
+                    let config = module.config().clone().with_parent(package_name);
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -94,8 +90,7 @@ fn test() {
                     }],
                 );
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
@@ -115,8 +110,7 @@ fn test() {
                 );
 
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

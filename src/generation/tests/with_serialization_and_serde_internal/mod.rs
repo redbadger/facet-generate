@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java, module,
+        Encoding, SourceInstaller as _, java, module,
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
@@ -49,7 +49,11 @@ fn test() {
                 let mut installer = java::Installer::new(package_name, tmp_path, &[]);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.with_parent(package_name).config().clone();
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_parent(package_name)
+                        .with_encoding(Encoding::Bincode);
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -58,8 +62,8 @@ fn test() {
                 let mut installer = Installer::new(package_name, tmp_path, &[]);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
@@ -68,8 +72,8 @@ fn test() {
                 let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

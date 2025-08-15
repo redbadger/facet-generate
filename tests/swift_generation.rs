@@ -82,20 +82,19 @@ fn test_that_swift_code_compiles() {
 
 #[test]
 fn test_that_swift_code_compiles_without_serialization() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).without_serialization();
+    let config = CodeGeneratorConfig::new("Testing".to_string());
     test_that_swift_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_swift_code_compiles_with_bcs() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encodings([Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bcs);
     test_that_swift_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_swift_code_compiles_with_bincode() {
-    let config =
-        CodeGeneratorConfig::new("Testing".to_string()).with_encodings([Encoding::Bincode]);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     test_that_swift_code_compiles_with_config(&config);
 }
 

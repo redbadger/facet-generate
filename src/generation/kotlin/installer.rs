@@ -3,8 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use std::collections::BTreeSet;
-
 use heck::ToPascalCase;
 use indoc::{formatdoc, indoc};
 
@@ -22,7 +20,7 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    used_encodings: BTreeSet<Encoding>,
+    encoding: Encoding,
 }
 
 impl Installer {
@@ -41,7 +39,7 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages,
-            used_encodings: BTreeSet::new(),
+            encoding: Encoding::default(),
         }
     }
 
@@ -69,7 +67,7 @@ impl Installer {
         let mut dependencies = Vec::new();
 
         // Add kotlinx.serialization only if not using bincode
-        let uses_bincode = self.used_encodings.contains(&Encoding::Bincode);
+        let uses_bincode = self.encoding == Encoding::Bincode;
         if !uses_bincode {
             dependencies.push(
                 r#"    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")"#
@@ -155,9 +153,7 @@ impl SourceInstaller for Installer {
         }
 
         // Track encodings used in this module
-        for encoding in &config.encodings {
-            self.used_encodings.insert(*encoding);
-        }
+        self.encoding = config.encoding;
 
         // Create source directory structure following Kotlin/Java conventions
         let src_dir = self.install_dir.join("src/main/kotlin");

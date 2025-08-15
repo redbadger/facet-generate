@@ -49,7 +49,7 @@ impl<'a> Language<'a> for CodeGenerator<'a> {
             emitter.output_container(&name.name, format)?;
         }
 
-        if self.config.serialization.is_enabled() {
+        if self.config.has_encoding() {
             emitter.output_trait_helpers(registry)?;
         }
 
@@ -118,7 +118,7 @@ impl<'a> CodeGenerator<'a> {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
 
-        if self.config.serialization.is_enabled() {
+        if self.config.has_encoding() {
             self.write_helper_class(&dir_path, current_namespace, registry)?;
         }
 

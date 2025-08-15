@@ -3,13 +3,10 @@ use std::io::Result;
 
 use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
-use crate::generation::Encoding;
-use crate::generation::swift::generator::CodeGenerator;
-use crate::reflection::format::{ContainerFormat, Doc, Named, VariantFormat};
 use crate::{
     Registry,
-    generation::{common, indent::IndentWrite},
-    reflection::format::{Format, FormatHolder as _},
+    generation::{common, indent::IndentWrite, swift::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Swift source file.
@@ -473,7 +470,7 @@ return obj
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -491,9 +488,7 @@ return obj
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_serialize_for_encoding(*encoding)?;
-            }
+            self.output_struct_serialize_for_encoding()?;
             // Deserialize
             writeln!(
                 self.out,
@@ -523,9 +518,7 @@ return obj
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_struct_deserialize_for_encoding(name)?;
         }
         // Custom code
         self.output_custom_code(name)?;
@@ -534,7 +527,8 @@ return obj
         Ok(())
     }
 
-    fn output_struct_serialize_for_encoding(&mut self, encoding: Encoding) -> Result<()> {
+    fn output_struct_serialize_for_encoding(&mut self) -> Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r"
@@ -548,11 +542,8 @@ public func {0}Serialize() throws -> [UInt8] {{
         )
     }
 
-    fn output_struct_deserialize_for_encoding(
-        &mut self,
-        name: &str,
-        encoding: Encoding,
-    ) -> Result<()> {
+    fn output_struct_deserialize_for_encoding(&mut self, name: &str) -> Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r#"
@@ -586,7 +577,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
         }
 
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -630,9 +621,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_serialize_for_encoding(*encoding)?;
-            }
+            self.output_struct_serialize_for_encoding()?;
 
             // Deserialize
             write!(
@@ -690,9 +679,7 @@ switch index {{",
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_struct_deserialize_for_encoding(name)?;
         }
 
         self.current_namespace.pop();
@@ -766,3 +753,7 @@ fn quote_deserialize(format: &Format) -> String {
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "emitter_tests.rs"]
+mod tests;

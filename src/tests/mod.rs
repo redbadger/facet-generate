@@ -46,7 +46,7 @@ macro_rules! test {
                 $(.add_type::<$ty>())*
                 .build();
             let package_name = test!(@package $language).to_string();
-            let cfg = CodeGeneratorConfig::new(package_name).without_serialization();
+            let cfg = CodeGeneratorConfig::new(package_name);
             let generator = <$language::CodeGenerator as Language>::new(&cfg);
             let expect = expect_file!(test!(@out $language));
 

@@ -46,20 +46,19 @@ fn test_that_java_code_compiles() {
 
 #[test]
 fn test_that_java_code_compiles_without_serialization() {
-    let config = CodeGeneratorConfig::new("testing".to_string()).without_serialization();
+    let config = CodeGeneratorConfig::new("testing".to_string());
     test_that_java_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_java_code_compiles_with_bcs() {
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encodings([Encoding::Bcs]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bcs);
     test_that_java_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_java_code_compiles_with_bincode() {
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encodings([Encoding::Bincode]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     test_that_java_code_compiles_with_config(&config);
 }
 
@@ -95,8 +94,9 @@ fn test_java_code_with_external_definitions() {
     // (wrongly) Declare TraitHelpers as external.
     let mut definitions = BTreeMap::new();
     definitions.insert("foo".to_string(), vec!["TraitHelpers".to_string()]);
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_external_definitions(definitions);
+    let config = CodeGeneratorConfig::new("testing".to_string())
+        .with_external_definitions(definitions)
+        .with_encoding(Encoding::Bincode);
     let generator = java::CodeGenerator::new(&config);
 
     generator
