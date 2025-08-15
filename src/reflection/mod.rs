@@ -24,6 +24,7 @@ pub struct RegistryBuilder {
     current: Vec<QualifiedTypeName>,
     processed: HashSet<QualifiedTypeName>,
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
+    processing_nested: bool,
 }
 
 impl RegistryBuilder {
@@ -138,13 +139,17 @@ impl RegistryBuilder {
     fn handle_user_struct(&mut self, shape: &Shape, struct_def: &StructType) {
         let type_name = get_name(shape);
 
-        // Update container with the struct format
-        let format = if shape.type_identifier == "()" {
-            Format::Unit
-        } else {
-            Format::TypeName(type_name.clone())
-        };
-        self.update_container_format_if_unknown(format);
+        // Update container with the struct format only if not processing nested types
+        if !self.processing_nested {
+            let format = if shape.type_identifier == "()" {
+                Format::Unit
+            } else {
+                Format::TypeName(type_name.clone())
+            };
+
+            self.update_container_format_if_unknown(format);
+        }
+
         self.format_struct(struct_def, shape);
     }
 
@@ -980,6 +985,7 @@ impl RegistryBuilder {
     }
 
     fn process_nested_types(&mut self, shape: &Shape, namespace: Option<&str>) {
+        self.processing_nested = true;
         match shape.def {
             Def::Scalar => {
                 // Scalar types don't need further processing
@@ -1019,6 +1025,7 @@ impl RegistryBuilder {
                 }
             }
         }
+        self.processing_nested = false;
     }
 }
 

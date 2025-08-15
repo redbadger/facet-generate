@@ -755,3 +755,7 @@ fn quote_deserialize(format: &Format) -> String {
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "emitter_tests.rs"]
+mod tests;
