@@ -320,12 +320,12 @@ impl<T> Variable<T> {
     }
 
     #[must_use]
-    pub fn borrow(&self) -> Ref<Option<T>> {
+    pub fn borrow(&self) -> Ref<'_, Option<T>> {
         self.0.as_ref().borrow()
     }
 
     #[must_use]
-    pub fn borrow_mut(&self) -> RefMut<Option<T>> {
+    pub fn borrow_mut(&self) -> RefMut<'_, Option<T>> {
         self.0.as_ref().borrow_mut()
     }
 }

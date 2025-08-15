@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use super::*;
 
@@ -1684,4 +1687,219 @@ fn tree_enum_with_mutual_recursion() {
         ),
     }
     "#);
+}
+
+#[test]
+fn enum_with_tuple_variant_of_user_types_in_a_mod() {
+    mod api {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Test1;
+
+        #[derive(Facet)]
+        pub struct Test2;
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        MyVariant(api::Test1, api::Test2),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          MyVariant:
+            TUPLE:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Test1
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Test2
+    ? namespace: ROOT
+      name: Test1
+    : UNITSTRUCT
+    ? namespace: ROOT
+      name: Test2
+    : UNITSTRUCT
+    ");
+}
+
+#[test]
+fn enum_with_tuple_variant_of_lists_of_user_types() {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Test1;
+
+    #[derive(Facet)]
+    pub struct Test2;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        MyVariant(Vec<Test1>, Vec<Test2>),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          MyVariant:
+            TUPLE:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test1
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test2
+    ? namespace: ROOT
+      name: Test1
+    : UNITSTRUCT
+    ? namespace: ROOT
+      name: Test2
+    : UNITSTRUCT
+    ");
+}
+
+#[test]
+fn enum_with_tuple_variant_of_option_of_user_types() {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Test1;
+
+    #[derive(Facet)]
+    pub struct Test2;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        MyVariant(Option<Test1>, Option<Test2>),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          MyVariant:
+            TUPLE:
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test1
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test2
+    ? namespace: ROOT
+      name: Test1
+    : UNITSTRUCT
+    ? namespace: ROOT
+      name: Test2
+    : UNITSTRUCT
+    ");
+}
+
+#[test]
+fn enum_with_tuple_variant_of_map_of_user_types() {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Test1;
+
+    #[derive(Facet)]
+    pub struct Test2;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    #[allow(clippy::zero_sized_map_values)]
+    enum MyEnum {
+        MyVariant(HashMap<String, Test1>, HashMap<String, Test2>),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          MyVariant:
+            TUPLE:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Test1
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Test2
+    ? namespace: ROOT
+      name: Test1
+    : UNITSTRUCT
+    ? namespace: ROOT
+      name: Test2
+    : UNITSTRUCT
+    ");
+}
+
+#[test]
+fn enum_with_tuple_variant_of_set_of_user_types() {
+    use facet::Facet;
+
+    #[derive(Facet, PartialEq, Eq, Hash)]
+    pub struct Test1;
+
+    #[derive(Facet, PartialEq, Eq, Hash)]
+    pub struct Test2;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        MyVariant(HashSet<Test1>, HashSet<Test2>),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        0:
+          MyVariant:
+            TUPLE:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test1
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Test2
+    ? namespace: ROOT
+      name: Test1
+    : UNITSTRUCT
+    ? namespace: ROOT
+      name: Test2
+    : UNITSTRUCT
+    ");
 }
