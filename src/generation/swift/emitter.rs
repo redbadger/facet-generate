@@ -3,13 +3,10 @@ use std::io::{Result, Write};
 
 use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
-use crate::generation::Encoding;
-use crate::generation::swift::generator::CodeGenerator;
-use crate::reflection::format::{ContainerFormat, Named, VariantFormat};
 use crate::{
     Registry,
-    generation::{common, indent::IndentedWriter},
-    reflection::format::{Format, FormatHolder as _},
+    generation::{Encoding, common, indent::IndentedWriter, swift::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Swift source file.
@@ -760,3 +757,7 @@ fn quote_deserialize(format: &Format) -> String {
         ),
     }
 }
+
+#[cfg(test)]
+#[path = "emitter_tests.rs"]
+mod tests;
