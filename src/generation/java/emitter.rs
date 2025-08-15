@@ -4,7 +4,7 @@ use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{Encoding, common, indent::IndentWrite, java::generator::CodeGenerator},
+    generation::{common, indent::IndentWrite, java::generator::CodeGenerator},
     reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
@@ -565,7 +565,7 @@ return obj;
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {{",
@@ -587,9 +587,7 @@ return obj;
             writeln!(self.out, "}}")?;
 
             if variant_index.is_none() {
-                for encoding in &self.generator.config.encodings {
-                    self.output_class_serialize_for_encoding(*encoding)?;
-                }
+                self.output_class_serialize_for_encoding()?;
             }
 
             // Deserialize (struct) or Load (variant)
@@ -621,9 +619,7 @@ return obj;
             writeln!(self.out, "}}")?;
 
             if variant_index.is_none() {
-                for encoding in &self.generator.config.encodings {
-                    self.output_class_deserialize_for_encoding(name, *encoding)?;
-                }
+                self.output_class_deserialize_for_encoding(name)?;
             }
         }
         // Equality
@@ -726,7 +722,7 @@ if (getClass() != obj.getClass()) return false;
             .map(|v| v.name.as_str())
             .collect::<Vec<_>>();
         self.enter_class(name, &reserved_names);
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\nabstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;"
@@ -759,10 +755,8 @@ switch (index) {{",
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_class_serialize_for_encoding(*encoding)?;
-                self.output_class_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_class_serialize_for_encoding()?;
+            self.output_class_deserialize_for_encoding(name)?;
         }
 
         self.output_variants(name, variants)?;
@@ -770,7 +764,8 @@ switch (index) {{",
         writeln!(self.out, "}}\n")
     }
 
-    fn output_class_serialize_for_encoding(&mut self, encoding: Encoding) -> std::io::Result<()> {
+    fn output_class_serialize_for_encoding(&mut self) -> std::io::Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r"
@@ -784,11 +779,8 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
         )
     }
 
-    fn output_class_deserialize_for_encoding(
-        &mut self,
-        name: &str,
-        encoding: Encoding,
-    ) -> std::io::Result<()> {
+    fn output_class_deserialize_for_encoding(&mut self, name: &str) -> std::io::Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r#"

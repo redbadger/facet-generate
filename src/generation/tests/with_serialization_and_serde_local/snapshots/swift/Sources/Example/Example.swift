@@ -13,11 +13,26 @@ public struct Child: Hashable {
         try serializer.decrease_container_depth()
     }
 
+    public func bincodeSerialize() throws -> [UInt8] {
+        let serializer = BincodeSerializer.init();
+        try self.serialize(serializer: serializer)
+        return serializer.get_bytes()
+    }
+
     public static func deserialize<D: Deserializer>(deserializer: D) throws -> Child {
         try deserializer.increase_container_depth()
         let name = try deserializer.deserialize_str()
         try deserializer.decrease_container_depth()
         return Child.init(name: name)
+    }
+
+    public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
+        let deserializer = BincodeDeserializer.init(input: input);
+        let obj = try deserialize(deserializer: deserializer)
+        if deserializer.get_buffer_offset() < input.count {
+            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+        }
+        return obj
     }
 }
 
@@ -34,6 +49,12 @@ indirect public enum Parent: Hashable {
         try serializer.decrease_container_depth()
     }
 
+    public func bincodeSerialize() throws -> [UInt8] {
+        let serializer = BincodeSerializer.init();
+        try self.serialize(serializer: serializer)
+        return serializer.get_bytes()
+    }
+
     public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
         let index = try deserializer.deserialize_variant_index()
         try deserializer.increase_container_depth()
@@ -44,6 +65,15 @@ indirect public enum Parent: Hashable {
             return .child(x)
         default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Parent: \(index)")
         }
+    }
+
+    public static func bincodeDeserialize(input: [UInt8]) throws -> Parent {
+        let deserializer = BincodeDeserializer.init(input: input);
+        let obj = try deserialize(deserializer: deserializer)
+        if deserializer.get_buffer_offset() < input.count {
+            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+        }
+        return obj
     }
 }
 

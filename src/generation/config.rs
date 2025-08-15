@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
@@ -15,27 +15,11 @@ use crate::{
     reflection::format::{Format, FormatHolder},
 };
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize)]
-pub enum Serialization {
-    #[default]
-    Bincode,
-    Bcs,
-    None,
-}
-
-impl Serialization {
-    #[must_use]
-    pub fn is_enabled(&self) -> bool {
-        *self != Serialization::None
-    }
-}
-
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
-    pub serialization: Serialization,
-    pub encodings: BTreeSet<Encoding>,
+    pub encoding: Encoding,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
@@ -45,8 +29,11 @@ pub struct CodeGeneratorConfig {
     pub has_bigint: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
 pub enum Encoding {
+    #[default]
+    None,
+    Json,
     Bincode,
     Bcs,
 }
@@ -104,8 +91,7 @@ impl CodeGeneratorConfig {
     pub fn new(module_name: String) -> Self {
         Self {
             module_name,
-            serialization: Serialization::default(),
-            encodings: BTreeSet::new(),
+            encoding: Encoding::default(),
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
@@ -121,28 +107,27 @@ impl CodeGeneratorConfig {
         &self.module_name
     }
 
-    /// Whether to include serialization methods.
+    /// for Java: updates the module name to be a child of the specified parent
     #[must_use]
-    pub fn with_serialization(mut self, serialization: Serialization) -> Self {
-        self.serialization = serialization;
+    pub fn with_parent(mut self, parent: &str) -> Self {
+        if parent == self.module_name() {
+            return self;
+        }
+
+        self.module_name = format!("{}.{}", parent, self.module_name());
         self
     }
 
-    /// Do not include serialization methods.
+    /// Which encoding to use.
     #[must_use]
-    pub fn without_serialization(mut self) -> Self {
-        self.serialization = Serialization::None;
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
         self
     }
 
-    /// Whether to include specialized methods for specific encodings.
     #[must_use]
-    pub fn with_encodings<I>(mut self, encodings: I) -> Self
-    where
-        I: IntoIterator<Item = Encoding>,
-    {
-        self.encodings = encodings.into_iter().collect();
-        self
+    pub fn has_encoding(&self) -> bool {
+        self.encoding != Encoding::None
     }
 
     /// Container names provided by other modules.
@@ -204,6 +189,8 @@ impl Encoding {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
+            Encoding::None => "none",
+            Encoding::Json => "json",
             Encoding::Bincode => "bincode",
             Encoding::Bcs => "bcs",
         }
@@ -286,4 +273,27 @@ pub struct ExternalPackage {
     pub module_name: Option<String>,
     /// An optional string to specify the version of a published package.
     pub version: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_parent() {
+        let root_package = "root";
+        let child_package = "child";
+
+        let root_config = CodeGeneratorConfig::new(root_package.to_string());
+
+        let actual = root_config.with_parent(root_package).module_name;
+        let expected = root_package;
+        assert_eq!(&actual, expected);
+
+        let actual = CodeGeneratorConfig::new(child_package.to_string())
+            .with_parent(root_package)
+            .module_name;
+        let expected = format!("{root_package}.{child_package}");
+        assert_eq!(&actual, &expected);
+    }
 }

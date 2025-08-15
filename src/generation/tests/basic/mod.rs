@@ -47,11 +47,7 @@ fn test() {
                 let package_name = "com.example";
                 let mut installer = java::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .with_parent(package_name)
-                        .config()
-                        .clone()
-                        .without_serialization();
+                    let config = module.config().clone().with_parent(package_name);
                     installer.install_module(&config, registry).unwrap();
                 }
             }
@@ -59,8 +55,7 @@ fn test() {
                 let package_name = "com.example";
                 let mut installer = kotlin::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
@@ -68,8 +63,7 @@ fn test() {
                 let package_name = "Example";
                 let mut installer = swift::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
@@ -77,8 +71,7 @@ fn test() {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().without_serialization();
-                    installer.install_module(&config, registry).unwrap();
+                    installer.install_module(module.config(), registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }

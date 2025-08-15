@@ -91,7 +91,7 @@ impl<'a> CodeGenerator<'a> {
             emitter.output_container(&mut writer, &name.name, format)?;
         }
 
-        if self.config.serialization.is_enabled() {
+        if self.config.has_encoding() {
             emitter.output_helpers(&mut writer, registry)?;
         }
 

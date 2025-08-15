@@ -23,8 +23,7 @@ fn test_that_kotlin_code_compiles() {
 
     let mut installer = kotlin::Installer::new(package_name, &dir, &[]);
     for (module, registry) in &module::split(package_name, &registry) {
-        let config = module.config().clone().without_serialization();
-        installer.install_module(&config, registry).unwrap();
+        installer.install_module(module.config(), registry).unwrap();
     }
     installer.install_manifest(package_name).unwrap();
 

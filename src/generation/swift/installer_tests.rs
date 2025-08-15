@@ -2,7 +2,7 @@ use facet::Facet;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
         swift::installer::Installer,
     },
     reflect,
@@ -54,9 +54,8 @@ fn manifest_with_serde_as_target() {
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     installer.install_serde_runtime().unwrap();
@@ -113,9 +112,8 @@ fn manifest_with_serde_as_a_remote_dependency() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -172,9 +170,8 @@ fn manifest_with_serde_as_a_local_dependency() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -225,9 +222,8 @@ fn manifest_with_namespaces() {
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -277,9 +273,8 @@ fn manifest_with_disjoint_namespaces() {
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -388,9 +383,8 @@ fn manifest_with_namespaces_and_dependencies() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -454,9 +448,8 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);

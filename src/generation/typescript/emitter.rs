@@ -8,7 +8,7 @@ use heck::ToUpperCamelCase;
 use crate::{
     Registry,
     generation::{
-        PackageLocation, Serialization, common, indent::IndentWrite, typescript::CodeGenerator,
+        Encoding, PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
         ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
@@ -40,7 +40,7 @@ where
     }
 
     pub fn output_preamble(&mut self, out: &mut T) -> std::io::Result<()> {
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             let (serde, bcs) = match self.generator.target {
                 InstallTarget::Node => ("serde", "bcs"),
                 InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts"),
@@ -65,7 +65,7 @@ where
                 out,
                 r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
             )?;
-            if let Serialization::Bcs = self.generator.config.serialization {
+            if let Encoding::Bcs = self.generator.config.encoding {
                 writeln!(
                     out,
                     r#"import {{ BcsSerializer, BcsDeserializer }} from "../{bcs}";"#
@@ -569,7 +569,7 @@ return list;
         out.unindent();
         writeln!(out, "}}\n")?;
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(out, "public serialize(serializer: Serializer): void {{",)?;
             out.indent();
             if let Some(index) = variant_index {
@@ -586,7 +586,7 @@ return list;
             writeln!(out, "}}\n")?;
         }
         // Deserialize (struct) or Load (variant)
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             if variant_index.is_none() {
                 writeln!(
                     out,
@@ -634,7 +634,7 @@ return list;
         self.output_comment(out, name)?;
         writeln!(out, "export abstract class {name} {{")?;
         out.indent();
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(out, "abstract serialize(serializer: Serializer): void;\n")?;
             write!(
                 out,

@@ -23,7 +23,7 @@ fn test_java_runtime_on_simple_data(runtime: Runtime) {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encodings([runtime.into()]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(runtime.into());
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
@@ -144,7 +144,7 @@ fn test_java_runtime_on_supported_types(runtime: Runtime) {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encodings([runtime.into()]);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(runtime.into());
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
