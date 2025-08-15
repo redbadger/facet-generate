@@ -2346,3 +2346,30 @@ fn struct_with_rc() {
         - []
     ");
 }
+
+#[test]
+fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum MyEnum {
+        Variant1((i32, u8)),
+    }
+
+    let registry = RegistryBuilder::new().add_type::<MyEnum>().build();
+    // TODO: this output is obviously wrong, the `name: (⋯)` is because it's an anonymous tuple struct
+    // so what should be name be (if it's a separate type)?
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            Variant1:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: (⋯)
+              - []
+        - []
+    ");
+}
