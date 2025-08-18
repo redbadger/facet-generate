@@ -38,6 +38,13 @@ pub enum Encoding {
     Bcs,
 }
 
+impl Encoding {
+    #[must_use]
+    pub fn is_json(self) -> bool {
+        self == Encoding::Json
+    }
+}
+
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).
 pub type ExternalDefinitions =
     std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;

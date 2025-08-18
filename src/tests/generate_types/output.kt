@@ -1,12 +1,7 @@
 package com.example
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-@Serializable
 data object CustomType
 
-@Serializable
 data class Types(
     val s: String,
     val static_s: String,

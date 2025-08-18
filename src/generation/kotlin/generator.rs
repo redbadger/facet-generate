@@ -3,7 +3,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Emitter, Language,
+        CodeGen, CodeGeneratorConfig, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
     },
@@ -15,7 +15,7 @@ pub struct CodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
 }
 
-impl<'a> Language<'a> for CodeGenerator<'a> {
+impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         CodeGenerator::new(config)
     }
@@ -44,14 +44,14 @@ impl<'a> CodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
-        let module = Module::new(config);
+        let module = Module::new(&config);
         module.write(w)?;
 
         for (i, container) in registry.iter().enumerate() {
             if i > 0 {
                 writeln!(w)?;
             }
-            container.write(w)?;
+            (config.encoding, container).write(w)?;
         }
 
         Ok(())

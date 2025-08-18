@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, io::Result};
 use indoc::writedoc;
 
 use crate::{
-    generation::{Emitter, indent::IndentWrite, module::Module},
+    generation::{Emitter, Encoding, indent::IndentWrite, module::Module},
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
@@ -16,10 +16,14 @@ impl Emitter<Kotlin> for Module {
         writeln!(w, "package {name}")?;
         writeln!(w)?;
 
-        let mut imports = vec![
-            "import kotlinx.serialization.Serializable",
-            "import kotlinx.serialization.SerialName",
-        ];
+        let mut imports = vec![];
+
+        if self.config().encoding.is_json() {
+            imports.extend_from_slice(&[
+                "import kotlinx.serialization.Serializable",
+                "import kotlinx.serialization.SerialName",
+            ]);
+        }
 
         if self.config().has_bigint {
             imports.extend_from_slice(&[
@@ -38,44 +42,41 @@ impl Emitter<Kotlin> for Module {
 
         imports.sort_unstable();
 
-        writeln!(w, "{}", imports.join("\n"))?;
-        writeln!(w)?;
+        if !imports.is_empty() {
+            writeln!(w, "{}", imports.join("\n"))?;
+            writeln!(w)?;
+        }
 
         if self.config().has_bigint {
-            emit_bigint_serializer(w)?;
+            if self.config().encoding.is_json() {
+                emit_bigint_serializer(w)?;
+            } else {
+                writeln!(w, "typealias BigInteger = java.math.BigInteger")?;
+            }
         }
 
         Ok(())
     }
 }
 
-impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
+impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (name, format) = self;
+        let (encoding, (name, format)) = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                data_object(w, &name.name, doc)?;
+                data_object(w, &name.name, None, doc, *encoding)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 type_alias(w, &name.name, format, doc)?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
-                let nameds = formats
-                    .iter()
-                    .enumerate()
-                    .map(|(i, f)| Named {
-                        name: format!("field_{i}"),
-                        doc: Doc::new(),
-                        value: f.clone(),
-                    })
-                    .collect::<Vec<_>>();
-                data_class(w, &name.name, &nameds, doc)?;
+                data_class(w, &name.name, None, &named(formats), doc, *encoding)?;
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    data_object(w, &name.name, doc)?;
+                    data_object(w, &name.name, None, doc, *encoding)?;
                 } else {
-                    data_class(w, &name.name, fields, doc)?;
+                    data_class(w, &name.name, None, fields, doc, *encoding)?;
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -86,9 +87,9 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));
 
                 if all_unit_variants {
-                    enum_class(w, &name.name, variants, doc)?;
+                    enum_class(w, &name.name, variants, doc, *encoding)?;
                 } else {
-                    sealed_interface(w, &name.name, &variant_list, doc)?;
+                    sealed_interface(w, &name.name, &variant_list, doc, *encoding)?;
                 }
             }
         }
@@ -98,26 +99,6 @@ impl Emitter<Kotlin> for (&QualifiedTypeName, &ContainerFormat) {
 }
 
 impl Emitter<Kotlin> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        self.doc.write(w)?;
-
-        let name = &self.name;
-        write!(w, "val {name}: ")?;
-
-        self.value.write(w)?;
-
-        // Add = null default only for top-level Option types
-        if matches!(self.value, Format::Option(_)) {
-            write!(w, " = null")?;
-        }
-
-        writeln!(w, ",")?;
-
-        Ok(())
-    }
-}
-
-impl Emitter<Kotlin> for &Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
         self.doc.write(w)?;
 
@@ -153,12 +134,10 @@ pub enum VariantContext {
     EnumClass,
 }
 
-impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
+impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
     #[allow(clippy::too_many_lines)]
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (variant, context) = *self;
-
-        variant.doc.write(w)?;
+        let (variant, context, encoding) = *self;
 
         let name = &variant.name;
         match (&variant.value, context) {
@@ -166,92 +145,57 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 unreachable!("placeholders should not get this far")
             }
             (VariantFormat::Unit, VariantContext::SealedInterface(interface_name)) => {
-                writedoc!(
-                    w,
-                    r#"
-                        @Serializable
-                        @SerialName("{name}")
-                        data object {name} : {interface_name} {{
-                            override val serialName: String = "{name}"
-                        }}
-                    "#
-                )?;
+                data_object(w, name, Some(interface_name), &variant.doc, encoding)?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
+                variant.doc.write(w)?;
                 let name_upper = variant.name.to_uppercase();
-                write!(
-                    w,
-                    r#"@SerialName("{name}") {name_upper}"#,
-                    name = variant.name
-                )?;
+                if encoding.is_json() {
+                    let name = &variant.name;
+                    write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
+                } else {
+                    write!(w, "{name_upper}")?;
+                }
             }
             (VariantFormat::NewType(format), VariantContext::SealedInterface(interface_name)) => {
-                writedoc!(
+                data_class(
                     w,
-                    r#"
-                        @Serializable
-                        @SerialName("{name}")
-                        data class {name}(
-                            val value: "#
+                    name,
+                    Some(interface_name),
+                    &[Named {
+                        name: "value".to_string(),
+                        doc: Doc::new(),
+                        value: Format::clone(format),
+                    }],
+                    &variant.doc,
+                    encoding,
                 )?;
-                format.write(w)?;
-                writeln!(w, ",")?;
-                writeln!(w, ") : {interface_name} {{")?;
-                w.indent();
-                writeln!(w, r#"override val serialName: String = "{name}""#)?;
-                w.unindent();
-                writeln!(w, "}}")?;
             }
             (VariantFormat::NewType(_format), VariantContext::EnumClass) => {
                 unreachable!("NewType variants are not supported in enum classes")
             }
             (VariantFormat::Tuple(formats), VariantContext::SealedInterface(interface_name)) => {
-                writedoc!(
+                data_class(
                     w,
-                    r#"
-                        @Serializable
-                        @SerialName("{name}")
-                        data class {name}(
-                    "#
+                    name,
+                    Some(interface_name),
+                    &named(formats),
+                    &variant.doc,
+                    encoding,
                 )?;
-
-                w.indent();
-                for (i, format) in formats.iter().enumerate() {
-                    write!(w, "val field_{i}: ")?;
-                    format.write(w)?;
-                    writeln!(w, ",")?;
-                }
-                w.unindent();
-                writeln!(w, ") : {interface_name} {{")?;
-                w.indent();
-                writeln!(w, r#"override val serialName: String = "{name}""#)?;
-                w.unindent();
-                writeln!(w, "}}")?;
             }
             (VariantFormat::Tuple(_formats), VariantContext::EnumClass) => {
                 unreachable!("Tuple variants are not supported in enum classes")
             }
             (VariantFormat::Struct(fields), VariantContext::SealedInterface(interface_name)) => {
-                writedoc!(
+                data_class(
                     w,
-                    r#"
-                        @Serializable
-                        @SerialName("{name}")
-                        data class {name}(
-                    "#
+                    name,
+                    Some(interface_name),
+                    fields,
+                    &variant.doc,
+                    encoding,
                 )?;
-
-                w.indent();
-                for field in fields {
-                    field.write(w)?;
-                    writeln!(w)?;
-                }
-                w.unindent();
-                writeln!(w, ") : {interface_name} {{")?;
-                w.indent();
-                writeln!(w, r#"override val serialName: String = "{name}""#)?;
-                w.unindent();
-                writeln!(w, "}}")?;
             }
             (VariantFormat::Struct(_fields), VariantContext::EnumClass) => {
                 unreachable!("Struct variants are not supported in enum classes")
@@ -279,7 +223,7 @@ impl Emitter<Kotlin> for Format {
             Format::U16 => write!(w, "UShort"),
             Format::U32 => write!(w, "UInt"),
             Format::U64 => write!(w, "ULong"),
-            Format::I128 | Format::U128 => write!(w, "BigIntegerJson"),
+            Format::I128 | Format::U128 => write!(w, "BigInteger"),
             Format::F32 => write!(w, "Float"),
             Format::F64 => write!(w, "Double"),
             Format::Char | Format::Str => write!(w, "String"),
@@ -352,16 +296,27 @@ impl Emitter<Kotlin> for Format {
     }
 }
 
-fn data_object<W: IndentWrite>(w: &mut W, name: &str, doc: &Doc) -> Result<()> {
+fn data_object<W: IndentWrite>(
+    w: &mut W,
+    name: &str,
+    interface: Option<&str>,
+    doc: &Doc,
+    encoding: Encoding,
+) -> Result<()> {
     doc.write(w)?;
 
-    writedoc!(
-        w,
-        "
-            @Serializable
-            data object {name}
-        "
-    )
+    if encoding.is_json() {
+        writeln!(w, "@Serializable")?;
+        writeln!(w, r#"@SerialName("{name}")"#)?;
+    }
+
+    write!(w, "data object {name}")?;
+
+    if let Some(interface) = interface {
+        write!(w, ": {interface}")?;
+    }
+
+    writeln!(w)
 }
 
 fn type_alias<W: IndentWrite>(w: &mut W, name: &str, format: &Format, doc: &Doc) -> Result<()> {
@@ -375,12 +330,18 @@ fn type_alias<W: IndentWrite>(w: &mut W, name: &str, format: &Format, doc: &Doc)
 fn data_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
+    interface: Option<&str>,
     fields: &[Named<Format>],
     doc: &Doc,
+    encoding: Encoding,
 ) -> Result<()> {
     doc.write(w)?;
 
-    writeln!(w, "@Serializable")?;
+    if encoding.is_json() {
+        writeln!(w, "@Serializable")?;
+        writeln!(w, r#"@SerialName("{name}")"#)?;
+    }
+
     writeln!(w, "data class {name}(")?;
 
     w.indent();
@@ -389,7 +350,15 @@ fn data_class<W: IndentWrite>(
     }
     w.unindent();
 
-    writeln!(w, ")")
+    write!(w, ")")?;
+
+    if let Some(interface) = interface {
+        write!(w, " : {interface}")?;
+    }
+
+    writeln!(w)?;
+
+    Ok(())
 }
 
 fn enum_class<W: IndentWrite>(
@@ -397,35 +366,39 @@ fn enum_class<W: IndentWrite>(
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
+    encoding: Encoding,
 ) -> Result<()> {
     doc.write(w)?;
 
-    writedoc!(
-        w,
-        "
-            @Serializable
-            enum class {name} {{
-        "
-    )?;
+    if encoding.is_json() {
+        writeln!(w, "@Serializable")?;
+        writeln!(w, r#"@SerialName("{name}")"#)?;
+    }
+
+    writeln!(w, "enum class {name} {{")?;
 
     w.indent();
+
     for (i, variant) in variants {
         if *i > 0 {
             writeln!(w, ",")?;
         }
 
-        (variant, &VariantContext::EnumClass).write(w)?;
+        (variant, &VariantContext::EnumClass, encoding).write(w)?;
     }
     writeln!(w, ";")?;
     writeln!(w)?;
 
-    writedoc!(
-        w,
+    if encoding.is_json() {
+        writedoc!(
+            w,
+            "
+            val serialName: String
+                get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
         "
-        val serialName: String
-            get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
-    "
-    )?;
+        )?;
+    }
+
     w.unindent();
 
     writeln!(w, "}}")
@@ -436,26 +409,24 @@ fn sealed_interface<W: IndentWrite>(
     name: &str,
     variants: &[Named<VariantFormat>],
     doc: &Doc,
+    encoding: Encoding,
 ) -> Result<()> {
     doc.write(w)?;
 
-    writedoc!(
-        w,
-        "
-            @Serializable
-            sealed interface {name} {{
-                val serialName: String
-
-        "
-    )?;
+    if encoding.is_json() {
+        writeln!(w, "@Serializable")?;
+        writeln!(w, r#"@SerialName("{name}")"#)?;
+    }
+    writeln!(w, "sealed interface {name} {{")?;
 
     w.indent();
+
     for (index, variant) in variants.iter().enumerate() {
         if index > 0 {
             writeln!(w)?;
         }
         let ctx = VariantContext::SealedInterface(name.to_string());
-        (variant, &ctx).write(w)?;
+        (variant, &ctx, encoding).write(w)?;
     }
     w.unindent();
 
@@ -466,7 +437,7 @@ fn emit_bigint_serializer<W: IndentWrite>(w: &mut W) -> Result<()> {
     writedoc!(
         w,
         r#"
-        typealias BigIntegerJson = @Serializable(with = BigIntegerSerializer::class) BigInteger
+        typealias BigInteger = @Serializable(with = BigIntegerSerializer::class) BigInteger
 
         private object BigIntegerSerializer : KSerializer<BigInteger> {{
             override val descriptor = PrimitiveSerialDescriptor("java.math.BigInteger", PrimitiveKind.STRING)
@@ -485,6 +456,18 @@ fn emit_bigint_serializer<W: IndentWrite>(w: &mut W) -> Result<()> {
         }}
         "#
     )
+}
+
+fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
+    formats
+        .iter()
+        .enumerate()
+        .map(|(i, f)| Named {
+            name: format!("field_{i}"),
+            doc: Doc::new(),
+            value: f.clone(),
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
-use crate::{Registry, generation::Language};
+use crate::{Registry, generation::CodeGen};
 use anyhow::Result;
 use expect_test::ExpectFile;
 
-fn check<'a, L: Language<'a>>(registry: &Registry, mut lang: L, expect: &ExpectFile) -> Result<()> {
+fn check<'a, L: CodeGen<'a>>(registry: &Registry, mut lang: L, expect: &ExpectFile) -> Result<()> {
     let mut output: Vec<u8> = Vec::new();
 
     lang.write_output(&mut output, registry)?;
@@ -30,7 +30,7 @@ macro_rules! test {
             use anyhow::Result;
             use expect_test::expect_file;
             use $crate::{
-                generation::{CodeGeneratorConfig, Language},
+                generation::{CodeGen, CodeGeneratorConfig},
                 reflection::RegistryBuilder,
             };
             use $crate::generation::{$($language),*};
@@ -47,7 +47,7 @@ macro_rules! test {
                 .build();
             let package_name = test!(@package $language).to_string();
             let cfg = CodeGeneratorConfig::new(package_name);
-            let generator = <$language::CodeGenerator as Language>::new(&cfg);
+            let generator = <$language::CodeGenerator as CodeGen>::new(&cfg);
             let expect = expect_file!(test!(@out $language));
 
             check(&registry, generator, &expect)?;

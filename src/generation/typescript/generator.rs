@@ -5,7 +5,7 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Language,
+        CodeGen, CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
         typescript::{InstallTarget, emitter::TypeScriptEmitter},
     },
@@ -23,7 +23,7 @@ pub struct CodeGenerator<'a> {
     pub(crate) target: InstallTarget,
 }
 
-impl<'a> Language<'a> for CodeGenerator<'a> {
+impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         CodeGenerator::new(config, InstallTarget::Node)
     }
