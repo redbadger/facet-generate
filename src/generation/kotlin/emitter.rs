@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, io::Result};
+use std::{
+    collections::BTreeMap,
+    io::{Result, Write},
+};
 
 use indoc::writedoc;
 
@@ -16,39 +19,48 @@ impl Emitter<Kotlin> for Module {
         writeln!(w, "package {name}")?;
         writeln!(w)?;
 
-        let mut imports = vec![];
+        let encoding = self.config().encoding;
+        let for_json = encoding.is_json();
+        let has_bigint = self.config().has_bigint;
 
-        if self.config().encoding.is_json() {
-            imports.extend_from_slice(&[
+        let mut imports = match encoding {
+            Encoding::Json => vec![
                 "import kotlinx.serialization.Serializable",
                 "import kotlinx.serialization.SerialName",
-            ]);
+            ],
+            Encoding::Bincode => vec![
+                "import com.novi.bincode.BincodeDeserializer",
+                "import com.novi.bincode.BincodeSerializer",
+                "import com.novi.serde.DeserializationError",
+                "import com.novi.serde.Deserializer",
+                "import com.novi.serde.Serializer",
+            ],
+            _ => vec![],
+        };
+        if has_bigint {
+            if let Encoding::Json = encoding {
+                imports.extend_from_slice(&[
+                    "import java.math.BigInteger",
+                    "import kotlinx.serialization.KSerializer",
+                    "import kotlinx.serialization.descriptors.PrimitiveKind",
+                    "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
+                    "import kotlinx.serialization.encoding.Decoder",
+                    "import kotlinx.serialization.encoding.Encoder",
+                    "import kotlinx.serialization.json.JsonDecoder",
+                    "import kotlinx.serialization.json.JsonEncoder",
+                    "import kotlinx.serialization.json.JsonUnquotedLiteral",
+                    "import kotlinx.serialization.json.jsonPrimitive",
+                ]);
+            }
         }
-
-        if self.config().has_bigint {
-            imports.extend_from_slice(&[
-                "import java.math.BigInteger",
-                "import kotlinx.serialization.KSerializer",
-                "import kotlinx.serialization.descriptors.PrimitiveKind",
-                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
-                "import kotlinx.serialization.encoding.Decoder",
-                "import kotlinx.serialization.encoding.Encoder",
-                "import kotlinx.serialization.json.JsonDecoder",
-                "import kotlinx.serialization.json.JsonEncoder",
-                "import kotlinx.serialization.json.JsonUnquotedLiteral",
-                "import kotlinx.serialization.json.jsonPrimitive",
-            ]);
-        }
-
         imports.sort_unstable();
-
         if !imports.is_empty() {
             writeln!(w, "{}", imports.join("\n"))?;
             writeln!(w)?;
         }
 
-        if self.config().has_bigint {
-            if self.config().encoding.is_json() {
+        if has_bigint {
+            if for_json {
                 emit_bigint_serializer(w)?;
             } else {
                 writeln!(w, "typealias BigInteger = java.math.BigInteger")?;
@@ -67,7 +79,18 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
                 data_object(w, &name.name, None, doc, *encoding)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
-                type_alias(w, &name.name, format, doc)?;
+                data_class(
+                    w,
+                    &name.name,
+                    None,
+                    &[Named {
+                        name: "value".to_string(),
+                        doc: Doc::new(),
+                        value: Format::clone(format),
+                    }],
+                    doc,
+                    *encoding,
+                )?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
                 data_class(w, &name.name, None, &named(formats), doc, *encoding)?;
@@ -112,9 +135,7 @@ impl Emitter<Kotlin> for Named<Format> {
             write!(w, " = null")?;
         }
 
-        writeln!(w, ",")?;
-
-        Ok(())
+        writeln!(w, ",")
     }
 }
 
@@ -316,15 +337,29 @@ fn data_object<W: IndentWrite>(
         write!(w, ": {interface}")?;
     }
 
-    writeln!(w)
-}
+    if encoding.is_bincode() {
+        write!(w, " ")?;
+        start_block(w)?;
+        write!(w, "fun serialize(serializer: Serializer) ")?;
+        empty_block(w)?;
+        writeln!(w)?;
+        write_bincode_serialize(w)?;
+        writeln!(w)?;
+        write!(w, "companion object ")?;
+        start_block(w)?;
+        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+        start_block(w)?;
+        writeln!(w, "return {name}()")?;
+        end_block(w)?;
+        writeln!(w)?;
+        write_bincode_deserialize(w, name)?;
+        end_block(w)?;
+        end_block(w)?;
+    } else {
+        writeln!(w)?;
+    }
 
-fn type_alias<W: IndentWrite>(w: &mut W, name: &str, format: &Format, doc: &Doc) -> Result<()> {
-    doc.write(w)?;
-
-    write!(w, "typealias {name} = ")?;
-    format.write(w)?;
-    writeln!(w)
+    Ok(())
 }
 
 fn data_class<W: IndentWrite>(
@@ -356,7 +391,53 @@ fn data_class<W: IndentWrite>(
         write!(w, " : {interface}")?;
     }
 
-    writeln!(w)?;
+    if encoding.is_bincode() {
+        write!(w, " ")?;
+        start_block(w)?;
+        write!(w, "fun serialize(serializer: Serializer) ")?;
+        if fields.is_empty() {
+            empty_block(w)?;
+        } else {
+            start_block(w)?;
+            writeln!(w, "serializer.increase_container_depth()")?;
+            for field in fields {
+                write_serialize(w, &field.name, &field.value)?;
+            }
+            writeln!(w, "serializer.decrease_container_depth()")?;
+            end_block(w)?;
+        }
+        writeln!(w)?;
+        write_bincode_serialize(w)?;
+        writeln!(w)?;
+        write!(w, "companion object ")?;
+        start_block(w)?;
+        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+        start_block(w)?;
+        if fields.is_empty() {
+            writeln!(w, "return {name}()")?;
+        } else {
+            writeln!(w, "deserializer.increase_container_depth()")?;
+            for field in fields {
+                write_deserialize(w, &field.name, &field.value)?;
+            }
+            writeln!(w, "deserializer.decrease_container_depth()")?;
+            write!(w, "return {name}(")?;
+            for (i, field) in fields.iter().enumerate() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write!(w, "{}", field.name)?;
+            }
+            writeln!(w, ")")?;
+        }
+        end_block(w)?;
+        writeln!(w)?;
+        write_bincode_deserialize(w, name)?;
+        end_block(w)?;
+        end_block(w)?;
+    } else {
+        writeln!(w)?;
+    }
 
     Ok(())
 }
@@ -468,6 +549,104 @@ fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
             value: f.clone(),
         })
         .collect()
+}
+
+fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        fun bincodeSerialize(): ByteArray {{
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }}
+        "
+    )
+}
+
+fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
+    writedoc!(
+        w,
+        r#"
+        fun bincodeDeserialize(input: ByteArray?): {name} {{
+            if (input == null) {{
+                throw DeserializationError("Cannot deserialize null array")
+            }}
+            val deserializer = BincodeDeserializer(input)
+            val value = deserialize(deserializer)
+            if (deserializer.get_buffer_offset() < input.size) {{
+                throw DeserializationError("Some input bytes were not read")
+            }}
+            return value
+        }}
+        "#
+    )
+}
+
+fn write_serialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<()> {
+    match format {
+        Format::TypeName(_) => writeln!(w, "{value}.serialize(serializer)"),
+        Format::Unit => writeln!(w, "serializer.serialize_unit({value})"),
+        Format::Bool => writeln!(w, "serializer.serialize_bool({value})"),
+        Format::I8 => writeln!(w, "serializer.serialize_i8({value})"),
+        Format::I16 => writeln!(w, "serializer.serialize_i16({value})"),
+        Format::I32 => writeln!(w, "serializer.serialize_i32({value})"),
+        Format::I64 => writeln!(w, "serializer.serialize_i64({value})"),
+        Format::I128 => writeln!(w, "serializer.serialize_i128({value})"),
+        Format::U8 => writeln!(w, "serializer.serialize_u8({value})"),
+        Format::U16 => writeln!(w, "serializer.serialize_u16({value})"),
+        Format::U32 => writeln!(w, "serializer.serialize_u32({value})"),
+        Format::U64 => writeln!(w, "serializer.serialize_u64({value})"),
+        Format::U128 => writeln!(w, "serializer.serialize_u128({value})"),
+        Format::F32 => writeln!(w, "serializer.serialize_f32({value})"),
+        Format::F64 => writeln!(w, "serializer.serialize_f64({value})"),
+        Format::Char => writeln!(w, "serializer.serialize_char({value})"),
+        Format::Str => writeln!(w, "serializer.serialize_str({value})"),
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes({value})"),
+        _ => Ok(()),
+    }
+}
+
+fn write_deserialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<()> {
+    match format {
+        Format::TypeName(qualified_name) => {
+            let name = &qualified_name.name;
+            writeln!(w, "val {value} = {name}.deserialize(deserializer)")
+        }
+        Format::Unit => writeln!(w, "val {value} = deserializer.deserialize_unit()"),
+        Format::Bool => writeln!(w, "val {value} = deserializer.deserialize_bool()"),
+        Format::I8 => writeln!(w, "val {value} = deserializer.deserialize_i8()"),
+        Format::I16 => writeln!(w, "val {value} = deserializer.deserialize_i16()"),
+        Format::I32 => writeln!(w, "val {value} = deserializer.deserialize_i32()"),
+        Format::I64 => writeln!(w, "val {value} = deserializer.deserialize_i64()"),
+        Format::I128 => writeln!(w, "val {value} = deserializer.deserialize_i128()"),
+        Format::U8 => writeln!(w, "val {value} = deserializer.deserialize_u8()"),
+        Format::U16 => writeln!(w, "val {value} = deserializer.deserialize_u16()"),
+        Format::U32 => writeln!(w, "val {value} = deserializer.deserialize_u32()"),
+        Format::U64 => writeln!(w, "val {value} = deserializer.deserialize_u64()"),
+        Format::U128 => writeln!(w, "val {value} = deserializer.deserialize_u128()"),
+        Format::F32 => writeln!(w, "val {value} = deserializer.deserialize_f32()"),
+        Format::F64 => writeln!(w, "val {value} = deserializer.deserialize_f64()"),
+        Format::Char => writeln!(w, "val {value} = deserializer.deserialize_char()"),
+        Format::Str => writeln!(w, "val {value} = deserializer.deserialize_str()"),
+        Format::Bytes => writeln!(w, "val {value} = deserializer.deserialize_bytes()"),
+        _ => Ok(()),
+    }
+}
+
+fn start_block<W: IndentWrite>(w: &mut W) -> Result<()> {
+    writeln!(w, "{{")?;
+    w.indent();
+    Ok(())
+}
+
+fn end_block<W: IndentWrite>(w: &mut W) -> Result<()> {
+    w.unindent();
+    writeln!(w, "}}")
+}
+
+fn empty_block<W: Write>(w: &mut W) -> Result<()> {
+    writeln!(w, "{{}}")
 }
 
 #[cfg(test)]

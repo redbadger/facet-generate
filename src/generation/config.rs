@@ -40,8 +40,23 @@ pub enum Encoding {
 
 impl Encoding {
     #[must_use]
+    pub fn is_none(self) -> bool {
+        self == Encoding::None
+    }
+
+    #[must_use]
     pub fn is_json(self) -> bool {
         self == Encoding::Json
+    }
+
+    #[must_use]
+    pub fn is_bincode(self) -> bool {
+        self == Encoding::Bincode
+    }
+
+    #[must_use]
+    pub fn is_bcs(self) -> bool {
+        self == Encoding::Bcs
     }
 }
 
@@ -134,7 +149,7 @@ impl CodeGeneratorConfig {
 
     #[must_use]
     pub fn has_encoding(&self) -> bool {
-        self.encoding != Encoding::None
+        !self.encoding.is_none()
     }
 
     /// Container names provided by other modules.
