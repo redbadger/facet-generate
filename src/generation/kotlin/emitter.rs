@@ -399,11 +399,11 @@ fn data_class<W: IndentWrite>(
             empty_block(w)?;
         } else {
             start_block(w)?;
-            writeln!(w, "serializer.increase_container_depth()")?;
+            push_serializer(w)?;
             for field in fields {
                 write_serialize(w, &field.name, &field.value)?;
             }
-            writeln!(w, "serializer.decrease_container_depth()")?;
+            pop_serializer(w)?;
             end_block(w)?;
         }
         writeln!(w)?;
@@ -416,11 +416,11 @@ fn data_class<W: IndentWrite>(
         if fields.is_empty() {
             writeln!(w, "return {name}()")?;
         } else {
-            writeln!(w, "deserializer.increase_container_depth()")?;
+            push_deserializer(w)?;
             for field in fields {
                 write_deserialize(w, &field.name, &field.value)?;
             }
-            writeln!(w, "deserializer.decrease_container_depth()")?;
+            pop_deserializer(w)?;
             write!(w, "return {name}(")?;
             for (i, field) in fields.iter().enumerate() {
                 if i > 0 {
@@ -603,7 +603,42 @@ fn write_serialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<
         Format::Char => writeln!(w, "serializer.serialize_char({value})"),
         Format::Str => writeln!(w, "serializer.serialize_str({value})"),
         Format::Bytes => writeln!(w, "serializer.serialize_bytes({value})"),
-        _ => Ok(()),
+        Format::Option(_format) => todo!(),
+        Format::Seq(_format) => todo!(),
+        Format::Set(_format) => todo!(),
+        Format::Map { key: _, value: _ } => todo!(),
+        Format::Tuple(formats) => match formats.len() {
+            0 => Ok(()),
+            1 => {
+                push_serializer(w)?;
+                write_serialize(w, "value", &formats[0])?;
+                pop_serializer(w)
+            }
+            2 => {
+                push_serializer(w)?;
+                write_serialize(w, &format!("{value}.first"), &formats[0])?;
+                write_serialize(w, &format!("{value}.second"), &formats[1])?;
+                pop_serializer(w)
+            }
+            3 => {
+                push_serializer(w)?;
+                write_serialize(w, &format!("{value}.first"), &formats[0])?;
+                write_serialize(w, &format!("{value}.second"), &formats[1])?;
+                write_serialize(w, &format!("{value}.third"), &formats[2])?;
+                pop_serializer(w)
+            }
+            _ => {
+                for (i, format) in formats.iter().enumerate() {
+                    write_serialize(w, &format!("{value}.field_{i}"), format)?;
+                }
+                Ok(())
+            }
+        },
+        Format::TupleArray {
+            content: _,
+            size: _,
+        } => todo!(),
+        Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
 }
 
@@ -630,8 +665,78 @@ fn write_deserialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Resul
         Format::Char => writeln!(w, "val {value} = deserializer.deserialize_char()"),
         Format::Str => writeln!(w, "val {value} = deserializer.deserialize_str()"),
         Format::Bytes => writeln!(w, "val {value} = deserializer.deserialize_bytes()"),
-        _ => Ok(()),
+        Format::Option(_format) => todo!(),
+        Format::Seq(_format) => todo!(),
+        Format::Set(_format) => todo!(),
+        Format::Map { key: _, value: _ } => todo!(),
+        Format::Tuple(formats) => {
+            let len = formats.len();
+            match len {
+                0 => Ok(()),
+                1 => {
+                    push_deserializer(w)?;
+                    write_deserialize(w, "value", &formats[0])?;
+                    pop_deserializer(w)
+                }
+                2 => {
+                    push_deserializer(w)?;
+                    write_deserialize(w, &format!("{value}_first"), &formats[0])?;
+                    write_deserialize(w, &format!("{value}_second"), &formats[1])?;
+                    pop_deserializer(w)?;
+                    writeln!(w, "val {value} = Pair({value}_first, {value}_second)")
+                }
+                3 => {
+                    push_deserializer(w)?;
+                    write_deserialize(w, &format!("{value}_first"), &formats[0])?;
+                    write_deserialize(w, &format!("{value}_second"), &formats[1])?;
+                    write_deserialize(w, &format!("{value}_third"), &formats[2])?;
+                    pop_deserializer(w)?;
+                    writeln!(
+                        w,
+                        "val {value} = Triple({value}_first, {value}_second, {value}_third)"
+                    )
+                }
+                _ => {
+                    push_deserializer(w)?;
+                    for (i, format) in formats.iter().enumerate() {
+                        write_serialize(w, &format!("{value}_field_{i}"), format)?;
+                    }
+                    write!(w, "val {value} = NTuple{len}(")?;
+                    pop_deserializer(w)?;
+
+                    for (i, _format) in formats.iter().enumerate() {
+                        if i > 0 {
+                            write!(w, ", ")?;
+                        }
+                        write!(w, "{value}_field_{i}")?;
+                    }
+
+                    write!(w, ")")
+                }
+            }
+        }
+        Format::TupleArray {
+            content: _,
+            size: _,
+        } => todo!(),
+        Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
+}
+
+fn push_serializer<W: Write>(w: &mut W) -> Result<()> {
+    writeln!(w, "serializer.increase_container_depth()")
+}
+
+fn pop_serializer<W: Write>(w: &mut W) -> Result<()> {
+    writeln!(w, "serializer.decrease_container_depth()")
+}
+
+fn push_deserializer<W: Write>(w: &mut W) -> Result<()> {
+    writeln!(w, "deserializer.increase_container_depth()")
+}
+
+fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
+    writeln!(w, "deserializer.decrease_container_depth()")
 }
 
 fn start_block<W: IndentWrite>(w: &mut W) -> Result<()> {

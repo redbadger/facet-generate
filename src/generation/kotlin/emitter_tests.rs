@@ -1,3 +1,4 @@
+#![allow(clippy::too_many_lines)]
 use facet::Facet;
 
 use super::*;
@@ -263,7 +264,6 @@ fn tuple_struct() {
 }
 
 #[test]
-#[allow(clippy::too_many_lines)]
 fn struct_with_fields_of_primitive_types() {
     /// line 1
     #[derive(Facet)]
@@ -434,7 +434,6 @@ fn struct_with_fields_of_primitive_types() {
 }
 
 #[test]
-#[allow(clippy::too_many_lines)]
 fn struct_with_fields_of_user_types() {
     #[derive(Facet)]
     struct Inner1 {
@@ -688,6 +687,53 @@ fn struct_with_field_that_is_a_2_tuple() {
     data class MyStruct(
         val one: Pair<String, Int>,
     )
+    "#);
+
+    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    data class MyStruct(
+        val one: Pair<String, Int>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.increase_container_depth()
+            serializer.serialize_str(one.first)
+            serializer.serialize_i32(one.second)
+            serializer.decrease_container_depth()
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                deserializer.increase_container_depth()
+                val one_first = deserializer.deserialize_str()
+                val one_second = deserializer.deserialize_i32()
+                deserializer.decrease_container_depth()
+                val one = Pair(one_first, one_second)
+                deserializer.decrease_container_depth()
+                return MyStruct(one)
+            }
+
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
     "#);
 }
 
