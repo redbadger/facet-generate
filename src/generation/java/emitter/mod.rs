@@ -833,5 +833,8 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
 }
 
 #[cfg(test)]
-#[path = "emitter_tests.rs"]
 mod tests;
+#[cfg(test)]
+mod tests_bincode;
+#[cfg(test)]
+mod tests_json;

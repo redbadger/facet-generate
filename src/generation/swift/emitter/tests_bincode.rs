@@ -4,35 +4,7 @@
 
 use facet::Facet;
 
-use crate::generation::{
-    CodeGeneratorConfig, Encoding,
-    indent::{IndentConfig, IndentedWriter},
-    swift::{CodeGenerator, emitter::SwiftEmitter},
-};
-
-macro_rules! emit {
-    ($($ty:ident),* as $encoding:path) => {
-        || -> anyhow::Result<String> {
-            let mut out = Vec::new();
-            let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
-            let config = CodeGeneratorConfig::new("com.example".to_string())
-                .with_encoding($encoding);
-            let generator = CodeGenerator::new(&config);
-            let mut emitter = SwiftEmitter {
-                out: w,
-                generator: &generator,
-                current_namespace: Vec::new(),
-            };
-            let registry = $crate::reflect!($($ty),*);
-            for (name, format) in &registry {
-                emitter.output_container(&name.name, format).unwrap();
-            }
-            let out = String::from_utf8(out)?;
-
-            Ok(out)
-        }()
-    };
-}
+use crate::{emit_swift, generation::Encoding};
 
 #[test]
 fn unit_struct_1() {
@@ -41,51 +13,7 @@ fn unit_struct_1() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit!(UnitStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct UnitStruct: Hashable {
-
-        public init() {
-        }
-    }
-    ");
-
-    let actual = emit!(UnitStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct UnitStruct: Hashable {
-
-        public init() {
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.decrease_container_depth()
-            return UnitStruct.init()
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> UnitStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(UnitStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(UnitStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct UnitStruct: Hashable {
 
@@ -128,51 +56,7 @@ fn unit_struct_2() {
     /// line 2
     struct UnitStruct {}
 
-    let actual = emit!(UnitStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct UnitStruct: Hashable {
-
-        public init() {
-        }
-    }
-    ");
-
-    let actual = emit!(UnitStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct UnitStruct: Hashable {
-
-        public init() {
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.decrease_container_depth()
-            return UnitStruct.init()
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> UnitStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(UnitStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(UnitStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct UnitStruct: Hashable {
 
@@ -215,57 +99,7 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    let actual = emit!(NewType as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct NewType: Hashable {
-        @Indirect public var value: String
-
-        public init(value: String) {
-            self.value = value
-        }
-    }
-    ");
-
-    let actual = emit!(NewType as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct NewType: Hashable {
-        @Indirect public var value: String
-
-        public init(value: String) {
-            self.value = value
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.value)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> NewType {
-            try deserializer.increase_container_depth()
-            let value = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return NewType.init(value: value)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> NewType {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(NewType as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(NewType as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct NewType: Hashable {
         @Indirect public var value: String
@@ -312,63 +146,7 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit!(TupleStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct TupleStruct: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
-
-        public init(field0: String, field1: Int32) {
-            self.field0 = field0
-            self.field1 = field1
-        }
-    }
-    ");
-
-    let actual = emit!(TupleStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct TupleStruct: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
-
-        public init(field0: String, field1: Int32) {
-            self.field0 = field0
-            self.field1 = field1
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field0)
-            try serializer.serialize_i32(value: self.field1)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> TupleStruct {
-            try deserializer.increase_container_depth()
-            let field0 = try deserializer.deserialize_str()
-            let field1 = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return TupleStruct.init(field0: field0, field1: field1)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> TupleStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(TupleStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(TupleStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct TupleStruct: Hashable {
         @Indirect public var field0: String
@@ -438,147 +216,7 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit!(StructWithFields as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct StructWithFields: Hashable {
-        @Indirect public var unit: Unit
-        @Indirect public var bool: Bool
-        @Indirect public var i8: Int8
-        @Indirect public var i16: Int16
-        @Indirect public var i32: Int32
-        @Indirect public var i64: Int64
-        @Indirect public var i128: Int128
-        @Indirect public var u8: UInt8
-        @Indirect public var u16: UInt16
-        @Indirect public var u32: UInt32
-        @Indirect public var u64: UInt64
-        @Indirect public var u128: UInt128
-        @Indirect public var f32: Float
-        @Indirect public var f64: Double
-        @Indirect public var char: Character
-        @Indirect public var string: String
-
-        public init(unit: Unit, bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: Int128, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: UInt128, f32: Float, f64: Double, char: Character, string: String) {
-            self.unit = unit
-            self.bool = bool
-            self.i8 = i8
-            self.i16 = i16
-            self.i32 = i32
-            self.i64 = i64
-            self.i128 = i128
-            self.u8 = u8
-            self.u16 = u16
-            self.u32 = u32
-            self.u64 = u64
-            self.u128 = u128
-            self.f32 = f32
-            self.f64 = f64
-            self.char = char
-            self.string = string
-        }
-    }
-    ");
-
-    let actual = emit!(StructWithFields as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct StructWithFields: Hashable {
-        @Indirect public var unit: Unit
-        @Indirect public var bool: Bool
-        @Indirect public var i8: Int8
-        @Indirect public var i16: Int16
-        @Indirect public var i32: Int32
-        @Indirect public var i64: Int64
-        @Indirect public var i128: Int128
-        @Indirect public var u8: UInt8
-        @Indirect public var u16: UInt16
-        @Indirect public var u32: UInt32
-        @Indirect public var u64: UInt64
-        @Indirect public var u128: UInt128
-        @Indirect public var f32: Float
-        @Indirect public var f64: Double
-        @Indirect public var char: Character
-        @Indirect public var string: String
-
-        public init(unit: Unit, bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: Int128, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: UInt128, f32: Float, f64: Double, char: Character, string: String) {
-            self.unit = unit
-            self.bool = bool
-            self.i8 = i8
-            self.i16 = i16
-            self.i32 = i32
-            self.i64 = i64
-            self.i128 = i128
-            self.u8 = u8
-            self.u16 = u16
-            self.u32 = u32
-            self.u64 = u64
-            self.u128 = u128
-            self.f32 = f32
-            self.f64 = f64
-            self.char = char
-            self.string = string
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_unit(value: self.unit)
-            try serializer.serialize_bool(value: self.bool)
-            try serializer.serialize_i8(value: self.i8)
-            try serializer.serialize_i16(value: self.i16)
-            try serializer.serialize_i32(value: self.i32)
-            try serializer.serialize_i64(value: self.i64)
-            try serializer.serialize_i128(value: self.i128)
-            try serializer.serialize_u8(value: self.u8)
-            try serializer.serialize_u16(value: self.u16)
-            try serializer.serialize_u32(value: self.u32)
-            try serializer.serialize_u64(value: self.u64)
-            try serializer.serialize_u128(value: self.u128)
-            try serializer.serialize_f32(value: self.f32)
-            try serializer.serialize_f64(value: self.f64)
-            try serializer.serialize_char(value: self.char)
-            try serializer.serialize_str(value: self.string)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> StructWithFields {
-            try deserializer.increase_container_depth()
-            let unit = try deserializer.deserialize_unit()
-            let bool = try deserializer.deserialize_bool()
-            let i8 = try deserializer.deserialize_i8()
-            let i16 = try deserializer.deserialize_i16()
-            let i32 = try deserializer.deserialize_i32()
-            let i64 = try deserializer.deserialize_i64()
-            let i128 = try deserializer.deserialize_i128()
-            let u8 = try deserializer.deserialize_u8()
-            let u16 = try deserializer.deserialize_u16()
-            let u32 = try deserializer.deserialize_u32()
-            let u64 = try deserializer.deserialize_u64()
-            let u128 = try deserializer.deserialize_u128()
-            let f32 = try deserializer.deserialize_f32()
-            let f64 = try deserializer.deserialize_f64()
-            let char = try deserializer.deserialize_char()
-            let string = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return StructWithFields.init(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> StructWithFields {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(StructWithFields as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(StructWithFields as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct StructWithFields: Hashable {
         @Indirect public var unit: Unit
@@ -698,207 +336,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit!(Outer as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct Inner1: Hashable {
-        @Indirect public var field1: String
-
-        public init(field1: String) {
-            self.field1 = field1
-        }
-    }
-
-    public struct Inner2: Hashable {
-        @Indirect public var value: String
-
-        public init(value: String) {
-            self.value = value
-        }
-    }
-
-    public struct Inner3: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
-
-        public init(field0: String, field1: Int32) {
-            self.field0 = field0
-            self.field1 = field1
-        }
-    }
-
-    public struct Outer: Hashable {
-        @Indirect public var one: Inner1
-        @Indirect public var two: Inner2
-        @Indirect public var three: Inner3
-
-        public init(one: Inner1, two: Inner2, three: Inner3) {
-            self.one = one
-            self.two = two
-            self.three = three
-        }
-    }
-    ");
-
-    let actual = emit!(Outer as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct Inner1: Hashable {
-        @Indirect public var field1: String
-
-        public init(field1: String) {
-            self.field1 = field1
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field1)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner1 {
-            try deserializer.increase_container_depth()
-            let field1 = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return Inner1.init(field1: field1)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> Inner1 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-
-    public struct Inner2: Hashable {
-        @Indirect public var value: String
-
-        public init(value: String) {
-            self.value = value
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.value)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner2 {
-            try deserializer.increase_container_depth()
-            let value = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return Inner2.init(value: value)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> Inner2 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-
-    public struct Inner3: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
-
-        public init(field0: String, field1: Int32) {
-            self.field0 = field0
-            self.field1 = field1
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field0)
-            try serializer.serialize_i32(value: self.field1)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner3 {
-            try deserializer.increase_container_depth()
-            let field0 = try deserializer.deserialize_str()
-            let field1 = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return Inner3.init(field0: field0, field1: field1)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> Inner3 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-
-    public struct Outer: Hashable {
-        @Indirect public var one: Inner1
-        @Indirect public var two: Inner2
-        @Indirect public var three: Inner3
-
-        public init(one: Inner1, two: Inner2, three: Inner3) {
-            self.one = one
-            self.two = two
-            self.three = three
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try self.one.serialize(serializer: serializer)
-            try self.two.serialize(serializer: serializer)
-            try self.three.serialize(serializer: serializer)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Outer {
-            try deserializer.increase_container_depth()
-            let one = try Inner1.deserialize(deserializer: deserializer)
-            let two = try Inner2.deserialize(deserializer: deserializer)
-            let three = try Inner3.deserialize(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return Outer.init(one: one, two: two, three: three)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> Outer {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(Outer as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(Outer as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct Inner1: Hashable {
         @Indirect public var field1: String
@@ -1065,57 +503,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple2<String, Int32>
-
-        public init(one: Tuple2<String, Int32>) {
-            self.one = one
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple2<String, Int32>
-
-        public init(one: Tuple2<String, Int32>) {
-            self.one = one
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serialize_tuple2_str_i32(value: self.one, serializer: serializer)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let one = try deserialize_tuple2_str_i32(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var one: Tuple2<String, Int32>
@@ -1162,57 +550,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple3<String, Int32, UInt16>
-
-        public init(one: Tuple3<String, Int32, UInt16>) {
-            self.one = one
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple3<String, Int32, UInt16>
-
-        public init(one: Tuple3<String, Int32, UInt16>) {
-            self.one = one
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serialize_tuple3_str_i32_u16(value: self.one, serializer: serializer)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let one = try deserialize_tuple3_str_i32_u16(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var one: Tuple3<String, Int32, UInt16>
@@ -1262,57 +600,7 @@ fn struct_with_field_that_is_a_4_tuple() {
     // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple4<String, Int32, UInt16, Float>
-
-        public init(one: Tuple4<String, Int32, UInt16, Float>) {
-            self.one = one
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple4<String, Int32, UInt16, Float>
-
-        public init(one: Tuple4<String, Int32, UInt16, Float>) {
-            self.one = one
-        }
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serialize_tuple4_str_i32_u16_f32(value: self.one, serializer: serializer)
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let one = try deserialize_tuple4_str_i32_u16_f32(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var one: Tuple4<String, Int32, UInt16, Float>
@@ -1368,70 +656,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit!(EnumWithUnitVariants as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum EnumWithUnitVariants: Hashable {
-        case variant1
-        case variant2
-        case variant3
-    }
-    ");
-
-    let actual = emit!(EnumWithUnitVariants as Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    indirect public enum EnumWithUnitVariants: Hashable {
-        case variant1
-        case variant2
-        case variant3
-
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            switch self {
-            case .variant1:
-                try serializer.serialize_variant_index(value: 0)
-            case .variant2:
-                try serializer.serialize_variant_index(value: 1)
-            case .variant3:
-                try serializer.serialize_variant_index(value: 2)
-            }
-            try serializer.decrease_container_depth()
-        }
-
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> EnumWithUnitVariants {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                try deserializer.decrease_container_depth()
-                return .variant1
-            case 1:
-                try deserializer.decrease_container_depth()
-                return .variant2
-            case 2:
-                try deserializer.decrease_container_depth()
-                return .variant3
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for EnumWithUnitVariants: \(index)")
-            }
-        }
-
-        public static func jsonDeserialize(input: [UInt8]) throws -> EnumWithUnitVariants {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
-        }
-    }
-    "#);
-
-    let actual = emit!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
+    let actual = emit_swift!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum EnumWithUnitVariants: Hashable {
         case variant1
@@ -1495,14 +720,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case variant1
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case variant1
@@ -1516,8 +734,8 @@ fn enum_with_unit_struct_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1533,8 +751,8 @@ fn enum_with_unit_struct_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1554,14 +772,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case variant1(String)
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case variant1(String)
@@ -1576,8 +787,8 @@ fn enum_with_1_tuple_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1594,8 +805,8 @@ fn enum_with_1_tuple_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1616,15 +827,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case variant1(String)
-        case variant2(Int32)
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case variant1(String)
@@ -1643,8 +846,8 @@ fn enum_with_newtype_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1665,8 +868,8 @@ fn enum_with_newtype_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1687,15 +890,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case variant1(String, Int32)
-        case variant2(Bool, Double, UInt8)
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case variant1(String, Int32)
@@ -1717,8 +912,8 @@ fn enum_with_tuple_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1742,8 +937,8 @@ fn enum_with_tuple_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1763,14 +958,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case variant1(field1: String, field2: Int32)
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case variant1(field1: String, field2: Int32)
@@ -1786,8 +974,8 @@ fn enum_with_struct_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1805,8 +993,8 @@ fn enum_with_struct_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1829,17 +1017,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit!(MyEnum as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    indirect public enum MyEnum: Hashable {
-        case unit
-        case newType(String)
-        case tuple(String, Int32)
-        case struct(field: Bool)
-    }
-    ");
-
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     indirect public enum MyEnum: Hashable {
         case unit
@@ -1866,8 +1044,8 @@ fn enum_with_mixed_variants() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1896,8 +1074,8 @@ fn enum_with_mixed_variants() {
             }
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyEnum {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1917,22 +1095,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var items: [String]
-        @Indirect public var numbers: [Int32]
-        @Indirect public var nestedItems: [[String]]
-
-        public init(items: [String], numbers: [Int32], nestedItems: [[String]]) {
-            self.items = items
-            self.numbers = numbers
-            self.nestedItems = nestedItems
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var items: [String]
@@ -1953,8 +1116,8 @@ fn struct_with_vec_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -1968,8 +1131,8 @@ fn struct_with_vec_field() {
             return MyStruct.init(items: items, numbers: numbers, nestedItems: nestedItems)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -1990,22 +1153,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var optionalString: String?
-        @Indirect public var optionalNumber: Int32?
-        @Indirect public var optionalBool: Bool?
-
-        public init(optionalString: String?, optionalNumber: Int32?, optionalBool: Bool?) {
-            self.optionalString = optionalString
-            self.optionalNumber = optionalNumber
-            self.optionalBool = optionalBool
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var optionalString: String?
@@ -2026,8 +1174,8 @@ fn struct_with_option_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2041,8 +1189,8 @@ fn struct_with_option_field() {
             return MyStruct.init(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2061,20 +1209,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: std::collections::HashMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var stringToInt: [String: Int32]
-        @Indirect public var intToBool: [Int32: Bool]
-
-        public init(stringToInt: [String: Int32], intToBool: [Int32: Bool]) {
-            self.stringToInt = stringToInt
-            self.intToBool = intToBool
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var stringToInt: [String: Int32]
@@ -2092,8 +1227,8 @@ fn struct_with_hashmap_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2106,8 +1241,8 @@ fn struct_with_hashmap_field() {
             return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2129,26 +1264,7 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var optionalList: [String]?
-        @Indirect public var listOfOptionals: [Int32?]
-        @Indirect public var mapToList: [String: [Bool]]
-        @Indirect public var optionalMap: [String: Int32]?
-        @Indirect public var complex: [[String: [Bool]]?]
-
-        public init(optionalList: [String]?, listOfOptionals: [Int32?], mapToList: [String: [Bool]], optionalMap: [String: Int32]?, complex: [[String: [Bool]]?]) {
-            self.optionalList = optionalList
-            self.listOfOptionals = listOfOptionals
-            self.mapToList = mapToList
-            self.optionalMap = optionalMap
-            self.complex = complex
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var optionalList: [String]?
@@ -2175,8 +1291,8 @@ fn struct_with_nested_generics() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2192,8 +1308,8 @@ fn struct_with_nested_generics() {
             return MyStruct.init(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2214,22 +1330,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var fixedArray: [Int32]
-        @Indirect public var byteArray: [UInt8]
-        @Indirect public var stringArray: [String]
-
-        public init(fixedArray: [Int32], byteArray: [UInt8], stringArray: [String]) {
-            self.fixedArray = fixedArray
-            self.byteArray = byteArray
-            self.stringArray = stringArray
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var fixedArray: [Int32]
@@ -2250,8 +1351,8 @@ fn struct_with_array_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2265,8 +1366,8 @@ fn struct_with_array_field() {
             return MyStruct.init(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2285,20 +1386,7 @@ fn struct_with_btreemap_field() {
         int_to_bool: std::collections::BTreeMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var stringToInt: [String: Int32]
-        @Indirect public var intToBool: [Int32: Bool]
-
-        public init(stringToInt: [String: Int32], intToBool: [Int32: Bool]) {
-            self.stringToInt = stringToInt
-            self.intToBool = intToBool
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var stringToInt: [String: Int32]
@@ -2316,8 +1404,8 @@ fn struct_with_btreemap_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2330,8 +1418,8 @@ fn struct_with_btreemap_field() {
             return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2352,20 +1440,7 @@ fn struct_with_hashset_field() {
         int_set: std::collections::HashSet<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
-
-        public init(stringSet: [String], intSet: [Int32]) {
-            self.stringSet = stringSet
-            self.intSet = intSet
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var stringSet: [String]
@@ -2383,8 +1458,8 @@ fn struct_with_hashset_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2397,8 +1472,8 @@ fn struct_with_hashset_field() {
             return MyStruct.init(stringSet: stringSet, intSet: intSet)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2419,20 +1494,7 @@ fn struct_with_btreeset_field() {
         int_set: std::collections::BTreeSet<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
-
-        public init(stringSet: [String], intSet: [Int32]) {
-            self.stringSet = stringSet
-            self.intSet = intSet
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var stringSet: [String]
@@ -2450,8 +1512,8 @@ fn struct_with_btreeset_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2464,8 +1526,8 @@ fn struct_with_btreeset_field() {
             return MyStruct.init(stringSet: stringSet, intSet: intSet)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2485,20 +1547,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var boxedString: String
-        @Indirect public var boxedInt: Int32
-
-        public init(boxedString: String, boxedInt: Int32) {
-            self.boxedString = boxedString
-            self.boxedInt = boxedInt
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var boxedString: String
@@ -2516,8 +1565,8 @@ fn struct_with_box_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2530,8 +1579,8 @@ fn struct_with_box_field() {
             return MyStruct.init(boxedString: boxedString, boxedInt: boxedInt)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2550,20 +1599,7 @@ fn struct_with_rc_field() {
         rc_int: std::rc::Rc<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var rcString: String
-        @Indirect public var rcInt: Int32
-
-        public init(rcString: String, rcInt: Int32) {
-            self.rcString = rcString
-            self.rcInt = rcInt
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var rcString: String
@@ -2581,8 +1617,8 @@ fn struct_with_rc_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2595,8 +1631,8 @@ fn struct_with_rc_field() {
             return MyStruct.init(rcString: rcString, rcInt: rcInt)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2615,20 +1651,7 @@ fn struct_with_arc_field() {
         arc_int: std::sync::Arc<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var arcString: String
-        @Indirect public var arcInt: Int32
-
-        public init(arcString: String, arcInt: Int32) {
-            self.arcString = arcString
-            self.arcInt = arcInt
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var arcString: String
@@ -2646,8 +1669,8 @@ fn struct_with_arc_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2660,8 +1683,8 @@ fn struct_with_arc_field() {
             return MyStruct.init(arcString: arcString, arcInt: arcInt)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2684,26 +1707,7 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var vecOfSets: [[String]]
-        @Indirect public var optionalBtree: [String: Int32]?
-        @Indirect public var boxedVec: [String]
-        @Indirect public var arcOption: String?
-        @Indirect public var arrayOfBoxes: [Int32]
-
-        public init(vecOfSets: [[String]], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
-            self.vecOfSets = vecOfSets
-            self.optionalBtree = optionalBtree
-            self.boxedVec = boxedVec
-            self.arcOption = arcOption
-            self.arrayOfBoxes = arrayOfBoxes
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var vecOfSets: [[String]]
@@ -2730,8 +1734,8 @@ fn struct_with_mixed_collections_and_pointers() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2747,8 +1751,8 @@ fn struct_with_mixed_collections_and_pointers() {
             return MyStruct.init(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2770,22 +1774,7 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var data: [UInt8]
-        @Indirect public var name: String
-        @Indirect public var header: [UInt8]
-
-        public init(data: [UInt8], name: String, header: [UInt8]) {
-            self.data = data
-            self.name = name
-            self.header = header
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var data: [UInt8]
@@ -2806,8 +1795,8 @@ fn struct_with_bytes_field() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2821,8 +1810,8 @@ fn struct_with_bytes_field() {
             return MyStruct.init(data: data, name: name, header: header)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
@@ -2845,24 +1834,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::None).unwrap();
-    insta::assert_snapshot!(actual, @r"
-    public struct MyStruct: Hashable {
-        @Indirect public var data: [UInt8]
-        @Indirect public var name: String
-        @Indirect public var header: [UInt8]
-        @Indirect public var optionalBytes: [UInt8]?
-
-        public init(data: [UInt8], name: String, header: [UInt8], optionalBytes: [UInt8]?) {
-            self.data = data
-            self.name = name
-            self.header = header
-            self.optionalBytes = optionalBytes
-        }
-    }
-    ");
-
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     public struct MyStruct: Hashable {
         @Indirect public var data: [UInt8]
@@ -2886,8 +1858,8 @@ fn struct_with_bytes_field_and_slice() {
             try serializer.decrease_container_depth()
         }
 
-        public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
         }
@@ -2902,8 +1874,8 @@ fn struct_with_bytes_field_and_slice() {
             return MyStruct.init(data: data, name: name, header: header, optionalBytes: optionalBytes)
         }
 
-        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")

@@ -41,6 +41,59 @@ macro_rules! emit {
 }
 
 #[macro_export]
+macro_rules! emit_swift {
+    ($($ty:ident),* as $encoding:path) => {
+        || -> anyhow::Result<String> {
+            use $crate::generation::indent::{IndentConfig, IndentedWriter};
+            let mut out = Vec::new();
+            let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
+            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
+                .with_encoding($encoding);
+            let generator = $crate::generation::swift::CodeGenerator::new(&config);
+            let mut emitter = $crate::generation::swift::emitter::SwiftEmitter {
+                out: w,
+                generator: &generator,
+                current_namespace: Vec::new(),
+            };
+            let registry = $crate::reflect!($($ty),*);
+            for (name, format) in &registry {
+                emitter.output_container(&name.name, format).unwrap();
+            }
+            let out = String::from_utf8(out)?;
+
+            Ok(out)
+        }()
+    };
+}
+
+#[macro_export]
+macro_rules! emit_java {
+    ($($ty:ident),* as $encoding:path) => {
+        || -> anyhow::Result<String> {
+            use $crate::generation::indent::{IndentConfig, IndentedWriter};
+            let mut out = Vec::new();
+            let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
+            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
+                .with_encoding($encoding);
+            let generator = $crate::generation::java::CodeGenerator::new(&config);
+            let mut emitter = $crate::generation::java::emitter::JavaEmitter {
+                out: w,
+                generator: &generator,
+                current_namespace: Vec::new(),
+                current_reserved_names: HashMap::new(),
+            };
+            let registry = $crate::reflect!($($ty),*);
+            for (name, format) in &registry {
+                emitter.output_container(&name.name, format).unwrap();
+            }
+            let out = String::from_utf8(out)?;
+
+            Ok(out)
+        }()
+    };
+}
+
+#[macro_export]
 macro_rules! reflect {
     ($($ty:ident),*) => {{
         $crate::reflection::RegistryBuilder::new()

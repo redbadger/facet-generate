@@ -755,5 +755,8 @@ fn empty_block<W: Write>(w: &mut W) -> Result<()> {
 }
 
 #[cfg(test)]
-#[path = "emitter_tests.rs"]
 mod tests;
+#[cfg(test)]
+mod tests_bincode;
+#[cfg(test)]
+mod tests_json;
