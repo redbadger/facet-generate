@@ -1211,6 +1211,45 @@ fn struct_with_field_that_is_a_3_tuple() {
         }
     }
     "#);
+
+    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    public struct MyStruct: Hashable {
+        @Indirect public var one: Tuple3<String, Int32, UInt16>
+
+        public init(one: Tuple3<String, Int32, UInt16>) {
+            self.one = one
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serialize_tuple3_str_i32_u16(value: self.one, serializer: serializer)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
+            try deserializer.increase_container_depth()
+            let one = try deserialize_tuple3_str_i32_u16(deserializer: deserializer)
+            try deserializer.decrease_container_depth()
+            return MyStruct.init(one: one)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
 }
 
 #[test]
@@ -1264,6 +1303,45 @@ fn struct_with_field_that_is_a_4_tuple() {
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
             let deserializer = JsonDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
+
+    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    public struct MyStruct: Hashable {
+        @Indirect public var one: Tuple4<String, Int32, UInt16, Float>
+
+        public init(one: Tuple4<String, Int32, UInt16, Float>) {
+            self.one = one
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serialize_tuple4_str_i32_u16_f32(value: self.one, serializer: serializer)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
+            try deserializer.increase_container_depth()
+            let one = try deserialize_tuple4_str_i32_u16_f32(deserializer: deserializer)
+            try deserializer.decrease_container_depth()
+            return MyStruct.init(one: one)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
+            let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")

@@ -583,9 +583,8 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
     )
 }
 
-fn write_serialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<()> {
+fn write_serialize<W: IndentWrite>(w: &mut W, value: &str, format: &Format) -> Result<()> {
     match format {
-        Format::TypeName(_) => writeln!(w, "{value}.serialize(serializer)"),
         Format::Unit => writeln!(w, "serializer.serialize_unit({value})"),
         Format::Bool => writeln!(w, "serializer.serialize_bool({value})"),
         Format::I8 => writeln!(w, "serializer.serialize_i8({value})"),
@@ -603,46 +602,18 @@ fn write_serialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<
         Format::Char => writeln!(w, "serializer.serialize_char({value})"),
         Format::Str => writeln!(w, "serializer.serialize_str({value})"),
         Format::Bytes => writeln!(w, "serializer.serialize_bytes({value})"),
-        Format::Option(_format) => todo!(),
-        Format::Seq(_format) => todo!(),
-        Format::Set(_format) => todo!(),
-        Format::Map { key: _, value: _ } => todo!(),
-        Format::Tuple(formats) => match formats.len() {
-            0 => Ok(()),
-            1 => {
-                push_serializer(w)?;
-                write_serialize(w, "value", &formats[0])?;
-                pop_serializer(w)
-            }
-            2 => {
-                push_serializer(w)?;
-                write_serialize(w, &format!("{value}.first"), &formats[0])?;
-                write_serialize(w, &format!("{value}.second"), &formats[1])?;
-                pop_serializer(w)
-            }
-            3 => {
-                push_serializer(w)?;
-                write_serialize(w, &format!("{value}.first"), &formats[0])?;
-                write_serialize(w, &format!("{value}.second"), &formats[1])?;
-                write_serialize(w, &format!("{value}.third"), &formats[2])?;
-                pop_serializer(w)
-            }
-            _ => {
-                for (i, format) in formats.iter().enumerate() {
-                    write_serialize(w, &format!("{value}.field_{i}"), format)?;
-                }
-                Ok(())
-            }
-        },
-        Format::TupleArray {
-            content: _,
-            size: _,
-        } => todo!(),
+        Format::TypeName(..)
+        | Format::Option(..)
+        | Format::Seq(..)
+        | Format::Set(..)
+        | Format::Map { .. }
+        | Format::Tuple(..)
+        | Format::TupleArray { .. } => writeln!(w, "{value}.serialize(serializer)"),
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
 }
 
-fn write_deserialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Result<()> {
+fn write_deserialize<W: IndentWrite>(w: &mut W, value: &str, format: &Format) -> Result<()> {
     match format {
         Format::TypeName(qualified_name) => {
             let name = &qualified_name.name;
@@ -671,49 +642,26 @@ fn write_deserialize<W: Write>(w: &mut W, value: &str, format: &Format) -> Resul
         Format::Map { key: _, value: _ } => todo!(),
         Format::Tuple(formats) => {
             let len = formats.len();
-            match len {
-                0 => Ok(()),
+            let typename = match len {
+                0 => return Ok(()),
                 1 => {
                     push_deserializer(w)?;
                     write_deserialize(w, "value", &formats[0])?;
-                    pop_deserializer(w)
-                }
-                2 => {
-                    push_deserializer(w)?;
-                    write_deserialize(w, &format!("{value}_first"), &formats[0])?;
-                    write_deserialize(w, &format!("{value}_second"), &formats[1])?;
                     pop_deserializer(w)?;
-                    writeln!(w, "val {value} = Pair({value}_first, {value}_second)")
+                    return Ok(());
                 }
-                3 => {
-                    push_deserializer(w)?;
-                    write_deserialize(w, &format!("{value}_first"), &formats[0])?;
-                    write_deserialize(w, &format!("{value}_second"), &formats[1])?;
-                    write_deserialize(w, &format!("{value}_third"), &formats[2])?;
-                    pop_deserializer(w)?;
-                    writeln!(
-                        w,
-                        "val {value} = Triple({value}_first, {value}_second, {value}_third)"
-                    )
+                2 => "Pair".to_string(),
+                3 => "Triple".to_string(),
+                _ => format!("NTuple{len}"),
+            };
+            write!(w, "val {value} = {typename}<")?;
+            for (i, format) in formats.iter().enumerate() {
+                if i > 0 {
+                    write!(w, ", ")?;
                 }
-                _ => {
-                    push_deserializer(w)?;
-                    for (i, format) in formats.iter().enumerate() {
-                        write_serialize(w, &format!("{value}_field_{i}"), format)?;
-                    }
-                    write!(w, "val {value} = NTuple{len}(")?;
-                    pop_deserializer(w)?;
-
-                    for (i, _format) in formats.iter().enumerate() {
-                        if i > 0 {
-                            write!(w, ", ")?;
-                        }
-                        write!(w, "{value}_field_{i}")?;
-                    }
-
-                    write!(w, ")")
-                }
+                format.write(w)?;
             }
+            writeln!(w, ">.deserialize(deserializer)")
         }
         Format::TupleArray {
             content: _,
