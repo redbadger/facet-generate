@@ -1430,6 +1430,60 @@ fn enum_with_unit_variants() {
         }
     }
     "#);
+
+    let actual = emit!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    indirect public enum EnumWithUnitVariants: Hashable {
+        case variant1
+        case variant2
+        case variant3
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            switch self {
+            case .variant1:
+                try serializer.serialize_variant_index(value: 0)
+            case .variant2:
+                try serializer.serialize_variant_index(value: 1)
+            case .variant3:
+                try serializer.serialize_variant_index(value: 2)
+            }
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> EnumWithUnitVariants {
+            let index = try deserializer.deserialize_variant_index()
+            try deserializer.increase_container_depth()
+            switch index {
+            case 0:
+                try deserializer.decrease_container_depth()
+                return .variant1
+            case 1:
+                try deserializer.decrease_container_depth()
+                return .variant2
+            case 2:
+                try deserializer.decrease_container_depth()
+                return .variant3
+            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for EnumWithUnitVariants: \(index)")
+            }
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> EnumWithUnitVariants {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
 }
 
 #[test]

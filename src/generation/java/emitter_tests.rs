@@ -2746,6 +2746,156 @@ fn enum_with_unit_variants() {
         }
     }
     "#);
+
+    let actual = emit!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    public abstract class EnumWithUnitVariants {
+
+        abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
+
+        public static EnumWithUnitVariants deserialize(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
+            int index = deserializer.deserialize_variant_index();
+            switch (index) {
+                case 0: return Variant1.load(deserializer);
+                case 1: return Variant2.load(deserializer);
+                case 2: return Variant3.load(deserializer);
+                default: throw new com.novi.serde.DeserializationError("Unknown variant index for EnumWithUnitVariants: " + index);
+            }
+        }
+
+        public byte[] bincodeSerialize() throws com.novi.serde.SerializationError {
+            com.novi.serde.Serializer serializer = new com.novi.bincode.BincodeSerializer();
+            serialize(serializer);
+            return serializer.get_bytes();
+        }
+
+        public static EnumWithUnitVariants bincodeDeserialize(byte[] input) throws com.novi.serde.DeserializationError {
+            if (input == null) {
+                 throw new com.novi.serde.DeserializationError("Cannot deserialize null array");
+            }
+            com.novi.serde.Deserializer deserializer = new com.novi.bincode.BincodeDeserializer(input);
+            EnumWithUnitVariants value = deserialize(deserializer);
+            if (deserializer.get_buffer_offset() < input.length) {
+                 throw new com.novi.serde.DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+
+        public static final class Variant1 extends EnumWithUnitVariants {
+            public Variant1() {
+            }
+
+            public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {
+                serializer.increase_container_depth();
+                serializer.serialize_variant_index(0);
+                serializer.decrease_container_depth();
+            }
+
+            static Variant1 load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
+                deserializer.increase_container_depth();
+                Builder builder = new Builder();
+                deserializer.decrease_container_depth();
+                return builder.build();
+            }
+
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null) return false;
+                if (getClass() != obj.getClass()) return false;
+                Variant1 other = (Variant1) obj;
+                return true;
+            }
+
+            public int hashCode() {
+                int value = 7;
+                return value;
+            }
+
+            public static final class Builder {
+                public Variant1 build() {
+                    return new Variant1(
+                    );
+                }
+            }
+        }
+
+        public static final class Variant2 extends EnumWithUnitVariants {
+            public Variant2() {
+            }
+
+            public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {
+                serializer.increase_container_depth();
+                serializer.serialize_variant_index(1);
+                serializer.decrease_container_depth();
+            }
+
+            static Variant2 load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
+                deserializer.increase_container_depth();
+                Builder builder = new Builder();
+                deserializer.decrease_container_depth();
+                return builder.build();
+            }
+
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null) return false;
+                if (getClass() != obj.getClass()) return false;
+                Variant2 other = (Variant2) obj;
+                return true;
+            }
+
+            public int hashCode() {
+                int value = 7;
+                return value;
+            }
+
+            public static final class Builder {
+                public Variant2 build() {
+                    return new Variant2(
+                    );
+                }
+            }
+        }
+
+        public static final class Variant3 extends EnumWithUnitVariants {
+            public Variant3() {
+            }
+
+            public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {
+                serializer.increase_container_depth();
+                serializer.serialize_variant_index(2);
+                serializer.decrease_container_depth();
+            }
+
+            static Variant3 load(com.novi.serde.Deserializer deserializer) throws com.novi.serde.DeserializationError {
+                deserializer.increase_container_depth();
+                Builder builder = new Builder();
+                deserializer.decrease_container_depth();
+                return builder.build();
+            }
+
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null) return false;
+                if (getClass() != obj.getClass()) return false;
+                Variant3 other = (Variant3) obj;
+                return true;
+            }
+
+            public int hashCode() {
+                int value = 7;
+                return value;
+            }
+
+            public static final class Builder {
+                public Variant3 build() {
+                    return new Variant3(
+                    );
+                }
+            }
+        }
+    }
+    "#);
 }
 
 #[test]

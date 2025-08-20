@@ -45,6 +45,7 @@ fn unit_struct_1() {
                 return UnitStruct()
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): UnitStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -102,6 +103,7 @@ fn unit_struct_2() {
                 return UnitStruct()
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): UnitStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -172,6 +174,7 @@ fn newtype_struct() {
                 return NewType(value)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): NewType {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -247,6 +250,7 @@ fn tuple_struct() {
                 return TupleStruct(field_0, field_1)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): TupleStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -417,6 +421,7 @@ fn struct_with_fields_of_primitive_types() {
                 return StructWithFields(unit, bool, i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64, char, string)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): StructWithFields {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -530,6 +535,7 @@ fn struct_with_fields_of_user_types() {
                 return Inner1(field1)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): Inner1 {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -567,6 +573,7 @@ fn struct_with_fields_of_user_types() {
                 return Inner2(value)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): Inner2 {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -607,6 +614,7 @@ fn struct_with_fields_of_user_types() {
                 return Inner3(field_0, field_1)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): Inner3 {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -650,6 +658,7 @@ fn struct_with_fields_of_user_types() {
                 return Outer(one, two, three)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): Outer {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -714,6 +723,7 @@ fn struct_with_field_that_is_a_2_tuple() {
                 return MyStruct(one)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): MyStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -778,6 +788,7 @@ fn struct_with_field_that_is_a_3_tuple() {
                 return MyStruct(one)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): MyStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -845,6 +856,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                 return MyStruct(one)
             }
 
+            @Throws(DeserializationError::class)
             fun bincodeDeserialize(input: ByteArray?): MyStruct {
                 if (input == null) {
                     throw DeserializationError("Cannot deserialize null array")
@@ -908,6 +920,60 @@ fn enum_with_unit_variants() {
 
         val serialName: String
             get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+    }
+    "#);
+
+    let actual = emit!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    /// line one
+    /// line two
+    enum class EnumWithUnitVariants {
+        /// variant one
+        VARIANT1,
+        /// variant two
+        VARIANT2,
+        /// variant three
+        VARIANT3;
+
+        fun serialize(serializer: Serializer) {
+            serializer.increaseContainerDepth()
+            serializer.serializeVariantIndex(ordinal)
+            serializer.decreaseContainerDepth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): EnumWithUnitVariants {
+                deserializer.increaseContainerDepth()
+                val index = deserializer.deserializeVariantIndex()
+                deserializer.decreaseContainerDepth()
+                return when (index) {
+                    0 -> VARIANT1
+                    1 -> VARIANT2
+                    2 -> VARIANT3
+                    else -> throw DeserializationError("Unknown variant index for EnumWithUnitVariants: $index")
+                }
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): EnumWithUnitVariants {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
     }
     "#);
 }

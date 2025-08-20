@@ -470,14 +470,65 @@ fn enum_class<W: IndentWrite>(
     writeln!(w, ";")?;
     writeln!(w)?;
 
-    if encoding.is_json() {
-        writedoc!(
-            w,
-            "
-            val serialName: String
-                get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
-        "
-        )?;
+    match encoding {
+        Encoding::Json => {
+            writedoc!(
+                w,
+                "
+                val serialName: String
+                    get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+                "
+            )?;
+        }
+        Encoding::Bincode => {
+            writedoc!(
+                w,
+                r"
+                fun serialize(serializer: Serializer) {{
+                    serializer.increaseContainerDepth()
+                    serializer.serializeVariantIndex(ordinal)
+                    serializer.decreaseContainerDepth()
+                }}
+                "
+            )?;
+            writeln!(w)?;
+
+            write_bincode_serialize(w)?;
+            writeln!(w)?;
+
+            write!(w, "companion object ")?;
+            start_block(w)?;
+
+            writeln!(w, "@Throws(DeserializationError::class)")?;
+            write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+            start_block(w)?;
+            writeln!(w, "deserializer.increaseContainerDepth()")?;
+            writeln!(w, "val index = deserializer.deserializeVariantIndex()")?;
+            writeln!(w, "deserializer.decreaseContainerDepth()")?;
+            write!(w, "return when (index) ")?;
+            start_block(w)?;
+            for (i, variant) in variants {
+                write!(w, "{i} -> ")?;
+                let variant = Named {
+                    name: variant.name.to_string(),
+                    doc: Doc::new(), // remove comments for this printing
+                    value: variant.value.clone(),
+                };
+                (&variant, &VariantContext::EnumClass, encoding).write(w)?;
+                writeln!(w)?;
+            }
+            writeln!(
+                w,
+                r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
+            )?;
+            end_block(w)?;
+            end_block(w)?;
+            writeln!(w)?;
+
+            write_bincode_deserialize(w, name)?;
+            end_block(w)?;
+        }
+        _ => (),
     }
 
     w.unindent();
@@ -568,6 +619,7 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
     writedoc!(
         w,
         r#"
+        @Throws(DeserializationError::class)
         fun bincodeDeserialize(input: ByteArray?): {name} {{
             if (input == null) {{
                 throw DeserializationError("Cannot deserialize null array")
