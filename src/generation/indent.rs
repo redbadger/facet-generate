@@ -12,6 +12,39 @@ pub enum IndentConfig {
 pub trait IndentWrite: Write {
     fn indent(&mut self) {}
     fn unindent(&mut self) {}
+
+    /// Start a new block.
+    /// # Errors
+    /// Returns an error if writing to the underlying writer fails.
+    fn start_block(&mut self) -> Result<()> {
+        writeln!(self, "{{")?;
+        self.indent();
+        Ok(())
+    }
+
+    /// Start a new block for continuation on the same line.
+    /// # Errors
+    /// Returns an error if writing to the underlying writer fails.
+    fn start_block_no_newline(&mut self) -> Result<()> {
+        write!(self, "{{")?;
+        self.indent();
+        Ok(())
+    }
+
+    /// End a block.
+    /// # Errors
+    /// Returns an error if writing to the underlying writer fails.
+    fn end_block(&mut self) -> Result<()> {
+        self.unindent();
+        writeln!(self, "}}")
+    }
+
+    /// Start and end a block.
+    /// # Errors
+    /// Returns an error if writing to the underlying writer fails.
+    fn empty_block(&mut self) -> Result<()> {
+        writeln!(self, "{{}}")
+    }
 }
 
 pub struct IndentedWriter<T> {

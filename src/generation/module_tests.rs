@@ -37,7 +37,7 @@ fn single_namespace() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-      has_bigint: false
+      features: []
     : ? namespace: ROOT
         name: ChildOne
       : STRUCT:
@@ -119,7 +119,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-      has_bigint: false
+      features: []
     : ? namespace: ROOT
         name: Parent
       : STRUCT:
@@ -146,7 +146,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-      has_bigint: false
+      features: []
     : ? namespace:
           NAMED: one
         name: ChildOne
@@ -174,7 +174,7 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
-      has_bigint: false
+      features: []
     : ? namespace:
           NAMED: two
         name: ChildTwo

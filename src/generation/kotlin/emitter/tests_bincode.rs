@@ -811,7 +811,7 @@ fn enum_with_1_tuple_variants() {
             }
         }
 
-        companion object{
+        companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
                 val index = deserializer.serialize_variant_index()
@@ -819,21 +819,22 @@ fn enum_with_1_tuple_variants() {
                     0 -> Variant1.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
                 }
+            }
 
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): MyEnum {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
                 }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
             }
         }
+    }
     "#);
 }
 
@@ -898,7 +899,7 @@ fn enum_with_newtype_variants() {
             }
         }
 
-        companion object{
+        companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
                 val index = deserializer.serialize_variant_index()
@@ -907,21 +908,22 @@ fn enum_with_newtype_variants() {
                     1 -> Variant2.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
                 }
+            }
 
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): MyEnum {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
                 }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
             }
         }
+    }
     "#);
 }
 
@@ -995,7 +997,7 @@ fn enum_with_tuple_variants() {
             }
         }
 
-        companion object{
+        companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
                 val index = deserializer.serialize_variant_index()
@@ -1004,21 +1006,22 @@ fn enum_with_tuple_variants() {
                     1 -> Variant2.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
                 }
+            }
 
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): MyEnum {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
                 }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
             }
         }
+    }
     "#);
 }
 
@@ -1065,7 +1068,7 @@ fn enum_with_struct_variants() {
             }
         }
 
-        companion object{
+        companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
                 val index = deserializer.serialize_variant_index()
@@ -1073,21 +1076,22 @@ fn enum_with_struct_variants() {
                     0 -> Variant1.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
                 }
+            }
 
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): MyEnum {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
                 }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
             }
         }
+    }
     "#);
 }
 
@@ -1191,7 +1195,7 @@ fn enum_with_mixed_variants() {
             }
         }
 
-        companion object{
+        companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
                 val index = deserializer.serialize_variant_index()
@@ -1202,27 +1206,27 @@ fn enum_with_mixed_variants() {
                     3 -> Struct.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
                 }
+            }
 
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): MyEnum {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
                 }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
             }
         }
+    }
     "#);
 }
 
 #[test]
-#[ignore = "TODO"]
-fn struct_with_vec_field() {
+fn struct_with_vec_field_1() {
     #[derive(Facet)]
     struct MyStruct {
         items: Vec<String>,
@@ -1231,13 +1235,171 @@ fn struct_with_vec_field() {
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val items: List<String>,
         val numbers: List<Int>,
         val nested_items: List<List<String>>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            items.serialize(serializer) {
+                serializer.serialize_str(it)
+            }
+            numbers.serialize(serializer) {
+                serializer.serialize_i32(it)
+            }
+            nested_items.serialize(serializer) { list1 ->
+                list1.serialize(serializer) {
+                    serializer.serialize_str(it)
+                }
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val items =
+                    deserializer.deserializeListOf {
+                        deserializer.deserialize_str()
+                    }
+                val numbers =
+                    deserializer.deserializeListOf {
+                        deserializer.deserialize_i32()
+                    }
+                val nested_items =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeListOf {
+                            deserializer.deserialize_str()
+                        }
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(items, numbers, nested_items)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}
+
+#[test]
+fn struct_with_vec_field_2() {
+    #[derive(Facet)]
+    pub struct Child {
+        name: String,
+    }
+
+    #[derive(Facet)]
+    pub struct Parent {
+        children: Vec<Vec<Child>>,
+    }
+
+    let actual = emit!(Parent as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    data class Child(
+        val name: String,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_str(name)
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Child {
+                deserializer.increase_container_depth()
+                val name = deserializer.deserialize_str()
+                deserializer.decrease_container_depth()
+                return Child(name)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Child {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+
+    data class Parent(
+        val children: List<List<Child>>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            children.serialize(serializer) { list1 ->
+                list1.serialize(serializer) {
+                    it.serialize(serializer)
+                }
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Parent {
+                deserializer.increase_container_depth()
+                val children =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeListOf {
+                            Child.deserialize(deserializer)
+                        }
+                    }
+                deserializer.decrease_container_depth()
+                return Parent(children)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Parent {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]

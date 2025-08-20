@@ -38,7 +38,7 @@ fn test() {
 
     for target in [
         Language::Java,
-        // Language::Kotlin,
+        Language::Kotlin,
         Language::Swift,
         Language::TypeScript,
     ] {

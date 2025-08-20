@@ -29,6 +29,7 @@ data class Child(
             return Child(name)
         }
 
+        @Throws(DeserializationError::class)
         fun bincodeDeserialize(input: ByteArray?): Child {
             if (input == null) {
                 throw DeserializationError("Cannot deserialize null array")
@@ -44,7 +45,6 @@ data class Child(
 }
 
 sealed interface Parent {
-    // Abstract methods that implementations must provide
     fun serialize(serializer: Serializer)
 
     fun bincodeSerialize(): ByteArray {
@@ -54,7 +54,7 @@ sealed interface Parent {
     }
 
     data class Child(
-        val value: com.example.Child,
+        val value: Child,
     ) : Parent {
         override fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -62,22 +62,28 @@ sealed interface Parent {
             value.serialize(serializer)
             serializer.decrease_container_depth()
         }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Child {
+                deserializer.increase_container_depth()
+                val value = Child.deserialize(deserializer)
+                deserializer.decrease_container_depth()
+                return Child(value)
+            }
+        }
     }
 
     companion object {
+        @Throws(DeserializationError::class)
         fun deserialize(deserializer: Deserializer): Parent {
-            val index = deserializer.deserialize_variant_index()
+            val index = deserializer.serialize_variant_index()
             return when (index) {
-                0 -> {
-                    deserializer.increase_container_depth()
-                    val value = com.example.Child.deserialize(deserializer)
-                    deserializer.decrease_container_depth()
-                    Child(value)
-                }
+                0 -> Child.deserialize(deserializer)
                 else -> throw DeserializationError("Unknown variant index for Parent: $index")
             }
         }
 
+        @Throws(DeserializationError::class)
         fun bincodeDeserialize(input: ByteArray?): Parent {
             if (input == null) {
                 throw DeserializationError("Cannot deserialize null array")
