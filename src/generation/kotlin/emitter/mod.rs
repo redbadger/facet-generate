@@ -76,7 +76,7 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
         let (encoding, (name, format)) = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                data_object(w, &name.name, None, doc, *encoding)?;
+                data_object(w, &name.name, None, doc, *encoding, None)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 data_class(
@@ -90,16 +90,17 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
                     }],
                     doc,
                     *encoding,
+                    None,
                 )?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
-                data_class(w, &name.name, None, &named(formats), doc, *encoding)?;
+                data_class(w, &name.name, None, &named(formats), doc, *encoding, None)?;
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    data_object(w, &name.name, None, doc, *encoding)?;
+                    data_object(w, &name.name, None, doc, *encoding, None)?;
                 } else {
-                    data_class(w, &name.name, None, fields, doc, *encoding)?;
+                    data_class(w, &name.name, None, fields, doc, *encoding, None)?;
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -151,7 +152,7 @@ impl Emitter<Kotlin> for Doc {
 
 #[derive(Clone)]
 pub enum VariantContext {
-    SealedInterface(String),
+    SealedInterface(String, usize),
     EnumClass,
 }
 
@@ -165,8 +166,15 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
             (VariantFormat::Variable(_), _) => {
                 unreachable!("placeholders should not get this far")
             }
-            (VariantFormat::Unit, VariantContext::SealedInterface(interface_name)) => {
-                data_object(w, name, Some(interface_name), &variant.doc, encoding)?;
+            (VariantFormat::Unit, VariantContext::SealedInterface(interface_name, index)) => {
+                data_object(
+                    w,
+                    name,
+                    Some(interface_name),
+                    &variant.doc,
+                    encoding,
+                    Some(*index),
+                )?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
                 variant.doc.write(w)?;
@@ -178,7 +186,10 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     write!(w, "{name_upper}")?;
                 }
             }
-            (VariantFormat::NewType(format), VariantContext::SealedInterface(interface_name)) => {
+            (
+                VariantFormat::NewType(format),
+                VariantContext::SealedInterface(interface_name, index),
+            ) => {
                 data_class(
                     w,
                     name,
@@ -190,12 +201,16 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     }],
                     &variant.doc,
                     encoding,
+                    Some(*index),
                 )?;
             }
             (VariantFormat::NewType(_format), VariantContext::EnumClass) => {
                 unreachable!("NewType variants are not supported in enum classes")
             }
-            (VariantFormat::Tuple(formats), VariantContext::SealedInterface(interface_name)) => {
+            (
+                VariantFormat::Tuple(formats),
+                VariantContext::SealedInterface(interface_name, index),
+            ) => {
                 data_class(
                     w,
                     name,
@@ -203,12 +218,16 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     &named(formats),
                     &variant.doc,
                     encoding,
+                    Some(*index),
                 )?;
             }
             (VariantFormat::Tuple(_formats), VariantContext::EnumClass) => {
                 unreachable!("Tuple variants are not supported in enum classes")
             }
-            (VariantFormat::Struct(fields), VariantContext::SealedInterface(interface_name)) => {
+            (
+                VariantFormat::Struct(fields),
+                VariantContext::SealedInterface(interface_name, index),
+            ) => {
                 data_class(
                     w,
                     name,
@@ -216,6 +235,7 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     fields,
                     &variant.doc,
                     encoding,
+                    Some(*index),
                 )?;
             }
             (VariantFormat::Struct(_fields), VariantContext::EnumClass) => {
@@ -323,6 +343,7 @@ fn data_object<W: IndentWrite>(
     interface: Option<&str>,
     doc: &Doc,
     encoding: Encoding,
+    variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w)?;
 
@@ -340,19 +361,35 @@ fn data_object<W: IndentWrite>(
     if encoding.is_bincode() {
         write!(w, " ")?;
         start_block(w)?;
+        if variant_index.is_some() {
+            write!(w, "override ")?;
+        }
         write!(w, "fun serialize(serializer: Serializer) ")?;
-        empty_block(w)?;
+        if let Some(index) = variant_index {
+            start_block(w)?;
+            push_serializer(w)?;
+            writeln!(w, "serializer.serialize_variant_index({index})")?;
+            pop_serializer(w)?;
+            end_block(w)?;
+        } else {
+            empty_block(w)?;
+        }
         writeln!(w)?;
-        write_bincode_serialize(w)?;
-        writeln!(w)?;
+
+        if variant_index.is_none() {
+            write_bincode_serialize(w)?;
+            writeln!(w)?;
+        }
         write!(w, "companion object ")?;
         start_block(w)?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         start_block(w)?;
         writeln!(w, "return {name}()")?;
         end_block(w)?;
-        writeln!(w)?;
-        write_bincode_deserialize(w, name)?;
+        if variant_index.is_none() {
+            writeln!(w)?;
+            write_bincode_deserialize(w, name)?;
+        }
         end_block(w)?;
         end_block(w)?;
     } else {
@@ -369,6 +406,7 @@ fn data_class<W: IndentWrite>(
     fields: &[Named<Format>],
     doc: &Doc,
     encoding: Encoding,
+    variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w)?;
 
@@ -394,12 +432,18 @@ fn data_class<W: IndentWrite>(
     if encoding.is_bincode() {
         write!(w, " ")?;
         start_block(w)?;
+        if variant_index.is_some() {
+            write!(w, "override ")?;
+        }
         write!(w, "fun serialize(serializer: Serializer) ")?;
         if fields.is_empty() {
             empty_block(w)?;
         } else {
             start_block(w)?;
             push_serializer(w)?;
+            if let Some(index) = variant_index {
+                writeln!(w, "serializer.serialize_variant_index({index})")?;
+            }
             for field in fields {
                 write_serialize(w, &field.name, &field.value)?;
             }
@@ -407,8 +451,11 @@ fn data_class<W: IndentWrite>(
             end_block(w)?;
         }
         writeln!(w)?;
-        write_bincode_serialize(w)?;
-        writeln!(w)?;
+
+        if variant_index.is_none() {
+            write_bincode_serialize(w)?;
+            writeln!(w)?;
+        }
         write!(w, "companion object ")?;
         start_block(w)?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
@@ -431,8 +478,10 @@ fn data_class<W: IndentWrite>(
             writeln!(w, ")")?;
         }
         end_block(w)?;
-        writeln!(w)?;
-        write_bincode_deserialize(w, name)?;
+        if variant_index.is_none() {
+            writeln!(w)?;
+            write_bincode_deserialize(w, name)?;
+        }
         end_block(w)?;
         end_block(w)?;
     } else {
@@ -481,16 +530,12 @@ fn enum_class<W: IndentWrite>(
             )?;
         }
         Encoding::Bincode => {
-            writedoc!(
-                w,
-                r"
-                fun serialize(serializer: Serializer) {{
-                    serializer.increaseContainerDepth()
-                    serializer.serializeVariantIndex(ordinal)
-                    serializer.decreaseContainerDepth()
-                }}
-                "
-            )?;
+            write!(w, "fun serialize(serializer: Serializer) ")?;
+            start_block(w)?;
+            push_serializer(w)?;
+            writeln!(w, "serializer.serialize_variant_index(ordinal)")?;
+            pop_serializer(w)?;
+            end_block(w)?;
             writeln!(w)?;
 
             write_bincode_serialize(w)?;
@@ -502,9 +547,9 @@ fn enum_class<W: IndentWrite>(
             writeln!(w, "@Throws(DeserializationError::class)")?;
             write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
             start_block(w)?;
-            writeln!(w, "deserializer.increaseContainerDepth()")?;
-            writeln!(w, "val index = deserializer.deserializeVariantIndex()")?;
-            writeln!(w, "deserializer.decreaseContainerDepth()")?;
+            push_deserializer(w)?;
+            writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
+            pop_deserializer(w)?;
             write!(w, "return when (index) ")?;
             start_block(w)?;
             for (i, variant) in variants {
@@ -549,20 +594,48 @@ fn sealed_interface<W: IndentWrite>(
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
-    writeln!(w, "sealed interface {name} {{")?;
+    write!(w, "sealed interface {name} ")?;
+    start_block(w)?;
 
-    w.indent();
+    if encoding.is_bincode() {
+        writeln!(w, "fun serialize(serializer: Serializer)")?;
+        writeln!(w)?;
+        write_bincode_serialize(w)?;
+        writeln!(w)?;
+    }
 
     for (index, variant) in variants.iter().enumerate() {
         if index > 0 {
             writeln!(w)?;
         }
-        let ctx = VariantContext::SealedInterface(name.to_string());
+        let ctx = VariantContext::SealedInterface(name.to_string(), index);
         (variant, &ctx, encoding).write(w)?;
     }
-    w.unindent();
 
-    writeln!(w, "}}")
+    if encoding.is_bincode() {
+        writeln!(w)?;
+        write!(w, "companion object")?;
+        start_block(w)?;
+        writeln!(w, "@Throws(DeserializationError::class)")?;
+        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+        start_block(w)?;
+        writeln!(w, "val index = deserializer.serialize_variant_index()")?;
+        write!(w, "return when (index) ")?;
+        start_block(w)?;
+        for (i, variant) in variants.iter().enumerate() {
+            let name = &variant.name;
+            writeln!(w, "{i} -> {name}.deserialize(deserializer)")?;
+        }
+        writeln!(
+            w,
+            r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
+        )?;
+        end_block(w)?;
+        writeln!(w)?;
+        write_bincode_deserialize(w, name)?;
+        end_block(w)?;
+    }
+    end_block(w)
 }
 
 fn emit_bigint_serializer<W: IndentWrite>(w: &mut W) -> Result<()> {

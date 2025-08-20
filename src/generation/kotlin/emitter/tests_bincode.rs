@@ -674,9 +674,9 @@ fn enum_with_unit_variants() {
         VARIANT3;
 
         fun serialize(serializer: Serializer) {
-            serializer.increaseContainerDepth()
-            serializer.serializeVariantIndex(ordinal)
-            serializer.decreaseContainerDepth()
+            serializer.increase_container_depth()
+            serializer.serialize_variant_index(ordinal)
+            serializer.decrease_container_depth()
         }
 
         fun bincodeSerialize(): ByteArray {
@@ -688,9 +688,9 @@ fn enum_with_unit_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): EnumWithUnitVariants {
-                deserializer.increaseContainerDepth()
-                val index = deserializer.deserializeVariantIndex()
-                deserializer.decreaseContainerDepth()
+                deserializer.increase_container_depth()
+                val index = deserializer.deserialize_variant_index()
+                deserializer.decrease_container_depth()
                 return when (index) {
                     0 -> VARIANT1
                     1 -> VARIANT2
@@ -717,7 +717,6 @@ fn enum_with_unit_variants() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_unit_struct_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -732,9 +731,9 @@ fn enum_with_unit_struct_variants() {
         VARIANT1;
 
         fun serialize(serializer: Serializer) {
-            serializer.increaseContainerDepth()
-            serializer.serializeVariantIndex(ordinal)
-            serializer.decreaseContainerDepth()
+            serializer.increase_container_depth()
+            serializer.serialize_variant_index(ordinal)
+            serializer.decrease_container_depth()
         }
 
         fun bincodeSerialize(): ByteArray {
@@ -746,9 +745,9 @@ fn enum_with_unit_struct_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                deserializer.increaseContainerDepth()
-                val index = deserializer.deserializeVariantIndex()
-                deserializer.decreaseContainerDepth()
+                deserializer.increase_container_depth()
+                val index = deserializer.deserialize_variant_index()
+                deserializer.decrease_container_depth()
                 return when (index) {
                     0 -> VARIANT1
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
@@ -773,7 +772,6 @@ fn enum_with_unit_struct_variants() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_1_tuple_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -785,19 +783,22 @@ fn enum_with_1_tuple_variants() {
     let actual = emit!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     sealed interface MyEnum {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
         data class Variant1(
             val value: String,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
                 serializer.serialize_str(value)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -807,9 +808,20 @@ fn enum_with_1_tuple_variants() {
                     deserializer.decrease_container_depth()
                     return Variant1(value)
                 }
+            }
+        }
+
+        companion object{
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): MyEnum {
+                val index = deserializer.serialize_variant_index()
+                return when (index) {
+                    0 -> Variant1.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
+                }
 
                 @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant1 {
+                fun bincodeDeserialize(input: ByteArray?): MyEnum {
                     if (input == null) {
                         throw DeserializationError("Cannot deserialize null array")
                     }
@@ -822,12 +834,10 @@ fn enum_with_1_tuple_variants() {
                 }
             }
         }
-    }
     "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_newtype_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -840,19 +850,22 @@ fn enum_with_newtype_variants() {
     let actual = emit!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     sealed interface MyEnum {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
         data class Variant1(
             val value: String,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
                 serializer.serialize_str(value)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -862,35 +875,17 @@ fn enum_with_newtype_variants() {
                     deserializer.decrease_container_depth()
                     return Variant1(value)
                 }
-
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant1 {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
-                }
             }
         }
 
         data class Variant2(
             val value: Int,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(1)
                 serializer.serialize_i32(value)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -900,9 +895,21 @@ fn enum_with_newtype_variants() {
                     deserializer.decrease_container_depth()
                     return Variant2(value)
                 }
+            }
+        }
+
+        companion object{
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): MyEnum {
+                val index = deserializer.serialize_variant_index()
+                return when (index) {
+                    0 -> Variant1.deserialize(deserializer)
+                    1 -> Variant2.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
+                }
 
                 @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant2 {
+                fun bincodeDeserialize(input: ByteArray?): MyEnum {
                     if (input == null) {
                         throw DeserializationError("Cannot deserialize null array")
                     }
@@ -915,12 +922,10 @@ fn enum_with_newtype_variants() {
                 }
             }
         }
-    }
     "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_tuple_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -933,21 +938,24 @@ fn enum_with_tuple_variants() {
     let actual = emit!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     sealed interface MyEnum {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
         data class Variant1(
             val field_0: String,
             val field_1: Int,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
                 serializer.serialize_str(field_0)
                 serializer.serialize_i32(field_1)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -958,19 +966,6 @@ fn enum_with_tuple_variants() {
                     deserializer.decrease_container_depth()
                     return Variant1(field_0, field_1)
                 }
-
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant1 {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
-                }
             }
         }
 
@@ -979,18 +974,13 @@ fn enum_with_tuple_variants() {
             val field_1: Double,
             val field_2: UByte,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(1)
                 serializer.serialize_bool(field_0)
                 serializer.serialize_f64(field_1)
                 serializer.serialize_u8(field_2)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -1002,9 +992,21 @@ fn enum_with_tuple_variants() {
                     deserializer.decrease_container_depth()
                     return Variant2(field_0, field_1, field_2)
                 }
+            }
+        }
+
+        companion object{
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): MyEnum {
+                val index = deserializer.serialize_variant_index()
+                return when (index) {
+                    0 -> Variant1.deserialize(deserializer)
+                    1 -> Variant2.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
+                }
 
                 @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant2 {
+                fun bincodeDeserialize(input: ByteArray?): MyEnum {
                     if (input == null) {
                         throw DeserializationError("Cannot deserialize null array")
                     }
@@ -1017,12 +1019,10 @@ fn enum_with_tuple_variants() {
                 }
             }
         }
-    }
     "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_struct_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -1034,21 +1034,24 @@ fn enum_with_struct_variants() {
     let actual = emit!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     sealed interface MyEnum {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
         data class Variant1(
             val field1: String,
             val field2: Int,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
                 serializer.serialize_str(field1)
                 serializer.serialize_i32(field2)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -1059,9 +1062,20 @@ fn enum_with_struct_variants() {
                     deserializer.decrease_container_depth()
                     return Variant1(field1, field2)
                 }
+            }
+        }
+
+        companion object{
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): MyEnum {
+                val index = deserializer.serialize_variant_index()
+                return when (index) {
+                    0 -> Variant1.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
+                }
 
                 @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Variant1 {
+                fun bincodeDeserialize(input: ByteArray?): MyEnum {
                     if (input == null) {
                         throw DeserializationError("Cannot deserialize null array")
                     }
@@ -1074,12 +1088,10 @@ fn enum_with_struct_variants() {
                 }
             }
         }
-    }
     "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn enum_with_mixed_variants() {
     #[derive(Facet)]
     #[repr(C)]
@@ -1094,31 +1106,24 @@ fn enum_with_mixed_variants() {
     let actual = emit!(MyEnum as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     sealed interface MyEnum {
-        data object Unit: MyEnum {
-            fun serialize(serializer: Serializer) {}
+        fun serialize(serializer: Serializer)
 
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        data object Unit: MyEnum {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
+                serializer.decrease_container_depth()
             }
 
             companion object {
                 fun deserialize(deserializer: Deserializer): Unit {
                     return Unit()
-                }
-
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Unit {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
                 }
             }
         }
@@ -1126,16 +1131,11 @@ fn enum_with_mixed_variants() {
         data class NewType(
             val value: String,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(1)
                 serializer.serialize_str(value)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -1145,19 +1145,6 @@ fn enum_with_mixed_variants() {
                     deserializer.decrease_container_depth()
                     return NewType(value)
                 }
-
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): NewType {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
-                }
             }
         }
 
@@ -1165,17 +1152,12 @@ fn enum_with_mixed_variants() {
             val field_0: String,
             val field_1: Int,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(2)
                 serializer.serialize_str(field_0)
                 serializer.serialize_i32(field_1)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -1186,35 +1168,17 @@ fn enum_with_mixed_variants() {
                     deserializer.decrease_container_depth()
                     return Tuple(field_0, field_1)
                 }
-
-                @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Tuple {
-                    if (input == null) {
-                        throw DeserializationError("Cannot deserialize null array")
-                    }
-                    val deserializer = BincodeDeserializer(input)
-                    val value = deserialize(deserializer)
-                    if (deserializer.get_buffer_offset() < input.size) {
-                        throw DeserializationError("Some input bytes were not read")
-                    }
-                    return value
-                }
             }
         }
 
         data class Struct(
             val field: Boolean,
         ) : MyEnum {
-            fun serialize(serializer: Serializer) {
+            override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
+                serializer.serialize_variant_index(3)
                 serializer.serialize_bool(field)
                 serializer.decrease_container_depth()
-            }
-
-            fun bincodeSerialize(): ByteArray {
-                val serializer = BincodeSerializer()
-                serialize(serializer)
-                return serializer.get_bytes()
             }
 
             companion object {
@@ -1224,9 +1188,23 @@ fn enum_with_mixed_variants() {
                     deserializer.decrease_container_depth()
                     return Struct(field)
                 }
+            }
+        }
+
+        companion object{
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): MyEnum {
+                val index = deserializer.serialize_variant_index()
+                return when (index) {
+                    0 -> Unit.deserialize(deserializer)
+                    1 -> NewType.deserialize(deserializer)
+                    2 -> Tuple.deserialize(deserializer)
+                    3 -> Struct.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
+                }
 
                 @Throws(DeserializationError::class)
-                fun bincodeDeserialize(input: ByteArray?): Struct {
+                fun bincodeDeserialize(input: ByteArray?): MyEnum {
                     if (input == null) {
                         throw DeserializationError("Cannot deserialize null array")
                     }
@@ -1239,7 +1217,6 @@ fn enum_with_mixed_variants() {
                 }
             }
         }
-    }
     "#);
 }
 
