@@ -32,14 +32,17 @@ pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
-use std::io::{Result, Write};
+use std::{
+    fmt::{Display, Formatter},
+    io::{Result, Write},
+};
 
 pub use config::*;
 use indent::IndentWrite;
 
 use crate::Registry;
 
-pub trait Language<'a> {
+pub trait CodeGen<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
 
     /// Generate code for the given [`Registry`] and write it to the provided `writer`.
@@ -47,6 +50,24 @@ pub trait Language<'a> {
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()>;
+}
+
+pub enum Language {
+    Java,
+    Kotlin,
+    Swift,
+    TypeScript,
+}
+
+impl Display for Language {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Language::Java => write!(f, "Java"),
+            Language::Kotlin => write!(f, "Kotlin"),
+            Language::Swift => write!(f, "Swift"),
+            Language::TypeScript => write!(f, "TypeScript"),
+        }
+    }
 }
 
 #[cfg(all(test, feature = "generate"))]

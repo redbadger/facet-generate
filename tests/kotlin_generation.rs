@@ -11,7 +11,6 @@ use tempfile::tempdir;
 pub mod common;
 
 #[test]
-// #[ignore = "This test is currently failing due to i128/u128 support"]
 fn test_that_kotlin_code_compiles() {
     type Test = common::PrimitiveTypes;
 

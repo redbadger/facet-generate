@@ -1,13 +1,8 @@
 package com.example
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-
-@Serializable
 data object Location
 
 /// This is a comment.
-@Serializable
 data class Person(
     /// This is another comment
     val name: String,

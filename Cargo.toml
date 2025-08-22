@@ -17,9 +17,9 @@ include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
 indoc = { version = "2.0.6", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.142"
+serde_json = "1.0.143"
 textwrap = "0.16.2"
-thiserror = "2.0.14"
+thiserror = "2.0.16"
 
 [dev-dependencies]
 anyhow = "1.0.99"
@@ -34,8 +34,8 @@ insta = { version = "1.43.1", features = ["yaml", "json"] }
 maplit = "1.0.2"
 regex = "1.11.1"
 strum = { version = "0.27.2", features = ["derive"] }
-tempfile = "3.20.0"
-url = "2.5.4"
+tempfile = "3.21.0"
+url = "=2.5.4"
 
 [features]
 default = ["generate"]

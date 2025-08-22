@@ -831,3 +831,10 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         self.output_struct_or_variant_container(None, None, name, &fields)
     }
 }
+
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod tests_bincode;
+#[cfg(test)]
+mod tests_json;

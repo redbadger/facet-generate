@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, module,
+        Encoding, ExternalPackage, Language, PackageLocation, SourceInstaller as _, java, module,
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
@@ -36,15 +36,20 @@ fn test() {
         .unwrap()
         .join("snapshots");
 
-    for target in ["java", "swift", "typescript"] {
+    for target in [
+        Language::Java,
+        // Language::Kotlin,
+        Language::Swift,
+        Language::TypeScript,
+    ] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
-        let snapshot_dir = this_dir.join(target);
+        let snapshot_dir = this_dir.join(target.to_string().to_lowercase());
         fs::create_dir_all(&snapshot_dir).unwrap();
 
         match target {
-            "java" => {
+            Language::Java => {
                 let package_name = "com.example";
                 let mut installer = java::Installer::new(
                     package_name,
@@ -66,7 +71,8 @@ fn test() {
                     installer.install_module(&config, registry).unwrap();
                 }
             }
-            "swift" => {
+            Language::Kotlin => {}
+            Language::Swift => {
                 let package_name = "Example";
                 let mut installer = Installer::new(
                     package_name,
@@ -86,7 +92,7 @@ fn test() {
                 }
                 installer.install_manifest(package_name).unwrap();
             }
-            "typescript" => {
+            Language::TypeScript => {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(
                     tmp_path,
@@ -106,7 +112,6 @@ fn test() {
                 }
                 installer.install_manifest(package_name).unwrap();
             }
-            _ => unreachable!(),
         }
 
         for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
