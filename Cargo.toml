@@ -11,7 +11,7 @@ rust-version = "1.87"
 
 [dependencies]
 derive_builder = "0.20.2"
-facet = "0.28.0"
+facet = "0.28.1"
 heck = "0.5.0"
 include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
@@ -28,11 +28,11 @@ bincode = "=1"
 chrono = "0.4.41"
 difficient = "0.1.0"
 expect-test = "1.5.1"
-facet = { version = "0.28.0", features = ["chrono", "url"] }
+facet = { version = "0.28.1", features = ["chrono", "url"] }
 ignore = "0.4.23"
 insta = { version = "1.43.1", features = ["yaml", "json"] }
 maplit = "1.0.2"
-regex = "1.11.1"
+regex = "1.11.2"
 strum = { version = "0.27.2", features = ["derive"] }
 tempfile = "3.21.0"
 url = "=2.5.4"

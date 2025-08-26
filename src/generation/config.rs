@@ -42,6 +42,7 @@ pub enum Encoding {
 pub enum Feature {
     BigInt,
     ListOfT,
+    OptionOfT,
 }
 
 impl Encoding {
@@ -208,6 +209,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::Seq(..) => {
                             self.features.insert(Feature::ListOfT);
+                        }
+                        Format::Option(..) => {
+                            self.features.insert(Feature::OptionOfT);
                         }
                         _ => (),
                     }

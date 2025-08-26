@@ -1249,8 +1249,8 @@ fn struct_with_vec_field_1() {
             numbers.serialize(serializer) {
                 serializer.serialize_i32(it)
             }
-            nested_items.serialize(serializer) { list1 ->
-                list1.serialize(serializer) {
+            nested_items.serialize(serializer) { level1 ->
+                level1.serialize(serializer) {
                     serializer.serialize_str(it)
                 }
             }
@@ -1358,8 +1358,8 @@ fn struct_with_vec_field_2() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            children.serialize(serializer) { list1 ->
-                list1.serialize(serializer) {
+            children.serialize(serializer) { level1 ->
+                level1.serialize(serializer) {
                     it.serialize(serializer)
                 }
             }
@@ -1403,24 +1403,97 @@ fn struct_with_vec_field_2() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_option_field() {
     #[derive(Facet)]
-    #[allow(clippy::struct_field_names)]
+    #[allow(clippy::struct_field_names, clippy::option_option)]
     struct MyStruct {
-        optional_string: Option<String>,
-        optional_number: Option<i32>,
-        optional_bool: Option<bool>,
+        simple: Option<String>,
+        nested: Option<Option<i32>>,
+        list: Option<Vec<bool>>,
+        list_of_options: Vec<Option<bool>>,
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val optional_string: String? = null,
-        val optional_number: Int? = null,
-        val optional_bool: Boolean? = null,
-    )
-    ");
+        val simple: String? = null,
+        val nested: Int?? = null,
+        val list: List<Boolean>? = null,
+        val list_of_options: List<Boolean?>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            simple.serializeOptionOf(serializer) {
+                serializer.serialize_str(it)
+            }
+            nested.serializeOptionOf(serializer) { level1 ->
+                level1.serializeOptionOf(serializer) {
+                    serializer.serialize_i32(it)
+                }
+            }
+            list.serializeOptionOf(serializer) { level1 ->
+                level1.serialize(serializer) {
+                    serializer.serialize_bool(it)
+                }
+            }
+            list_of_options.serialize(serializer) { level1 ->
+                level1.serializeOptionOf(serializer) {
+                    serializer.serialize_bool(it)
+                }
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val simple =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserialize_str()
+                    }
+                val nested =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserializeOptionOf {
+                            deserializer.deserialize_i32()
+                        }
+                    }
+                val list =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserializeListOf {
+                            deserializer.deserialize_bool()
+                        }
+                    }
+                val list_of_options =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeOptionOf {
+                            deserializer.deserialize_bool()
+                        }
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(simple, nested, list, list_of_options)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]

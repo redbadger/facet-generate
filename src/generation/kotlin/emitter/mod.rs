@@ -14,6 +14,7 @@ use crate::{
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
+const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
 
 pub struct Kotlin;
 
@@ -68,6 +69,12 @@ impl Emitter<Kotlin> for Module {
                 Feature::ListOfT => {
                     if encoding == &Encoding::Bincode {
                         features_out.write_all(FEATURE_LIST_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::OptionOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_OPTION_OF_T)?;
                         writeln!(features_out)?;
                     }
                 }
@@ -498,7 +505,7 @@ fn data_class<W: IndentWrite>(
                 writeln!(w, "serializer.serialize_variant_index({index})")?;
             }
             for field in fields {
-                write_serialize(w, &field.name, &field.value, 1)?;
+                write_serialize(w, &field.name, &field.value, 0)?;
             }
             pop_serializer(w)?;
             w.end_block()?;
@@ -761,36 +768,40 @@ fn write_serialize<W: IndentWrite>(
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
         Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
-        Format::Seq(format) => {
-            if level == 1 {
-                write!(w, "{field_name}.serialize(serializer) ")?;
-            }
-            let name;
-            if format.is_leaf() {
-                name = "it".to_string();
-                w.start_block()?;
-            } else {
-                name = format!("list{level}");
-                w.start_block_no_newline()?;
-                writeln!(w, " {name} ->")?;
-            }
-            if format.is_leaf() {
-                write_serialize(w, &name, format, level + 1)?;
-            } else {
-                write!(w, "{name}.serialize(serializer)")?;
-                write!(w, " ")?;
-                write_serialize(w, field_name, format, level + 1)?;
-            }
-            w.end_block()
+
+        // Container types - these generate method calls with lambdas
+        Format::Option(inner_format) => {
+            write!(w, "{field_name}.serializeOptionOf(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
         }
+
+        Format::Seq(inner_format) => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
+        }
+
         Format::TypeName(..)
-        | Format::Option(..)
         | Format::Set(..)
         | Format::Map { .. }
         | Format::Tuple(..)
         | Format::TupleArray { .. } => writeln!(w, "{field_name}.serialize(serializer)"),
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
+}
+
+fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usize) -> Result<()> {
+    if format.is_leaf() {
+        w.start_block()?;
+        write_serialize(w, "it", format, level + 1)?;
+    } else {
+        let param_name = format!("level{}", level + 1);
+        w.start_block_no_newline()?;
+        writeln!(w, " {param_name} ->")?;
+        write_serialize(w, &param_name, format, level + 1)?;
+    }
+    w.end_block()
 }
 
 fn write_deserialize<W: IndentWrite>(
@@ -801,7 +812,7 @@ fn write_deserialize<W: IndentWrite>(
 ) -> Result<()> {
     if level == 1 {
         write!(w, "val {field_name} =")?;
-        if !matches!(format, Format::Seq(..)) {
+        if !matches!(format, Format::Seq(..) | Format::Option(..)) {
             write!(w, " ")?;
         }
     }
@@ -827,13 +838,26 @@ fn write_deserialize<W: IndentWrite>(
         Format::Char => writeln!(w, "deserializer.deserialize_char()"),
         Format::Str => writeln!(w, "deserializer.deserialize_str()"),
         Format::Bytes => writeln!(w, "deserializer.deserialize_bytes()"),
-        Format::Option(_format) => writeln!(w, "todo!"),
         Format::Seq(format) => {
             if level == 1 {
                 writeln!(w)?;
                 w.indent();
             }
             write!(w, "deserializer.deserializeListOf ")?;
+            w.start_block()?;
+            write_deserialize(w, field_name, format, level + 1)?;
+            w.end_block()?;
+            if level == 1 {
+                w.unindent();
+            }
+            Ok(())
+        }
+        Format::Option(format) => {
+            if level == 1 {
+                writeln!(w)?;
+                w.indent();
+            }
+            write!(w, "deserializer.deserializeOptionOf ")?;
             w.start_block()?;
             write_deserialize(w, field_name, format, level + 1)?;
             w.end_block()?;
