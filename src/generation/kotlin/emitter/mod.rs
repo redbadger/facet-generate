@@ -15,6 +15,7 @@ use crate::{
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
+const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 
 pub struct Kotlin;
 
@@ -75,6 +76,12 @@ impl Emitter<Kotlin> for Module {
                 Feature::OptionOfT => {
                     if encoding == &Encoding::Bincode {
                         features_out.write_all(FEATURE_OPTION_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::SetOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_SET_OF_T)?;
                         writeln!(features_out)?;
                     }
                 }
@@ -525,7 +532,7 @@ fn data_class<W: IndentWrite>(
         } else {
             push_deserializer(w)?;
             for field in fields {
-                write_deserialize(w, &field.name, &field.value, 1)?;
+                write_deserialize(w, Some(&field.name), &field.value)?;
             }
             pop_deserializer(w)?;
             write!(w, "return {name}(")?;
@@ -782,8 +789,13 @@ fn write_serialize<W: IndentWrite>(
             Ok(())
         }
 
+        Format::Set(inner_format) => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
+        }
+
         Format::TypeName(..)
-        | Format::Set(..)
         | Format::Map { .. }
         | Format::Tuple(..)
         | Format::TupleArray { .. } => writeln!(w, "{field_name}.serialize(serializer)"),
@@ -806,13 +818,20 @@ fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usi
 
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
-    field_name: &str,
+    field_name: Option<&str>,
     format: &Format,
-    level: usize,
 ) -> Result<()> {
-    if level == 1 {
+    let mut indented = false;
+    if let Some(field_name) = field_name {
         write!(w, "val {field_name} =")?;
-        if !matches!(format, Format::Seq(..) | Format::Option(..)) {
+        if matches!(
+            format,
+            Format::Seq(..) | Format::Option(..) | Format::Set(..)
+        ) {
+            writeln!(w)?;
+            w.indent();
+            indented = true;
+        } else {
             write!(w, " ")?;
         }
     }
@@ -839,34 +858,23 @@ fn write_deserialize<W: IndentWrite>(
         Format::Str => writeln!(w, "deserializer.deserialize_str()"),
         Format::Bytes => writeln!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
-            if level == 1 {
-                writeln!(w)?;
-                w.indent();
-            }
             write!(w, "deserializer.deserializeListOf ")?;
             w.start_block()?;
-            write_deserialize(w, field_name, format, level + 1)?;
-            w.end_block()?;
-            if level == 1 {
-                w.unindent();
-            }
-            Ok(())
+            write_deserialize(w, None, format)?;
+            w.end_block()
         }
         Format::Option(format) => {
-            if level == 1 {
-                writeln!(w)?;
-                w.indent();
-            }
             write!(w, "deserializer.deserializeOptionOf ")?;
             w.start_block()?;
-            write_deserialize(w, field_name, format, level + 1)?;
-            w.end_block()?;
-            if level == 1 {
-                w.unindent();
-            }
-            Ok(())
+            write_deserialize(w, None, format)?;
+            w.end_block()
         }
-        Format::Set(_format) => writeln!(w, "todo!"),
+        Format::Set(format) => {
+            write!(w, "deserializer.deserializeSetOf ")?;
+            w.start_block()?;
+            write_deserialize(w, None, format)?;
+            w.end_block()
+        }
         Format::Map { key: _, value: _ } => writeln!(w, "todo!"),
         Format::Tuple(formats) => {
             let len = formats.len();
@@ -874,7 +882,7 @@ fn write_deserialize<W: IndentWrite>(
                 0 => return Ok(()),
                 1 => {
                     push_deserializer(w)?;
-                    write_deserialize(w, "value", &formats[0], level)?;
+                    write_deserialize(w, Some("value"), &formats[0])?;
                     pop_deserializer(w)?;
                     return Ok(());
                 }
@@ -896,7 +904,13 @@ fn write_deserialize<W: IndentWrite>(
             size: _,
         } => todo!(),
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
+    }?;
+
+    if indented {
+        w.unindent();
     }
+
+    Ok(())
 }
 
 fn push_serializer<W: Write>(w: &mut W) -> Result<()> {

@@ -1,4 +1,6 @@
 #![allow(clippy::too_many_lines)]
+use std::collections::HashSet;
+
 use facet::Facet;
 
 use super::*;
@@ -1578,27 +1580,71 @@ fn struct_with_btreemap_field() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_hashset_field() {
     // NOTE: HashSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
-        string_set: std::collections::HashSet<String>,
-        int_set: std::collections::HashSet<i32>,
+        string_set: HashSet<String>,
+        int_set: HashSet<i32>,
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val string_set: Set<String>,
         val int_set: Set<Int>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            string_set.serialize(serializer) {
+                serializer.serialize_str(it)
+            }
+            int_set.serialize(serializer) {
+                serializer.serialize_i32(it)
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val string_set =
+                    deserializer.deserializeSetOf {
+                        deserializer.deserialize_str()
+                    }
+                val int_set =
+                    deserializer.deserializeSetOf {
+                        deserializer.deserialize_i32()
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(string_set, int_set)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_btreeset_field() {
     // NOTE: BTreeSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
     // This preserves the uniqueness constraint and provides better type safety.
@@ -1609,12 +1655,125 @@ fn struct_with_btreeset_field() {
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val string_set: Set<String>,
         val int_set: Set<Int>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            string_set.serialize(serializer) {
+                serializer.serialize_str(it)
+            }
+            int_set.serialize(serializer) {
+                serializer.serialize_i32(it)
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val string_set =
+                    deserializer.deserializeSetOf {
+                        deserializer.deserialize_str()
+                    }
+                val int_set =
+                    deserializer.deserializeSetOf {
+                        deserializer.deserialize_i32()
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(string_set, int_set)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}
+
+#[test]
+fn struct_with_nested_set_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        vec_of_sets: Vec<HashSet<String>>,
+        set_of_ints: HashSet<i32>,
+    }
+
+    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    data class MyStruct(
+        val vec_of_sets: List<Set<String>>,
+        val set_of_ints: Set<Int>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            vec_of_sets.serialize(serializer) { level1 ->
+                level1.serialize(serializer) {
+                    serializer.serialize_str(it)
+                }
+            }
+            set_of_ints.serialize(serializer) {
+                serializer.serialize_i32(it)
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val vec_of_sets =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeSetOf {
+                            deserializer.deserialize_str()
+                        }
+                    }
+                val set_of_ints =
+                    deserializer.deserializeSetOf {
+                        deserializer.deserialize_i32()
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(vec_of_sets, set_of_ints)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]
@@ -1786,7 +1945,7 @@ fn struct_with_mixed_collections_and_pointers() {
     #[derive(Facet)]
     #[allow(clippy::box_collection)]
     struct MyStruct {
-        vec_of_sets: Vec<std::collections::HashSet<String>>,
+        vec_of_sets: Vec<HashSet<String>>,
         optional_btree: Option<std::collections::BTreeMap<String, i32>>,
         boxed_vec: Box<Vec<String>>,
         arc_option: std::sync::Arc<Option<String>>,
