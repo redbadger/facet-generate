@@ -41,6 +41,7 @@ pub enum Encoding {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
+    BuildList,
     ListOfT,
     MapOfT,
     OptionOfT,
@@ -71,21 +72,18 @@ impl Encoding {
 
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).
 pub type ExternalDefinitions =
-    std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;
+    BTreeMap</* module */ String, /* type names */ Vec<String>>;
 
 /// Track locations for imports of external packages (key = <module>, value = <import from>).
 pub type ExternalPackages =
-    std::collections::BTreeMap</* module */ String, /* import from */ ExternalPackage>;
+    BTreeMap</* module */ String, /* import from */ ExternalPackage>;
 
 /// Track documentation to be attached to particular definitions.
-pub type DocComments =
-    std::collections::BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
+pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
 
 /// Track custom code to be added to particular definitions (use with care!).
-pub type CustomCode = std::collections::BTreeMap<
-    /* qualified name */ Vec<String>,
-    /* custom code */ String,
->;
+pub type CustomCode =
+    BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
 /// How to copy generated source code and available runtimes for a given language.
 pub trait SourceInstaller {
@@ -220,6 +218,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::Map { .. } => {
                             self.features.insert(Feature::MapOfT);
+                        }
+                        Format::TupleArray { .. } => {
+                            self.features.insert(Feature::BuildList);
                         }
                         _ => (),
                     }

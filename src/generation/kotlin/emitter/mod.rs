@@ -13,6 +13,7 @@ use crate::{
 };
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
+const FEATURE_BUILD_LIST: &[u8] = include_bytes!("features/BuildList.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
 const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
@@ -91,6 +92,10 @@ impl Emitter<Kotlin> for Module {
                         features_out.write_all(FEATURE_MAP_OF_T)?;
                         writeln!(features_out)?;
                     }
+                }
+                Feature::BuildList => {
+                    features_out.write_all(FEATURE_BUILD_LIST)?;
+                    writeln!(features_out)?;
                 }
             }
         }
@@ -873,6 +878,16 @@ fn write_deserialize<W: IndentWrite>(
     field_name: Option<&str>,
     format: &Format,
 ) -> Result<()> {
+    write_deserialize_impl(w, field_name, format, true)
+}
+
+#[allow(clippy::too_many_lines)]
+fn write_deserialize_impl<W: IndentWrite>(
+    w: &mut W,
+    field_name: Option<&str>,
+    format: &Format,
+    newline: bool,
+) -> Result<()> {
     let mut indented = false;
     if let Some(field_name) = field_name {
         write!(w, "val {field_name} =")?;
@@ -890,41 +905,41 @@ fn write_deserialize<W: IndentWrite>(
     match format {
         Format::TypeName(qualified_name) => {
             let name = &qualified_name.name;
-            writeln!(w, "{name}.deserialize(deserializer)")
+            write!(w, "{name}.deserialize(deserializer)")
         }
-        Format::Unit => writeln!(w, "deserializer.deserialize_unit()"),
-        Format::Bool => writeln!(w, "deserializer.deserialize_bool()"),
-        Format::I8 => writeln!(w, "deserializer.deserialize_i8()"),
-        Format::I16 => writeln!(w, "deserializer.deserialize_i16()"),
-        Format::I32 => writeln!(w, "deserializer.deserialize_i32()"),
-        Format::I64 => writeln!(w, "deserializer.deserialize_i64()"),
-        Format::I128 => writeln!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => writeln!(w, "deserializer.deserialize_u8()"),
-        Format::U16 => writeln!(w, "deserializer.deserialize_u16()"),
-        Format::U32 => writeln!(w, "deserializer.deserialize_u32()"),
-        Format::U64 => writeln!(w, "deserializer.deserialize_u64()"),
-        Format::U128 => writeln!(w, "deserializer.deserialize_u128()"),
-        Format::F32 => writeln!(w, "deserializer.deserialize_f32()"),
-        Format::F64 => writeln!(w, "deserializer.deserialize_f64()"),
-        Format::Char => writeln!(w, "deserializer.deserialize_char()"),
-        Format::Str => writeln!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => writeln!(w, "deserializer.deserialize_bytes()"),
+        Format::Unit => write!(w, "deserializer.deserialize_unit()"),
+        Format::Bool => write!(w, "deserializer.deserialize_bool()"),
+        Format::I8 => write!(w, "deserializer.deserialize_i8()"),
+        Format::I16 => write!(w, "deserializer.deserialize_i16()"),
+        Format::I32 => write!(w, "deserializer.deserialize_i32()"),
+        Format::I64 => write!(w, "deserializer.deserialize_i64()"),
+        Format::I128 => write!(w, "deserializer.deserialize_i128()"),
+        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
+        Format::U128 => write!(w, "deserializer.deserialize_u128()"),
+        Format::F32 => write!(w, "deserializer.deserialize_f32()"),
+        Format::F64 => write!(w, "deserializer.deserialize_f64()"),
+        Format::Char => write!(w, "deserializer.deserialize_char()"),
+        Format::Str => write!(w, "deserializer.deserialize_str()"),
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             w.start_block()?;
-            write_deserialize(w, None, format)?;
+            write_deserialize_impl(w, None, format, true)?;
             w.end_block()
         }
         Format::Option(format) => {
             write!(w, "deserializer.deserializeOptionOf ")?;
             w.start_block()?;
-            write_deserialize(w, None, format)?;
+            write_deserialize_impl(w, None, format, true)?;
             w.end_block()
         }
         Format::Set(format) => {
             write!(w, "deserializer.deserializeSetOf ")?;
             w.start_block()?;
-            write_deserialize(w, None, format)?;
+            write_deserialize_impl(w, None, format, true)?;
             w.end_block()
         }
         Format::Map { key, value } => {
@@ -955,12 +970,28 @@ fn write_deserialize<W: IndentWrite>(
             }
             writeln!(w, ">.deserialize(deserializer)")
         }
-        Format::TupleArray {
-            content: _,
-            size: _,
-        } => todo!(),
+        Format::TupleArray { content, size } => {
+            write!(w, "buildList({size}) {{ repeat({size}) {{ add(")?;
+            write_deserialize_impl(w, None, content, false)?;
+            write!(w, ") }} }}")
+        }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }?;
+
+    // Add newline for simple expressions and field assignments
+    // Block-based formats (Seq, Option, Set, Map, Tuple) handle their own newlines
+    if newline
+        && !matches!(
+            format,
+            Format::Seq(..)
+                | Format::Option(..)
+                | Format::Set(..)
+                | Format::Map { .. }
+                | Format::Tuple(..)
+        )
+    {
+        writeln!(w)?;
+    }
 
     if indented {
         w.unindent();

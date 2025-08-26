@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -1404,7 +1404,7 @@ fn test_fixed_issues() {
     // Test 1: Set types (previously caused panic due to Def::Set being unhandled)
     #[derive(Facet)]
     struct WithSet {
-        set_field: std::collections::BTreeSet<u32>,
+        set_field: BTreeSet<u32>,
     }
 
     // Test 2: Nested collections with sets
@@ -1412,15 +1412,15 @@ fn test_fixed_issues() {
     #[repr(u8)]
     #[allow(unused)]
     enum EnumWithSet {
-        SetVariant(std::collections::HashSet<String>),
+        SetVariant(HashSet<String>),
         Regular(u32),
     }
 
     // Test 3: Complex nested structures that could hit multiple problematic paths
     #[derive(Facet)]
     struct ComplexNested {
-        sets: Vec<std::collections::BTreeSet<String>>,
-        optional_set: Option<std::collections::HashSet<u64>>,
+        sets: Vec<BTreeSet<String>>,
+        optional_set: Option<HashSet<u64>>,
     }
 
     // This should not panic - all Variable placeholders should be resolved

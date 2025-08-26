@@ -1,5 +1,9 @@
 #![allow(clippy::too_many_lines)]
-use std::collections::HashMap;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
 
 use facet::Facet;
 
@@ -2584,8 +2588,8 @@ fn struct_with_array_field() {
 fn struct_with_btreemap_field() {
     #[derive(Facet)]
     struct MyStruct {
-        string_to_int: std::collections::BTreeMap<String, i32>,
-        int_to_bool: std::collections::BTreeMap<i32, bool>,
+        string_to_int: BTreeMap<String, i32>,
+        int_to_bool: BTreeMap<i32, bool>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -2673,8 +2677,8 @@ fn struct_with_hashset_field() {
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
-        string_set: std::collections::HashSet<String>,
-        int_set: std::collections::HashSet<i32>,
+        string_set: HashSet<String>,
+        int_set: HashSet<i32>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -2762,8 +2766,8 @@ fn struct_with_btreeset_field() {
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
-        string_set: std::collections::BTreeSet<String>,
-        int_set: std::collections::BTreeSet<i32>,
+        string_set: BTreeSet<String>,
+        int_set: BTreeSet<i32>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -2937,8 +2941,8 @@ fn struct_with_box_field() {
 fn struct_with_rc_field() {
     #[derive(Facet)]
     struct MyStruct {
-        rc_string: std::rc::Rc<String>,
-        rc_int: std::rc::Rc<i32>,
+        rc_string: Rc<String>,
+        rc_int: Rc<i32>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -3024,8 +3028,8 @@ fn struct_with_rc_field() {
 fn struct_with_arc_field() {
     #[derive(Facet)]
     struct MyStruct {
-        arc_string: std::sync::Arc<String>,
-        arc_int: std::sync::Arc<i32>,
+        arc_string: Arc<String>,
+        arc_int: Arc<i32>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -3112,10 +3116,10 @@ fn struct_with_mixed_collections_and_pointers() {
     #[derive(Facet)]
     #[allow(clippy::box_collection)]
     struct MyStruct {
-        vec_of_sets: Vec<std::collections::HashSet<String>>,
-        optional_btree: Option<std::collections::BTreeMap<String, i32>>,
+        vec_of_sets: Vec<HashSet<String>>,
+        optional_btree: Option<BTreeMap<String, i32>>,
         boxed_vec: Box<Vec<String>>,
-        arc_option: std::sync::Arc<Option<String>>,
+        arc_option: Arc<Option<String>>,
         array_of_boxes: [Box<i32>; 3],
     }
 
