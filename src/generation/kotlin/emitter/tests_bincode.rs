@@ -1,5 +1,5 @@
 #![allow(clippy::too_many_lines)]
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use facet::Facet;
 
@@ -1499,45 +1499,203 @@ fn struct_with_option_field() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_hashmap_field() {
     #[derive(Facet)]
     struct MyStruct {
-        string_to_int: std::collections::HashMap<String, i32>,
-        int_to_bool: std::collections::HashMap<i32, bool>,
+        string_to_int: HashMap<String, i32>,
+        int_to_bool: HashMap<i32, bool>,
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val string_to_int: Map<String, Int>,
         val int_to_bool: Map<Int, Boolean>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            string_to_int.serialize(serializer) { key, value ->
+                serializer.serialize_str(key)
+                serializer.serialize_i32(value)
+            }
+            int_to_bool.serialize(serializer) { key, value ->
+                serializer.serialize_i32(key)
+                serializer.serialize_bool(value)
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val string_to_int =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_str()
+                        val value = deserializer.deserialize_i32()
+                        Pair(key, value)
+                    }
+                val int_to_bool =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_i32()
+                        val value = deserializer.deserialize_bool()
+                        Pair(key, value)
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(string_to_int, int_to_bool)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_nested_generics() {
     #[derive(Facet)]
     struct MyStruct {
         optional_list: Option<Vec<String>>,
         list_of_optionals: Vec<Option<i32>>,
-        map_to_list: std::collections::HashMap<String, Vec<bool>>,
-        optional_map: Option<std::collections::HashMap<String, i32>>,
-        complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
+        map_to_list: HashMap<String, Vec<bool>>,
+        optional_map: Option<HashMap<String, i32>>,
+        complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val optional_list: List<String>? = null,
         val list_of_optionals: List<Int?>,
         val map_to_list: Map<String, List<Boolean>>,
         val optional_map: Map<String, Int>? = null,
         val complex: List<Map<String, List<Boolean>>?>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            optional_list.serializeOptionOf(serializer) { level1 ->
+                level1.serialize(serializer) {
+                    serializer.serialize_str(it)
+                }
+            }
+            list_of_optionals.serialize(serializer) { level1 ->
+                level1.serializeOptionOf(serializer) {
+                    serializer.serialize_i32(it)
+                }
+            }
+            map_to_list.serialize(serializer) { key, value ->
+                serializer.serialize_str(key)
+                value.serialize(serializer) { level2 ->
+                    level2.serialize(serializer) {
+                        serializer.serialize_bool(it)
+                    }
+                }
+            }
+            optional_map.serializeOptionOf(serializer) { level1 ->
+                level1.serialize(serializer) { key, value ->
+                    serializer.serialize_str(key)
+                    serializer.serialize_i32(value)
+                }
+            }
+            complex.serialize(serializer) { level1 ->
+                level1.serializeOptionOf(serializer) { level2 ->
+                    level2.serialize(serializer) { key, value ->
+                        serializer.serialize_str(key)
+                        value.serialize(serializer) { level4 ->
+                            level4.serialize(serializer) {
+                                serializer.serialize_bool(it)
+                            }
+                        }
+                    }
+                }
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val optional_list =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserializeListOf {
+                            deserializer.deserialize_str()
+                        }
+                    }
+                val list_of_optionals =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeOptionOf {
+                            deserializer.deserialize_i32()
+                        }
+                    }
+                val map_to_list =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_str()
+                        val value = deserializer.deserializeListOf {
+                            deserializer.deserialize_bool()
+                        }
+                        Pair(key, value)
+                    }
+                val optional_map =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserializeMapOf {
+                            val key = deserializer.deserialize_str()
+                            val value = deserializer.deserialize_i32()
+                            Pair(key, value)
+                        }
+                    }
+                val complex =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeOptionOf {
+                            deserializer.deserializeMapOf {
+                                val key = deserializer.deserialize_str()
+                                val value = deserializer.deserializeListOf {
+                                    deserializer.deserialize_bool()
+                                }
+                                Pair(key, value)
+                            }
+                        }
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(optional_list, list_of_optionals, map_to_list, optional_map, complex)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]
@@ -1562,7 +1720,6 @@ fn struct_with_array_field() {
 }
 
 #[test]
-#[ignore = "TODO"]
 fn struct_with_btreemap_field() {
     #[derive(Facet)]
     struct MyStruct {
@@ -1571,12 +1728,143 @@ fn struct_with_btreemap_field() {
     }
 
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
-    insta::assert_snapshot!(actual, @r"
+    insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
         val string_to_int: Map<String, Int>,
         val int_to_bool: Map<Int, Boolean>,
-    )
-    ");
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            string_to_int.serialize(serializer) { key, value ->
+                serializer.serialize_str(key)
+                serializer.serialize_i32(value)
+            }
+            int_to_bool.serialize(serializer) { key, value ->
+                serializer.serialize_i32(key)
+                serializer.serialize_bool(value)
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val string_to_int =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_str()
+                        val value = deserializer.deserialize_i32()
+                        Pair(key, value)
+                    }
+                val int_to_bool =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_i32()
+                        val value = deserializer.deserialize_bool()
+                        Pair(key, value)
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(string_to_int, int_to_bool)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}
+
+#[test]
+fn struct_with_nested_map_field() {
+    #[derive(Facet)]
+    struct MyStruct {
+        map_to_list: HashMap<String, Vec<i32>>,
+        list_to_map: Vec<HashMap<i32, String>>,
+    }
+
+    let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    data class MyStruct(
+        val map_to_list: Map<String, List<Int>>,
+        val list_to_map: List<Map<Int, String>>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            map_to_list.serialize(serializer) { key, value ->
+                serializer.serialize_str(key)
+                value.serialize(serializer) { level2 ->
+                    level2.serialize(serializer) {
+                        serializer.serialize_i32(it)
+                    }
+                }
+            }
+            list_to_map.serialize(serializer) { level1 ->
+                level1.serialize(serializer) { key, value ->
+                    serializer.serialize_i32(key)
+                    serializer.serialize_str(value)
+                }
+            }
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): MyStruct {
+                deserializer.increase_container_depth()
+                val map_to_list =
+                    deserializer.deserializeMapOf {
+                        val key = deserializer.deserialize_str()
+                        val value = deserializer.deserializeListOf {
+                            deserializer.deserialize_i32()
+                        }
+                        Pair(key, value)
+                    }
+                val list_to_map =
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeMapOf {
+                            val key = deserializer.deserialize_i32()
+                            val value = deserializer.deserialize_str()
+                            Pair(key, value)
+                        }
+                    }
+                deserializer.decrease_container_depth()
+                return MyStruct(map_to_list, list_to_map)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): MyStruct {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
 }
 
 #[test]

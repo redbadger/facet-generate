@@ -6,6 +6,85 @@ import com.novi.serde.DeserializationError
 import com.novi.serde.Deserializer
 import com.novi.serde.Serializer
 
+fun <T> List<T>.serialize(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { element ->
+        serializer.serializeElement(element)
+    }
+}
+
+fun <T> Deserializer.deserializeListOf(deserializeElement: (Deserializer) -> T): List<T> {
+    val length = deserialize_len()
+    val list = mutableListOf<T>()
+    repeat(length.toInt()) {
+        list.add(deserializeElement(this))
+    }
+    return list
+}
+
+fun <K, V> Map<K, V>.serialize(
+    serializer: Serializer,
+    serializeEntry: Serializer.(K, V) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { (key, value) ->
+        serializer.serializeEntry(key, value)
+    }
+}
+
+fun <K, V> Deserializer.deserializeMapOf(deserializeEntry: (Deserializer) -> Pair<K, V>): Map<K, V> {
+    val length = deserialize_len()
+    val map = mutableMapOf<K, V>()
+    repeat(length.toInt()) {
+        val (key, value) = deserializeEntry(this)
+        map[key] = value
+    }
+    return map
+}
+
+fun <T> T?.serializeOptionOf(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    if (this != null) {
+        serializer.serialize_option_tag(true)
+        serializer.serializeElement(this)
+    } else {
+        serializer.serialize_option_tag(false)
+    }
+}
+
+fun <T> Deserializer.deserializeOptionOf(deserializeElement: (Deserializer) -> T): T? {
+    val tag = deserialize_option_tag()
+    return if (tag) {
+        deserializeElement(this)
+    } else {
+        null
+    }
+}
+
+fun <T> Set<T>.serialize(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { element ->
+        serializer.serializeElement(element)
+    }
+}
+
+fun <T> Deserializer.deserializeSetOf(deserializeElement: (Deserializer) -> T): Set<T> {
+    val length = deserialize_len()
+    val set = mutableSetOf<T>()
+    repeat(length.toInt()) {
+        set.add(deserializeElement(this))
+    }
+    return set
+}
+
 data class Child(
     val name: String,
 ) {
@@ -31,6 +110,88 @@ data class Child(
 
         @Throws(DeserializationError::class)
         fun bincodeDeserialize(input: ByteArray?): Child {
+            if (input == null) {
+                throw DeserializationError("Cannot deserialize null array")
+            }
+            val deserializer = BincodeDeserializer(input)
+            val value = deserialize(deserializer)
+            if (deserializer.get_buffer_offset() < input.size) {
+                throw DeserializationError("Some input bytes were not read")
+            }
+            return value
+        }
+    }
+}
+
+data class MyStruct(
+    val string_to_int: Map<String, Int>,
+    val map_to_list: Map<String, List<Int>>,
+    val option_of_vec_of_set: List<Set<String>>? = null,
+    val parent: Parent,
+) {
+    fun serialize(serializer: Serializer) {
+        serializer.increase_container_depth()
+        string_to_int.serialize(serializer) { key, value ->
+            serializer.serialize_str(key)
+            serializer.serialize_i32(value)
+        }
+        map_to_list.serialize(serializer) { key, value ->
+            serializer.serialize_str(key)
+            value.serialize(serializer) { level2 ->
+                level2.serialize(serializer) {
+                    serializer.serialize_i32(it)
+                }
+            }
+        }
+        option_of_vec_of_set.serializeOptionOf(serializer) { level1 ->
+            level1.serialize(serializer) { level2 ->
+                level2.serialize(serializer) {
+                    serializer.serialize_str(it)
+                }
+            }
+        }
+        parent.serialize(serializer)
+        serializer.decrease_container_depth()
+    }
+
+    fun bincodeSerialize(): ByteArray {
+        val serializer = BincodeSerializer()
+        serialize(serializer)
+        return serializer.get_bytes()
+    }
+
+    companion object {
+        fun deserialize(deserializer: Deserializer): MyStruct {
+            deserializer.increase_container_depth()
+            val string_to_int =
+                deserializer.deserializeMapOf {
+                    val key = deserializer.deserialize_str()
+                    val value = deserializer.deserialize_i32()
+                    Pair(key, value)
+                }
+            val map_to_list =
+                deserializer.deserializeMapOf {
+                    val key = deserializer.deserialize_str()
+                    val value = deserializer.deserializeListOf {
+                        deserializer.deserialize_i32()
+                    }
+                    Pair(key, value)
+                }
+            val option_of_vec_of_set =
+                deserializer.deserializeOptionOf {
+                    deserializer.deserializeListOf {
+                        deserializer.deserializeSetOf {
+                            deserializer.deserialize_str()
+                        }
+                    }
+                }
+            val parent = Parent.deserialize(deserializer)
+            deserializer.decrease_container_depth()
+            return MyStruct(string_to_int, map_to_list, option_of_vec_of_set, parent)
+        }
+
+        @Throws(DeserializationError::class)
+        fun bincodeDeserialize(input: ByteArray?): MyStruct {
             if (input == null) {
                 throw DeserializationError("Cannot deserialize null array")
             }

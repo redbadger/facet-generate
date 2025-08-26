@@ -1,4 +1,8 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    path::PathBuf,
+};
 
 use expect_test::expect_file;
 use facet::Facet;
@@ -28,7 +32,15 @@ fn test() {
         Child(Child),
     }
 
-    let registry = reflect!(Parent);
+    #[derive(Facet)]
+    struct MyStruct {
+        string_to_int: HashMap<String, i32>,
+        map_to_list: HashMap<String, Vec<i32>>,
+        option_of_vec_of_set: Option<Vec<HashSet<String>>>,
+        parent: Parent,
+    }
+
+    let registry = reflect!(MyStruct);
 
     let this_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .join(file!())

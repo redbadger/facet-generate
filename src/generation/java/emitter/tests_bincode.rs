@@ -2282,8 +2282,8 @@ fn struct_with_option_field() {
 fn struct_with_hashmap_field() {
     #[derive(Facet)]
     struct MyStruct {
-        string_to_int: std::collections::HashMap<String, i32>,
-        int_to_bool: std::collections::HashMap<i32, bool>,
+        string_to_int: HashMap<String, i32>,
+        int_to_bool: HashMap<i32, bool>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();
@@ -2371,9 +2371,9 @@ fn struct_with_nested_generics() {
     struct MyStruct {
         optional_list: Option<Vec<String>>,
         list_of_optionals: Vec<Option<i32>>,
-        map_to_list: std::collections::HashMap<String, Vec<bool>>,
-        optional_map: Option<std::collections::HashMap<String, i32>>,
-        complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
+        map_to_list: HashMap<String, Vec<bool>>,
+        optional_map: Option<HashMap<String, i32>>,
+        complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
     let actual = emit_java!(MyStruct as Encoding::Bincode).unwrap();

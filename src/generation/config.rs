@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -26,7 +26,7 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
     pub package_manifest: bool,
-    pub features: HashSet<Feature>,
+    pub features: BTreeSet<Feature>,
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
@@ -38,10 +38,11 @@ pub enum Encoding {
     Bcs,
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
     ListOfT,
+    MapOfT,
     OptionOfT,
     SetOfT,
 }
@@ -128,7 +129,7 @@ impl CodeGeneratorConfig {
             custom_code: BTreeMap::new(),
             c_style_enums: false,
             package_manifest: true,
-            features: HashSet::new(),
+            features: BTreeSet::new(),
         }
     }
 
@@ -216,6 +217,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::Set(..) => {
                             self.features.insert(Feature::SetOfT);
+                        }
+                        Format::Map { .. } => {
+                            self.features.insert(Feature::MapOfT);
                         }
                         _ => (),
                     }

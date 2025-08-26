@@ -14,6 +14,7 @@ use crate::{
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
+const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
 const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 
@@ -82,6 +83,12 @@ impl Emitter<Kotlin> for Module {
                 Feature::SetOfT => {
                     if encoding == &Encoding::Bincode {
                         features_out.write_all(FEATURE_SET_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::MapOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_MAP_OF_T)?;
                         writeln!(features_out)?;
                     }
                 }
@@ -795,10 +802,15 @@ fn write_serialize<W: IndentWrite>(
             Ok(())
         }
 
-        Format::TypeName(..)
-        | Format::Map { .. }
-        | Format::Tuple(..)
-        | Format::TupleArray { .. } => writeln!(w, "{field_name}.serialize(serializer)"),
+        Format::Map { key, value } => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_map_serialize_lambda(w, key, value, level)?;
+            Ok(())
+        }
+
+        Format::TypeName(..) | Format::Tuple(..) | Format::TupleArray { .. } => {
+            writeln!(w, "{field_name}.serialize(serializer)")
+        }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
 }
@@ -816,6 +828,46 @@ fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usi
     w.end_block()
 }
 
+fn write_map_serialize_lambda<W: IndentWrite>(
+    w: &mut W,
+    key_format: &Format,
+    value_format: &Format,
+    level: usize,
+) -> Result<()> {
+    w.start_block_no_newline()?;
+    writeln!(w, " key, value ->")?;
+
+    if key_format.is_leaf() {
+        write_serialize(w, "key", key_format, level + 1)?;
+    } else {
+        write!(w, "key.serialize(serializer) ")?;
+        write_serialize_lambda(w, key_format, level + 1)?;
+    }
+
+    if value_format.is_leaf() {
+        write_serialize(w, "value", value_format, level + 1)?;
+    } else {
+        write!(w, "value.serialize(serializer) ")?;
+        write_serialize_lambda(w, value_format, level + 1)?;
+    }
+
+    w.end_block()
+}
+
+fn write_map_deserialize_lambda<W: IndentWrite>(
+    w: &mut W,
+    key_format: &Format,
+    value_format: &Format,
+) -> Result<()> {
+    w.start_block()?;
+    write!(w, "val key = ")?;
+    write_deserialize(w, None, key_format)?;
+    write!(w, "val value = ")?;
+    write_deserialize(w, None, value_format)?;
+    writeln!(w, "Pair(key, value)")?;
+    w.end_block()
+}
+
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
@@ -826,7 +878,7 @@ fn write_deserialize<W: IndentWrite>(
         write!(w, "val {field_name} =")?;
         if matches!(
             format,
-            Format::Seq(..) | Format::Option(..) | Format::Set(..)
+            Format::Seq(..) | Format::Option(..) | Format::Set(..) | Format::Map { .. }
         ) {
             writeln!(w)?;
             w.indent();
@@ -875,7 +927,11 @@ fn write_deserialize<W: IndentWrite>(
             write_deserialize(w, None, format)?;
             w.end_block()
         }
-        Format::Map { key: _, value: _ } => writeln!(w, "todo!"),
+        Format::Map { key, value } => {
+            write!(w, "deserializer.deserializeMapOf ")?;
+            write_map_deserialize_lambda(w, key, value)?;
+            Ok(())
+        }
         Format::Tuple(formats) => {
             let len = formats.len();
             let typename = match len {
