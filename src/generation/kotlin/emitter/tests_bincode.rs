@@ -31,7 +31,7 @@ fn unit_struct_1() {
         }
 
         fun deserialize(deserializer: Deserializer): UnitStruct {
-            return UnitStruct()
+            return UnitStruct
         }
 
         @Throws(DeserializationError::class)
@@ -71,7 +71,7 @@ fn unit_struct_2() {
         }
 
         fun deserialize(deserializer: Deserializer): UnitStruct {
-            return UnitStruct()
+            return UnitStruct
         }
 
         @Throws(DeserializationError::class)
@@ -253,12 +253,12 @@ fn struct_with_fields_of_primitive_types() {
             serializer.serialize_i16(i16)
             serializer.serialize_i32(i32)
             serializer.serialize_i64(i64)
-            serializer.serialize_i128(i128)
-            serializer.serialize_u8(u8)
-            serializer.serialize_u16(u16)
-            serializer.serialize_u32(u32)
-            serializer.serialize_u64(u64)
-            serializer.serialize_u128(u128)
+            serializer.serialize_i128(@Int128 i128)
+            serializer.serialize_u8(@Unsigned u8.toByte())
+            serializer.serialize_u16(@Unsigned u16.toShort())
+            serializer.serialize_u32(@Unsigned u32.toInt())
+            serializer.serialize_u64(@Unsigned u64.toLong())
+            serializer.serialize_u128(@Unsigned @Int128 u128)
             serializer.serialize_f32(f32)
             serializer.serialize_f64(f64)
             serializer.serialize_char(char)
@@ -282,10 +282,10 @@ fn struct_with_fields_of_primitive_types() {
                 val i32 = deserializer.deserialize_i32()
                 val i64 = deserializer.deserialize_i64()
                 val i128 = deserializer.deserialize_i128()
-                val u8 = deserializer.deserialize_u8()
-                val u16 = deserializer.deserialize_u16()
-                val u32 = deserializer.deserialize_u32()
-                val u64 = deserializer.deserialize_u64()
+                val u8 = deserializer.deserialize_u8().toUByte()
+                val u16 = deserializer.deserialize_u16().toUShort()
+                val u32 = deserializer.deserialize_u32().toUInt()
+                val u64 = deserializer.deserialize_u64().toULong()
                 val u128 = deserializer.deserialize_u128()
                 val f32 = deserializer.deserialize_f32()
                 val f64 = deserializer.deserialize_f64()
@@ -816,7 +816,7 @@ fn enum_with_1_tuple_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                val index = deserializer.serialize_variant_index()
+                val index = deserializer.deserialize_variant_index()
                 return when (index) {
                     0 -> Variant1.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
@@ -904,7 +904,7 @@ fn enum_with_newtype_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                val index = deserializer.serialize_variant_index()
+                val index = deserializer.deserialize_variant_index()
                 return when (index) {
                     0 -> Variant1.deserialize(deserializer)
                     1 -> Variant2.deserialize(deserializer)
@@ -983,7 +983,7 @@ fn enum_with_tuple_variants() {
                 serializer.serialize_variant_index(1)
                 serializer.serialize_bool(field0)
                 serializer.serialize_f64(field1)
-                serializer.serialize_u8(field2)
+                serializer.serialize_u8(@Unsigned field2.toByte())
                 serializer.decrease_container_depth()
             }
 
@@ -992,7 +992,7 @@ fn enum_with_tuple_variants() {
                     deserializer.increase_container_depth()
                     val field0 = deserializer.deserialize_bool()
                     val field1 = deserializer.deserialize_f64()
-                    val field2 = deserializer.deserialize_u8()
+                    val field2 = deserializer.deserialize_u8().toUByte()
                     deserializer.decrease_container_depth()
                     return Variant2(field0, field1, field2)
                 }
@@ -1002,7 +1002,7 @@ fn enum_with_tuple_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                val index = deserializer.serialize_variant_index()
+                val index = deserializer.deserialize_variant_index()
                 return when (index) {
                     0 -> Variant1.deserialize(deserializer)
                     1 -> Variant2.deserialize(deserializer)
@@ -1073,7 +1073,7 @@ fn enum_with_struct_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                val index = deserializer.serialize_variant_index()
+                val index = deserializer.deserialize_variant_index()
                 return when (index) {
                     0 -> Variant1.deserialize(deserializer)
                     else -> throw DeserializationError("Unknown variant index for MyEnum: $index")
@@ -1128,7 +1128,7 @@ fn enum_with_mixed_variants() {
             }
 
             fun deserialize(deserializer: Deserializer): Unit {
-                return Unit()
+                return Unit
             }
         }
 
@@ -1198,7 +1198,7 @@ fn enum_with_mixed_variants() {
         companion object {
             @Throws(DeserializationError::class)
             fun deserialize(deserializer: Deserializer): MyEnum {
-                val index = deserializer.serialize_variant_index()
+                val index = deserializer.deserialize_variant_index()
                 return when (index) {
                     0 -> Unit.deserialize(deserializer)
                     1 -> NewType.deserialize(deserializer)
@@ -1733,7 +1733,7 @@ fn struct_with_array_field() {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
                 val fixedArray = buildList(5) { repeat(5) { add(deserializer.deserialize_i32()) } }
-                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8()) } }
+                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8().toUByte()) } }
                 val stringArray = buildList(3) { repeat(3) { add(deserializer.deserialize_str()) } }
                 deserializer.decrease_container_depth()
                 return MyStruct(fixedArray, byteArray, stringArray)
@@ -2379,9 +2379,9 @@ fn struct_with_bytes_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_bytes(data)
+            serializer.serialize_bytes(Bytes.valueOf(data))
             serializer.serialize_str(name)
-            serializer.serialize_bytes(header)
+            serializer.serialize_bytes(Bytes.valueOf(header))
             serializer.decrease_container_depth()
         }
 
@@ -2394,9 +2394,9 @@ fn struct_with_bytes_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val data = deserializer.deserialize_bytes()
+                val data = deserializer.deserialize_bytes().content()
                 val name = deserializer.deserialize_str()
-                val header = deserializer.deserialize_bytes()
+                val header = deserializer.deserialize_bytes().content()
                 deserializer.decrease_container_depth()
                 return MyStruct(data, name, header)
             }
@@ -2440,12 +2440,12 @@ fn struct_with_bytes_field_and_slice() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_bytes(data)
+            serializer.serialize_bytes(Bytes.valueOf(data))
             serializer.serialize_str(name)
-            serializer.serialize_bytes(header)
+            serializer.serialize_bytes(Bytes.valueOf(header))
             optional_bytes.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) {
-                    serializer.serialize_u8(it)
+                    serializer.serialize_u8(@Unsigned it.toByte())
                 }
             }
             serializer.decrease_container_depth()
@@ -2460,13 +2460,13 @@ fn struct_with_bytes_field_and_slice() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val data = deserializer.deserialize_bytes()
+                val data = deserializer.deserialize_bytes().content()
                 val name = deserializer.deserialize_str()
-                val header = deserializer.deserialize_bytes()
+                val header = deserializer.deserialize_bytes().content()
                 val optionalBytes =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeListOf {
-                            deserializer.deserialize_u8()
+                            deserializer.deserialize_u8().toUByte()
                         }
                     }
                 deserializer.decrease_container_depth()

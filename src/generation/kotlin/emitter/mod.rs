@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     io::{Result, Write},
+    string::ToString,
 };
 
 use heck::ToLowerCamelCase;
@@ -8,7 +9,8 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, indent::IndentWrite, module::Module,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
+        module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -23,6 +25,7 @@ const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 pub struct Kotlin;
 
 impl Emitter<Kotlin> for Module {
+    #[allow(clippy::too_many_lines)]
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
@@ -42,9 +45,11 @@ impl Emitter<Kotlin> for Module {
             Encoding::Bincode => vec![
                 "import com.novi.bincode.BincodeDeserializer",
                 "import com.novi.bincode.BincodeSerializer",
+                "import com.novi.serde.Bytes",
                 "import com.novi.serde.DeserializationError",
                 "import com.novi.serde.Deserializer",
                 "import com.novi.serde.Serializer",
+                "import com.novi.serde.Unsigned",
             ],
             _ => vec![],
         };
@@ -54,20 +59,26 @@ impl Emitter<Kotlin> for Module {
             match feature {
                 Feature::BigInt => {
                     imports.push("import java.math.BigInteger");
-                    if encoding == &Encoding::Json {
-                        imports.extend_from_slice(&[
-                            "import kotlinx.serialization.KSerializer",
-                            "import kotlinx.serialization.descriptors.PrimitiveKind",
-                            "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
-                            "import kotlinx.serialization.encoding.Decoder",
-                            "import kotlinx.serialization.encoding.Encoder",
-                            "import kotlinx.serialization.json.JsonDecoder",
-                            "import kotlinx.serialization.json.JsonEncoder",
-                            "import kotlinx.serialization.json.JsonUnquotedLiteral",
-                            "import kotlinx.serialization.json.jsonPrimitive",
-                        ]);
-                        features_out.write_all(FEATURE_BIGINT)?;
-                        writeln!(features_out)?;
+                    match encoding {
+                        Encoding::Json => {
+                            imports.extend_from_slice(&[
+                                "import kotlinx.serialization.KSerializer",
+                                "import kotlinx.serialization.descriptors.PrimitiveKind",
+                                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
+                                "import kotlinx.serialization.encoding.Decoder",
+                                "import kotlinx.serialization.encoding.Encoder",
+                                "import kotlinx.serialization.json.JsonDecoder",
+                                "import kotlinx.serialization.json.JsonEncoder",
+                                "import kotlinx.serialization.json.JsonUnquotedLiteral",
+                                "import kotlinx.serialization.json.jsonPrimitive",
+                            ]);
+                            features_out.write_all(FEATURE_BIGINT)?;
+                            writeln!(features_out)?;
+                        }
+                        Encoding::Bincode => {
+                            imports.push("import com.novi.serde.Int128");
+                        }
+                        Encoding::None | Encoding::Bcs => (),
                     }
                 }
                 Feature::ListOfT => {
@@ -97,6 +108,21 @@ impl Emitter<Kotlin> for Module {
                 Feature::BuildList => {
                     features_out.write_all(FEATURE_BUILD_LIST)?;
                     writeln!(features_out)?;
+                }
+            }
+        }
+
+        let mut imports = imports
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>();
+
+        for (ns, names) in &self.config().external_definitions {
+            if let Some(external_package) = self.config().external_packages.get(ns) {
+                if let PackageLocation::Path(ns) = &external_package.location {
+                    for name in names {
+                        imports.push(format!("import {ns}.{name}"));
+                    }
                 }
             }
         }
@@ -462,7 +488,7 @@ fn data_object<W: IndentWrite>(
         }
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         w.start_block()?;
-        writeln!(w, "return {name}()")?;
+        writeln!(w, "return {name}")?;
         w.end_block()?;
         if variant_index.is_none() {
             writeln!(w)?;
@@ -701,7 +727,7 @@ fn sealed_interface<W: IndentWrite>(
         writeln!(w, "@Throws(DeserializationError::class)")?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         w.start_block()?;
-        writeln!(w, "val index = deserializer.serialize_variant_index()")?;
+        writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
         write!(w, "return when (index) ")?;
         w.start_block()?;
         for (i, variant) in variants.iter().enumerate() {
@@ -779,17 +805,32 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
-        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
-        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
-        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
-        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
-        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
+        Format::I128 => writeln!(w, "serializer.serialize_i128(@Int128 {field_name})"),
+        Format::U8 => writeln!(
+            w,
+            "serializer.serialize_u8(@Unsigned {field_name}.toByte())"
+        ),
+        Format::U16 => writeln!(
+            w,
+            "serializer.serialize_u16(@Unsigned {field_name}.toShort())"
+        ),
+        Format::U32 => writeln!(
+            w,
+            "serializer.serialize_u32(@Unsigned {field_name}.toInt())"
+        ),
+        Format::U64 => writeln!(
+            w,
+            "serializer.serialize_u64(@Unsigned {field_name}.toLong())"
+        ),
+        Format::U128 => writeln!(
+            w,
+            "serializer.serialize_u128(@Unsigned @Int128 {field_name})"
+        ),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes(Bytes.valueOf({field_name}))"),
 
         // Container types - these generate method calls with lambdas
         Format::Option(inner_format) => {
@@ -894,16 +935,16 @@ fn write_deserialize<W: IndentWrite>(
         Format::I32 => write!(w, "deserializer.deserialize_i32()"),
         Format::I64 => write!(w, "deserializer.deserialize_i64()"),
         Format::I128 => write!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
-        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
-        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
-        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
+        Format::U8 => write!(w, "deserializer.deserialize_u8().toUByte()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16().toUShort()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32().toUInt()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64().toULong()"),
         Format::U128 => write!(w, "deserializer.deserialize_u128()"),
         Format::F32 => write!(w, "deserializer.deserialize_f32()"),
         Format::F64 => write!(w, "deserializer.deserialize_f64()"),
         Format::Char => write!(w, "deserializer.deserialize_char()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes().content()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             write_deserialize_lambda(w, format)

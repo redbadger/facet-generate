@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use crate::{
     Registry,
-    reflection::format::{Format, FormatHolder},
+    reflection::format::{Format, FormatHolder, Namespace},
 };
 
 /// Code generation options meant to be supported by all languages.
@@ -227,6 +227,13 @@ impl CodeGeneratorConfig {
                     Ok(())
                 })
                 .unwrap();
+        }
+
+        for name in registry.keys() {
+            if let Namespace::Named(ns) = &name.namespace {
+                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                entry.push(name.name.clone());
+            }
         }
     }
 }

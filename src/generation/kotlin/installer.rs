@@ -146,7 +146,10 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let skip_module = self.external_packages.contains_key(config.module_name());
+        // Extract the namespace from the module name to check if it's external
+        let module_parts: Vec<&str> = config.module_name().split('.').collect();
+        let namespace = module_parts.last().map_or("", |v| *v);
+        let skip_module = self.external_packages.contains_key(namespace);
 
         if skip_module {
             return Ok(());

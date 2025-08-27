@@ -2,9 +2,11 @@ package com.example
 
 import com.novi.bincode.BincodeDeserializer
 import com.novi.bincode.BincodeSerializer
+import com.novi.serde.Bytes
 import com.novi.serde.DeserializationError
 import com.novi.serde.Deserializer
 import com.novi.serde.Serializer
+import com.novi.serde.Unsigned
 
 fun <T> List<T>.serialize(
     serializer: Serializer,
@@ -238,7 +240,7 @@ sealed interface Parent {
     companion object {
         @Throws(DeserializationError::class)
         fun deserialize(deserializer: Deserializer): Parent {
-            val index = deserializer.serialize_variant_index()
+            val index = deserializer.deserialize_variant_index()
             return when (index) {
                 0 -> Child.deserialize(deserializer)
                 else -> throw DeserializationError("Unknown variant index for Parent: $index")
