@@ -3,6 +3,7 @@ use std::{
     io::{Result, Write},
 };
 
+use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use crate::{
@@ -169,7 +170,7 @@ impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
         self.doc.write(w)?;
 
-        let name = &self.name;
+        let name = &self.name.to_lower_camel_case();
         write!(w, "val {name}: ")?;
 
         self.value.write(w)?;
@@ -544,7 +545,12 @@ fn data_class<W: IndentWrite>(
         } else {
             push_deserializer(w)?;
             for field in fields {
-                write_deserialize(w, Some(&field.name), &field.value)?;
+                write_deserialize(
+                    w,
+                    Some(&field.name.to_lower_camel_case()),
+                    &field.value,
+                    true,
+                )?;
             }
             pop_deserializer(w)?;
             write!(w, "return {name}(")?;
@@ -552,7 +558,7 @@ fn data_class<W: IndentWrite>(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                write!(w, "{}", field.name)?;
+                write!(w, "{}", field.name.to_lower_camel_case())?;
             }
             writeln!(w, ")")?;
         }
@@ -723,7 +729,7 @@ fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
         .iter()
         .enumerate()
         .map(|(i, f)| Named {
-            name: format!("field_{i}"),
+            name: format!("field{i}"),
             doc: Doc::new(),
             value: f.clone(),
         })
@@ -859,30 +865,7 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     w.end_block()
 }
 
-fn write_map_deserialize_lambda<W: IndentWrite>(
-    w: &mut W,
-    key_format: &Format,
-    value_format: &Format,
-) -> Result<()> {
-    w.start_block()?;
-    write!(w, "val key = ")?;
-    write_deserialize(w, None, key_format)?;
-    write!(w, "val value = ")?;
-    write_deserialize(w, None, value_format)?;
-    writeln!(w, "Pair(key, value)")?;
-    w.end_block()
-}
-
 fn write_deserialize<W: IndentWrite>(
-    w: &mut W,
-    field_name: Option<&str>,
-    format: &Format,
-) -> Result<()> {
-    write_deserialize_impl(w, field_name, format, true)
-}
-
-#[allow(clippy::too_many_lines)]
-fn write_deserialize_impl<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
     format: &Format,
@@ -926,26 +909,19 @@ fn write_deserialize_impl<W: IndentWrite>(
         Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
-            w.start_block()?;
-            write_deserialize_impl(w, None, format, true)?;
-            w.end_block()
+            write_deserialize_lambda(w, format)
         }
         Format::Option(format) => {
             write!(w, "deserializer.deserializeOptionOf ")?;
-            w.start_block()?;
-            write_deserialize_impl(w, None, format, true)?;
-            w.end_block()
+            write_deserialize_lambda(w, format)
         }
         Format::Set(format) => {
             write!(w, "deserializer.deserializeSetOf ")?;
-            w.start_block()?;
-            write_deserialize_impl(w, None, format, true)?;
-            w.end_block()
+            write_deserialize_lambda(w, format)
         }
         Format::Map { key, value } => {
             write!(w, "deserializer.deserializeMapOf ")?;
-            write_map_deserialize_lambda(w, key, value)?;
-            Ok(())
+            write_map_deserialize_lambda(w, key, value)
         }
         Format::Tuple(formats) => {
             let len = formats.len();
@@ -953,7 +929,7 @@ fn write_deserialize_impl<W: IndentWrite>(
                 0 => return Ok(()),
                 1 => {
                     push_deserializer(w)?;
-                    write_deserialize(w, Some("value"), &formats[0])?;
+                    write_deserialize(w, Some("value"), &formats[0], true)?;
                     pop_deserializer(w)?;
                     return Ok(());
                 }
@@ -972,14 +948,12 @@ fn write_deserialize_impl<W: IndentWrite>(
         }
         Format::TupleArray { content, size } => {
             write!(w, "buildList({size}) {{ repeat({size}) {{ add(")?;
-            write_deserialize_impl(w, None, content, false)?;
+            write_deserialize(w, None, content, false)?;
             write!(w, ") }} }}")
         }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }?;
 
-    // Add newline for simple expressions and field assignments
-    // Block-based formats (Seq, Option, Set, Map, Tuple) handle their own newlines
     if newline
         && !matches!(
             format,
@@ -998,6 +972,42 @@ fn write_deserialize_impl<W: IndentWrite>(
     }
 
     Ok(())
+}
+
+fn write_deserialize_lambda<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
+    w.start_block()?;
+    write_deserialize(w, None, format, true)?;
+    w.end_block()
+}
+
+fn write_map_deserialize_lambda<W: IndentWrite>(
+    w: &mut W,
+    key_format: &Format,
+    value_format: &Format,
+) -> Result<()> {
+    w.start_block()?;
+    write!(w, "val key =")?;
+    if key_format.is_leaf() {
+        write!(w, " ")?;
+        write_deserialize(w, None, key_format, true)?;
+    } else {
+        writeln!(w)?;
+        w.indent();
+        write_deserialize(w, None, key_format, true)?;
+        w.unindent();
+    }
+    write!(w, "val value =")?;
+    if value_format.is_leaf() {
+        write!(w, " ")?;
+        write_deserialize(w, None, value_format, true)?;
+    } else {
+        writeln!(w)?;
+        w.indent();
+        write_deserialize(w, None, value_format, true)?;
+        w.unindent();
+    }
+    writeln!(w, "Pair(key, value)")?;
+    w.end_block()
 }
 
 fn push_serializer<W: Write>(w: &mut W) -> Result<()> {

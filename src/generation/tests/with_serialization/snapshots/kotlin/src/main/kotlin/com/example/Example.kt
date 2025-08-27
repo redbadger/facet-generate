@@ -124,9 +124,9 @@ data class Child(
 }
 
 data class MyStruct(
-    val string_to_int: Map<String, Int>,
-    val map_to_list: Map<String, List<Int>>,
-    val option_of_vec_of_set: List<Set<String>>? = null,
+    val stringToInt: Map<String, Int>,
+    val mapToList: Map<String, List<Int>>,
+    val optionOfVecOfSet: List<Set<String>>? = null,
     val parent: Parent,
 ) {
     fun serialize(serializer: Serializer) {
@@ -163,21 +163,22 @@ data class MyStruct(
     companion object {
         fun deserialize(deserializer: Deserializer): MyStruct {
             deserializer.increase_container_depth()
-            val string_to_int =
+            val stringToInt =
                 deserializer.deserializeMapOf {
                     val key = deserializer.deserialize_str()
                     val value = deserializer.deserialize_i32()
                     Pair(key, value)
                 }
-            val map_to_list =
+            val mapToList =
                 deserializer.deserializeMapOf {
                     val key = deserializer.deserialize_str()
-                    val value = deserializer.deserializeListOf {
-                        deserializer.deserialize_i32()
-                    }
+                    val value =
+                        deserializer.deserializeListOf {
+                            deserializer.deserialize_i32()
+                        }
                     Pair(key, value)
                 }
-            val option_of_vec_of_set =
+            val optionOfVecOfSet =
                 deserializer.deserializeOptionOf {
                     deserializer.deserializeListOf {
                         deserializer.deserializeSetOf {
@@ -187,7 +188,7 @@ data class MyStruct(
                 }
             val parent = Parent.deserialize(deserializer)
             deserializer.decrease_container_depth()
-            return MyStruct(string_to_int, map_to_list, option_of_vec_of_set, parent)
+            return MyStruct(stringToInt, mapToList, optionOfVecOfSet, parent)
         }
 
         @Throws(DeserializationError::class)

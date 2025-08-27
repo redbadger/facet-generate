@@ -157,13 +157,13 @@ fn tuple_struct() {
     /// line 1
     /// line 2
     data class TupleStruct(
-        val field_0: String,
-        val field_1: Int,
+        val field0: String,
+        val field1: Int,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_str(field_0)
-            serializer.serialize_i32(field_1)
+            serializer.serialize_str(field0)
+            serializer.serialize_i32(field1)
             serializer.decrease_container_depth()
         }
 
@@ -176,10 +176,10 @@ fn tuple_struct() {
         companion object {
             fun deserialize(deserializer: Deserializer): TupleStruct {
                 deserializer.increase_container_depth()
-                val field_0 = deserializer.deserialize_str()
-                val field_1 = deserializer.deserialize_i32()
+                val field0 = deserializer.deserialize_str()
+                val field1 = deserializer.deserialize_i32()
                 deserializer.decrease_container_depth()
-                return TupleStruct(field_0, field_1)
+                return TupleStruct(field0, field1)
             }
 
             @Throws(DeserializationError::class)
@@ -415,13 +415,13 @@ fn struct_with_fields_of_user_types() {
     }
 
     data class Inner3(
-        val field_0: String,
-        val field_1: Int,
+        val field0: String,
+        val field1: Int,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_str(field_0)
-            serializer.serialize_i32(field_1)
+            serializer.serialize_str(field0)
+            serializer.serialize_i32(field1)
             serializer.decrease_container_depth()
         }
 
@@ -434,10 +434,10 @@ fn struct_with_fields_of_user_types() {
         companion object {
             fun deserialize(deserializer: Deserializer): Inner3 {
                 deserializer.increase_container_depth()
-                val field_0 = deserializer.deserialize_str()
-                val field_1 = deserializer.deserialize_i32()
+                val field0 = deserializer.deserialize_str()
+                val field1 = deserializer.deserialize_i32()
                 deserializer.decrease_container_depth()
-                return Inner3(field_0, field_1)
+                return Inner3(field0, field1)
             }
 
             @Throws(DeserializationError::class)
@@ -955,50 +955,50 @@ fn enum_with_tuple_variants() {
         }
 
         data class Variant1(
-            val field_0: String,
-            val field_1: Int,
+            val field0: String,
+            val field1: Int,
         ) : MyEnum {
             override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
                 serializer.serialize_variant_index(0)
-                serializer.serialize_str(field_0)
-                serializer.serialize_i32(field_1)
+                serializer.serialize_str(field0)
+                serializer.serialize_i32(field1)
                 serializer.decrease_container_depth()
             }
 
             companion object {
                 fun deserialize(deserializer: Deserializer): Variant1 {
                     deserializer.increase_container_depth()
-                    val field_0 = deserializer.deserialize_str()
-                    val field_1 = deserializer.deserialize_i32()
+                    val field0 = deserializer.deserialize_str()
+                    val field1 = deserializer.deserialize_i32()
                     deserializer.decrease_container_depth()
-                    return Variant1(field_0, field_1)
+                    return Variant1(field0, field1)
                 }
             }
         }
 
         data class Variant2(
-            val field_0: Boolean,
-            val field_1: Double,
-            val field_2: UByte,
+            val field0: Boolean,
+            val field1: Double,
+            val field2: UByte,
         ) : MyEnum {
             override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
                 serializer.serialize_variant_index(1)
-                serializer.serialize_bool(field_0)
-                serializer.serialize_f64(field_1)
-                serializer.serialize_u8(field_2)
+                serializer.serialize_bool(field0)
+                serializer.serialize_f64(field1)
+                serializer.serialize_u8(field2)
                 serializer.decrease_container_depth()
             }
 
             companion object {
                 fun deserialize(deserializer: Deserializer): Variant2 {
                     deserializer.increase_container_depth()
-                    val field_0 = deserializer.deserialize_bool()
-                    val field_1 = deserializer.deserialize_f64()
-                    val field_2 = deserializer.deserialize_u8()
+                    val field0 = deserializer.deserialize_bool()
+                    val field1 = deserializer.deserialize_f64()
+                    val field2 = deserializer.deserialize_u8()
                     deserializer.decrease_container_depth()
-                    return Variant2(field_0, field_1, field_2)
+                    return Variant2(field0, field1, field2)
                 }
             }
         }
@@ -1159,24 +1159,24 @@ fn enum_with_mixed_variants() {
         }
 
         data class Tuple(
-            val field_0: String,
-            val field_1: Int,
+            val field0: String,
+            val field1: Int,
         ) : MyEnum {
             override fun serialize(serializer: Serializer) {
                 serializer.increase_container_depth()
                 serializer.serialize_variant_index(2)
-                serializer.serialize_str(field_0)
-                serializer.serialize_i32(field_1)
+                serializer.serialize_str(field0)
+                serializer.serialize_i32(field1)
                 serializer.decrease_container_depth()
             }
 
             companion object {
                 fun deserialize(deserializer: Deserializer): Tuple {
                     deserializer.increase_container_depth()
-                    val field_0 = deserializer.deserialize_str()
-                    val field_1 = deserializer.deserialize_i32()
+                    val field0 = deserializer.deserialize_str()
+                    val field1 = deserializer.deserialize_i32()
                     deserializer.decrease_container_depth()
-                    return Tuple(field_0, field_1)
+                    return Tuple(field0, field1)
                 }
             }
         }
@@ -1245,7 +1245,7 @@ fn struct_with_vec_field_1() {
     data class MyStruct(
         val items: List<String>,
         val numbers: List<Int>,
-        val nested_items: List<List<String>>,
+        val nestedItems: List<List<String>>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1280,14 +1280,14 @@ fn struct_with_vec_field_1() {
                     deserializer.deserializeListOf {
                         deserializer.deserialize_i32()
                     }
-                val nested_items =
+                val nestedItems =
                     deserializer.deserializeListOf {
                         deserializer.deserializeListOf {
                             deserializer.deserialize_str()
                         }
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(items, numbers, nested_items)
+                return MyStruct(items, numbers, nestedItems)
             }
 
             @Throws(DeserializationError::class)
@@ -1425,7 +1425,7 @@ fn struct_with_option_field() {
         val simple: String? = null,
         val nested: Int?? = null,
         val list: List<Boolean>? = null,
-        val list_of_options: List<Boolean?>,
+        val listOfOptions: List<Boolean?>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1475,14 +1475,14 @@ fn struct_with_option_field() {
                             deserializer.deserialize_bool()
                         }
                     }
-                val list_of_options =
+                val listOfOptions =
                     deserializer.deserializeListOf {
                         deserializer.deserializeOptionOf {
                             deserializer.deserialize_bool()
                         }
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(simple, nested, list, list_of_options)
+                return MyStruct(simple, nested, list, listOfOptions)
             }
 
             @Throws(DeserializationError::class)
@@ -1513,8 +1513,8 @@ fn struct_with_hashmap_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>,
+        val stringToInt: Map<String, Int>,
+        val intToBool: Map<Int, Boolean>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1538,20 +1538,20 @@ fn struct_with_hashmap_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val string_to_int =
+                val stringToInt =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_str()
                         val value = deserializer.deserialize_i32()
                         Pair(key, value)
                     }
-                val int_to_bool =
+                val intToBool =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_i32()
                         val value = deserializer.deserialize_bool()
                         Pair(key, value)
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(string_to_int, int_to_bool)
+                return MyStruct(stringToInt, intToBool)
             }
 
             @Throws(DeserializationError::class)
@@ -1585,10 +1585,10 @@ fn struct_with_nested_generics() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val optional_list: List<String>? = null,
-        val list_of_optionals: List<Int?>,
-        val map_to_list: Map<String, List<Boolean>>,
-        val optional_map: Map<String, Int>? = null,
+        val optionalList: List<String>? = null,
+        val listOfOptionals: List<Int?>,
+        val mapToList: Map<String, List<Boolean>>,
+        val optionalMap: Map<String, Int>? = null,
         val complex: List<Map<String, List<Boolean>>?>,
     ) {
         fun serialize(serializer: Serializer) {
@@ -1641,27 +1641,28 @@ fn struct_with_nested_generics() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val optional_list =
+                val optionalList =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeListOf {
                             deserializer.deserialize_str()
                         }
                     }
-                val list_of_optionals =
+                val listOfOptionals =
                     deserializer.deserializeListOf {
                         deserializer.deserializeOptionOf {
                             deserializer.deserialize_i32()
                         }
                     }
-                val map_to_list =
+                val mapToList =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_str()
-                        val value = deserializer.deserializeListOf {
-                            deserializer.deserialize_bool()
-                        }
+                        val value =
+                            deserializer.deserializeListOf {
+                                deserializer.deserialize_bool()
+                            }
                         Pair(key, value)
                     }
-                val optional_map =
+                val optionalMap =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeMapOf {
                             val key = deserializer.deserialize_str()
@@ -1674,15 +1675,16 @@ fn struct_with_nested_generics() {
                         deserializer.deserializeOptionOf {
                             deserializer.deserializeMapOf {
                                 val key = deserializer.deserialize_str()
-                                val value = deserializer.deserializeListOf {
-                                    deserializer.deserialize_bool()
-                                }
+                                val value =
+                                    deserializer.deserializeListOf {
+                                        deserializer.deserialize_bool()
+                                    }
                                 Pair(key, value)
                             }
                         }
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(optional_list, list_of_optionals, map_to_list, optional_map, complex)
+                return MyStruct(optionalList, listOfOptionals, mapToList, optionalMap, complex)
             }
 
             @Throws(DeserializationError::class)
@@ -1715,9 +1717,9 @@ fn struct_with_array_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val fixed_array: List<Int>,
-        val byte_array: List<UByte>,
-        val string_array: List<String>,
+        val fixedArray: List<Int>,
+        val byteArray: List<UByte>,
+        val stringArray: List<String>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1736,11 +1738,11 @@ fn struct_with_array_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val fixed_array = buildList(5) { repeat(5) { add(deserializer.deserialize_i32()) } }
-                val byte_array = buildList(32) { repeat(32) { add(deserializer.deserialize_u8()) } }
-                val string_array = buildList(3) { repeat(3) { add(deserializer.deserialize_str()) } }
+                val fixedArray = buildList(5) { repeat(5) { add(deserializer.deserialize_i32()) } }
+                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8()) } }
+                val stringArray = buildList(3) { repeat(3) { add(deserializer.deserialize_str()) } }
                 deserializer.decrease_container_depth()
-                return MyStruct(fixed_array, byte_array, string_array)
+                return MyStruct(fixedArray, byteArray, stringArray)
             }
 
             @Throws(DeserializationError::class)
@@ -1771,8 +1773,8 @@ fn struct_with_btreemap_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>,
+        val stringToInt: Map<String, Int>,
+        val intToBool: Map<Int, Boolean>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1796,20 +1798,20 @@ fn struct_with_btreemap_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val string_to_int =
+                val stringToInt =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_str()
                         val value = deserializer.deserialize_i32()
                         Pair(key, value)
                     }
-                val int_to_bool =
+                val intToBool =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_i32()
                         val value = deserializer.deserialize_bool()
                         Pair(key, value)
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(string_to_int, int_to_bool)
+                return MyStruct(stringToInt, intToBool)
             }
 
             @Throws(DeserializationError::class)
@@ -1840,8 +1842,8 @@ fn struct_with_nested_map_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val map_to_list: Map<String, List<Int>>,
-        val list_to_map: List<Map<Int, String>>,
+        val mapToList: Map<String, List<Int>>,
+        val listToMap: List<Map<Int, String>>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1871,15 +1873,16 @@ fn struct_with_nested_map_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val map_to_list =
+                val mapToList =
                     deserializer.deserializeMapOf {
                         val key = deserializer.deserialize_str()
-                        val value = deserializer.deserializeListOf {
-                            deserializer.deserialize_i32()
-                        }
+                        val value =
+                            deserializer.deserializeListOf {
+                                deserializer.deserialize_i32()
+                            }
                         Pair(key, value)
                     }
-                val list_to_map =
+                val listToMap =
                     deserializer.deserializeListOf {
                         deserializer.deserializeMapOf {
                             val key = deserializer.deserialize_i32()
@@ -1888,7 +1891,7 @@ fn struct_with_nested_map_field() {
                         }
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(map_to_list, list_to_map)
+                return MyStruct(mapToList, listToMap)
             }
 
             @Throws(DeserializationError::class)
@@ -1921,8 +1924,8 @@ fn struct_with_hashset_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val string_set: Set<String>,
-        val int_set: Set<Int>,
+        val stringSet: Set<String>,
+        val intSet: Set<Int>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -1944,16 +1947,16 @@ fn struct_with_hashset_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val string_set =
+                val stringSet =
                     deserializer.deserializeSetOf {
                         deserializer.deserialize_str()
                     }
-                val int_set =
+                val intSet =
                     deserializer.deserializeSetOf {
                         deserializer.deserialize_i32()
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(string_set, int_set)
+                return MyStruct(stringSet, intSet)
             }
 
             @Throws(DeserializationError::class)
@@ -1986,8 +1989,8 @@ fn struct_with_btreeset_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val string_set: Set<String>,
-        val int_set: Set<Int>,
+        val stringSet: Set<String>,
+        val intSet: Set<Int>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2009,16 +2012,16 @@ fn struct_with_btreeset_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val string_set =
+                val stringSet =
                     deserializer.deserializeSetOf {
                         deserializer.deserialize_str()
                     }
-                val int_set =
+                val intSet =
                     deserializer.deserializeSetOf {
                         deserializer.deserialize_i32()
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(string_set, int_set)
+                return MyStruct(stringSet, intSet)
             }
 
             @Throws(DeserializationError::class)
@@ -2049,8 +2052,8 @@ fn struct_with_nested_set_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val vec_of_sets: List<Set<String>>,
-        val set_of_ints: Set<Int>,
+        val vecOfSets: List<Set<String>>,
+        val setOfInts: Set<Int>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2074,18 +2077,18 @@ fn struct_with_nested_set_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val vec_of_sets =
+                val vecOfSets =
                     deserializer.deserializeListOf {
                         deserializer.deserializeSetOf {
                             deserializer.deserialize_str()
                         }
                     }
-                val set_of_ints =
+                val setOfInts =
                     deserializer.deserializeSetOf {
                         deserializer.deserialize_i32()
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(vec_of_sets, set_of_ints)
+                return MyStruct(vecOfSets, setOfInts)
             }
 
             @Throws(DeserializationError::class)
@@ -2117,8 +2120,8 @@ fn struct_with_box_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val boxed_string: String,
-        val boxed_int: Int,
+        val boxedString: String,
+        val boxedInt: Int,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2136,10 +2139,10 @@ fn struct_with_box_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val boxed_string = deserializer.deserialize_str()
-                val boxed_int = deserializer.deserialize_i32()
+                val boxedString = deserializer.deserialize_str()
+                val boxedInt = deserializer.deserialize_i32()
                 deserializer.decrease_container_depth()
-                return MyStruct(boxed_string, boxed_int)
+                return MyStruct(boxedString, boxedInt)
             }
 
             @Throws(DeserializationError::class)
@@ -2170,8 +2173,8 @@ fn struct_with_rc_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val rc_string: String,
-        val rc_int: Int,
+        val rcString: String,
+        val rcInt: Int,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2189,10 +2192,10 @@ fn struct_with_rc_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val rc_string = deserializer.deserialize_str()
-                val rc_int = deserializer.deserialize_i32()
+                val rcString = deserializer.deserialize_str()
+                val rcInt = deserializer.deserialize_i32()
                 deserializer.decrease_container_depth()
-                return MyStruct(rc_string, rc_int)
+                return MyStruct(rcString, rcInt)
             }
 
             @Throws(DeserializationError::class)
@@ -2223,8 +2226,8 @@ fn struct_with_arc_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val arc_string: String,
-        val arc_int: Int,
+        val arcString: String,
+        val arcInt: Int,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2242,10 +2245,10 @@ fn struct_with_arc_field() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val arc_string = deserializer.deserialize_str()
-                val arc_int = deserializer.deserialize_i32()
+                val arcString = deserializer.deserialize_str()
+                val arcInt = deserializer.deserialize_i32()
                 deserializer.decrease_container_depth()
-                return MyStruct(arc_string, arc_int)
+                return MyStruct(arcString, arcInt)
             }
 
             @Throws(DeserializationError::class)
@@ -2280,11 +2283,11 @@ fn struct_with_mixed_collections_and_pointers() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val vec_of_sets: List<Set<String>>,
-        val optional_btree: Map<String, Int>? = null,
-        val boxed_vec: List<String>,
-        val arc_option: String? = null,
-        val array_of_boxes: List<Int>,
+        val vecOfSets: List<Set<String>>,
+        val optionalBtree: Map<String, Int>? = null,
+        val boxedVec: List<String>,
+        val arcOption: String? = null,
+        val arrayOfBoxes: List<Int>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2318,13 +2321,13 @@ fn struct_with_mixed_collections_and_pointers() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val vec_of_sets =
+                val vecOfSets =
                     deserializer.deserializeListOf {
                         deserializer.deserializeSetOf {
                             deserializer.deserialize_str()
                         }
                     }
-                val optional_btree =
+                val optionalBtree =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeMapOf {
                             val key = deserializer.deserialize_str()
@@ -2332,17 +2335,17 @@ fn struct_with_mixed_collections_and_pointers() {
                             Pair(key, value)
                         }
                     }
-                val boxed_vec =
+                val boxedVec =
                     deserializer.deserializeListOf {
                         deserializer.deserialize_str()
                     }
-                val arc_option =
+                val arcOption =
                     deserializer.deserializeOptionOf {
                         deserializer.deserialize_str()
                     }
-                val array_of_boxes = buildList(3) { repeat(3) { add(deserializer.deserialize_i32()) } }
+                val arrayOfBoxes = buildList(3) { repeat(3) { add(deserializer.deserialize_i32()) } }
                 deserializer.decrease_container_depth()
-                return MyStruct(vec_of_sets, optional_btree, boxed_vec, arc_option, array_of_boxes)
+                return MyStruct(vecOfSets, optionalBtree, boxedVec, arcOption, arrayOfBoxes)
             }
 
             @Throws(DeserializationError::class)
@@ -2439,7 +2442,7 @@ fn struct_with_bytes_field_and_slice() {
         val data: ByteArray,
         val name: String,
         val header: ByteArray,
-        val optional_bytes: List<UByte>? = null,
+        val optionalBytes: List<UByte>? = null,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2466,14 +2469,14 @@ fn struct_with_bytes_field_and_slice() {
                 val data = deserializer.deserialize_bytes()
                 val name = deserializer.deserialize_str()
                 val header = deserializer.deserialize_bytes()
-                val optional_bytes =
+                val optionalBytes =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeListOf {
                             deserializer.deserialize_u8()
                         }
                     }
                 deserializer.decrease_container_depth()
-                return MyStruct(data, name, header, optional_bytes)
+                return MyStruct(data, name, header, optionalBytes)
             }
 
             @Throws(DeserializationError::class)
