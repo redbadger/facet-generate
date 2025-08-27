@@ -460,8 +460,6 @@ fn data_object<W: IndentWrite>(
             write_bincode_serialize(w)?;
             writeln!(w)?;
         }
-        write!(w, "companion object ")?;
-        w.start_block()?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         w.start_block()?;
         writeln!(w, "return {name}()")?;
@@ -470,7 +468,6 @@ fn data_object<W: IndentWrite>(
             writeln!(w)?;
             write_bincode_deserialize(w, name)?;
         }
-        w.end_block()?;
         w.end_block()?;
     } else {
         writeln!(w)?;

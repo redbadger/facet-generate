@@ -30,23 +30,21 @@ fn unit_struct_1() {
             return serializer.get_bytes()
         }
 
-        companion object {
-            fun deserialize(deserializer: Deserializer): UnitStruct {
-                return UnitStruct()
-            }
+        fun deserialize(deserializer: Deserializer): UnitStruct {
+            return UnitStruct()
+        }
 
-            @Throws(DeserializationError::class)
-            fun bincodeDeserialize(input: ByteArray?): UnitStruct {
-                if (input == null) {
-                    throw DeserializationError("Cannot deserialize null array")
-                }
-                val deserializer = BincodeDeserializer(input)
-                val value = deserialize(deserializer)
-                if (deserializer.get_buffer_offset() < input.size) {
-                    throw DeserializationError("Some input bytes were not read")
-                }
-                return value
+        @Throws(DeserializationError::class)
+        fun bincodeDeserialize(input: ByteArray?): UnitStruct {
+            if (input == null) {
+                throw DeserializationError("Cannot deserialize null array")
             }
+            val deserializer = BincodeDeserializer(input)
+            val value = deserialize(deserializer)
+            if (deserializer.get_buffer_offset() < input.size) {
+                throw DeserializationError("Some input bytes were not read")
+            }
+            return value
         }
     }
     "#);
@@ -72,23 +70,21 @@ fn unit_struct_2() {
             return serializer.get_bytes()
         }
 
-        companion object {
-            fun deserialize(deserializer: Deserializer): UnitStruct {
-                return UnitStruct()
-            }
+        fun deserialize(deserializer: Deserializer): UnitStruct {
+            return UnitStruct()
+        }
 
-            @Throws(DeserializationError::class)
-            fun bincodeDeserialize(input: ByteArray?): UnitStruct {
-                if (input == null) {
-                    throw DeserializationError("Cannot deserialize null array")
-                }
-                val deserializer = BincodeDeserializer(input)
-                val value = deserialize(deserializer)
-                if (deserializer.get_buffer_offset() < input.size) {
-                    throw DeserializationError("Some input bytes were not read")
-                }
-                return value
+        @Throws(DeserializationError::class)
+        fun bincodeDeserialize(input: ByteArray?): UnitStruct {
+            if (input == null) {
+                throw DeserializationError("Cannot deserialize null array")
             }
+            val deserializer = BincodeDeserializer(input)
+            val value = deserialize(deserializer)
+            if (deserializer.get_buffer_offset() < input.size) {
+                throw DeserializationError("Some input bytes were not read")
+            }
+            return value
         }
     }
     "#);
@@ -1131,10 +1127,8 @@ fn enum_with_mixed_variants() {
                 serializer.decrease_container_depth()
             }
 
-            companion object {
-                fun deserialize(deserializer: Deserializer): Unit {
-                    return Unit()
-                }
+            fun deserialize(deserializer: Deserializer): Unit {
+                return Unit()
             }
         }
 
