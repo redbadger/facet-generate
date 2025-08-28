@@ -146,7 +146,10 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Self::Error> {
-        let skip_module = self.external_packages.contains_key(config.module_name());
+        // Extract the namespace from the module name to check if it's external
+        let module_parts: Vec<&str> = config.module_name().split('.').collect();
+        let namespace = module_parts.last().map_or("", |v| *v);
+        let skip_module = self.external_packages.contains_key(namespace);
 
         if skip_module {
             return Ok(());
@@ -155,12 +158,9 @@ impl SourceInstaller for Installer {
         // Track encodings used in this module
         self.encoding = config.encoding;
 
-        // Create source directory structure following Kotlin/Java conventions
-        let src_dir = self.install_dir.join("src/main/kotlin");
-
         // Convert module name to package path (e.g., "com.example.types" -> "com/example/types")
         let package_path = config.module_name().replace('.', "/");
-        let module_dir = src_dir.join(&package_path);
+        let module_dir = self.install_dir.join(&package_path);
         std::fs::create_dir_all(&module_dir)?;
 
         // All types in the module go into a single file
@@ -191,8 +191,7 @@ impl SourceInstaller for Installer {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/java/com/novi/serde");
 
         if runtime_dir.exists() {
-            let target_dir = "src/main/java/com/novi/serde";
-            self.install_runtime(runtime_dir.to_str().unwrap(), target_dir)?;
+            self.install_runtime(runtime_dir.to_str().unwrap(), "com/novi/serde")?;
         }
 
         Ok(())
@@ -204,8 +203,7 @@ impl SourceInstaller for Installer {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/java/com/novi/bincode");
 
         if runtime_dir.exists() {
-            let target_dir = "src/main/java/com/novi/bincode";
-            self.install_runtime(runtime_dir.to_str().unwrap(), target_dir)?;
+            self.install_runtime(runtime_dir.to_str().unwrap(), "com/novi/bincode")?;
         }
 
         Ok(())

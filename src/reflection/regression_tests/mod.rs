@@ -11,6 +11,8 @@ use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
+
     use crate::{
         reflect,
         reflection::format::{Doc, Namespace, QualifiedTypeName},
@@ -25,15 +27,15 @@ mod tests {
     fn test_set_types_work() {
         #[derive(Facet)]
         struct WithSets {
-            btree_set: std::collections::BTreeSet<String>,
-            hash_set: std::collections::HashSet<u32>,
+            btree_set: BTreeSet<String>,
+            hash_set: HashSet<u32>,
         }
 
         #[derive(Facet)]
         #[repr(u8)]
         #[allow(unused)]
         enum EnumWithSet {
-            SetVariant(std::collections::BTreeSet<i64>),
+            SetVariant(BTreeSet<i64>),
             Regular(u32),
         }
 
@@ -48,8 +50,8 @@ mod tests {
     fn test_complex_nested_sets() {
         #[derive(Facet)]
         struct NestedSets {
-            sets_in_vec: Vec<std::collections::BTreeSet<String>>,
-            optional_set: Option<std::collections::HashSet<u64>>,
+            sets_in_vec: Vec<BTreeSet<String>>,
+            optional_set: Option<HashSet<u64>>,
         }
 
         // All Variable placeholders should be resolved correctly
@@ -103,7 +105,7 @@ mod tests {
         #[repr(u8)]
         #[allow(unused)]
         enum WithNewtypeVariant {
-            Variant(std::collections::BTreeSet<String>),
+            Variant(BTreeSet<String>),
         }
 
         // The temp container workflow in process_newtype_variant_with_temp_container
@@ -183,7 +185,7 @@ mod tests {
         let mut builder = RegistryBuilder::new();
 
         // Create an enum with an unresolved variant Variable
-        let mut variants = std::collections::BTreeMap::new();
+        let mut variants = BTreeMap::new();
         variants.insert(
             0,
             crate::reflection::format::Named {

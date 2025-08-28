@@ -1,23 +1,31 @@
 use std::{
     collections::BTreeMap,
     io::{Result, Write},
+    string::ToString,
 };
 
+use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, indent::IndentWrite, module::Module,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
+        module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
+const FEATURE_BUILD_LIST: &[u8] = include_bytes!("features/BuildList.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
+const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
+const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
+const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 
 pub struct Kotlin;
 
 impl Emitter<Kotlin> for Module {
+    #[allow(clippy::too_many_lines)]
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
@@ -37,9 +45,11 @@ impl Emitter<Kotlin> for Module {
             Encoding::Bincode => vec![
                 "import com.novi.bincode.BincodeDeserializer",
                 "import com.novi.bincode.BincodeSerializer",
+                "import com.novi.serde.Bytes",
                 "import com.novi.serde.DeserializationError",
                 "import com.novi.serde.Deserializer",
                 "import com.novi.serde.Serializer",
+                "import com.novi.serde.Unsigned",
             ],
             _ => vec![],
         };
@@ -49,26 +59,69 @@ impl Emitter<Kotlin> for Module {
             match feature {
                 Feature::BigInt => {
                     imports.push("import java.math.BigInteger");
-                    if encoding == &Encoding::Json {
-                        imports.extend_from_slice(&[
-                            "import kotlinx.serialization.KSerializer",
-                            "import kotlinx.serialization.descriptors.PrimitiveKind",
-                            "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
-                            "import kotlinx.serialization.encoding.Decoder",
-                            "import kotlinx.serialization.encoding.Encoder",
-                            "import kotlinx.serialization.json.JsonDecoder",
-                            "import kotlinx.serialization.json.JsonEncoder",
-                            "import kotlinx.serialization.json.JsonUnquotedLiteral",
-                            "import kotlinx.serialization.json.jsonPrimitive",
-                        ]);
-                        features_out.write_all(FEATURE_BIGINT)?;
-                        writeln!(features_out)?;
+                    match encoding {
+                        Encoding::Json => {
+                            imports.extend_from_slice(&[
+                                "import kotlinx.serialization.KSerializer",
+                                "import kotlinx.serialization.descriptors.PrimitiveKind",
+                                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
+                                "import kotlinx.serialization.encoding.Decoder",
+                                "import kotlinx.serialization.encoding.Encoder",
+                                "import kotlinx.serialization.json.JsonDecoder",
+                                "import kotlinx.serialization.json.JsonEncoder",
+                                "import kotlinx.serialization.json.JsonUnquotedLiteral",
+                                "import kotlinx.serialization.json.jsonPrimitive",
+                            ]);
+                            features_out.write_all(FEATURE_BIGINT)?;
+                            writeln!(features_out)?;
+                        }
+                        Encoding::Bincode => {
+                            imports.push("import com.novi.serde.Int128");
+                        }
+                        Encoding::None | Encoding::Bcs => (),
                     }
                 }
                 Feature::ListOfT => {
                     if encoding == &Encoding::Bincode {
                         features_out.write_all(FEATURE_LIST_OF_T)?;
                         writeln!(features_out)?;
+                    }
+                }
+                Feature::OptionOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_OPTION_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::SetOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_SET_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::MapOfT => {
+                    if encoding == &Encoding::Bincode {
+                        features_out.write_all(FEATURE_MAP_OF_T)?;
+                        writeln!(features_out)?;
+                    }
+                }
+                Feature::BuildList => {
+                    features_out.write_all(FEATURE_BUILD_LIST)?;
+                    writeln!(features_out)?;
+                }
+            }
+        }
+
+        let mut imports = imports
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>();
+
+        for (ns, names) in &self.config().external_definitions {
+            if let Some(external_package) = self.config().external_packages.get(ns) {
+                if let PackageLocation::Path(ns) = &external_package.location {
+                    for name in names {
+                        imports.push(format!("import {ns}.{name}"));
                     }
                 }
             }
@@ -143,7 +196,7 @@ impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
         self.doc.write(w)?;
 
-        let name = &self.name;
+        let name = &self.name.to_lower_camel_case();
         write!(w, "val {name}: ")?;
 
         self.value.write(w)?;
@@ -433,17 +486,14 @@ fn data_object<W: IndentWrite>(
             write_bincode_serialize(w)?;
             writeln!(w)?;
         }
-        write!(w, "companion object ")?;
-        w.start_block()?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         w.start_block()?;
-        writeln!(w, "return {name}()")?;
+        writeln!(w, "return {name}")?;
         w.end_block()?;
         if variant_index.is_none() {
             writeln!(w)?;
             write_bincode_deserialize(w, name)?;
         }
-        w.end_block()?;
         w.end_block()?;
     } else {
         writeln!(w)?;
@@ -498,7 +548,7 @@ fn data_class<W: IndentWrite>(
                 writeln!(w, "serializer.serialize_variant_index({index})")?;
             }
             for field in fields {
-                write_serialize(w, &field.name, &field.value, 1)?;
+                write_serialize(w, &field.name.to_lower_camel_case(), &field.value, 0)?;
             }
             pop_serializer(w)?;
             w.end_block()?;
@@ -518,7 +568,12 @@ fn data_class<W: IndentWrite>(
         } else {
             push_deserializer(w)?;
             for field in fields {
-                write_deserialize(w, &field.name, &field.value, 1)?;
+                write_deserialize(
+                    w,
+                    Some(&field.name.to_lower_camel_case()),
+                    &field.value,
+                    true,
+                )?;
             }
             pop_deserializer(w)?;
             write!(w, "return {name}(")?;
@@ -526,7 +581,7 @@ fn data_class<W: IndentWrite>(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                write!(w, "{}", field.name)?;
+                write!(w, "{}", field.name.to_lower_camel_case())?;
             }
             writeln!(w, ")")?;
         }
@@ -672,7 +727,7 @@ fn sealed_interface<W: IndentWrite>(
         writeln!(w, "@Throws(DeserializationError::class)")?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         w.start_block()?;
-        writeln!(w, "val index = deserializer.serialize_variant_index()")?;
+        writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
         write!(w, "return when (index) ")?;
         w.start_block()?;
         for (i, variant) in variants.iter().enumerate() {
@@ -697,7 +752,7 @@ fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
         .iter()
         .enumerate()
         .map(|(i, f)| Named {
-            name: format!("field_{i}"),
+            name: format!("field{i}"),
             doc: Doc::new(),
             value: f.clone(),
         })
@@ -750,107 +805,169 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
-        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
-        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
-        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
-        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
-        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
+        Format::I128 => writeln!(w, "serializer.serialize_i128(@Int128 {field_name})"),
+        Format::U8 => writeln!(
+            w,
+            "serializer.serialize_u8(@Unsigned {field_name}.toByte())"
+        ),
+        Format::U16 => writeln!(
+            w,
+            "serializer.serialize_u16(@Unsigned {field_name}.toShort())"
+        ),
+        Format::U32 => writeln!(
+            w,
+            "serializer.serialize_u32(@Unsigned {field_name}.toInt())"
+        ),
+        Format::U64 => writeln!(
+            w,
+            "serializer.serialize_u64(@Unsigned {field_name}.toLong())"
+        ),
+        Format::U128 => writeln!(
+            w,
+            "serializer.serialize_u128(@Unsigned @Int128 {field_name})"
+        ),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
-        Format::Seq(format) => {
-            if level == 1 {
-                write!(w, "{field_name}.serialize(serializer) ")?;
-            }
-            let name;
-            if format.is_leaf() {
-                name = "it".to_string();
-                w.start_block()?;
-            } else {
-                name = format!("list{level}");
-                w.start_block_no_newline()?;
-                writeln!(w, " {name} ->")?;
-            }
-            if format.is_leaf() {
-                write_serialize(w, &name, format, level + 1)?;
-            } else {
-                write!(w, "{name}.serialize(serializer)")?;
-                write!(w, " ")?;
-                write_serialize(w, field_name, format, level + 1)?;
-            }
-            w.end_block()
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes(Bytes.valueOf({field_name}))"),
+
+        // Container types - these generate method calls with lambdas
+        Format::Option(inner_format) => {
+            write!(w, "{field_name}.serializeOptionOf(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
         }
-        Format::TypeName(..)
-        | Format::Option(..)
-        | Format::Set(..)
-        | Format::Map { .. }
-        | Format::Tuple(..)
-        | Format::TupleArray { .. } => writeln!(w, "{field_name}.serialize(serializer)"),
+
+        Format::Seq(inner_format) => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
+        }
+
+        Format::Set(inner_format) => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_serialize_lambda(w, inner_format, level)?;
+            Ok(())
+        }
+
+        Format::Map { key, value } => {
+            write!(w, "{field_name}.serialize(serializer) ")?;
+            write_map_serialize_lambda(w, key, value, level)?;
+            Ok(())
+        }
+
+        Format::TypeName(..) | Format::Tuple(..) | Format::TupleArray { .. } => {
+            writeln!(w, "{field_name}.serialize(serializer)")
+        }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
 }
 
-fn write_deserialize<W: IndentWrite>(
+fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usize) -> Result<()> {
+    if format.is_leaf() {
+        w.start_block()?;
+        write_serialize(w, "it", format, level + 1)?;
+    } else {
+        let param_name = format!("level{}", level + 1);
+        w.start_block_no_newline()?;
+        writeln!(w, " {param_name} ->")?;
+        write_serialize(w, &param_name, format, level + 1)?;
+    }
+    w.end_block()
+}
+
+fn write_map_serialize_lambda<W: IndentWrite>(
     w: &mut W,
-    field_name: &str,
-    format: &Format,
+    key_format: &Format,
+    value_format: &Format,
     level: usize,
 ) -> Result<()> {
-    if level == 1 {
+    w.start_block_no_newline()?;
+    writeln!(w, " key, value ->")?;
+
+    if key_format.is_leaf() {
+        write_serialize(w, "key", key_format, level + 1)?;
+    } else {
+        write!(w, "key.serialize(serializer) ")?;
+        write_serialize_lambda(w, key_format, level + 1)?;
+    }
+
+    if value_format.is_leaf() {
+        write_serialize(w, "value", value_format, level + 1)?;
+    } else {
+        write!(w, "value.serialize(serializer) ")?;
+        write_serialize_lambda(w, value_format, level + 1)?;
+    }
+
+    w.end_block()
+}
+
+fn write_deserialize<W: IndentWrite>(
+    w: &mut W,
+    field_name: Option<&str>,
+    format: &Format,
+    newline: bool,
+) -> Result<()> {
+    let mut indented = false;
+    if let Some(field_name) = field_name {
         write!(w, "val {field_name} =")?;
-        if !matches!(format, Format::Seq(..)) {
+        if matches!(
+            format,
+            Format::Seq(..) | Format::Option(..) | Format::Set(..) | Format::Map { .. }
+        ) {
+            writeln!(w)?;
+            w.indent();
+            indented = true;
+        } else {
             write!(w, " ")?;
         }
     }
     match format {
         Format::TypeName(qualified_name) => {
             let name = &qualified_name.name;
-            writeln!(w, "{name}.deserialize(deserializer)")
+            write!(w, "{name}.deserialize(deserializer)")
         }
-        Format::Unit => writeln!(w, "deserializer.deserialize_unit()"),
-        Format::Bool => writeln!(w, "deserializer.deserialize_bool()"),
-        Format::I8 => writeln!(w, "deserializer.deserialize_i8()"),
-        Format::I16 => writeln!(w, "deserializer.deserialize_i16()"),
-        Format::I32 => writeln!(w, "deserializer.deserialize_i32()"),
-        Format::I64 => writeln!(w, "deserializer.deserialize_i64()"),
-        Format::I128 => writeln!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => writeln!(w, "deserializer.deserialize_u8()"),
-        Format::U16 => writeln!(w, "deserializer.deserialize_u16()"),
-        Format::U32 => writeln!(w, "deserializer.deserialize_u32()"),
-        Format::U64 => writeln!(w, "deserializer.deserialize_u64()"),
-        Format::U128 => writeln!(w, "deserializer.deserialize_u128()"),
-        Format::F32 => writeln!(w, "deserializer.deserialize_f32()"),
-        Format::F64 => writeln!(w, "deserializer.deserialize_f64()"),
-        Format::Char => writeln!(w, "deserializer.deserialize_char()"),
-        Format::Str => writeln!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => writeln!(w, "deserializer.deserialize_bytes()"),
-        Format::Option(_format) => writeln!(w, "todo!"),
+        Format::Unit => write!(w, "deserializer.deserialize_unit()"),
+        Format::Bool => write!(w, "deserializer.deserialize_bool()"),
+        Format::I8 => write!(w, "deserializer.deserialize_i8()"),
+        Format::I16 => write!(w, "deserializer.deserialize_i16()"),
+        Format::I32 => write!(w, "deserializer.deserialize_i32()"),
+        Format::I64 => write!(w, "deserializer.deserialize_i64()"),
+        Format::I128 => write!(w, "deserializer.deserialize_i128()"),
+        Format::U8 => write!(w, "deserializer.deserialize_u8().toUByte()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16().toUShort()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32().toUInt()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64().toULong()"),
+        Format::U128 => write!(w, "deserializer.deserialize_u128()"),
+        Format::F32 => write!(w, "deserializer.deserialize_f32()"),
+        Format::F64 => write!(w, "deserializer.deserialize_f64()"),
+        Format::Char => write!(w, "deserializer.deserialize_char()"),
+        Format::Str => write!(w, "deserializer.deserialize_str()"),
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes().content()"),
         Format::Seq(format) => {
-            if level == 1 {
-                writeln!(w)?;
-                w.indent();
-            }
             write!(w, "deserializer.deserializeListOf ")?;
-            w.start_block()?;
-            write_deserialize(w, field_name, format, level + 1)?;
-            w.end_block()?;
-            if level == 1 {
-                w.unindent();
-            }
-            Ok(())
+            write_deserialize_lambda(w, format)
         }
-        Format::Set(_format) => writeln!(w, "todo!"),
-        Format::Map { key: _, value: _ } => writeln!(w, "todo!"),
+        Format::Option(format) => {
+            write!(w, "deserializer.deserializeOptionOf ")?;
+            write_deserialize_lambda(w, format)
+        }
+        Format::Set(format) => {
+            write!(w, "deserializer.deserializeSetOf ")?;
+            write_deserialize_lambda(w, format)
+        }
+        Format::Map { key, value } => {
+            write!(w, "deserializer.deserializeMapOf ")?;
+            write_map_deserialize_lambda(w, key, value)
+        }
         Format::Tuple(formats) => {
             let len = formats.len();
             let typename = match len {
                 0 => return Ok(()),
                 1 => {
                     push_deserializer(w)?;
-                    write_deserialize(w, "value", &formats[0], level)?;
+                    write_deserialize(w, Some("value"), &formats[0], true)?;
                     pop_deserializer(w)?;
                     return Ok(());
                 }
@@ -867,12 +984,68 @@ fn write_deserialize<W: IndentWrite>(
             }
             writeln!(w, ">.deserialize(deserializer)")
         }
-        Format::TupleArray {
-            content: _,
-            size: _,
-        } => todo!(),
+        Format::TupleArray { content, size } => {
+            write!(w, "buildList({size}) {{ repeat({size}) {{ add(")?;
+            write_deserialize(w, None, content, false)?;
+            write!(w, ") }} }}")
+        }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
+    }?;
+
+    if newline
+        && !matches!(
+            format,
+            Format::Seq(..)
+                | Format::Option(..)
+                | Format::Set(..)
+                | Format::Map { .. }
+                | Format::Tuple(..)
+        )
+    {
+        writeln!(w)?;
     }
+
+    if indented {
+        w.unindent();
+    }
+
+    Ok(())
+}
+
+fn write_deserialize_lambda<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
+    w.start_block()?;
+    write_deserialize(w, None, format, true)?;
+    w.end_block()
+}
+
+fn write_map_deserialize_lambda<W: IndentWrite>(
+    w: &mut W,
+    key_format: &Format,
+    value_format: &Format,
+) -> Result<()> {
+    w.start_block()?;
+    write!(w, "val key =")?;
+    if key_format.is_leaf() {
+        write!(w, " ")?;
+        write_deserialize(w, None, key_format, true)?;
+    } else {
+        writeln!(w)?;
+        w.indent();
+        write_deserialize(w, None, key_format, true)?;
+        w.unindent();
+    }
+    write!(w, "val value =")?;
+    if value_format.is_leaf() {
+        write!(w, " ")?;
+        write_deserialize(w, None, value_format, true)?;
+    } else {
+        writeln!(w)?;
+        w.indent();
+        write_deserialize(w, None, value_format, true)?;
+        w.unindent();
+    }
+    writeln!(w, "Pair(key, value)")?;
+    w.end_block()
 }
 
 fn push_serializer<W: Write>(w: &mut W) -> Result<()> {

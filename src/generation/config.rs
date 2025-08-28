@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use crate::{
     Registry,
-    reflection::format::{Format, FormatHolder},
+    reflection::format::{Format, FormatHolder, Namespace},
 };
 
 /// Code generation options meant to be supported by all languages.
@@ -26,7 +26,7 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
     pub package_manifest: bool,
-    pub features: HashSet<Feature>,
+    pub features: BTreeSet<Feature>,
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
@@ -38,10 +38,14 @@ pub enum Encoding {
     Bcs,
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
+    BuildList,
     ListOfT,
+    MapOfT,
+    OptionOfT,
+    SetOfT,
 }
 
 impl Encoding {
@@ -68,21 +72,18 @@ impl Encoding {
 
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).
 pub type ExternalDefinitions =
-    std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;
+    BTreeMap</* module */ String, /* type names */ Vec<String>>;
 
 /// Track locations for imports of external packages (key = <module>, value = <import from>).
 pub type ExternalPackages =
-    std::collections::BTreeMap</* module */ String, /* import from */ ExternalPackage>;
+    BTreeMap</* module */ String, /* import from */ ExternalPackage>;
 
 /// Track documentation to be attached to particular definitions.
-pub type DocComments =
-    std::collections::BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
+pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
 
 /// Track custom code to be added to particular definitions (use with care!).
-pub type CustomCode = std::collections::BTreeMap<
-    /* qualified name */ Vec<String>,
-    /* custom code */ String,
->;
+pub type CustomCode =
+    BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
 /// How to copy generated source code and available runtimes for a given language.
 pub trait SourceInstaller {
@@ -126,7 +127,7 @@ impl CodeGeneratorConfig {
             custom_code: BTreeMap::new(),
             c_style_enums: false,
             package_manifest: true,
-            features: HashSet::new(),
+            features: BTreeSet::new(),
         }
     }
 
@@ -209,11 +210,30 @@ impl CodeGeneratorConfig {
                         Format::Seq(..) => {
                             self.features.insert(Feature::ListOfT);
                         }
+                        Format::Option(..) => {
+                            self.features.insert(Feature::OptionOfT);
+                        }
+                        Format::Set(..) => {
+                            self.features.insert(Feature::SetOfT);
+                        }
+                        Format::Map { .. } => {
+                            self.features.insert(Feature::MapOfT);
+                        }
+                        Format::TupleArray { .. } => {
+                            self.features.insert(Feature::BuildList);
+                        }
                         _ => (),
                     }
                     Ok(())
                 })
                 .unwrap();
+        }
+
+        for name in registry.keys() {
+            if let Namespace::Named(ns) = &name.namespace {
+                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                entry.push(name.name.clone());
+            }
         }
     }
 }

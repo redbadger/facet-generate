@@ -327,9 +327,9 @@ dependencies = [
 
 [[package]]
 name = "facet"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3290e0be77e9eeca366489c3b4010764dc897a83e5936a93857c3937f47a57aa"
+checksum = "0340c4f4e70cb5cb70dd10b8be598d70fc5102ce1b66740598e31ccb6e6eba17"
 dependencies = [
  "facet-core",
  "facet-macros",
@@ -338,9 +338,9 @@ dependencies = [
 
 [[package]]
 name = "facet-core"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8643770dc61323e6ae5620f336f4c4fc283a6bf39e6701fed32efa747fba5a6a"
+checksum = "47235ba7a21bcc1c4df33a17f6a2340b75cb5e78d41e1705c8ea71a0d75b1fe1"
 dependencies = [
  "bitflags",
  "chrono",
@@ -350,9 +350,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eb526288148251e984f3a9ab3cef5191ca1da34a45fb5c548781e7053148e19"
+checksum = "24fa4485ebb192519068d08444dacafd7042786ea33b434c21cbda4ddc756cd4"
 dependencies = [
  "facet-core",
  "facet-macros-emit",
@@ -360,9 +360,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros-emit"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52619b4834e81068fd915795c297e52f894a18742581627568d451e39dd1c906"
+checksum = "196a71ed7c16496b571b7a068210f8baa594ff2c74882e8f666bbddf637b0f8f"
 dependencies = [
  "facet-macros-parse",
  "quote",
@@ -370,9 +370,9 @@ dependencies = [
 
 [[package]]
 name = "facet-macros-parse"
-version = "0.28.0"
+version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6097c15775794dd66eb69cd4614be654877e3e6e4a93ca0d0440236c1798f0b"
+checksum = "ad23863fb8c3cd3b697370c446148b190bacd945b6c1367941f5e4977d651f99"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -785,9 +785,9 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "regex"
-version = "1.11.1"
+version = "1.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
+checksum = "23d7fd106d8c02486a8d64e778353d1cffe08ce79ac2e82f540c86d0facf6912"
 dependencies = [
  "aho-corasick",
  "memchr",

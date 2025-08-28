@@ -1,5 +1,3 @@
-package com.example
-
 /**
  * Compatibility functions for buildList, ensuring support for Kotlin versions < 1.6.0
  *
@@ -21,18 +19,3 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
     list.builderAction()
     return list
 }
-
-data object CustomType
-
-data class Types(
-    val s: String,
-    val staticS: String,
-    val int8: Byte,
-    val float: Float,
-    val double: Double,
-    val array: List<String>,
-    val fixedLengthArray: List<String>,
-    val dictionary: Map<String, Int>,
-    val optionalDictionary: Map<String, Int>? = null,
-    val customType: CustomType,
-)

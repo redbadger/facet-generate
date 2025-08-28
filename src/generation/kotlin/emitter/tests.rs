@@ -1,4 +1,10 @@
 #![allow(clippy::too_many_lines)]
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
+
 use facet::Facet;
 
 use super::*;
@@ -63,8 +69,8 @@ fn tuple_struct() {
     /// line 1
     /// line 2
     data class TupleStruct(
-        val field_0: String,
-        val field_1: Int,
+        val field0: String,
+        val field1: Int,
     )
     ");
 }
@@ -153,8 +159,8 @@ fn struct_with_fields_of_user_types() {
     )
 
     data class Inner3(
-        val field_0: String,
-        val field_1: Int,
+        val field0: String,
+        val field1: Int,
     )
 
     data class Outer(
@@ -320,14 +326,14 @@ fn enum_with_tuple_variants() {
     insta::assert_snapshot!(actual, @r"
     sealed interface MyEnum {
         data class Variant1(
-            val field_0: String,
-            val field_1: Int,
+            val field0: String,
+            val field1: Int,
         ) : MyEnum
 
         data class Variant2(
-            val field_0: Boolean,
-            val field_1: Double,
-            val field_2: UByte,
+            val field0: Boolean,
+            val field1: Double,
+            val field2: UByte,
         ) : MyEnum
     }
     ");
@@ -375,8 +381,8 @@ fn enum_with_mixed_variants() {
         ) : MyEnum
 
         data class Tuple(
-            val field_0: String,
-            val field_1: Int,
+            val field0: String,
+            val field1: Int,
         ) : MyEnum
 
         data class Struct(
@@ -400,7 +406,7 @@ fn struct_with_vec_field() {
     data class MyStruct(
         val items: List<String>,
         val numbers: List<Int>,
-        val nested_items: List<List<String>>,
+        val nestedItems: List<List<String>>,
     )
     ");
 }
@@ -418,9 +424,9 @@ fn struct_with_option_field() {
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val optional_string: String? = null,
-        val optional_number: Int? = null,
-        val optional_bool: Boolean? = null,
+        val optionalString: String? = null,
+        val optionalNumber: Int? = null,
+        val optionalBool: Boolean? = null,
     )
     ");
 }
@@ -429,15 +435,15 @@ fn struct_with_option_field() {
 fn struct_with_hashmap_field() {
     #[derive(Facet)]
     struct MyStruct {
-        string_to_int: std::collections::HashMap<String, i32>,
-        int_to_bool: std::collections::HashMap<i32, bool>,
+        string_to_int: HashMap<String, i32>,
+        int_to_bool: HashMap<i32, bool>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>,
+        val stringToInt: Map<String, Int>,
+        val intToBool: Map<Int, Boolean>,
     )
     ");
 }
@@ -448,18 +454,18 @@ fn struct_with_nested_generics() {
     struct MyStruct {
         optional_list: Option<Vec<String>>,
         list_of_optionals: Vec<Option<i32>>,
-        map_to_list: std::collections::HashMap<String, Vec<bool>>,
-        optional_map: Option<std::collections::HashMap<String, i32>>,
-        complex: Vec<Option<std::collections::HashMap<String, Vec<bool>>>>,
+        map_to_list: HashMap<String, Vec<bool>>,
+        optional_map: Option<HashMap<String, i32>>,
+        complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val optional_list: List<String>? = null,
-        val list_of_optionals: List<Int?>,
-        val map_to_list: Map<String, List<Boolean>>,
-        val optional_map: Map<String, Int>? = null,
+        val optionalList: List<String>? = null,
+        val listOfOptionals: List<Int?>,
+        val mapToList: Map<String, List<Boolean>>,
+        val optionalMap: Map<String, Int>? = null,
         val complex: List<Map<String, List<Boolean>>?>,
     )
     ");
@@ -478,9 +484,9 @@ fn struct_with_array_field() {
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val fixed_array: List<Int>,
-        val byte_array: List<UByte>,
-        val string_array: List<String>,
+        val fixedArray: List<Int>,
+        val byteArray: List<UByte>,
+        val stringArray: List<String>,
     )
     ");
 }
@@ -489,15 +495,15 @@ fn struct_with_array_field() {
 fn struct_with_btreemap_field() {
     #[derive(Facet)]
     struct MyStruct {
-        string_to_int: std::collections::BTreeMap<String, i32>,
-        int_to_bool: std::collections::BTreeMap<i32, bool>,
+        string_to_int: BTreeMap<String, i32>,
+        int_to_bool: BTreeMap<i32, bool>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val string_to_int: Map<String, Int>,
-        val int_to_bool: Map<Int, Boolean>,
+        val stringToInt: Map<String, Int>,
+        val intToBool: Map<Int, Boolean>,
     )
     ");
 }
@@ -508,15 +514,15 @@ fn struct_with_hashset_field() {
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
-        string_set: std::collections::HashSet<String>,
-        int_set: std::collections::HashSet<i32>,
+        string_set: HashSet<String>,
+        int_set: HashSet<i32>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val string_set: Set<String>,
-        val int_set: Set<Int>,
+        val stringSet: Set<String>,
+        val intSet: Set<Int>,
     )
     ");
 }
@@ -527,15 +533,15 @@ fn struct_with_btreeset_field() {
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
     struct MyStruct {
-        string_set: std::collections::BTreeSet<String>,
-        int_set: std::collections::BTreeSet<i32>,
+        string_set: BTreeSet<String>,
+        int_set: BTreeSet<i32>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val string_set: Set<String>,
-        val int_set: Set<Int>,
+        val stringSet: Set<String>,
+        val intSet: Set<Int>,
     )
     ");
 }
@@ -552,8 +558,8 @@ fn struct_with_box_field() {
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val boxed_string: String,
-        val boxed_int: Int,
+        val boxedString: String,
+        val boxedInt: Int,
     )
     ");
 }
@@ -562,15 +568,15 @@ fn struct_with_box_field() {
 fn struct_with_rc_field() {
     #[derive(Facet)]
     struct MyStruct {
-        rc_string: std::rc::Rc<String>,
-        rc_int: std::rc::Rc<i32>,
+        rc_string: Rc<String>,
+        rc_int: Rc<i32>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val rc_string: String,
-        val rc_int: Int,
+        val rcString: String,
+        val rcInt: Int,
     )
     ");
 }
@@ -579,15 +585,15 @@ fn struct_with_rc_field() {
 fn struct_with_arc_field() {
     #[derive(Facet)]
     struct MyStruct {
-        arc_string: std::sync::Arc<String>,
-        arc_int: std::sync::Arc<i32>,
+        arc_string: Arc<String>,
+        arc_int: Arc<i32>,
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val arc_string: String,
-        val arc_int: Int,
+        val arcString: String,
+        val arcInt: Int,
     )
     ");
 }
@@ -597,21 +603,21 @@ fn struct_with_mixed_collections_and_pointers() {
     #[derive(Facet)]
     #[allow(clippy::box_collection)]
     struct MyStruct {
-        vec_of_sets: Vec<std::collections::HashSet<String>>,
-        optional_btree: Option<std::collections::BTreeMap<String, i32>>,
+        vec_of_sets: Vec<HashSet<String>>,
+        optional_btree: Option<BTreeMap<String, i32>>,
         boxed_vec: Box<Vec<String>>,
-        arc_option: std::sync::Arc<Option<String>>,
+        arc_option: Arc<Option<String>>,
         array_of_boxes: [Box<i32>; 3],
     }
 
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @r"
     data class MyStruct(
-        val vec_of_sets: List<Set<String>>,
-        val optional_btree: Map<String, Int>? = null,
-        val boxed_vec: List<String>,
-        val arc_option: String? = null,
-        val array_of_boxes: List<Int>,
+        val vecOfSets: List<Set<String>>,
+        val optionalBtree: Map<String, Int>? = null,
+        val boxedVec: List<String>,
+        val arcOption: String? = null,
+        val arrayOfBoxes: List<Int>,
     )
     ");
 }
@@ -655,7 +661,7 @@ fn struct_with_bytes_field_and_slice() {
         val data: ByteArray,
         val name: String,
         val header: ByteArray,
-        val optional_bytes: List<UByte>? = null,
+        val optionalBytes: List<UByte>? = null,
     )
     ");
 }
