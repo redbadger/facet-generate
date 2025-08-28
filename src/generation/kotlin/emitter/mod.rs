@@ -548,7 +548,7 @@ fn data_class<W: IndentWrite>(
                 writeln!(w, "serializer.serialize_variant_index({index})")?;
             }
             for field in fields {
-                write_serialize(w, &field.name, &field.value, 0)?;
+                write_serialize(w, &field.name.to_lower_camel_case(), &field.value, 0)?;
             }
             pop_serializer(w)?;
             w.end_block()?;

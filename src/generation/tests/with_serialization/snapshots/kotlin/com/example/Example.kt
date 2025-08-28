@@ -133,11 +133,11 @@ data class MyStruct(
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
-        string_to_int.serialize(serializer) { key, value ->
+        stringToInt.serialize(serializer) { key, value ->
             serializer.serialize_str(key)
             serializer.serialize_i32(value)
         }
-        map_to_list.serialize(serializer) { key, value ->
+        mapToList.serialize(serializer) { key, value ->
             serializer.serialize_str(key)
             value.serialize(serializer) { level2 ->
                 level2.serialize(serializer) {
@@ -145,7 +145,7 @@ data class MyStruct(
                 }
             }
         }
-        option_of_vec_of_set.serializeOptionOf(serializer) { level1 ->
+        optionOfVecOfSet.serializeOptionOf(serializer) { level1 ->
             level1.serialize(serializer) { level2 ->
                 level2.serialize(serializer) {
                     serializer.serialize_str(it)

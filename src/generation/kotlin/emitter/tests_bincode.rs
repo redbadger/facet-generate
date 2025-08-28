@@ -1249,7 +1249,7 @@ fn struct_with_vec_field_1() {
             numbers.serialize(serializer) {
                 serializer.serialize_i32(it)
             }
-            nested_items.serialize(serializer) { level1 ->
+            nestedItems.serialize(serializer) { level1 ->
                 level1.serialize(serializer) {
                     serializer.serialize_str(it)
                 }
@@ -1436,7 +1436,7 @@ fn struct_with_option_field() {
                     serializer.serialize_bool(it)
                 }
             }
-            list_of_options.serialize(serializer) { level1 ->
+            listOfOptions.serialize(serializer) { level1 ->
                 level1.serializeOptionOf(serializer) {
                     serializer.serialize_bool(it)
                 }
@@ -1512,11 +1512,11 @@ fn struct_with_hashmap_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            string_to_int.serialize(serializer) { key, value ->
+            stringToInt.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
                 serializer.serialize_i32(value)
             }
-            int_to_bool.serialize(serializer) { key, value ->
+            intToBool.serialize(serializer) { key, value ->
                 serializer.serialize_i32(key)
                 serializer.serialize_bool(value)
             }
@@ -1587,17 +1587,17 @@ fn struct_with_nested_generics() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            optional_list.serializeOptionOf(serializer) { level1 ->
+            optionalList.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) {
                     serializer.serialize_str(it)
                 }
             }
-            list_of_optionals.serialize(serializer) { level1 ->
+            listOfOptionals.serialize(serializer) { level1 ->
                 level1.serializeOptionOf(serializer) {
                     serializer.serialize_i32(it)
                 }
             }
-            map_to_list.serialize(serializer) { key, value ->
+            mapToList.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
                 value.serialize(serializer) { level2 ->
                     level2.serialize(serializer) {
@@ -1605,7 +1605,7 @@ fn struct_with_nested_generics() {
                     }
                 }
             }
-            optional_map.serializeOptionOf(serializer) { level1 ->
+            optionalMap.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) { key, value ->
                     serializer.serialize_str(key)
                     serializer.serialize_i32(value)
@@ -1717,9 +1717,9 @@ fn struct_with_array_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            fixed_array.serialize(serializer)
-            byte_array.serialize(serializer)
-            string_array.serialize(serializer)
+            fixedArray.serialize(serializer)
+            byteArray.serialize(serializer)
+            stringArray.serialize(serializer)
             serializer.decrease_container_depth()
         }
 
@@ -1772,11 +1772,11 @@ fn struct_with_btreemap_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            string_to_int.serialize(serializer) { key, value ->
+            stringToInt.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
                 serializer.serialize_i32(value)
             }
-            int_to_bool.serialize(serializer) { key, value ->
+            intToBool.serialize(serializer) { key, value ->
                 serializer.serialize_i32(key)
                 serializer.serialize_bool(value)
             }
@@ -1841,7 +1841,7 @@ fn struct_with_nested_map_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            map_to_list.serialize(serializer) { key, value ->
+            mapToList.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
                 value.serialize(serializer) { level2 ->
                     level2.serialize(serializer) {
@@ -1849,7 +1849,7 @@ fn struct_with_nested_map_field() {
                     }
                 }
             }
-            list_to_map.serialize(serializer) { level1 ->
+            listToMap.serialize(serializer) { level1 ->
                 level1.serialize(serializer) { key, value ->
                     serializer.serialize_i32(key)
                     serializer.serialize_str(value)
@@ -1923,10 +1923,10 @@ fn struct_with_hashset_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            string_set.serialize(serializer) {
+            stringSet.serialize(serializer) {
                 serializer.serialize_str(it)
             }
-            int_set.serialize(serializer) {
+            intSet.serialize(serializer) {
                 serializer.serialize_i32(it)
             }
             serializer.decrease_container_depth()
@@ -1988,10 +1988,10 @@ fn struct_with_btreeset_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            string_set.serialize(serializer) {
+            stringSet.serialize(serializer) {
                 serializer.serialize_str(it)
             }
-            int_set.serialize(serializer) {
+            intSet.serialize(serializer) {
                 serializer.serialize_i32(it)
             }
             serializer.decrease_container_depth()
@@ -2051,12 +2051,12 @@ fn struct_with_nested_set_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            vec_of_sets.serialize(serializer) { level1 ->
+            vecOfSets.serialize(serializer) { level1 ->
                 level1.serialize(serializer) {
                     serializer.serialize_str(it)
                 }
             }
-            set_of_ints.serialize(serializer) {
+            setOfInts.serialize(serializer) {
                 serializer.serialize_i32(it)
             }
             serializer.decrease_container_depth()
@@ -2119,8 +2119,8 @@ fn struct_with_box_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_str(boxed_string)
-            serializer.serialize_i32(boxed_int)
+            serializer.serialize_str(boxedString)
+            serializer.serialize_i32(boxedInt)
             serializer.decrease_container_depth()
         }
 
@@ -2172,8 +2172,8 @@ fn struct_with_rc_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_str(rc_string)
-            serializer.serialize_i32(rc_int)
+            serializer.serialize_str(rcString)
+            serializer.serialize_i32(rcInt)
             serializer.decrease_container_depth()
         }
 
@@ -2225,8 +2225,8 @@ fn struct_with_arc_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_str(arc_string)
-            serializer.serialize_i32(arc_int)
+            serializer.serialize_str(arcString)
+            serializer.serialize_i32(arcInt)
             serializer.decrease_container_depth()
         }
 
@@ -2285,24 +2285,24 @@ fn struct_with_mixed_collections_and_pointers() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            vec_of_sets.serialize(serializer) { level1 ->
+            vecOfSets.serialize(serializer) { level1 ->
                 level1.serialize(serializer) {
                     serializer.serialize_str(it)
                 }
             }
-            optional_btree.serializeOptionOf(serializer) { level1 ->
+            optionalBtree.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) { key, value ->
                     serializer.serialize_str(key)
                     serializer.serialize_i32(value)
                 }
             }
-            boxed_vec.serialize(serializer) {
+            boxedVec.serialize(serializer) {
                 serializer.serialize_str(it)
             }
-            arc_option.serializeOptionOf(serializer) {
+            arcOption.serializeOptionOf(serializer) {
                 serializer.serialize_str(it)
             }
-            array_of_boxes.serialize(serializer)
+            arrayOfBoxes.serialize(serializer)
             serializer.decrease_container_depth()
         }
 
@@ -2443,7 +2443,7 @@ fn struct_with_bytes_field_and_slice() {
             serializer.serialize_bytes(Bytes.valueOf(data))
             serializer.serialize_str(name)
             serializer.serialize_bytes(Bytes.valueOf(header))
-            optional_bytes.serializeOptionOf(serializer) { level1 ->
+            optionalBytes.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) {
                     serializer.serialize_u8(@Unsigned it.toByte())
                 }
