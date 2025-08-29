@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.0] - 2025-08-29
+
+### 🚀 Features
+
+- adds support for generating code in Kotlin. The generated code is idiomatic and clean (and passes `ktlint` checks). Using Kotlin instead of Java can be more ergonomic with, for example, exhaustive when statements for enums.
+
 ## [0.10.3] - 2025-08-15
 
 ### 🐛 Bug Fixes
