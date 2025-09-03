@@ -3,6 +3,8 @@ use std::{
     sync::Arc,
 };
 
+use chrono::{DateTime, Utc};
+
 use super::*;
 use crate::reflect;
 
@@ -2598,3 +2600,52 @@ fn enum_with_tuple_variant_of_set_of_user_types() {
     : UNITSTRUCT: []
     ");
 }
+
+#[test]
+fn chrono_date_time() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Date(DateTime<Utc>),
+        Date2 { date: DateTime<Utc> },
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        field1: DateTime<Utc>,
+        field2: MyEnum,
+    }
+
+    let registry = reflect!(MyStruct);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            Date:
+              - NEWTYPE: STR
+              - []
+          1:
+            Date2:
+              - STRUCT:
+                  - date:
+                      - STR
+                      - []
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - field1:
+              - STR
+              - []
+          - field2:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MyEnum
+              - []
+        - []
+    ");
+}
+

@@ -1135,13 +1135,10 @@ fn type_to_format(shape: &Shape) -> Format {
             },
             PrimitiveType::Never => unimplemented!("Never type not supported"),
         },
-        Type::User(UserType::Opaque) => {
-            // Handle opaque types like String based on type identifier
-            match shape.type_identifier {
-                "String" => Format::Str,
-                _ => unimplemented!("Unsupported opaque type: {}", shape.type_identifier),
-            }
-        }
+        Type::User(UserType::Opaque) => match shape.type_identifier {
+            "String" | "DateTime<Utc>" => Format::Str,
+            _ => unimplemented!("Unsupported opaque type: {}", shape.type_identifier),
+        },
         _ => unimplemented!("Unsupported type for scalar format: {:?}", shape.ty),
     }
 }
