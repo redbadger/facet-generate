@@ -1,8 +1,8 @@
-#![cfg(all(test, feature = "swift"))]
+#![cfg(feature = "swift")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-mod common;
+pub mod common;
 
 use common::{Choice, Runtime, Test};
 use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
@@ -40,7 +40,7 @@ fn test_swift_runtime_on_simple_data(runtime: Runtime) {
     // std::fs::remove_dir_all(my_path).unwrap_or(());
     // std::fs::create_dir_all(my_path).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encodings([runtime.into()]);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(runtime.into());
     let registry = common::get_simple_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();
@@ -158,7 +158,7 @@ fn test_swift_runtime_on_supported_types(runtime: Runtime) {
     // std::fs::remove_dir_all(my_path).unwrap_or(());
     // std::fs::create_dir_all(my_path).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encodings([runtime.into()]);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(runtime.into());
     let registry = common::get_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();

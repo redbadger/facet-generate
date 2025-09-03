@@ -1,6 +1,6 @@
 use facet::Facet;
 
-use crate::reflection::RegistryBuilder;
+use crate::reflect;
 
 use super::*;
 
@@ -27,48 +27,59 @@ fn single_namespace() {
         two: ChildTwo,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", &registry);
-    insta::assert_yaml_snapshot!(result, @r"
+    let registries = split("Root", &reflect!(Parent));
+    insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions: {}
       external_packages: {}
       comments: {}
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      features: []
     : ? namespace: ROOT
         name: ChildOne
       : STRUCT:
-          - child:
-              TYPENAME:
-                namespace: ROOT
-                name: GrandChild
+          - - child:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: GrandChild
+                - []
+          - []
       ? namespace: ROOT
         name: ChildTwo
       : STRUCT:
-          - field: STR
+          - - field:
+                - STR
+                - []
+          - []
       ? namespace: ROOT
         name: GrandChild
       : STRUCT:
-          - field: STR
+          - - field:
+                - STR
+                - []
+          - []
       ? namespace: ROOT
         name: Parent
       : STRUCT:
-          - one:
-              TYPENAME:
-                namespace: ROOT
-                name: ChildOne
-          - two:
-              TYPENAME:
-                namespace: ROOT
-                name: ChildTwo
+          - - one:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: ChildOne
+                - []
+            - two:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: ChildTwo
+                - []
+          - []
     ");
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn root_namespace_with_two_child_namespaces() {
     #[derive(Facet)]
     #[facet(namespace = "one")]
@@ -94,12 +105,10 @@ fn root_namespace_with_two_child_namespaces() {
         two: ChildTwo,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
-    let result = split("Root", &registry);
-    insta::assert_yaml_snapshot!(result, @r"
+    let registries = split("Root", &reflect!(Parent));
+    insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions:
         one:
           - ChildOne
@@ -110,22 +119,25 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      features: []
     : ? namespace: ROOT
         name: Parent
       : STRUCT:
-          - one:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: ChildOne
-          - two:
-              TYPENAME:
-                namespace:
-                  NAMED: two
-                name: ChildTwo
+          - - one:
+                - TYPENAME:
+                    namespace:
+                      NAMED: one
+                    name: ChildOne
+                - []
+            - two:
+                - TYPENAME:
+                    namespace:
+                      NAMED: two
+                    name: ChildTwo
+                - []
+          - []
     ? module_name: one
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions:
         one:
           - GrandChild
@@ -134,33 +146,42 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      features: []
     : ? namespace:
           NAMED: one
         name: ChildOne
       : STRUCT:
-          - child:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: GrandChild
+          - - child:
+                - TYPENAME:
+                    namespace:
+                      NAMED: one
+                    name: GrandChild
+                - []
+          - []
       ? namespace:
           NAMED: one
         name: GrandChild
       : STRUCT:
-          - field: STR
+          - - field:
+                - STR
+                - []
+          - []
     ? module_name: two
-      serialization: Bincode
-      encodings: []
+      encoding: None
       external_definitions: {}
       external_packages: {}
       comments: {}
       custom_code: {}
       c_style_enums: false
       package_manifest: true
+      features: []
     : ? namespace:
           NAMED: two
         name: ChildTwo
       : STRUCT:
-          - field: STR
+          - - field:
+                - STR
+                - []
+          - []
     ");
 }

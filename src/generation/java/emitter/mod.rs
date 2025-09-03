@@ -1,20 +1,17 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::Write,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{Encoding, common, indent::IndentedWriter, java::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    generation::{common, indent::IndentWrite, java::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Java source file.
 pub(crate) struct JavaEmitter<'a, T> {
     /// Writer.
-    pub(crate) out: IndentedWriter<T>,
+    pub(crate) out: T,
     /// Generator.
     pub(crate) generator: &'a CodeGenerator<'a>,
     #[allow(clippy::doc_markdown)]
@@ -29,7 +26,7 @@ pub(crate) struct JavaEmitter<'a, T> {
 
 impl<T> JavaEmitter<'_, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub(crate) fn output_preamble(&mut self) -> std::io::Result<()> {
         writeln!(self.out, "package {};\n", self.generator.config.module_name)?;
@@ -113,7 +110,9 @@ where
             Format::Bytes => "com.novi.serde.Bytes".into(),
 
             Format::Option(format) => format!("java.util.Optional<{}>", self.quote_type(format)),
-            Format::Seq(format) => format!("java.util.List<{}>", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => {
+                format!("java.util.List<{}>", self.quote_type(format))
+            }
             Format::Map { key, value } => format!(
                 "java.util.Map<{}, {}>",
                 self.quote_type(key),
@@ -193,6 +192,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -285,7 +285,7 @@ if (value.isPresent()) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -380,7 +380,7 @@ if (!tag) {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -476,6 +476,7 @@ return obj;
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -483,6 +484,7 @@ return obj;
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
@@ -563,7 +565,7 @@ return obj;
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {{",
@@ -585,9 +587,7 @@ return obj;
             writeln!(self.out, "}}")?;
 
             if variant_index.is_none() {
-                for encoding in &self.generator.config.encodings {
-                    self.output_class_serialize_for_encoding(*encoding)?;
-                }
+                self.output_class_serialize_for_encoding()?;
             }
 
             // Deserialize (struct) or Load (variant)
@@ -619,9 +619,7 @@ return obj;
             writeln!(self.out, "}}")?;
 
             if variant_index.is_none() {
-                for encoding in &self.generator.config.encodings {
-                    self.output_class_deserialize_for_encoding(name, *encoding)?;
-                }
+                self.output_class_deserialize_for_encoding(name)?;
             }
         }
         // Equality
@@ -724,7 +722,7 @@ if (getClass() != obj.getClass()) return false;
             .map(|v| v.name.as_str())
             .collect::<Vec<_>>();
         self.enter_class(name, &reserved_names);
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\nabstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;"
@@ -757,10 +755,8 @@ switch (index) {{",
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_class_serialize_for_encoding(*encoding)?;
-                self.output_class_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_class_serialize_for_encoding()?;
+            self.output_class_deserialize_for_encoding(name)?;
         }
 
         self.output_variants(name, variants)?;
@@ -768,7 +764,8 @@ switch (index) {{",
         writeln!(self.out, "}}\n")
     }
 
-    fn output_class_serialize_for_encoding(&mut self, encoding: Encoding) -> std::io::Result<()> {
+    fn output_class_serialize_for_encoding(&mut self) -> std::io::Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r"
@@ -782,11 +779,8 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
         )
     }
 
-    fn output_class_deserialize_for_encoding(
-        &mut self,
-        name: &str,
-        encoding: Encoding,
-    ) -> std::io::Result<()> {
+    fn output_class_deserialize_for_encoding(&mut self, name: &str) -> std::io::Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r#"
@@ -813,21 +807,23 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         format: &ContainerFormat,
     ) -> std::io::Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect::<Vec<_>>(),
-            ContainerFormat::Struct(fields) => fields.clone(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Struct(fields, _doc) => fields.clone(),
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());
             }
@@ -835,3 +831,10 @@ public static {0} {1}Deserialize(byte[] input) throws com.novi.serde.Deserializa
         self.output_struct_or_variant_container(None, None, name, &fields)
     }
 }
+
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod tests_bincode;
+#[cfg(test)]
+mod tests_json;

@@ -1,4 +1,8 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fs,
+    path::PathBuf,
+};
 
 use expect_test::expect_file;
 use facet::Facet;
@@ -6,13 +10,12 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        SourceInstaller as _, java,
-        module::{self, Module},
+        Encoding, Language, SourceInstaller as _, java, kotlin, module,
         swift::Installer,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
-    reflection::RegistryBuilder,
+    reflect,
 };
 
 #[test]
@@ -29,7 +32,15 @@ fn test() {
         Child(Child),
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
+    #[derive(Facet)]
+    struct MyStruct {
+        string_to_int: HashMap<String, i32>,
+        map_to_list: HashMap<String, Vec<i32>>,
+        option_of_vec_of_set: Option<Vec<HashSet<String>>>,
+        parent: Parent,
+    }
+
+    let registry = reflect!(MyStruct);
 
     let this_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .join(file!())
@@ -37,48 +48,61 @@ fn test() {
         .unwrap()
         .join("snapshots");
 
-    for target in ["java", "swift", "typescript"] {
+    for target in [
+        Language::Java,
+        Language::Kotlin,
+        Language::Swift,
+        Language::TypeScript,
+    ] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
-        let snapshot_dir = this_dir.join(target);
+        let snapshot_dir = this_dir.join(target.to_string().to_lowercase());
         fs::create_dir_all(&snapshot_dir).unwrap();
 
         match target {
-            "java" => {
+            Language::Java => {
                 let package_name = "com.example";
                 let mut installer = java::Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let this_module = &module.config().module_name;
-                    let is_root_package = package_name == this_module;
-                    let module = if is_root_package {
-                        module
-                    } else {
-                        &Module::new([package_name, this_module].join("."))
-                    };
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_parent(package_name)
+                        .with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
             }
-            "swift" => {
+            Language::Kotlin => {
+                let package_name = "com.example";
+                let mut installer = kotlin::Installer::new(package_name, tmp_path, &[]);
+                for (module, registry) in &module::split(package_name, &registry) {
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_parent(package_name)
+                        .with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
+                }
+            }
+            Language::Swift => {
                 let package_name = "Example";
                 let mut installer = Installer::new(package_name, tmp_path, &[]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
-            "typescript" => {
+            Language::TypeScript => {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config();
-                    installer.install_module(config, registry).unwrap();
+                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
             }
-            _ => unreachable!(),
         }
 
         for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {

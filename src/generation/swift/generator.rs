@@ -8,7 +8,7 @@ use heck::{AsUpperCamelCase, ToUpperCamelCase};
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Language,
+        CodeGen, CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
         swift::emitter::SwiftEmitter,
     },
@@ -23,7 +23,7 @@ pub struct CodeGenerator<'a> {
     pub external_qualified_names: HashMap<String, String>,
 }
 
-impl<'a> Language<'a> for CodeGenerator<'a> {
+impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         CodeGenerator::new(config)
     }
@@ -84,7 +84,7 @@ impl<'a> CodeGenerator<'a> {
             emitter.output_container(&name.name, format)?;
         }
 
-        if self.config.serialization.is_enabled() {
+        if self.config.has_encoding() {
             writeln!(emitter.out)?;
             emitter.output_trait_helpers(registry)?;
         }

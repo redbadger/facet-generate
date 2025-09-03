@@ -2,10 +2,10 @@ use facet::Facet;
 
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
         swift::installer::Installer,
     },
-    reflection::RegistryBuilder,
+    reflect,
 };
 
 #[test]
@@ -46,7 +46,7 @@ fn manifest_with_serde_as_target() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -54,9 +54,8 @@ fn manifest_with_serde_as_target() {
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     installer.install_serde_runtime().unwrap();
@@ -96,7 +95,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -113,9 +112,8 @@ fn manifest_with_serde_as_a_remote_dependency() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -155,7 +153,7 @@ fn manifest_with_serde_as_a_local_dependency() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -172,9 +170,8 @@ fn manifest_with_serde_as_a_local_dependency() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -218,16 +215,15 @@ fn manifest_with_namespaces() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -270,19 +266,15 @@ fn manifest_with_disjoint_namespaces() {
         id: u32,
     }
 
-    let registry = RegistryBuilder::new()
-        .add_type::<Root>()
-        .add_type::<Another>()
-        .build();
+    let registry = reflect!(Root, Another);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
     let mut installer = Installer::new(package_name, install_dir.path(), &[]);
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -372,7 +364,7 @@ fn manifest_with_namespaces_and_dependencies() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -391,9 +383,8 @@ fn manifest_with_namespaces_and_dependencies() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);
@@ -438,10 +429,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
         id: u32,
     }
 
-    let registry = RegistryBuilder::new()
-        .add_type::<Root>()
-        .add_type::<Another>()
-        .build();
+    let registry = reflect!(Root, Another);
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -460,9 +448,8 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
     );
 
     for (module, registry) in split(package_name, &registry) {
-        installer
-            .install_module(module.config(), &registry)
-            .unwrap();
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
     }
 
     let manifest = installer.make_manifest(package_name);

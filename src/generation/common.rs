@@ -28,6 +28,7 @@ pub(crate) fn mangle_type(format: &Format) -> String {
 
         Format::Option(format) => format!("option_{}", mangle_type(format)),
         Format::Seq(format) => format!("vector_{}", mangle_type(format)),
+        Format::Set(format) => format!("set_{}", mangle_type(format)),
         Format::Map { key, value } => format!("map_{}_to_{}", mangle_type(key), mangle_type(value)),
         Format::Tuple(formats) => format!(
             "tuple{}_{}",

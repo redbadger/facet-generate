@@ -5,7 +5,7 @@ use heck::ToUpperCamelCase as _;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Language,
+        CodeGen, CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
         typescript::{InstallTarget, emitter::TypeScriptEmitter},
     },
@@ -23,7 +23,7 @@ pub struct CodeGenerator<'a> {
     pub(crate) target: InstallTarget,
 }
 
-impl<'a> Language<'a> for CodeGenerator<'a> {
+impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         CodeGenerator::new(config, InstallTarget::Node)
     }
@@ -85,17 +85,20 @@ impl<'a> CodeGenerator<'a> {
         let mut emitter = TypeScriptEmitter::new(self);
 
         let mut body = Vec::new();
+
         let mut writer = IndentedWriter::new(&mut body, IndentConfig::Space(2));
         for (name, format) in registry {
             emitter.output_container(&mut writer, &name.name, format)?;
         }
 
-        if self.config.serialization.is_enabled() {
+        if self.config.has_encoding() {
             emitter.output_helpers(&mut writer, registry)?;
         }
 
         let mut preamble = Vec::new();
-        emitter.output_preamble(&mut preamble)?;
+
+        let mut writer = IndentedWriter::new(&mut preamble, IndentConfig::Space(2));
+        emitter.output_preamble(&mut writer)?;
 
         out.write_all(&preamble)?;
         out.write_all(&body)?;

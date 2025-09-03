@@ -1,18 +1,18 @@
 use std::collections::BTreeMap;
-use std::io::{Result, Write};
+use std::io::Result;
 
 use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 
 use crate::{
     Registry,
-    generation::{Encoding, common, indent::IndentedWriter, swift::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
+    generation::{common, indent::IndentWrite, swift::generator::CodeGenerator},
+    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Swift source file.
 pub struct SwiftEmitter<'a, T> {
     /// Writer.
-    pub out: IndentedWriter<T>,
+    pub out: T,
     /// Generator.
     pub generator: &'a CodeGenerator<'a>,
     /// Current namespace (e.g. vec!["Package", "`MyClass`"])
@@ -21,7 +21,7 @@ pub struct SwiftEmitter<'a, T> {
 
 impl<T> SwiftEmitter<'_, T>
 where
-    T: Write,
+    T: IndentWrite,
 {
     pub fn output_preamble(&mut self) -> Result<()> {
         let mut imports = ["Serde".to_string()]
@@ -91,7 +91,7 @@ where
             Format::Bytes => "[UInt8]".into(),
 
             Format::Option(format) => format!("{}?", self.quote_type(format)),
-            Format::Seq(format) => format!("[{}]", self.quote_type(format)),
+            Format::Seq(format) | Format::Set(format) => format!("[{}]", self.quote_type(format)),
             Format::Map { key, value } => {
                 format!("[{}: {}]", self.quote_type(key), self.quote_type(value))
             }
@@ -153,6 +153,7 @@ where
             format,
             Format::Option(_)
                 | Format::Seq(_)
+                | Format::Set(_)
                 | Format::Map { .. }
                 | Format::Tuple(_)
                 | Format::TupleArray { .. }
@@ -215,7 +216,7 @@ if let value = value {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -296,7 +297,7 @@ if tag {{
                 )?;
             }
 
-            Format::Seq(format) => {
+            Format::Seq(format) | Format::Set(format) => {
                 write!(
                     self.out,
                     r"
@@ -419,6 +420,7 @@ return obj
             VariantFormat::Unit => Vec::new(),
             VariantFormat::NewType(format) => vec![Named {
                 name: "x".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
             VariantFormat::Tuple(formats) => formats
@@ -427,6 +429,7 @@ return obj
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("x{i}"),
+                    doc: Doc::new(),
                     value: f,
                 })
                 .collect(),
@@ -467,7 +470,7 @@ return obj
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -485,9 +488,7 @@ return obj
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_serialize_for_encoding(*encoding)?;
-            }
+            self.output_struct_serialize_for_encoding()?;
             // Deserialize
             writeln!(
                 self.out,
@@ -517,9 +518,7 @@ return obj
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_struct_deserialize_for_encoding(name)?;
         }
         // Custom code
         self.output_custom_code(name)?;
@@ -528,7 +527,8 @@ return obj
         Ok(())
     }
 
-    fn output_struct_serialize_for_encoding(&mut self, encoding: Encoding) -> Result<()> {
+    fn output_struct_serialize_for_encoding(&mut self) -> Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r"
@@ -542,11 +542,8 @@ public func {0}Serialize() throws -> [UInt8] {{
         )
     }
 
-    fn output_struct_deserialize_for_encoding(
-        &mut self,
-        name: &str,
-        encoding: Encoding,
-    ) -> Result<()> {
+    fn output_struct_deserialize_for_encoding(&mut self, name: &str) -> Result<()> {
+        let encoding = self.generator.config.encoding;
         writeln!(
             self.out,
             r#"
@@ -580,7 +577,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
         }
 
         // Serialize
-        if self.generator.config.serialization.is_enabled() {
+        if self.generator.config.has_encoding() {
             writeln!(
                 self.out,
                 "\npublic func serialize<S: Serializer>(serializer: S) throws {{",
@@ -624,9 +621,7 @@ public static func {1}Deserialize(input: [UInt8]) throws -> {0} {{
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_serialize_for_encoding(*encoding)?;
-            }
+            self.output_struct_serialize_for_encoding()?;
 
             // Deserialize
             write!(
@@ -684,9 +679,7 @@ switch index {{",
             self.out.unindent();
             writeln!(self.out, "}}")?;
 
-            for encoding in &self.generator.config.encodings {
-                self.output_struct_deserialize_for_encoding(name, *encoding)?;
-            }
+            self.output_struct_deserialize_for_encoding(name)?;
         }
 
         self.current_namespace.pop();
@@ -699,27 +692,30 @@ switch index {{",
 
     pub fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
         let fields = match format {
-            ContainerFormat::UnitStruct => Vec::new(),
-            ContainerFormat::NewTypeStruct(format) => vec![Named {
+            ContainerFormat::UnitStruct(_doc) => Vec::new(),
+            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
                 name: "value".to_string(),
+                doc: Doc::new(),
                 value: format.as_ref().clone(),
             }],
-            ContainerFormat::TupleStruct(formats) => formats
+            ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
                 .map(|(i, f)| Named {
                     name: format!("field{i}"),
+                    doc: Doc::new(),
                     value: f.clone(),
                 })
                 .collect(),
-            ContainerFormat::Struct(fields) => fields
+            ContainerFormat::Struct(fields, _doc) => fields
                 .iter()
                 .map(|f| Named {
                     name: f.name.to_lower_camel_case(),
+                    doc: Doc::new(),
                     value: f.value.clone(),
                 })
                 .collect(),
-            ContainerFormat::Enum(variants) => {
+            ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;
                 return Ok(());
             }
@@ -759,5 +755,8 @@ fn quote_deserialize(format: &Format) -> String {
 }
 
 #[cfg(test)]
-#[path = "emitter_tests.rs"]
 mod tests;
+#[cfg(test)]
+mod tests_bincode;
+#[cfg(test)]
+mod tests_json;

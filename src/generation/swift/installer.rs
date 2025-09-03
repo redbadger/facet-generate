@@ -12,7 +12,7 @@ use indoc::formatdoc;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, ExternalPackage, ExternalPackages, SourceInstaller,
+        CodeGeneratorConfig, Encoding, ExternalPackage, ExternalPackages, SourceInstaller,
         swift::generator::CodeGenerator,
     },
 };
@@ -209,7 +209,7 @@ impl SourceInstaller for Installer {
             targets.insert(target.clone());
         }
 
-        if config.serialization.is_enabled() {
+        if matches!(config.encoding, Encoding::Bincode | Encoding::Bcs) {
             targets.insert("Serde".to_string());
         }
 

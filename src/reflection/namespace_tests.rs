@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use facet::Facet;
 
-use crate::reflection::RegistryBuilder;
+use crate::reflect;
 
 #[test]
 fn nested_namespaced_structs() {
@@ -36,38 +36,49 @@ fn nested_namespaced_structs() {
         two: two::Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
+    let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandChild
     : STRUCT:
-        - field: STR
+        - - field:
+              - STR
+              - []
+        - []
     ? namespace: ROOT
       name: Parent
     : STRUCT:
-        - one:
-            TYPENAME:
-              namespace:
-                NAMED: one
-              name: Child
-        - two:
-            TYPENAME:
-              namespace:
-                NAMED: two
-              name: Child
+        - - one:
+              - TYPENAME:
+                  namespace:
+                    NAMED: one
+                  name: Child
+              - []
+          - two:
+              - TYPENAME:
+                  namespace:
+                    NAMED: two
+                  name: Child
+              - []
+        - []
     ? namespace:
         NAMED: one
       name: Child
     : STRUCT:
-        - child:
-            TYPENAME:
-              namespace: ROOT
-              name: GrandChild
+        - - child:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: GrandChild
+              - []
+        - []
     ? namespace:
         NAMED: two
       name: Child
     : STRUCT:
-        - field: STR
+        - - field:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -111,47 +122,57 @@ fn nested_namespaced_enums() {
         Two(two::Child),
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
+    let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandChild
     : ENUM:
-        0:
-          None: UNIT
+        - 0:
+            None:
+              - UNIT
+              - []
+        - []
     ? namespace: ROOT
       name: Parent
     : ENUM:
-        0:
-          One:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: one
-                name: Child
-        1:
-          Two:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: two
-                name: Child
+        - 0:
+            One:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: one
+                    name: Child
+              - []
+          1:
+            Two:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: two
+                    name: Child
+              - []
+        - []
     ? namespace:
         NAMED: one
       name: Child
     : ENUM:
-        0:
-          Data:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: GrandChild
+        - 0:
+            Data:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: GrandChild
+              - []
+        - []
     ? namespace:
         NAMED: two
       name: Child
     : ENUM:
-        0:
-          Data:
-            NEWTYPE: STR
+        - 0:
+            Data:
+              - NEWTYPE: STR
+              - []
+        - []
     ");
 }
 
@@ -190,38 +211,49 @@ fn nested_namespaced_renamed_structs() {
         two: two::Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Parent>().build();
+    let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: GrandKid
     : STRUCT:
-        - field: STR
+        - - field:
+              - STR
+              - []
+        - []
     ? namespace: ROOT
       name: Parent
     : STRUCT:
-        - one:
-            TYPENAME:
-              namespace:
-                NAMED: one
-              name: Kid
-        - two:
-            TYPENAME:
-              namespace:
-                NAMED: two
-              name: Kid
+        - - one:
+              - TYPENAME:
+                  namespace:
+                    NAMED: one
+                  name: Kid
+              - []
+          - two:
+              - TYPENAME:
+                  namespace:
+                    NAMED: two
+                  name: Kid
+              - []
+        - []
     ? namespace:
         NAMED: one
       name: Kid
     : STRUCT:
-        - child:
-            TYPENAME:
-              namespace: ROOT
-              name: GrandKid
+        - - child:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: GrandKid
+              - []
+        - []
     ? namespace:
         NAMED: two
       name: Kid
     : STRUCT:
-        - field: STR
+        - - field:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -248,53 +280,65 @@ fn namespaced_collections() {
         groups: Vec<Group>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Response>().build();
+    let registry = reflect!(Response);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Response
     : STRUCT:
-        - users:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: User
-        - user_arrays:
-            TUPLEARRAY:
-              CONTENT:
-                TYPENAME:
-                  namespace:
-                    NAMED: api
-                  name: User
-              SIZE: 5
-        - optional_user:
-            OPTION:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: User
-        - groups:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: Group
+        - - users:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
+          - user_arrays:
+              - TUPLEARRAY:
+                  CONTENT:
+                    TYPENAME:
+                      namespace:
+                        NAMED: api
+                      name: User
+                  SIZE: 5
+              - []
+          - optional_user:
+              - OPTION:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
+          - groups:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: Group
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: Group
     : STRUCT:
-        - users:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: User
+        - - users:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: User
     : STRUCT:
-        - id: STR
-        - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -321,41 +365,52 @@ fn namespaced_maps() {
         user_counts: HashMap<String, u32>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Database>().build();
+    let registry = reflect!(Database);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Database
     : STRUCT:
-        - user_profiles:
-            MAP:
-              KEY:
-                TYPENAME:
-                  namespace:
-                    NAMED: models
-                  name: UserId
-              VALUE:
-                TYPENAME:
-                  namespace:
-                    NAMED: models
-                  name: UserProfile
-        - user_counts:
-            MAP:
-              KEY: STR
-              VALUE: U32
+        - - user_profiles:
+              - MAP:
+                  KEY:
+                    TYPENAME:
+                      namespace:
+                        NAMED: models
+                      name: UserId
+                  VALUE:
+                    TYPENAME:
+                      namespace:
+                        NAMED: models
+                      name: UserProfile
+              - []
+          - user_counts:
+              - MAP:
+                  KEY: STR
+                  VALUE: U32
+              - []
+        - []
     ? namespace:
         NAMED: models
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ? namespace:
         NAMED: models
       name: UserProfile
     : STRUCT:
-        - name: STR
-        - active: BOOL
+        - - name:
+              - STR
+              - []
+          - active:
+              - BOOL
+              - []
+        - []
     ");
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn complex_namespaced_enums() {
     mod events {
         use facet::Facet;
@@ -391,61 +446,79 @@ fn complex_namespaced_enums() {
         events: Vec<events::Event>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<EventLog>().build();
+    let registry = reflect!(EventLog);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: EventLog
     : STRUCT:
-        - events:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: Event
+        - - events:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: Event
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: Event
     : ENUM:
-        0:
-          UserCreated:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: UserData
-        1:
-          UserUpdated:
-            STRUCT:
-              - old:
+        - 0:
+            UserCreated:
+              - NEWTYPE:
                   TYPENAME:
                     namespace:
                       NAMED: events
                     name: UserData
-              - new:
+              - []
+          1:
+            UserUpdated:
+              - STRUCT:
+                  - old:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: events
+                          name: UserData
+                      - []
+                  - new:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: events
+                          name: UserData
+                      - []
+              - []
+          2:
+            SystemEvent:
+              - NEWTYPE:
                   TYPENAME:
                     namespace:
                       NAMED: events
-                    name: UserData
-        2:
-          SystemEvent:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: SystemData
-        3:
-          Simple: UNIT
+                    name: SystemData
+              - []
+          3:
+            Simple:
+              - UNIT
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: SystemData
     : STRUCT:
-        - timestamp: U64
+        - - timestamp:
+              - U64
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: UserData
     : STRUCT:
-        - id: STR
-        - email: STR
+        - - id:
+              - STR
+              - []
+          - email:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -466,25 +539,30 @@ fn namespaced_transparent_structs() {
         wrapped_id: TransparentWrapper,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Container>().build();
+    let registry = reflect!(Container);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
     : STRUCT:
-        - direct_id:
-            TYPENAME:
-              namespace:
-                NAMED: wrappers
-              name: UserId
-        - wrapped_id:
-            TYPENAME:
-              namespace:
-                NAMED: wrappers
-              name: UserId
+        - - direct_id:
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrappers
+                  name: UserId
+              - []
+          - wrapped_id:
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrappers
+                  name: UserId
+              - []
+        - []
     ? namespace:
         NAMED: wrappers
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ");
 }
 
@@ -515,46 +593,58 @@ fn cross_namespace_references() {
         records: Vec<Record>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<System>().build();
+    let registry = reflect!(System);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: System
     : STRUCT:
-        - records:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: storage
-                name: Record
+        - - records:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: storage
+                    name: Record
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: Request
     : STRUCT:
-        - entity:
-            TYPENAME:
-              namespace:
-                NAMED: entities
-              name: Entity
-        - metadata: STR
+        - - entity:
+              - TYPENAME:
+                  namespace:
+                    NAMED: entities
+                  name: Entity
+              - []
+          - metadata:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: entities
       name: Entity
     : STRUCT:
-        - id: STR
+        - - id:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: storage
       name: Record
     : STRUCT:
-        - entity:
-            TYPENAME:
-              namespace:
-                NAMED: entities
-              name: Entity
-        - request:
-            TYPENAME:
-              namespace:
-                NAMED: api
-              name: Request
+        - - entity:
+              - TYPENAME:
+                  namespace:
+                    NAMED: entities
+                  name: Entity
+              - []
+          - request:
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: Request
+              - []
+        - []
     ");
 }
 
@@ -579,23 +669,32 @@ fn namespace_with_byte_attributes() {
         binary: data::BinaryData,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Document>().build();
+    let registry = reflect!(Document);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Document
     : STRUCT:
-        - binary:
-            TYPENAME:
-              namespace:
-                NAMED: data
-              name: BinaryData
+        - - binary:
+              - TYPENAME:
+                  namespace:
+                    NAMED: data
+                  name: BinaryData
+              - []
+        - []
     ? namespace:
         NAMED: data
       name: BinaryData
     : STRUCT:
-        - content: BYTES
-        - header: BYTES
-        - metadata: STR
+        - - content:
+              - BYTES
+              - []
+          - header:
+              - BYTES
+              - []
+          - metadata:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -627,35 +726,43 @@ fn deeply_nested_namespaces() {
         deep_direct: level1::level2::DeepStruct,
     }
 
-    let registry = RegistryBuilder::new().add_type::<RootStruct>().build();
+    let registry = reflect!(RootStruct);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: RootStruct
     : STRUCT:
-        - middle:
-            TYPENAME:
-              namespace:
-                NAMED: level1
-              name: MiddleStruct
-        - deep_direct:
-            TYPENAME:
-              namespace:
-                NAMED: level1.level2
-              name: DeepStruct
+        - - middle:
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1
+                  name: MiddleStruct
+              - []
+          - deep_direct:
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1.level2
+                  name: DeepStruct
+              - []
+        - []
     ? namespace:
         NAMED: level1
       name: MiddleStruct
     : STRUCT:
-        - deep:
-            TYPENAME:
-              namespace:
-                NAMED: level1.level2
-              name: DeepStruct
+        - - deep:
+              - TYPENAME:
+                  namespace:
+                    NAMED: level1.level2
+                  name: DeepStruct
+              - []
+        - []
     ? namespace:
         NAMED: level1.level2
       name: DeepStruct
     : STRUCT:
-        - value: STR
+        - - value:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -679,18 +786,22 @@ fn transparent_struct_explicit_namespace() {
         wrapped_id: wrappers::TransparentWrapper,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Container>().build();
+    let registry = reflect!(Container);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
     : STRUCT:
-        - wrapped_id:
-            TYPENAME:
-              namespace: ROOT
-              name: UserId
+        - - wrapped_id:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: UserId
+              - []
+        - []
     ? namespace: ROOT
       name: UserId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ");
 }
 
@@ -764,94 +875,124 @@ fn explicit_namespace_declarations() {
         efficient: RootGroup,
     }
 
-    let registry = RegistryBuilder::new().add_type::<RootContainer>().build();
+    let registry = reflect!(RootContainer);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ApiContainer
     : STRUCT:
-        - user:
-            TYPENAME:
-              namespace:
-                NAMED: api
-              name: User
-        - group:
-            TYPENAME:
-              namespace:
-                NAMED: api
-              name: Group
+        - - user:
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: User
+              - []
+          - group:
+              - TYPENAME:
+                  namespace:
+                    NAMED: api
+                  name: Group
+              - []
+        - []
     ? namespace: ROOT
       name: RootContainer
     : STRUCT:
-        - api_data:
-            TYPENAME:
-              namespace: ROOT
-              name: ApiContainer
-        - event:
-            TYPENAME:
-              namespace:
-                NAMED: events
-              name: Event
-        - efficient:
-            TYPENAME:
-              namespace: ROOT
-              name: RootGroup
+        - - api_data:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ApiContainer
+              - []
+          - event:
+              - TYPENAME:
+                  namespace:
+                    NAMED: events
+                  name: Event
+              - []
+          - efficient:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: RootGroup
+              - []
+        - []
     ? namespace: ROOT
       name: RootGroup
     : STRUCT:
-        - users:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: RootUser
+        - - users:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: RootUser
+              - []
+        - []
     ? namespace: ROOT
       name: RootUser
     : STRUCT:
-        - id: STR
-        - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: Group
     : STRUCT:
-        - users:
-            SEQ:
-              TYPENAME:
-                namespace:
-                  NAMED: api
-                name: User
+        - - users:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: User
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: User
     : STRUCT:
-        - id: STR
-        - name: STR
+        - - id:
+              - STR
+              - []
+          - name:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: Event
     : ENUM:
-        0:
-          UserCreated:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: UserData
-        1:
-          SystemEvent:
-            NEWTYPE:
-              TYPENAME:
-                namespace:
-                  NAMED: events
-                name: SystemData
+        - 0:
+            UserCreated:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: UserData
+              - []
+          1:
+            SystemEvent:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: events
+                    name: SystemData
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: SystemData
     : STRUCT:
-        - timestamp: U64
+        - - timestamp:
+              - U64
+              - []
+        - []
     ? namespace:
         NAMED: events
       name: UserData
     : STRUCT:
-        - id: STR
+        - - id:
+              - STR
+              - []
+        - []
     ");
 }
 
@@ -879,55 +1020,67 @@ fn collections_with_explicit_namespace() {
         nested_lists: Vec<Vec<UnnamedUser>>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<UserManager>().build();
+    let registry = reflect!(UserManager);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: UnnamedRole
     : STRUCT:
-        - permissions:
-            SEQ: STR
+        - - permissions:
+              - SEQ: STR
+              - []
+        - []
     ? namespace: ROOT
       name: UnnamedUser
     : STRUCT:
-        - name: STR
+        - - name:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: system
       name: UserManager
     : STRUCT:
-        - users:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: UnnamedUser
-        - admins:
-            TUPLEARRAY:
-              CONTENT:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UnnamedUser
-              SIZE: 2
-        - optional_user:
-            OPTION:
-              TYPENAME:
-                namespace: ROOT
-                name: UnnamedUser
-        - role_map:
-            MAP:
-              KEY: STR
-              VALUE:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UnnamedRole
-        - nested_lists:
-            SEQ:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: UnnamedUser
+        - - users:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: UnnamedUser
+              - []
+          - admins:
+              - TUPLEARRAY:
+                  CONTENT:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedUser
+                  SIZE: 2
+              - []
+          - optional_user:
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: UnnamedUser
+              - []
+          - role_map:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedRole
+              - []
+          - nested_lists:
+              - SEQ:
+                  SEQ:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: UnnamedUser
+              - []
+        - []
     ");
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn enums_with_explicit_namespace() {
     // Test that enum variant types go to root namespace when no explicit namespace is given
     #[derive(Facet)]
@@ -963,63 +1116,84 @@ fn enums_with_explicit_namespace() {
         Empty,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Response>().build();
+    let registry = reflect!(Response);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ErrorData
     : STRUCT:
-        - code: U32
-        - message: STR
+        - - code:
+              - U32
+              - []
+          - message:
+              - STR
+              - []
+        - []
     ? namespace: ROOT
       name: ProcessingData
     : STRUCT:
-        - progress: F32
-        - estimate:
-            TYPENAME:
-              namespace: ROOT
-              name: ErrorData
+        - - progress:
+              - F32
+              - []
+          - estimate:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ErrorData
+              - []
+        - []
     ? namespace: ROOT
       name: SuccessData
     : STRUCT:
-        - result: STR
+        - - result:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: api
       name: Response
     : ENUM:
-        0:
-          Success:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: SuccessData
-        1:
-          Error:
-            NEWTYPE:
-              TYPENAME:
-                namespace: ROOT
-                name: ErrorData
-        2:
-          Processing:
-            STRUCT:
-              - data:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: ProcessingData
-              - extra:
+        - 0:
+            Success:
+              - NEWTYPE:
                   TYPENAME:
                     namespace: ROOT
                     name: SuccessData
-        3:
-          Multipart:
-            TUPLE:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: ErrorData
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SuccessData
-        4:
-          Empty: UNIT
+              - []
+          1:
+            Error:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: ErrorData
+              - []
+          2:
+            Processing:
+              - STRUCT:
+                  - data:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: ProcessingData
+                      - []
+                  - extra:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: SuccessData
+                      - []
+              - []
+          3:
+            Multipart:
+              - TUPLE:
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: ErrorData
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: SuccessData
+              - []
+          4:
+            Empty:
+              - UNIT
+              - []
+        - []
     ");
 }
 
@@ -1052,51 +1226,64 @@ fn nested_structs_with_explicit_namespace() {
         inner_direct: DeepInner,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Container>().build();
+    let registry = reflect!(Container);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: DeepInner
     : STRUCT:
-        - value: I32
+        - - value:
+              - I32
+              - []
+        - []
     ? namespace: ROOT
       name: MiddleLayer
     : STRUCT:
-        - inner:
-            TYPENAME:
-              namespace: ROOT
-              name: DeepInner
-        - inner_list:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: DeepInner
+        - - inner:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeepInner
+              - []
+          - inner_list:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: DeepInner
+              - []
+        - []
     ? namespace: ROOT
       name: TopLayer
     : STRUCT:
-        - middle:
-            TYPENAME:
-              namespace: ROOT
-              name: MiddleLayer
-        - direct_inner:
-            TYPENAME:
-              namespace: ROOT
-              name: DeepInner
+        - - middle:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MiddleLayer
+              - []
+          - direct_inner:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeepInner
+              - []
+        - []
     ? namespace:
         NAMED: nested
       name: Container
     : STRUCT:
-        - top:
-            TYPENAME:
-              namespace: ROOT
-              name: TopLayer
-        - middle_direct:
-            TYPENAME:
-              namespace: ROOT
-              name: MiddleLayer
-        - inner_direct:
-            TYPENAME:
-              namespace: ROOT
-              name: DeepInner
+        - - top:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: TopLayer
+              - []
+          - middle_direct:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MiddleLayer
+              - []
+          - inner_direct:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeepInner
+              - []
+        - []
     ");
 }
 
@@ -1124,26 +1311,31 @@ fn transparent_struct_chains() {
         id: NamespacedWrapper,
     }
 
-    let registry = RegistryBuilder::new().add_type::<IdContainer>().build();
+    let registry = reflect!(IdContainer);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: CoreId
-    : NEWTYPESTRUCT: STR
+    : NEWTYPESTRUCT:
+        - STR
+        - []
     ? namespace: ROOT
       name: IdContainer
     : STRUCT:
-        - id:
-            TYPENAME:
-              namespace:
-                NAMED: identity
-              name: NamespacedWrapper
+        - - id:
+              - TYPENAME:
+                  namespace:
+                    NAMED: identity
+                  name: NamespacedWrapper
+              - []
+        - []
     ? namespace:
         NAMED: identity
       name: NamespacedWrapper
     : NEWTYPESTRUCT:
-        TYPENAME:
-          namespace: ROOT
-          name: DoubleWrapperId
+        - TYPENAME:
+            namespace: ROOT
+            name: DoubleWrapperId
+        - []
     ");
 }
 
@@ -1167,58 +1359,69 @@ fn mixed_containers_with_explicit_namespace() {
         complex_map: HashMap<String, Vec<Option<Item>>>,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MixedContainer>().build();
+    let registry = reflect!(MixedContainer);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Item
     : STRUCT:
-        - id: STR
+        - - id:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: storage
       name: MixedContainer
     : STRUCT:
-        - single:
-            TYPENAME:
-              namespace: ROOT
-              name: Item
-        - vector:
-            SEQ:
-              TYPENAME:
-                namespace: ROOT
-                name: Item
-        - array:
-            TUPLEARRAY:
-              CONTENT:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Item
-              SIZE: 3
-        - option:
-            OPTION:
-              TYPENAME:
-                namespace: ROOT
-                name: Item
-        - tuple:
-            TUPLE:
+        - - single:
               - TYPENAME:
                   namespace: ROOT
                   name: Item
-              - STR
-        - nested_option:
-            OPTION:
-              SEQ:
-                TYPENAME:
-                  namespace: ROOT
-                  name: Item
-        - complex_map:
-            MAP:
-              KEY: STR
-              VALUE:
-                SEQ:
-                  OPTION:
+              - []
+          - vector:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Item
+              - []
+          - array:
+              - TUPLEARRAY:
+                  CONTENT:
                     TYPENAME:
                       namespace: ROOT
                       name: Item
+                  SIZE: 3
+              - []
+          - option:
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Item
+              - []
+          - tuple:
+              - TUPLE:
+                  - TYPENAME:
+                      namespace: ROOT
+                      name: Item
+                  - STR
+              - []
+          - nested_option:
+              - OPTION:
+                  SEQ:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: Item
+              - []
+          - complex_map:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    SEQ:
+                      OPTION:
+                        TYPENAME:
+                          namespace: ROOT
+                          name: Item
+              - []
+        - []
     ");
 }
 
@@ -1249,45 +1452,56 @@ fn no_namespace_pollution() {
         unnamespaced: SharedType,
     }
 
-    let registry = RegistryBuilder::new().add_type::<RootContainer>().build();
+    let registry = reflect!(RootContainer);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: RootContainer
     : STRUCT:
-        - alpha:
-            TYPENAME:
-              namespace:
-                NAMED: alpha
-              name: AlphaContainer
-        - beta:
-            TYPENAME:
-              namespace:
-                NAMED: beta
-              name: BetaContainer
-        - unnamespaced:
-            TYPENAME:
-              namespace: ROOT
-              name: SharedType
+        - - alpha:
+              - TYPENAME:
+                  namespace:
+                    NAMED: alpha
+                  name: AlphaContainer
+              - []
+          - beta:
+              - TYPENAME:
+                  namespace:
+                    NAMED: beta
+                  name: BetaContainer
+              - []
+          - unnamespaced:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
+        - []
     ? namespace: ROOT
       name: SharedType
     : STRUCT:
-        - value: STR
+        - - value:
+              - STR
+              - []
+        - []
     ? namespace:
         NAMED: alpha
       name: AlphaContainer
     : STRUCT:
-        - shared:
-            TYPENAME:
-              namespace: ROOT
-              name: SharedType
+        - - shared:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
+        - []
     ? namespace:
         NAMED: beta
       name: BetaContainer
     : STRUCT:
-        - shared:
-            TYPENAME:
-              namespace: ROOT
-              name: SharedType
+        - - shared:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SharedType
+              - []
+        - []
     ");
 }
 
@@ -1317,44 +1531,55 @@ fn explicit_namespace_behavior_summary() {
         direct: BaseType,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: BaseType
     : STRUCT:
-        - value: STR
+        - - value:
+              - STR
+              - []
+        - []
     ? namespace: ROOT
       name: Root
     : STRUCT:
-        - first:
-            TYPENAME:
-              namespace:
-                NAMED: first
-              name: FirstContainer
-        - second:
-            TYPENAME:
-              namespace:
-                NAMED: second
-              name: SecondContainer
-        - direct:
-            TYPENAME:
-              namespace: ROOT
-              name: BaseType
+        - - first:
+              - TYPENAME:
+                  namespace:
+                    NAMED: first
+                  name: FirstContainer
+              - []
+          - second:
+              - TYPENAME:
+                  namespace:
+                    NAMED: second
+                  name: SecondContainer
+              - []
+          - direct:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
+        - []
     ? namespace:
         NAMED: first
       name: FirstContainer
     : STRUCT:
-        - item:
-            TYPENAME:
-              namespace: ROOT
-              name: BaseType
+        - - item:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
+        - []
     ? namespace:
         NAMED: second
       name: SecondContainer
     : STRUCT:
-        - item:
-            TYPENAME:
-              namespace: ROOT
-              name: BaseType
+        - - item:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: BaseType
+              - []
+        - []
     ");
 }

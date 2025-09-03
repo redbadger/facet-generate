@@ -38,7 +38,19 @@ impl RegistryBuilder {
         for format in self.registry.values() {
             match format.visit(&mut |_| Ok(())) {
                 Ok(()) => (),
-                Err(err) => panic!("should not have any remaining placeholders: {err}"),
+                Err(err) => panic!(
+                    "
+                    There was a problem building the registry: {err}
+                    Note: Most types with generic parameters are currently not yet supported.
+                    The only supported generic types are:
+                    - Option<T>
+                    - Vec<T>
+                    - HashMap<K, V>
+                    - HashSet<T>
+                    - BTreeMap<K, V>
+                    - BTreeSet<T>
+                    "
+                ),
             }
         }
         self.registry
@@ -47,7 +59,7 @@ impl RegistryBuilder {
     /// Reflect a type into the registry.
     #[must_use]
     pub fn add_type<'a, T: Facet<'a>>(mut self) -> Self {
-        self.format(T::SHAPE);
+        self.format(T::SHAPE, None);
         self
     }
 }
@@ -91,11 +103,7 @@ impl RegistryBuilder {
         }
     }
 
-    fn format(&mut self, shape: &Shape) {
-        self.process_type(shape, None);
-    }
-
-    fn process_type(&mut self, shape: &Shape, namespace: Option<&str>) {
+    fn format(&mut self, shape: &Shape, namespace: Option<&str>) {
         // First check for special cases in the def system (like Option)
         if let Def::Option(option_def) = shape.def {
             self.format_option(option_def, namespace);
@@ -114,7 +122,7 @@ impl RegistryBuilder {
     fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
         match &shape.ty {
             Type::User(UserType::Struct(struct_def)) => {
-                self.handle_user_struct(shape, struct_def, namespace);
+                self.handle_user_struct(shape, struct_def);
                 true
             }
             Type::User(UserType::Enum(enum_def)) => {
@@ -128,12 +136,7 @@ impl RegistryBuilder {
         }
     }
 
-    fn handle_user_struct(
-        &mut self,
-        shape: &Shape,
-        struct_def: &StructType,
-        namespace: Option<&str>,
-    ) {
+    fn handle_user_struct(&mut self, shape: &Shape, struct_def: &StructType) {
         let type_name = get_name(shape);
 
         // Update container with the struct format only if not processing nested types
@@ -143,10 +146,11 @@ impl RegistryBuilder {
             } else {
                 Format::TypeName(type_name.clone())
             };
+
             self.update_container_format_if_unknown(format);
         }
 
-        self.format_struct(struct_def, shape, namespace);
+        self.format_struct(struct_def, shape);
     }
 
     fn handle_sequence_type(
@@ -216,7 +220,7 @@ impl RegistryBuilder {
 
     fn handle_pointer(&mut self, inner_shape: &Shape, namespace: Option<&str>) {
         // For Pointer, we need to update the current container with the inner type's format
-        let inner_format = get_inner_format(inner_shape);
+        let inner_format = get_format_for_shape(inner_shape);
 
         // Update the current container with the Pointer's inner format
         self.update_container_format_if_unknown(inner_format);
@@ -247,7 +251,7 @@ impl RegistryBuilder {
                 }
             },
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                self.process_type((pt.target)(), namespace);
+                self.format((pt.target)(), namespace);
             }
             _ => {}
         }
@@ -258,12 +262,7 @@ impl RegistryBuilder {
         self.update_container_format(format);
     }
 
-    fn format_struct(
-        &mut self,
-        struct_type: &StructType,
-        shape: &Shape,
-        _parent_namespace: Option<&str>,
-    ) {
+    fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) {
         let struct_name = get_name(shape);
 
         // Check if already processed using the full namespaced name
@@ -290,7 +289,7 @@ impl RegistryBuilder {
 
         match struct_type.kind {
             StructKind::Unit => {
-                self.push(struct_name, ContainerFormat::UnitStruct);
+                self.push(struct_name, ContainerFormat::UnitStruct(shape.into()));
                 self.pop();
             }
             StructKind::TupleStruct => {
@@ -304,32 +303,44 @@ impl RegistryBuilder {
                     if is_transparent {
                         // For transparent structs, don't create a container - just process the inner type
                         // This will register the transparent struct's name with its inner type's format
-                        self.process_type(field_shape, current_namespace.as_deref());
+                        self.format(field_shape, current_namespace.as_deref());
                         return;
                     }
 
                     // Handle regular newtype struct
-                    let container = ContainerFormat::NewTypeStruct(Box::default());
+                    let container = ContainerFormat::NewTypeStruct(Box::default(), shape.into());
                     self.push(struct_name, container);
 
                     // Process the inner field
-                    self.process_type(field_shape, current_namespace.as_deref());
+                    self.format(field_shape, current_namespace.as_deref());
 
                     self.pop();
                 } else {
                     // Handle tuple struct with multiple fields
-                    let container = ContainerFormat::TupleStruct(vec![]);
+                    let container = ContainerFormat::TupleStruct(vec![], shape.into());
                     self.push(struct_name, container);
                     for field in struct_type.fields {
-                        self.process_type(field.shape(), current_namespace.as_deref());
+                        let skip = field.attributes.iter().any(|attr| match attr {
+                            FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                        });
+                        if skip {
+                            continue;
+                        }
+                        self.format(field.shape(), current_namespace.as_deref());
                     }
                     self.pop();
                 }
             }
             StructKind::Struct => {
-                let container = ContainerFormat::Struct(vec![]);
+                let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push(struct_name, container);
                 for field in struct_type.fields {
+                    let skip = field.attributes.iter().any(|attr| match attr {
+                        FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                    });
+                    if skip {
+                        continue;
+                    }
                     self.handle_struct_field(field, current_namespace.as_deref());
                 }
                 self.pop();
@@ -349,15 +360,15 @@ impl RegistryBuilder {
             FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
         });
 
-        if has_bytes_attribute && self.try_handle_bytes_attribute(field, field_shape) {
+        if has_bytes_attribute && self.try_handle_bytes_attribute(field) {
             return;
         }
 
-        if self.try_handle_option_field(field, field_shape, namespace) {
+        if self.try_handle_option_field(field, namespace) {
             return;
         }
 
-        if self.try_handle_tuple_struct_field(field, field_shape, namespace) {
+        if self.try_handle_tuple_struct_field(field, namespace) {
             return;
         }
 
@@ -365,38 +376,41 @@ impl RegistryBuilder {
 
         // For user-defined types (structs/enums), get the renamed name before mutable borrow
         // But skip primitives like String, which are also Type::User but should use scalar format
-        let field_format = if let Type::User(user_type) = &field_shape.ty {
-            match user_type {
-                UserType::Struct(_) | UserType::Enum(_) => {
-                    let renamed_name = get_name(field_shape);
-
-                    Format::TypeName(renamed_name)
-                }
-                _ => get_inner_format(field_shape),
+        let field_format = match &field_shape.ty {
+            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
+                let renamed_name = get_name(field_shape);
+                Format::TypeName(renamed_name)
             }
-        } else {
-            get_inner_format(field_shape)
+            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
+                let target_shape = (pt.target)();
+                get_inner_format(target_shape)
+            }
+            _ => get_inner_format(field_shape),
         };
 
-        if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
-            named_formats.push(Named {
+        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+            let format = Named {
                 name: field.name.to_string(),
+                doc: field.into(),
                 value: field_format,
-            });
+            };
+            named_formats.push(format);
         }
-        self.process_type(field_shape, namespace);
+        self.format(field_shape, namespace);
     }
 
-    fn try_handle_bytes_attribute(&mut self, field: &Field, field_shape: &Shape) -> bool {
+    fn try_handle_bytes_attribute(&mut self, field: &Field) -> bool {
+        let field_shape = field.shape();
         // Handle bytes attribute for Vec<u8>
         if field_shape.type_identifier == "Vec" {
             // Check if it's actually Vec<u8> by examining the definition
             if let Def::List(list_def) = field_shape.def {
                 let inner_shape = list_def.t();
                 if inner_shape.type_identifier == "u8" {
-                    if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                    if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                         named_formats.push(Named {
                             name: field.name.to_string(),
+                            doc: field.shape().into(),
                             value: Format::Bytes,
                         });
                     }
@@ -417,9 +431,10 @@ impl RegistryBuilder {
                 if let Def::Slice(slice_def) = target_shape.def {
                     let element_shape = slice_def.t();
                     if element_shape.type_identifier == "u8" {
-                        if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                             named_formats.push(Named {
                                 name: field.name.to_string(),
+                                doc: field.into(),
                                 value: Format::Bytes,
                             });
                         }
@@ -432,30 +447,28 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_option_field(
-        &mut self,
-        field: &Field,
-        field_shape: &Shape,
-        namespace: Option<&str>,
-    ) -> bool {
+    fn try_handle_option_field(&mut self, field: &Field, namespace: Option<&str>) -> bool {
+        let field_shape = field.shape();
         // Check if the field is an Option
         if field_shape.type_identifier == "Option" {
             if let Def::Option(option_def) = field_shape.def {
                 // Handle Option types directly
                 let inner_shape = option_def.t();
-                let inner_format = get_inner_format(inner_shape);
+                // Handle pointer types specially
+                let inner_format = get_format_for_shape(inner_shape);
                 let option_format = Format::Option(Box::new(inner_format));
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: option_format,
                     });
                 }
 
                 // If the inner type is a user-defined type, we need to process it too
                 if !matches!(inner_shape.def, Def::Scalar) {
-                    self.process_type(inner_shape, namespace);
+                    self.format(inner_shape, namespace);
                 }
                 return true;
             }
@@ -463,12 +476,8 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_tuple_struct_field(
-        &mut self,
-        field: &Field,
-        field_shape: &Shape,
-        _namespace: Option<&str>,
-    ) -> bool {
+    fn try_handle_tuple_struct_field(&mut self, field: &Field, _namespace: Option<&str>) -> bool {
+        let field_shape = field.shape();
         // Check if the field is a tuple struct
         if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
             if inner_struct.kind == StructKind::Tuple {
@@ -480,7 +489,7 @@ impl RegistryBuilder {
                     tuple_formats.push(field_format);
                 }
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     let tuple_format = if tuple_formats.is_empty() {
                         Format::Unit
                     } else {
@@ -488,6 +497,7 @@ impl RegistryBuilder {
                     };
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: tuple_format,
                     });
                 }
@@ -517,15 +527,16 @@ impl RegistryBuilder {
                     get_inner_format(inner_field_shape)
                 };
 
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: inner_format,
                     });
                 }
 
                 // Process the inner type with the transparent struct's namespace context
-                self.process_type(inner_field_shape, transparent_namespace.as_deref());
+                self.format(inner_field_shape, transparent_namespace.as_deref());
 
                 return true;
             }
@@ -555,7 +566,7 @@ impl RegistryBuilder {
 
         let variants = self.process_enum_variants(enum_type, shape, parent_namespace);
 
-        let container = ContainerFormat::Enum(variants);
+        let container = ContainerFormat::Enum(variants, shape.into());
         self.push(enum_name, container);
         self.pop();
     }
@@ -583,6 +594,7 @@ impl RegistryBuilder {
                 variant_index,
                 Named {
                     name: variant.name.to_string(),
+                    doc: variant.into(),
                     value: variant_format,
                 },
             );
@@ -630,7 +642,7 @@ impl RegistryBuilder {
         } else if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty {
             // For user-defined struct/enum types, create a TypeName reference and process the type
             let current_namespace = extract_namespace_from_shape(shape);
-            self.process_type(field_shape, current_namespace.as_deref());
+            self.format(field_shape, current_namespace.as_deref());
             let namespaced_name = get_name(field_shape);
             VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
         } else {
@@ -653,20 +665,21 @@ impl RegistryBuilder {
     ) -> VariantFormat {
         let temp = self.push_temporary(
             variant.name.to_string(),
-            ContainerFormat::NewTypeStruct(Box::default()),
+            ContainerFormat::NewTypeStruct(Box::default(), shape.into()),
         );
 
         // Process the field to determine its format
         let current_namespace = extract_namespace_from_shape(shape);
-        self.process_type(field_shape, current_namespace.as_deref());
+        self.format(field_shape, current_namespace.as_deref());
 
         // Extract the format from the temporary container
-        let variant_format =
-            if let Some(ContainerFormat::NewTypeStruct(inner_format)) = self.registry.get(&temp) {
-                VariantFormat::NewType(inner_format.clone())
-            } else {
-                VariantFormat::Unit
-            };
+        let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format, _doc)) =
+            self.registry.get(&temp)
+        {
+            VariantFormat::NewType(inner_format.clone())
+        } else {
+            VariantFormat::Unit
+        };
 
         // Clean up the temporary container
         self.registry.remove(&temp);
@@ -698,7 +711,10 @@ impl RegistryBuilder {
         shape: &Shape,
         _parent_namespace: Option<&str>,
     ) -> VariantFormat {
-        let temp = self.push_temporary(variant.name.to_string(), ContainerFormat::Struct(vec![]));
+        let temp = self.push_temporary(
+            variant.name.to_string(),
+            ContainerFormat::Struct(vec![], shape.into()),
+        );
 
         // Process all fields with their names
         for field in variant.data.fields {
@@ -716,33 +732,35 @@ impl RegistryBuilder {
                 };
 
                 // Add Named TypeName format to the struct
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value,
                     });
                 }
                 // Process the inner type to add it to the registry (skip for unit type)
                 if field_shape.type_identifier != "()" {
                     let current_namespace = extract_namespace_from_shape(shape);
-                    self.process_type(field_shape, current_namespace.as_deref());
+                    self.format(field_shape, current_namespace.as_deref());
                 }
             } else {
                 // For non-struct types, add unknown format and let format() fill it
-                if let Some(ContainerFormat::Struct(named_formats)) = self.get_mut() {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
                         name: field.name.to_string(),
+                        doc: field.into(),
                         value: Format::unknown(),
                     });
                 }
                 let current_namespace = extract_namespace_from_shape(shape);
-                self.process_type(field_shape, current_namespace.as_deref());
+                self.format(field_shape, current_namespace.as_deref());
             }
         }
 
         // Extract the formats from the temporary container
         let variant_format =
-            if let Some(ContainerFormat::Struct(named_formats)) = self.registry.get(&temp) {
+            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.registry.get(&temp) {
                 VariantFormat::Struct(named_formats.clone())
             } else {
                 VariantFormat::Unit
@@ -763,19 +781,19 @@ impl RegistryBuilder {
     ) -> VariantFormat {
         let temp = self.push_temporary(
             variant.name.to_string(),
-            ContainerFormat::TupleStruct(vec![]),
+            ContainerFormat::TupleStruct(vec![], shape.into()),
         );
 
         // Process all fields
         for field in variant.data.fields {
             // Use the current enum's namespace context for its variant fields
             let current_namespace = extract_namespace_from_shape(shape);
-            self.process_type(field.shape(), current_namespace.as_deref());
+            self.format(field.shape(), current_namespace.as_deref());
         }
 
         // Extract the formats from the temporary container
         let variant_format =
-            if let Some(ContainerFormat::TupleStruct(formats)) = self.registry.get(&temp) {
+            if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.registry.get(&temp) {
                 VariantFormat::Tuple(formats.clone())
             } else {
                 VariantFormat::Unit
@@ -826,7 +844,19 @@ impl RegistryBuilder {
     }
 
     fn format_slice(&mut self, slice_def: SliceDef, namespace: Option<&str>) {
-        self.process_type(slice_def.t(), namespace);
+        // Get the inner type of the slice
+        let inner_shape = slice_def.t();
+
+        // Get the format for the inner type
+        let inner_format = get_format_for_shape(inner_shape);
+
+        let slice_format = Format::Seq(Box::new(inner_format));
+
+        // Update the current container with the slice format
+        self.update_container_format(slice_format);
+
+        // Process any user-defined types in the nested structure
+        self.process_nested_types(inner_shape, namespace);
     }
 
     fn format_array(&mut self, array_def: ArrayDef, namespace: Option<&str>) {
@@ -847,7 +877,7 @@ impl RegistryBuilder {
 
         // If the inner type is a user-defined type, we need to process it too
         if !matches!(inner_shape.def, Def::Scalar) {
-            self.process_type(inner_shape, namespace);
+            self.format(inner_shape, namespace);
         }
     }
 
@@ -856,7 +886,7 @@ impl RegistryBuilder {
         let inner_shape = option_def.t();
 
         // We need to determine what format to use for the Option based on the inner type
-        let inner_format = get_inner_format(inner_shape);
+        let inner_format = get_format_for_shape(inner_shape);
         let option_format = Format::Option(Box::new(inner_format));
 
         // Update the current container with the option format
@@ -873,8 +903,8 @@ impl RegistryBuilder {
         // Get the format for the element type recursively
         let element_format = get_inner_format(element_shape);
 
-        // Sets are represented as sequences in the format system
-        let set_format = Format::Seq(Box::new(element_format));
+        // Sets are represented as sets in the format system
+        let set_format = Format::Set(Box::new(element_format));
 
         // Update the current container with the set format
         self.update_container_format(set_format);
@@ -904,8 +934,8 @@ impl RegistryBuilder {
     fn update_container_format_with_mode(&mut self, format: Format, mode: UpdateMode) {
         if let Some(container_format) = self.get_mut() {
             match container_format {
-                ContainerFormat::UnitStruct => {}
-                ContainerFormat::NewTypeStruct(inner_format) => match mode {
+                ContainerFormat::UnitStruct(_doc) => {}
+                ContainerFormat::NewTypeStruct(inner_format, _doc) => match mode {
                     UpdateMode::Force => {
                         **inner_format = format;
                     }
@@ -915,7 +945,7 @@ impl RegistryBuilder {
                         }
                     }
                 },
-                ContainerFormat::TupleStruct(formats) => {
+                ContainerFormat::TupleStruct(formats, _doc) => {
                     match mode {
                         UpdateMode::Force | UpdateMode::IfUnknown => {
                             formats.push(format);
@@ -926,7 +956,7 @@ impl RegistryBuilder {
                         }
                     }
                 }
-                ContainerFormat::Struct(fields) => {
+                ContainerFormat::Struct(fields, _doc) => {
                     if let Some(last_named) = fields.last_mut() {
                         match mode {
                             UpdateMode::Force => {
@@ -945,7 +975,7 @@ impl RegistryBuilder {
                         }
                     }
                 }
-                ContainerFormat::Enum(_) => {
+                ContainerFormat::Enum(_, _doc) => {
                     if matches!(mode, UpdateMode::Force) {
                         todo!("Enum container format update not implemented");
                     }
@@ -983,10 +1013,15 @@ impl RegistryBuilder {
                     self.process_nested_types(value_shape, namespace);
                 }
             }
+            Def::Slice(slice_def) => {
+                // Recursively process slice inner types
+                let inner_shape = slice_def.t();
+                self.process_nested_types(inner_shape, namespace);
+            }
             _ => {
                 // For other user-defined types, process them
                 if should_process_nested_type(shape) {
-                    self.process_type(shape, namespace);
+                    self.format(shape, namespace);
                 }
             }
         }
@@ -1039,6 +1074,17 @@ fn get_name(shape: &Shape) -> QualifiedTypeName {
         QualifiedTypeName::namespaced(ns, base_name)
     } else {
         QualifiedTypeName::root(base_name)
+    }
+}
+
+fn get_format_for_shape(shape: &Shape) -> Format {
+    // Handle pointer types specially for container inner types
+    if let Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) = &shape.ty {
+        // For pointer types like &'static str, get the format of the target type
+        let target_shape = (pt.target)();
+        get_inner_format(target_shape)
+    } else {
+        get_inner_format(shape)
     }
 }
 
@@ -1162,6 +1208,11 @@ fn get_inner_format(shape: &Shape) -> Format {
                 value: Box::new(value_format),
             }
         }
+        Def::Set(set_def) => {
+            // Handle Set<T> -> SET: T
+            let inner_shape = set_def.t();
+            Format::Set(Box::new(get_inner_format(inner_shape)))
+        }
         Def::Array(array_def) => {
             // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
             let inner_shape = array_def.t();
@@ -1187,9 +1238,14 @@ fn get_inner_format(shape: &Shape) -> Format {
             }
 
             // Special case for unit type
-            // For user-defined types, use TypeName
             if shape.type_identifier == "()" {
                 Format::Unit
+            } else if let Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) =
+                &shape.ty
+            {
+                // For pointer types like &'static str, get the format of the target type
+                let target_shape = (pt.target)();
+                get_inner_format(target_shape)
             } else {
                 // For user-defined types, use TypeName with renamed name if applicable
                 let name = get_name(shape);
@@ -1197,11 +1253,7 @@ fn get_inner_format(shape: &Shape) -> Format {
                 Format::TypeName(name)
             }
         }
-        Def::Set(set_def) => {
-            // Handle Set<T> -> SEQ: T (sets are represented as sequences)
-            let element_shape = set_def.t();
-            Format::Seq(Box::new(get_inner_format(element_shape)))
-        }
+
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();

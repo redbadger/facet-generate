@@ -3,7 +3,7 @@
 //! These tests verify that the Variable resolution problems in `RegistryBuilder` have been fixed
 //! and serve as regression tests to prevent these issues from reoccurring.
 //!
-//! Previously, these scenarios would cause panics with "should not have any remaining placeholders".
+//! Previously, these scenarios would cause panics with "There was a problem building the registry".
 //! Now they should all work correctly, demonstrating that the underlying issues have been resolved.
 
 use crate::reflection::RegistryBuilder;
@@ -11,6 +11,13 @@ use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet, HashSet};
+
+    use crate::{
+        reflect,
+        reflection::format::{Doc, Namespace, QualifiedTypeName},
+    };
+
     use super::*;
     use facet::Facet;
 
@@ -20,24 +27,20 @@ mod tests {
     fn test_set_types_work() {
         #[derive(Facet)]
         struct WithSets {
-            btree_set: std::collections::BTreeSet<String>,
-            hash_set: std::collections::HashSet<u32>,
+            btree_set: BTreeSet<String>,
+            hash_set: HashSet<u32>,
         }
 
         #[derive(Facet)]
         #[repr(u8)]
         #[allow(unused)]
         enum EnumWithSet {
-            SetVariant(std::collections::BTreeSet<i64>),
+            SetVariant(BTreeSet<i64>),
             Regular(u32),
         }
 
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<WithSets>();
-        let builder = builder.add_type::<EnumWithSet>();
-
         // This should complete successfully - no more panics on Set types
-        let registry = builder.build();
+        let registry = reflect!(WithSets, EnumWithSet);
         assert!(!registry.is_empty());
     }
 
@@ -47,15 +50,12 @@ mod tests {
     fn test_complex_nested_sets() {
         #[derive(Facet)]
         struct NestedSets {
-            sets_in_vec: Vec<std::collections::BTreeSet<String>>,
-            optional_set: Option<std::collections::HashSet<u64>>,
+            sets_in_vec: Vec<BTreeSet<String>>,
+            optional_set: Option<HashSet<u64>>,
         }
 
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<NestedSets>();
-
         // All Variable placeholders should be resolved correctly
-        let registry = builder.build();
+        let registry = reflect!(NestedSets);
         assert!(!registry.is_empty());
     }
 
@@ -68,16 +68,13 @@ mod tests {
             field: u32,
         }
 
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<SimpleStruct>();
-
         // This should work fine - all Variables should be resolved
-        let registry = builder.build();
+        let registry = reflect!(SimpleStruct);
         assert!(!registry.is_empty());
 
         // Verify the type was processed correctly
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Root,
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Root,
             name: "SimpleStruct".to_string(),
         };
         assert!(registry.contains_key(&type_name));
@@ -108,15 +105,12 @@ mod tests {
         #[repr(u8)]
         #[allow(unused)]
         enum WithNewtypeVariant {
-            Variant(std::collections::BTreeSet<String>),
+            Variant(BTreeSet<String>),
         }
-
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<WithNewtypeVariant>();
 
         // The temp container workflow in process_newtype_variant_with_temp_container
         // should now properly resolve all Variables
-        let registry = builder.build();
+        let registry = reflect!(WithNewtypeVariant);
         assert!(!registry.is_empty());
     }
 
@@ -150,12 +144,8 @@ mod tests {
             Regular(u32),
         }
 
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<Complex>();
-        let builder = builder.add_type::<ComplexEnum>();
-
         // All of these previously problematic patterns should now work
-        let registry = builder.build();
+        let registry = reflect!(Complex, ComplexEnum);
         assert!(!registry.is_empty());
 
         // Should have processed both types
@@ -171,17 +161,17 @@ mod tests {
     /// Diagnostic test: Manually create unresolved Variables to verify `build()` catches them
     /// This simulates what used to happen in the problematic code paths
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_build_catches_unresolved_variables() {
         let mut builder = RegistryBuilder::new();
 
         // Manually insert an unresolved Variable (simulating the old bug)
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "UnresolvedType".to_string(),
         };
 
-        let unresolved_container = ContainerFormat::NewTypeStruct(Box::default());
+        let unresolved_container = ContainerFormat::NewTypeStruct(Box::default(), Doc::new());
         builder.registry.insert(type_name, unresolved_container);
 
         // This should still panic - the safety check works
@@ -190,23 +180,24 @@ mod tests {
 
     /// Test with enum variants that have unresolved Variables
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_enum_with_unresolved_variant_caught() {
         let mut builder = RegistryBuilder::new();
 
         // Create an enum with an unresolved variant Variable
-        let mut variants = std::collections::BTreeMap::new();
+        let mut variants = BTreeMap::new();
         variants.insert(
             0,
             crate::reflection::format::Named {
                 name: "UnresolvedVariant".to_string(),
+                doc: Doc::new(),
                 value: VariantFormat::unknown(), // Unresolved Variable
             },
         );
 
-        let enum_container = ContainerFormat::Enum(variants);
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let enum_container = ContainerFormat::Enum(variants, Doc::new());
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "EnumWithUnresolvedVariant".to_string(),
         };
 
@@ -218,19 +209,20 @@ mod tests {
 
     /// Test with struct fields that have unresolved Variables
     #[test]
-    #[should_panic(expected = "should not have any remaining placeholders")]
+    #[should_panic(expected = "There was a problem building the registry")]
     fn test_struct_with_unresolved_field_caught() {
         let mut builder = RegistryBuilder::new();
 
         // Create a struct with an unresolved field Variable
         let fields = vec![crate::reflection::format::Named {
             name: "unresolved_field".to_string(),
+            doc: Doc::new(),
             value: Format::unknown(), // Unresolved Variable
         }];
 
-        let struct_container = ContainerFormat::Struct(fields);
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Named("test".to_string()),
+        let struct_container = ContainerFormat::Struct(fields, Doc::new());
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Named("test".to_string()),
             name: "StructWithUnresolvedField".to_string(),
         };
 
@@ -254,18 +246,57 @@ mod tests {
             Other(u32),
         }
 
-        let builder = RegistryBuilder::new();
-        let builder = builder.add_type::<MyEnum>();
-
         // This used to panic, now it should work
-        let registry = builder.build();
+        let registry = reflect!(MyEnum);
         assert!(!registry.is_empty());
 
         // Should contain the enum type
-        let type_name = crate::reflection::format::QualifiedTypeName {
-            namespace: crate::reflection::format::Namespace::Root,
+        let type_name = QualifiedTypeName {
+            namespace: Namespace::Root,
             name: "MyEnum".to_string(),
         };
         assert!(registry.contains_key(&type_name));
+    }
+
+    /// This will pass eventually, once we fully support generic types.
+    #[test]
+    #[should_panic(expected = "There was a problem building the registry")]
+    fn test_enum_with_anon_struct_variants_with_result_of_t() {
+        use thiserror::Error;
+
+        #[derive(Facet, Clone, PartialEq, Eq, Error, Debug)]
+        #[error("AnotherError")]
+        struct AnotherError;
+
+        #[derive(Facet, Clone, PartialEq, Eq, Error, Debug)]
+        #[repr(C)]
+        #[allow(unused)]
+        pub enum MyError {
+            #[error("disconnected")]
+            Disconnect(#[from] AnotherError),
+            #[error("the data for key `{0}` is not available")]
+            Redaction(String),
+            #[error("invalid header (expected {expected:?}, found {found:?})")]
+            InvalidHeader { expected: String, found: String },
+            #[error("unknown data store error")]
+            Unknown,
+        }
+        #[derive(Facet, Debug, Clone, PartialEq, Eq)]
+        #[repr(C)]
+        #[allow(unused)]
+        pub enum MyResult<T> {
+            Ok(T),
+            Err(MyError),
+        }
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(unused)]
+        enum MyEnum {
+            Variant1 { result: MyResult<String> },
+            Variant2 { result: MyResult<i32> },
+        }
+
+        let _registry = reflect!(MyEnum);
     }
 }

@@ -1,7 +1,7 @@
 [package]
 name = "facet_generate"
 description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
-version = "0.10.4"
+version = "0.11.1"
 authors = ["Red Badger Consulting Limited"]
 repository = "https://github.com/redbadger/facet-generate"
 license = "Apache-2.0"
@@ -11,34 +11,36 @@ rust-version = "1.87"
 
 [dependencies]
 derive_builder = "0.20.2"
-facet = "0.28.0"
+facet = "0.28.1"
 heck = "0.5.0"
 include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
-indoc = "2.0.6"
+indoc = { version = "2.0.6", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0"
 textwrap = "0.16.2"
-thiserror = "2.0.12"
+thiserror = "2.0.16"
 
 [dev-dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.99"
 bcs = "0.1.6"
 bincode = "=1"
 chrono = "0.4.41"
 difficient = "0.1.0"
 expect-test = "1.5.1"
-facet = { version = "0.28.0", features = ["chrono", "url"] }
+facet = { version = "0.28.1", features = ["chrono", "url"] }
 ignore = "0.4.23"
 insta = { version = "1.43.1", features = ["yaml", "json"] }
 maplit = "1.0.2"
-regex = "1.11.1"
+regex = "1.11.2"
 strum = { version = "0.27.2", features = ["derive"] }
-tempfile = "3.20.0"
-url = "2.5.4"
+tempfile = "3.21.0"
+url = "2.5.7"
 
 [features]
-default = ["java", "swift", "typescript"]
+default = ["generate"]
+generate = ["java", "kotlin", "swift", "typescript"]
 java = ["include_dir"]
-swift = ["include_dir"]
+kotlin = ["include_dir", "indoc"]
+swift = ["include_dir", "indoc"]
 typescript = ["include_dir"]

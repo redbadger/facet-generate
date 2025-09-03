@@ -14,3 +14,7 @@ pub enum Colors {
     #[facet(rename = "green-like")]
     Green = 2,
 }
+
+// crate::test! {
+//     Colors for kotlin
+// }

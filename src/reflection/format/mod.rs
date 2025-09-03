@@ -17,6 +17,7 @@
 mod tests;
 
 use crate::{Result, error::Error};
+use facet::{Field, Shape, Variant};
 use serde::{
     Deserialize, Serialize, de, ser,
     ser::{SerializeMap, SerializeStruct},
@@ -91,6 +92,51 @@ impl QualifiedTypeName {
     }
 }
 
+#[derive(Serialize, Deserialize, Default, Debug, Eq, Clone, PartialEq)]
+#[serde(transparent)]
+pub struct Doc(Vec<String>);
+
+impl Doc {
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn push(&mut self, comment: String) {
+        self.0.push(comment);
+    }
+
+    #[must_use]
+    pub fn comments(&self) -> &Vec<String> {
+        &self.0
+    }
+}
+
+impl From<&[&str]> for Doc {
+    fn from(comments: &[&str]) -> Self {
+        let doc = comments.iter().map(|c| c.trim().to_string()).collect();
+        Self(doc)
+    }
+}
+
+impl From<&Shape> for Doc {
+    fn from(shape: &Shape) -> Self {
+        shape.doc.into()
+    }
+}
+
+impl From<&Field> for Doc {
+    fn from(field: &Field) -> Self {
+        field.doc.into()
+    }
+}
+
+impl From<&Variant> for Doc {
+    fn from(variant: &Variant) -> Self {
+        variant.doc.into()
+    }
+}
+
 /// Serde-based serialization format for anonymous "value" types.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
@@ -124,6 +170,8 @@ pub enum Format {
     Option(Box<Format>),
     /// A sequence, e.g. the format of `Vec<Foo>`.
     Seq(Box<Format>),
+    /// A set, e.g. the format of `HashSet<Foo>`.
+    Set(Box<Format>),
     /// A map, e.g. the format of `BTreeMap<K, V>`.
     #[serde(rename_all = "UPPERCASE")]
     Map {
@@ -148,16 +196,16 @@ pub enum Format {
 #[serde(rename_all = "UPPERCASE")]
 pub enum ContainerFormat {
     /// An empty struct, e.g. `struct A`.
-    UnitStruct,
+    UnitStruct(Doc),
     /// A struct with a single unnamed parameter, e.g. `struct A(u16)`
-    NewTypeStruct(Box<Format>),
+    NewTypeStruct(Box<Format>, Doc),
     /// A struct with several unnamed parameters, e.g. `struct A(u16, u32)`
-    TupleStruct(Vec<Format>),
+    TupleStruct(Vec<Format>, Doc),
     /// A struct with named parameters, e.g. `struct A { a: Foo }`.
-    Struct(Vec<Named<Format>>),
+    Struct(Vec<Named<Format>>, Doc),
     /// An enum, that is, an enumeration of variants.
     /// Each variant has a unique name and index within the enum.
-    Enum(BTreeMap<u32, Named<VariantFormat>>),
+    Enum(BTreeMap<u32, Named<VariantFormat>>, Doc),
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -165,6 +213,7 @@ pub enum ContainerFormat {
 /// Used for named parameters or variants.
 pub struct Named<T> {
     pub name: String,
+    pub doc: Doc,
     pub value: T,
 }
 
@@ -386,19 +435,19 @@ where
 impl FormatHolder for ContainerFormat {
     fn visit<'a>(&'a self, f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
         match self {
-            Self::UnitStruct => (),
-            Self::NewTypeStruct(format) => format.visit(f)?,
-            Self::TupleStruct(formats) => {
+            Self::UnitStruct(_doc) => (),
+            Self::NewTypeStruct(format, _doc) => format.visit(f)?,
+            Self::TupleStruct(formats, _doc) => {
                 for format in formats {
                     format.visit(f)?;
                 }
             }
-            Self::Struct(named_formats) => {
+            Self::Struct(named_formats, _doc) => {
                 for format in named_formats {
                     format.visit(f)?;
                 }
             }
-            Self::Enum(variants) => {
+            Self::Enum(variants, _doc) => {
                 for variant in variants {
                     variant.1.visit(f)?;
                 }
@@ -409,19 +458,19 @@ impl FormatHolder for ContainerFormat {
 
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
         match self {
-            Self::UnitStruct => (),
-            Self::NewTypeStruct(format) => format.visit_mut(f)?,
-            Self::TupleStruct(formats) => {
+            Self::UnitStruct(_doc) => (),
+            Self::NewTypeStruct(format, _doc) => format.visit_mut(f)?,
+            Self::TupleStruct(formats, _doc) => {
                 for format in formats {
                     format.visit_mut(f)?;
                 }
             }
-            Self::Struct(named_formats) => {
+            Self::Struct(named_formats, _doc) => {
                 for format in named_formats {
                     format.visit_mut(f)?;
                 }
             }
-            Self::Enum(variants) => {
+            Self::Enum(variants, _doc) => {
                 for variant in variants {
                     variant.1.visit_mut(f)?;
                 }
@@ -460,6 +509,7 @@ impl FormatHolder for Format {
 
             Self::Option(format)
             | Self::Seq(format)
+            | Self::Set(format)
             | Self::TupleArray {
                 content: format, ..
             } => {
@@ -511,6 +561,7 @@ impl FormatHolder for Format {
 
             Self::Option(format)
             | Self::Seq(format)
+            | Self::Set(format)
             | Self::TupleArray {
                 content: format, ..
             } => {
@@ -568,7 +619,7 @@ impl Default for VariantFormat {
 }
 
 // For better rendering in human readable formats, we wish to serialize
-// `Named { key: x, value: y }` as a map `{ x: y }`.
+// `Named { name: x, value: y, doc: z }` as a map `{ x: (y, z) }`.
 impl<T> Serialize for Named<T>
 where
     T: Serialize,
@@ -579,12 +630,13 @@ where
     {
         if serializer.is_human_readable() {
             let mut map = serializer.serialize_map(Some(1))?;
-            map.serialize_entry(&self.name, &self.value)?;
+            map.serialize_entry(&self.name, &(&self.value, &self.doc))?;
             map.end()
         } else {
-            let mut inner = serializer.serialize_struct("Named", 2)?;
+            let mut inner = serializer.serialize_struct("Named", 3)?;
             inner.serialize_field("name", &self.name)?;
             inner.serialize_field("value", &self.value)?;
+            inner.serialize_field("doc", &self.doc)?;
             inner.end()
         }
     }
@@ -617,7 +669,11 @@ where
         M: de::MapAccess<'de>,
     {
         let named_value = match access.next_entry::<String, T>()? {
-            Some((name, value)) => Named { name, value },
+            Some((name, value)) => Named {
+                name,
+                doc: Doc::new(),
+                value,
+            },
             _ => {
                 return Err(de::Error::custom("Missing entry"));
             }
@@ -634,6 +690,7 @@ where
 #[serde(rename = "Named")]
 struct NamedInternal<T> {
     name: String,
+    doc: Doc,
     value: T,
 }
 
@@ -648,8 +705,8 @@ where
         if deserializer.is_human_readable() {
             deserializer.deserialize_map(NamedVisitor::new())
         } else {
-            let NamedInternal { name, value } = NamedInternal::deserialize(deserializer)?;
-            Ok(Self { name, value })
+            let NamedInternal { name, doc, value } = NamedInternal::deserialize(deserializer)?;
+            Ok(Self { name, doc, value })
         }
     }
 }

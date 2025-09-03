@@ -13,8 +13,8 @@ pub struct Module(CodeGeneratorConfig);
 
 impl Module {
     #[must_use]
-    pub fn new(module_name: String) -> Self {
-        Module(CodeGeneratorConfig::new(module_name))
+    pub fn new(config: &CodeGeneratorConfig) -> Self {
+        Module(config.clone())
     }
 
     #[must_use]

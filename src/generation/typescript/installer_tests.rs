@@ -6,7 +6,7 @@ use crate::{
         module::split,
         typescript::{InstallTarget, installer::Installer},
     },
-    reflection::RegistryBuilder,
+    reflect,
 };
 
 #[test]
@@ -144,7 +144,7 @@ fn manifest_with_serde_module() {
         name: String,
     }
 
-    let registry = RegistryBuilder::new().add_type::<MyStruct>().build();
+    let registry = reflect!(MyStruct);
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
@@ -184,7 +184,7 @@ fn manifest_with_namespaces() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
@@ -221,7 +221,7 @@ fn manifest_with_external_namespace_dependencies() {
         child: Child,
     }
 
-    let registry = RegistryBuilder::new().add_type::<Root>().build();
+    let registry = reflect!(Root);
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();

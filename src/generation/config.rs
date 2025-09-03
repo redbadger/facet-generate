@@ -10,60 +10,80 @@ use std::{
 use derive_builder::Builder;
 use serde::Serialize;
 
-use crate::Registry;
-
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize)]
-pub enum Serialization {
-    #[default]
-    Bincode,
-    Bcs,
-    None,
-}
-
-impl Serialization {
-    #[must_use]
-    pub fn is_enabled(&self) -> bool {
-        *self != Serialization::None
-    }
-}
+use crate::{
+    Registry,
+    reflection::format::{Format, FormatHolder, Namespace},
+};
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
-    pub serialization: Serialization,
-    pub encodings: BTreeSet<Encoding>,
+    pub encoding: Encoding,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
     pub custom_code: CustomCode,
     pub c_style_enums: bool,
     pub package_manifest: bool,
+    pub features: BTreeSet<Feature>,
 }
 
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
 pub enum Encoding {
+    #[default]
+    None,
+    Json,
     Bincode,
     Bcs,
 }
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
+pub enum Feature {
+    BigInt,
+    BuildList,
+    ListOfT,
+    MapOfT,
+    OptionOfT,
+    SetOfT,
+}
+
+impl Encoding {
+    #[must_use]
+    pub fn is_none(self) -> bool {
+        self == Encoding::None
+    }
+
+    #[must_use]
+    pub fn is_json(self) -> bool {
+        self == Encoding::Json
+    }
+
+    #[must_use]
+    pub fn is_bincode(self) -> bool {
+        self == Encoding::Bincode
+    }
+
+    #[must_use]
+    pub fn is_bcs(self) -> bool {
+        self == Encoding::Bcs
+    }
+}
+
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).
 pub type ExternalDefinitions =
-    std::collections::BTreeMap</* module */ String, /* type names */ Vec<String>>;
+    BTreeMap</* module */ String, /* type names */ Vec<String>>;
 
 /// Track locations for imports of external packages (key = <module>, value = <import from>).
 pub type ExternalPackages =
-    std::collections::BTreeMap</* module */ String, /* import from */ ExternalPackage>;
+    BTreeMap</* module */ String, /* import from */ ExternalPackage>;
 
 /// Track documentation to be attached to particular definitions.
-pub type DocComments =
-    std::collections::BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
+pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
 
 /// Track custom code to be added to particular definitions (use with care!).
-pub type CustomCode = std::collections::BTreeMap<
-    /* qualified name */ Vec<String>,
-    /* custom code */ String,
->;
+pub type CustomCode =
+    BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
 /// How to copy generated source code and available runtimes for a given language.
 pub trait SourceInstaller {
@@ -100,14 +120,14 @@ impl CodeGeneratorConfig {
     pub fn new(module_name: String) -> Self {
         Self {
             module_name,
-            serialization: Serialization::default(),
-            encodings: BTreeSet::new(),
+            encoding: Encoding::default(),
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
             custom_code: BTreeMap::new(),
             c_style_enums: false,
             package_manifest: true,
+            features: BTreeSet::new(),
         }
     }
 
@@ -116,28 +136,27 @@ impl CodeGeneratorConfig {
         &self.module_name
     }
 
-    /// Whether to include serialization methods.
+    /// for Java: updates the module name to be a child of the specified parent
     #[must_use]
-    pub fn with_serialization(mut self, serialization: Serialization) -> Self {
-        self.serialization = serialization;
+    pub fn with_parent(mut self, parent: &str) -> Self {
+        if parent == self.module_name() {
+            return self;
+        }
+
+        self.module_name = format!("{}.{}", parent, self.module_name());
         self
     }
 
-    /// Do not include serialization methods.
+    /// Which encoding to use.
     #[must_use]
-    pub fn without_serialization(mut self) -> Self {
-        self.serialization = Serialization::None;
+    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
         self
     }
 
-    /// Whether to include specialized methods for specific encodings.
     #[must_use]
-    pub fn with_encodings<I>(mut self, encodings: I) -> Self
-    where
-        I: IntoIterator<Item = Encoding>,
-    {
-        self.encodings = encodings.into_iter().collect();
-        self
+    pub fn has_encoding(&self) -> bool {
+        !self.encoding.is_none()
     }
 
     /// Container names provided by other modules.
@@ -179,12 +198,52 @@ impl CodeGeneratorConfig {
         self.package_manifest = package_manifest;
         self
     }
+
+    pub fn update_from(&mut self, registry: &Registry) {
+        for format in registry.values() {
+            format
+                .visit(&mut |f| {
+                    match f {
+                        Format::I128 | Format::U128 => {
+                            self.features.insert(Feature::BigInt);
+                        }
+                        Format::Seq(..) => {
+                            self.features.insert(Feature::ListOfT);
+                        }
+                        Format::Option(..) => {
+                            self.features.insert(Feature::OptionOfT);
+                        }
+                        Format::Set(..) => {
+                            self.features.insert(Feature::SetOfT);
+                        }
+                        Format::Map { .. } => {
+                            self.features.insert(Feature::MapOfT);
+                        }
+                        Format::TupleArray { .. } => {
+                            self.features.insert(Feature::BuildList);
+                        }
+                        _ => (),
+                    }
+                    Ok(())
+                })
+                .unwrap();
+        }
+
+        for name in registry.keys() {
+            if let Namespace::Named(ns) = &name.namespace {
+                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                entry.push(name.name.clone());
+            }
+        }
+    }
 }
 
 impl Encoding {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
+            Encoding::None => "none",
+            Encoding::Json => "json",
             Encoding::Bincode => "bincode",
             Encoding::Bcs => "bcs",
         }
@@ -267,4 +326,27 @@ pub struct ExternalPackage {
     pub module_name: Option<String>,
     /// An optional string to specify the version of a published package.
     pub version: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn with_parent() {
+        let root_package = "root";
+        let child_package = "child";
+
+        let root_config = CodeGeneratorConfig::new(root_package.to_string());
+
+        let actual = root_config.with_parent(root_package).module_name;
+        let expected = root_package;
+        assert_eq!(&actual, expected);
+
+        let actual = CodeGeneratorConfig::new(child_package.to_string())
+            .with_parent(root_package)
+            .module_name;
+        let expected = format!("{root_package}.{child_package}");
+        assert_eq!(&actual, &expected);
+    }
 }

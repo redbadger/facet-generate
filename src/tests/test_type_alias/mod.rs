@@ -7,3 +7,7 @@ pub struct Bar(String);
 pub struct Foo {
     bar: Bar,
 }
+
+// crate::test! {
+//     Foo for kotlin
+// }
