@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.10.4] - 2025-09-03
+
+### 🐛 Bug Fixes
+
+- fixes a bug when generating typescript, and the serde runtime is not an external package, the import should be relative to the current directory
+
 ## [0.10.3] - 2025-08-15
 
 ### 🐛 Bug Fixes
