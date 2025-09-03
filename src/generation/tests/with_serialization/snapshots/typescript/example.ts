@@ -1,4 +1,4 @@
-import { Serializer, Deserializer } from "../serde";
+import { Serializer, Deserializer } from "./serde";
 type int32 = number;
 type Optional<T> = T | null;
 type Seq<T> = T[];

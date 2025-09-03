@@ -1,4 +1,4 @@
-import { Serializer, Deserializer } from "../serde";
+import { Serializer, Deserializer } from "./serde";
 import * as Other from "other";
 
 export class Child {

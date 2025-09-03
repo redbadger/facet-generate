@@ -179,10 +179,10 @@ fn test_typescript_code_generation_without_extensions() {
 
     // Check that the generated content doesn't have .ts extensions in imports
     let content = std::fs::read_to_string(&module_path).unwrap();
-    assert!(content.contains(r#"from "../serde""#));
-    assert!(content.contains(r#"from "../bcs""#));
-    assert!(!content.contains(r#"from "../serde/mod.ts""#));
-    assert!(!content.contains(r#"from "../bcs/mod.ts""#));
+    assert!(content.contains(r#"from "./serde""#));
+    assert!(content.contains(r#"from "./bcs""#));
+    assert!(!content.contains(r#"from "./serde/mod.ts""#));
+    assert!(!content.contains(r#"from "./bcs/mod.ts""#));
 
     // Check that runtime files were transformed
     let serde_index = dir.path().join("serde").join("index.ts");
@@ -220,8 +220,8 @@ fn test_typescript_code_generation_with_extensions() {
 
     // Check that the generated content has .ts extensions in imports
     let content = std::fs::read_to_string(&module_path).unwrap();
-    assert!(content.contains(r#"from "../serde/mod.ts""#));
-    assert!(content.contains(r#"from "../bcs/mod.ts""#));
+    assert!(content.contains(r#"from "./serde/mod.ts""#));
+    assert!(content.contains(r#"from "./bcs/mod.ts""#));
 
     // Check that runtime files kept original structure
     let serde_mod = dir.path().join("serde").join("mod.ts");

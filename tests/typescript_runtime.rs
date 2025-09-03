@@ -17,13 +17,13 @@ fn test_typescript_runtime_bcs_serialization() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
-    std::fs::create_dir_all(dir_path.join("tests")).unwrap();
+    std::fs::create_dir_all(dir_path).unwrap();
 
     let mut installer = typescript::Installer::new(dir_path, &[], InstallTarget::Deno);
     installer.install_serde_runtime().unwrap();
     installer.install_bcs_runtime().unwrap();
 
-    let source_path = dir_path.join("tests/test.ts");
+    let source_path = dir_path.join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
     let runtime = Runtime::Bcs;

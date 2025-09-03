@@ -1,4 +1,4 @@
-import { Serializer, Deserializer } from "../serde";
+import { Serializer, Deserializer } from "./serde";
 type str = string;
 export class Child {
 

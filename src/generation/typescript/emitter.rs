@@ -59,7 +59,7 @@ where
                         PackageLocation::Url(_) => path.for_namespace.clone(),
                     }
                 } else {
-                    format!("../{serde}")
+                    format!("./{serde}")
                 };
             writeln!(
                 out,
@@ -68,7 +68,7 @@ where
             if let Encoding::Bcs = self.generator.config.encoding {
                 writeln!(
                     out,
-                    r#"import {{ BcsSerializer, BcsDeserializer }} from "../{bcs}";"#
+                    r#"import {{ BcsSerializer, BcsDeserializer }} from "./{bcs}";"#
                 )?;
             }
         }
