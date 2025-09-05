@@ -95,9 +95,9 @@ macro_rules! emit_java {
 
 #[macro_export]
 macro_rules! reflect {
-    ($($ty:ident),*) => {{
+    ($($ty:ident),*) => {
         $crate::reflection::RegistryBuilder::new()
             $(.add_type::<$ty>())*
             .build()
-    }};
+    };
 }

@@ -3,7 +3,7 @@
 //! These tests verify that the Variable resolution problems in `RegistryBuilder` have been fixed
 //! and serve as regression tests to prevent these issues from reoccurring.
 //!
-//! Previously, these scenarios would cause panics with "There was a problem building the registry".
+//! Previously, these scenarios would cause panics with "There was a problem reflecting type".
 //! Now they should all work correctly, demonstrating that the underlying issues have been resolved.
 
 use crate::reflection::RegistryBuilder;
@@ -161,7 +161,7 @@ mod tests {
     /// Diagnostic test: Manually create unresolved Variables to verify `build()` catches them
     /// This simulates what used to happen in the problematic code paths
     #[test]
-    #[should_panic(expected = "There was a problem building the registry")]
+    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_build_catches_unresolved_variables() {
         let mut builder = RegistryBuilder::new();
 
@@ -180,7 +180,7 @@ mod tests {
 
     /// Test with enum variants that have unresolved Variables
     #[test]
-    #[should_panic(expected = "There was a problem building the registry")]
+    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_enum_with_unresolved_variant_caught() {
         let mut builder = RegistryBuilder::new();
 
@@ -209,7 +209,7 @@ mod tests {
 
     /// Test with struct fields that have unresolved Variables
     #[test]
-    #[should_panic(expected = "There was a problem building the registry")]
+    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_struct_with_unresolved_field_caught() {
         let mut builder = RegistryBuilder::new();
 
@@ -260,7 +260,7 @@ mod tests {
 
     /// This will pass eventually, once we fully support generic types.
     #[test]
-    #[should_panic(expected = "There was a problem building the registry")]
+    #[should_panic(expected = "Unsupported generic type")]
     fn test_enum_with_anon_struct_variants_with_result_of_t() {
         use thiserror::Error;
 

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum Error {
-    #[error("Incomplete reflection detected")]
+    #[error("incomplete reflection detected")]
     UnknownFormat,
 }

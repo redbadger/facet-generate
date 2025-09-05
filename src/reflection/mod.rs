@@ -3,9 +3,11 @@ pub mod format;
 pub mod regression_tests;
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     string::ToString,
 };
+
+use tracing::debug;
 
 use facet::{
     ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
@@ -18,12 +20,17 @@ use format::{
 
 use crate::Registry;
 
+const SUPPORTED_GENERIC_TYPES: &[&str] = &[
+    "Arc", "Rc", "Box", "Option", "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "DateTime",
+];
+
 #[derive(Debug, Default)]
 pub struct RegistryBuilder {
     pub registry: Registry,
     current: Vec<QualifiedTypeName>,
     processed: HashSet<QualifiedTypeName>,
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
+    generic_type_params: HashMap<String, String>,
     processing_nested: bool,
 }
 
@@ -33,26 +40,17 @@ impl RegistryBuilder {
         Self::default()
     }
 
+    /// Builds the registry from the current state.
+    /// # Errors
+    /// Will error if the registry is invalid, usually due to incomplete reflection.
     #[must_use]
     pub fn build(self) -> Registry {
-        for format in self.registry.values() {
-            match format.visit(&mut |_| Ok(())) {
-                Ok(()) => (),
-                Err(err) => panic!(
-                    "
-                    There was a problem building the registry: {err}
-                    Note: Most types with generic parameters are currently not yet supported.
-                    The only supported generic types are:
-                    - Option<T>
-                    - Vec<T>
-                    - HashMap<K, V>
-                    - HashSet<T>
-                    - BTreeMap<K, V>
-                    - BTreeSet<T>
-                    "
-                ),
+        for (type_name, format) in &self.registry {
+            if let Err(err) = format.visit(&mut |_| Ok(())) {
+                panic!("There was a problem reflecting type '{type_name:?}': {err}");
             }
         }
+
         self.registry
     }
 
@@ -70,13 +68,39 @@ impl RegistryBuilder {
         self.current.push(name);
     }
 
-    fn push_temporary(&mut self, name: String, container: ContainerFormat) -> QualifiedTypeName {
-        let name = QualifiedTypeName {
-            namespace: Namespace::Named("__temp__".to_string()),
-            name,
+    fn push_temporary(
+        &mut self,
+        name: String,
+        container: ContainerFormat,
+        parent_context: Option<&Shape>,
+    ) -> QualifiedTypeName {
+        let temp_name = if let Some(parent) = parent_context {
+            let parent_name = parent.type_identifier.replace(['<', '>', ' ', ','], "_");
+            format!("{name}__in__{parent_name}")
+        } else {
+            name
         };
-        self.push(name.clone(), container);
-        name
+        let qualified_name = QualifiedTypeName {
+            namespace: Namespace::Named("__temp__".to_string()),
+            name: temp_name,
+        };
+
+        // Debug: Track temporary container creation
+        if let Some(parent) = parent_context {
+            debug!(
+                container = ?qualified_name,
+                parent = %parent.type_identifier,
+                "Creating temporary container"
+            );
+        } else {
+            debug!(
+                container = ?qualified_name,
+                "Creating temporary container with unknown parent"
+            );
+        }
+
+        self.push(qualified_name.clone(), container);
+        qualified_name
     }
 
     fn register_type_mapping(&mut self, original: QualifiedTypeName, renamed: QualifiedTypeName) {
@@ -104,6 +128,11 @@ impl RegistryBuilder {
     }
 
     fn format(&mut self, shape: &Shape, namespace: Option<&str>) {
+        assert!(
+            self.is_supported_generic_type(shape),
+            "Unsupported generic type: {shape}, the type may have already been used with different parameters"
+        );
+
         // First check for special cases in the def system (like Option)
         if let Def::Option(option_def) = shape.def {
             self.format_option(option_def, namespace);
@@ -119,6 +148,22 @@ impl RegistryBuilder {
         self.format_from_def_system(shape, namespace);
     }
 
+    fn is_supported_generic_type(&mut self, shape: &Shape) -> bool {
+        if shape.type_params.is_empty()
+            || shape.type_identifier.starts_with('&')
+            || SUPPORTED_GENERIC_TYPES.contains(&shape.type_identifier)
+        {
+            return true;
+        }
+
+        let current = format!("{:?}", shape.type_params);
+        let previous = self
+            .generic_type_params
+            .entry(shape.type_identifier.to_string())
+            .or_insert(current.clone());
+        previous == &current
+    }
+
     fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
         match &shape.ty {
             Type::User(UserType::Struct(struct_def)) => {
@@ -126,7 +171,7 @@ impl RegistryBuilder {
                 true
             }
             Type::User(UserType::Enum(enum_def)) => {
-                self.format_enum(enum_def, shape, namespace);
+                self.format_enum(enum_def, shape);
                 true
             }
             Type::Sequence(sequence_type) => {
@@ -210,7 +255,7 @@ impl RegistryBuilder {
                 self.handle_pointer(inner_shape(), namespace);
             }
             Def::Pointer(PointerDef { pointee: None, .. }) => {
-                self.handle_opaque_pointee(shape, namespace);
+                self.handle_opaque_pointee();
             }
             Def::Undefined => {
                 self.handle_undefined_def(shape, namespace);
@@ -545,7 +590,7 @@ impl RegistryBuilder {
         false
     }
 
-    fn format_enum(&mut self, enum_type: &EnumType, shape: &Shape, parent_namespace: Option<&str>) {
+    fn format_enum(&mut self, enum_type: &EnumType, shape: &Shape) {
         let enum_name = get_name(shape);
 
         // Check if already processed using the full namespaced name
@@ -564,7 +609,7 @@ impl RegistryBuilder {
 
         self.mark_processed(enum_name.clone());
 
-        let variants = self.process_enum_variants(enum_type, shape, parent_namespace);
+        let variants = self.process_enum_variants(enum_type, shape);
 
         let container = ContainerFormat::Enum(variants, shape.into());
         self.push(enum_name, container);
@@ -575,7 +620,6 @@ impl RegistryBuilder {
         &mut self,
         enum_type: &EnumType,
         shape: &Shape,
-        parent_namespace: Option<&str>,
     ) -> BTreeMap<u32, Named<VariantFormat>> {
         let mut variants = BTreeMap::new();
         let mut variant_index = 0u32;
@@ -588,7 +632,7 @@ impl RegistryBuilder {
                 continue;
             }
 
-            let variant_format = self.process_single_variant(variant, shape, parent_namespace);
+            let variant_format = self.process_single_variant(variant, shape);
 
             variants.insert(
                 variant_index,
@@ -604,12 +648,7 @@ impl RegistryBuilder {
         variants
     }
 
-    fn process_single_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-        parent_namespace: Option<&str>,
-    ) -> VariantFormat {
+    fn process_single_variant(&mut self, variant: &Variant, shape: &Shape) -> VariantFormat {
         if variant.data.fields.is_empty() {
             // Unit variant
             VariantFormat::Unit
@@ -619,21 +658,16 @@ impl RegistryBuilder {
             let is_struct_variant = !field.name.chars().all(|c| c.is_ascii_digit());
 
             if is_struct_variant {
-                self.process_struct_variant(variant, shape, parent_namespace)
+                self.process_struct_variant(variant, shape)
             } else {
-                self.process_newtype_variant(variant, shape, parent_namespace)
+                self.process_newtype_variant(variant, shape)
             }
         } else {
-            self.process_multi_field_variant(variant, shape, parent_namespace)
+            self.process_multi_field_variant(variant, shape)
         }
     }
 
-    fn process_newtype_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-        parent_namespace: Option<&str>,
-    ) -> VariantFormat {
+    fn process_newtype_variant(&mut self, variant: &Variant, shape: &Shape) -> VariantFormat {
         let field = variant.data.fields[0];
         let field_shape = field.shape();
 
@@ -647,12 +681,7 @@ impl RegistryBuilder {
             VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
         } else {
             // For other types, use the temporary container approach
-            self.process_newtype_variant_with_temp_container(
-                variant,
-                field_shape,
-                shape,
-                parent_namespace,
-            )
+            self.process_newtype_variant_with_temp_container(variant, field_shape, shape)
         }
     }
 
@@ -661,11 +690,17 @@ impl RegistryBuilder {
         variant: &Variant,
         field_shape: &Shape,
         shape: &Shape,
-        _parent_namespace: Option<&str>,
     ) -> VariantFormat {
+        // Debug: Track variant processing start
+        debug!(
+            variant = %variant.name,
+            parent_type = %shape.type_identifier,
+            "Processing newtype variant"
+        );
         let temp = self.push_temporary(
             variant.name.to_string(),
             ContainerFormat::NewTypeStruct(Box::default(), shape.into()),
+            Some(shape),
         );
 
         // Process the field to determine its format
@@ -682,80 +717,72 @@ impl RegistryBuilder {
         };
 
         // Clean up the temporary container
-        self.registry.remove(&temp);
+        debug!(container = ?temp, "Cleaning up temporary container");
+
+        let removed = self.registry.remove(&temp);
+        if removed.is_some() {
+            debug!(container = ?temp, "Successfully removed temporary container");
+        } else {
+            debug!(container = ?temp, "WARNING: Temporary container not found for removal");
+        }
         self.pop();
 
         variant_format
     }
 
-    fn process_multi_field_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-        parent_namespace: Option<&str>,
-    ) -> VariantFormat {
+    fn process_multi_field_variant(&mut self, variant: &Variant, shape: &Shape) -> VariantFormat {
         // Check if it's a struct variant (named fields) or tuple variant
         let first_field = variant.data.fields[0];
         let is_struct_variant = !first_field.name.chars().all(|c| c.is_ascii_digit());
 
         if is_struct_variant {
-            self.process_struct_variant(variant, shape, parent_namespace)
+            self.process_struct_variant(variant, shape)
         } else {
-            self.process_tuple_variant(variant, shape, parent_namespace)
+            self.process_tuple_variant(variant, shape)
         }
     }
 
-    fn process_struct_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-        _parent_namespace: Option<&str>,
-    ) -> VariantFormat {
+    fn process_struct_variant(&mut self, variant: &Variant, shape: &Shape) -> VariantFormat {
+        // Debug: Track variant processing start
+        debug!(
+            variant = %variant.name,
+            parent_type = %shape.type_identifier,
+            "Processing struct variant"
+        );
         let temp = self.push_temporary(
             variant.name.to_string(),
             ContainerFormat::Struct(vec![], shape.into()),
+            Some(shape),
         );
 
         // Process all fields with their names
         for field in variant.data.fields {
             let field_shape = field.shape();
 
-            // Check if the field is a user-defined struct
-            if let Type::User(UserType::Struct(_)) = &field_shape.ty {
-                // Compute the value before the mutable borrow
-                let value = if field_shape.type_identifier == "()" {
+            // Check if the field is user-defined
+            let value = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty
+            {
+                if field_shape.type_identifier == "()" {
                     Format::Unit
                 } else {
-                    let _current_namespace = extract_namespace_from_shape(shape);
                     let namespaced_name = get_name(field_shape);
                     Format::TypeName(namespaced_name)
-                };
-
-                // Add Named TypeName format to the struct
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field.name.to_string(),
-                        doc: field.into(),
-                        value,
-                    });
-                }
-                // Process the inner type to add it to the registry (skip for unit type)
-                if field_shape.type_identifier != "()" {
-                    let current_namespace = extract_namespace_from_shape(shape);
-                    self.format(field_shape, current_namespace.as_deref());
                 }
             } else {
-                // For non-struct types, add unknown format and let format() fill it
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field.name.to_string(),
-                        doc: field.into(),
-                        value: Format::unknown(),
-                    });
-                }
-                let current_namespace = extract_namespace_from_shape(shape);
-                self.format(field_shape, current_namespace.as_deref());
+                // For other types, add unknown format and let format() fill it
+                Format::unknown()
+            };
+
+            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+                named_formats.push(Named {
+                    name: field.name.to_string(),
+                    doc: field.into(),
+                    value,
+                });
             }
+
+            let current_namespace = extract_namespace_from_shape(shape);
+            self.format(field_shape, current_namespace.as_deref());
         }
 
         // Extract the formats from the temporary container
@@ -767,21 +794,28 @@ impl RegistryBuilder {
             };
 
         // Clean up the temporary container
-        self.registry.remove(&temp);
+        let removed = self.registry.remove(&temp);
+        if removed.is_some() {
+            debug!(container = ?temp, "Successfully removed temporary container");
+        } else {
+            debug!(container = ?temp, "WARNING: Temporary container not found for removal");
+        }
         self.pop();
 
         variant_format
     }
 
-    fn process_tuple_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-        _parent_namespace: Option<&str>,
-    ) -> VariantFormat {
+    fn process_tuple_variant(&mut self, variant: &Variant, shape: &Shape) -> VariantFormat {
+        // Debug: Track variant processing start
+        debug!(
+            variant = %variant.name,
+            parent_type = %shape.type_identifier,
+            "Processing tuple variant"
+        );
         let temp = self.push_temporary(
             variant.name.to_string(),
             ContainerFormat::TupleStruct(vec![], shape.into()),
+            Some(shape),
         );
 
         // Process all fields
@@ -800,7 +834,12 @@ impl RegistryBuilder {
             };
 
         // Clean up the temporary container
-        self.registry.remove(&temp);
+        let removed = self.registry.remove(&temp);
+        if removed.is_some() {
+            debug!(container = ?temp, "Successfully removed temporary container");
+        } else {
+            debug!(container = ?temp, "WARNING: Temporary container not found for removal");
+        }
         self.pop();
 
         variant_format
@@ -913,7 +952,7 @@ impl RegistryBuilder {
         self.process_nested_types(element_shape, namespace);
     }
 
-    fn handle_opaque_pointee(&mut self, _shape: &Shape, _namespace: Option<&str>) {
+    fn handle_opaque_pointee(&mut self) {
         // For pointers that point to opaque types, treat as unit type for now
         let format = Format::Unit;
         self.update_container_format(format);
