@@ -3,6 +3,8 @@ use std::{
     sync::Arc,
 };
 
+use chrono::{DateTime, Utc};
+
 use super::*;
 use crate::reflect;
 
@@ -2597,4 +2599,103 @@ fn enum_with_tuple_variant_of_set_of_user_types() {
       name: Test2
     : UNITSTRUCT: []
     ");
+}
+
+#[test]
+fn chrono_date_time() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Date(DateTime<Utc>),
+        Date2 { date: DateTime<Utc> },
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        field1: DateTime<Utc>,
+        field2: MyEnum,
+    }
+
+    let registry = reflect!(MyStruct);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            Date:
+              - NEWTYPE: STR
+              - []
+          1:
+            Date2:
+              - STRUCT:
+                  - date:
+                      - STR
+                      - []
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - field1:
+              - STR
+              - []
+          - field2:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MyEnum
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn generics_supported_if_used_once() {
+    #[derive(Facet)]
+    struct SupportedGenerics<T> {
+        field: T,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        field1: SupportedGenerics<String>,
+    }
+
+    let registry = reflect!(MyStruct);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - field1:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SupportedGenerics
+              - []
+        - []
+    ? namespace: ROOT
+      name: SupportedGenerics
+    : STRUCT:
+        - - field:
+              - STR
+              - []
+        - []
+    ");
+}
+
+/// TODO: Eventually we should support generics used more than once
+#[test]
+#[should_panic(expected = "Unsupported generic type")]
+fn generics_unsupported_if_used_twice() {
+    #[derive(Facet)]
+    struct UnsupportedGenerics<T> {
+        field: T,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        field1: UnsupportedGenerics<String>,
+        field2: UnsupportedGenerics<u16>,
+    }
+
+    let _registry = reflect!(MyStruct);
 }
