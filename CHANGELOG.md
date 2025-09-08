@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.2] - 2025-09-08
+
+### 🐛 Bug Fixes
+
+There was a problem reflecting enums inside struct variants, which is now fixed.
+
+Also changed the handling of generic types, which are supported if:
+- `Arc`, `Rc`, `Box`, which are reflected as the inner type
+- `Option`, which is reflected as `OPTION`
+- `Vec`, `HashSet`, `BTreeSet`, reflected as `SEQ`
+- `HashMap`, `BTreeMap`, reflected as `MAP`
+- `DateTime`, reflected as `STR`, for serialization as RFC3339 (using the serde feature of DateTime)
+- other generic types are reflected as `TYPENAME`, with the type parameters currently removed. This means that if the type is used more than once with different parameters, the reflection will panic.
+
 ## [0.11.1] - 2025-09-03
 
 ### 🐛 Bug Fixes
