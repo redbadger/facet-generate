@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.3] - 2025-10-02
+
+### 🐛 Bug Fixes
+
+[Fixes a bug](https://github.com/redbadger/facet-generate/pull/34) with module splitting by namespace.
+
 ## [0.11.2] - 2025-09-08
 
 ### 🐛 Bug Fixes
