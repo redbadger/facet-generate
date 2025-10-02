@@ -138,9 +138,7 @@ fn root_namespace_with_two_child_namespaces() {
           - []
     ? module_name: one
       encoding: None
-      external_definitions:
-        one:
-          - GrandChild
+      external_definitions: {}
       external_packages: {}
       comments: {}
       custom_code: {}
@@ -180,6 +178,104 @@ fn root_namespace_with_two_child_namespaces() {
         name: ChildTwo
       : STRUCT:
           - - field:
+                - STR
+                - []
+          - []
+    ");
+}
+
+#[test]
+fn same_namespace_with_external_dependency_bug_regression() {
+    // This test reproduces the specific bug where external dependencies
+    // were lost when multiple types in the same namespace were processed
+    // and the first type didn't have external dependencies.
+
+    #[derive(Facet)]
+    #[facet(namespace = "api")]
+    struct GrandChild {
+        test: String,
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        api: GrandChild,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        event: Child,
+    }
+
+    let registries = split("App", &reflect!(Parent));
+
+    // The App module should contain external dependencies to "api" namespace
+    // even though Parent itself doesn't directly reference it - Child does
+    let app_module = registries
+        .keys()
+        .find(|m| m.config().module_name() == "App")
+        .unwrap();
+    let external_deps = &app_module.config().external_definitions;
+
+    // This should NOT be empty - it should include the "api" dependency
+    assert!(
+        !external_deps.is_empty(),
+        "App module should have external dependencies"
+    );
+    assert!(
+        external_deps.contains_key("api"),
+        "App module should depend on api namespace"
+    );
+    assert_eq!(
+        external_deps["api"],
+        vec!["GrandChild"],
+        "App module should reference GrandChild from api"
+    );
+
+    insta::assert_yaml_snapshot!(registries, @r"
+    ? module_name: App
+      encoding: None
+      external_definitions:
+        api:
+          - GrandChild
+      external_packages: {}
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+      features: []
+    : ? namespace: ROOT
+        name: Child
+      : STRUCT:
+          - - api:
+                - TYPENAME:
+                    namespace:
+                      NAMED: api
+                    name: GrandChild
+                - []
+          - []
+      ? namespace: ROOT
+        name: Parent
+      : STRUCT:
+          - - event:
+                - TYPENAME:
+                    namespace: ROOT
+                    name: Child
+                - []
+          - []
+    ? module_name: api
+      encoding: None
+      external_definitions: {}
+      external_packages: {}
+      comments: {}
+      custom_code: {}
+      c_style_enums: false
+      package_manifest: true
+      features: []
+    : ? namespace:
+          NAMED: api
+        name: GrandChild
+      : STRUCT:
+          - - test:
                 - STR
                 - []
           - []

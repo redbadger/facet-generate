@@ -480,3 +480,74 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
     )
     "#);
 }
+
+#[test]
+fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
+    // This test ensures that when multiple types belong to the same namespace,
+    // ALL external dependencies from ALL types are collected properly.
+    // Previously, only the first type's external dependencies were preserved.
+    #[derive(Facet)]
+    #[facet(namespace = "api")]
+    struct GrandChild {
+        test: String,
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        api: GrandChild,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        event: Child,
+    }
+
+    let registry = reflect!(Parent);
+
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
+            for_namespace: "api".to_string(),
+            location: PackageLocation::Path("../Api".to_string()),
+            module_name: None,
+            version: None,
+        }],
+    );
+
+    for (module, registry) in split(package_name, &registry) {
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+
+        installer.install_module(&config, &registry).unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Api"
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["Api", "Serde"]
+            ),
+        ]
+    )
+    "#);
+}

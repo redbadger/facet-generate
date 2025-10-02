@@ -3,9 +3,9 @@ use std::{cmp::Ordering, collections::BTreeMap};
 use serde::Serialize;
 
 use crate::{
-    Registry, Result,
+    Registry,
     generation::CodeGeneratorConfig,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,42 +52,62 @@ impl Ord for Module {
 /// Splits a registry by namespace.
 #[must_use]
 pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
-    let mut registries = BTreeMap::<Module, Registry>::new();
+    // First, group types by their target namespace
+    let mut namespace_groups = BTreeMap::<String, Vec<(QualifiedTypeName, ContainerFormat)>>::new();
+
     for (name, format) in registry {
-        let mut format = format.clone();
-        registries
-            .entry(
-                make_module(root, &mut format, &name.namespace)
-                    .expect("should not have any remaining placeholders"),
-            )
+        let namespace_key = match &name.namespace {
+            Namespace::Root => root.to_string(),
+            Namespace::Named(ns) => ns.clone(),
+        };
+        namespace_groups
+            .entry(namespace_key)
             .or_default()
-            .insert(name.clone(), format);
+            .push((name.clone(), format.clone()));
     }
-    registries
-}
 
-fn make_module(root: &str, format: &mut ContainerFormat, namespace: &Namespace) -> Result<Module> {
-    let mut external_definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    format.visit(&mut |format| {
-        if let Format::TypeName(qualified_name) = format {
-            if let Namespace::Named(ns) = &qualified_name.namespace {
-                external_definitions
-                    .entry(ns.to_string())
-                    .or_default()
-                    .push(qualified_name.name.clone());
-            }
+    // Then create one module per namespace, collecting all external dependencies
+    let mut registries = BTreeMap::<Module, Registry>::new();
+
+    for (namespace_key, types) in namespace_groups {
+        // Collect all external dependencies for this namespace
+        let mut all_external_definitions: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+        for (_, format) in &types {
+            let format_clone = format.clone();
+            format_clone
+                .visit(&mut |format| {
+                    if let Format::TypeName(qualified_name) = format {
+                        if let Namespace::Named(ns) = &qualified_name.namespace {
+                            // Only consider it external if it's a different namespace
+                            if ns != &namespace_key {
+                                all_external_definitions
+                                    .entry(ns.to_string())
+                                    .or_default()
+                                    .push(qualified_name.name.clone());
+                            }
+                        }
+                    }
+                    Ok(())
+                })
+                .expect("should not have any remaining placeholders");
         }
-        Ok(())
-    })?;
-    let namespace = match namespace {
-        Namespace::Root => root,
-        Namespace::Named(ns) => ns,
-    };
 
-    let config = CodeGeneratorConfig::new(namespace.to_string())
-        .with_external_definitions(external_definitions);
+        // Create the module with all collected external dependencies
+        let config = CodeGeneratorConfig::new(namespace_key)
+            .with_external_definitions(all_external_definitions);
+        let module = Module(config);
 
-    Ok(Module(config))
+        // Add all types to this module's registry
+        let mut module_registry = Registry::new();
+        for (name, format) in types {
+            module_registry.insert(name, format);
+        }
+
+        registries.insert(module, module_registry);
+    }
+
+    registries
 }
 
 #[cfg(test)]
