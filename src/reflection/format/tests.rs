@@ -30,8 +30,7 @@ fn test_format_visiting() {
     format
         .visit(&mut |f| {
             if let TypeName(x) = f {
-                // Insert a &str borrowed from `format`.
-                names.insert(x.to_legacy_string(ToString::to_string));
+                names.insert(x.to_string(ToString::to_string, "."));
             }
             Ok(())
         })

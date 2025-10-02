@@ -24,6 +24,25 @@ fn test_get_simple_registry() {
     let registry = get_simple_registry();
     insta::assert_yaml_snapshot!(&registry, @r"
     ? namespace: ROOT
+      name: Test
+    : STRUCT:
+        - - a:
+              - SEQ: U32
+              - []
+          - b:
+              - TUPLE:
+                  - I64
+                  - U64
+              - []
+          - c:
+              - TYPENAME:
+                  namespace:
+                    NAMED: test
+                  name: Choice
+              - []
+        - []
+    ? namespace:
+        NAMED: test
       name: Choice
     : ENUM:
         - 0:
@@ -40,23 +59,6 @@ fn test_get_simple_registry() {
                   - x:
                       - U8
                       - []
-              - []
-        - []
-    ? namespace: ROOT
-      name: Test
-    : STRUCT:
-        - - a:
-              - SEQ: U32
-              - []
-          - b:
-              - TUPLE:
-                  - I64
-                  - U64
-              - []
-          - c:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: Choice
               - []
         - []
     ");

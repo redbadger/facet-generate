@@ -49,7 +49,11 @@ pub struct QualifiedTypeName {
 
 impl From<&str> for QualifiedTypeName {
     fn from(value: &str) -> Self {
-        Self::from_legacy_string(value)
+        if let Some((namespace, name)) = value.split_once(['.', '_']) {
+            Self::namespaced(namespace.to_string(), name.to_string())
+        } else {
+            Self::root(value.to_string())
+        }
     }
 }
 
@@ -72,22 +76,16 @@ impl QualifiedTypeName {
         }
     }
 
-    /// Convert to the legacy dot-separated string format for compatibility.
+    /// Build a string from the qualified type name using the supplied namespace formatter and separator.
     #[must_use]
-    pub fn to_legacy_string(&self, namespace_formatter: fn(&str) -> String) -> String {
+    pub fn to_string(&self, namespace_formatter: fn(&str) -> String, separator: &str) -> String {
         match &self.namespace {
             Namespace::Root => self.name.clone(),
-            Namespace::Named(ns) => format!("{}.{}", namespace_formatter(ns), self.name),
-        }
-    }
-
-    /// Parse from the legacy dot-separated string format.
-    #[must_use]
-    pub fn from_legacy_string(s: &str) -> Self {
-        if let Some((namespace, name)) = s.split_once('.') {
-            Self::namespaced(namespace.to_string(), name.to_string())
-        } else {
-            Self::root(s.to_string())
+            Namespace::Named(ns) => {
+                let namespace = namespace_formatter(ns);
+                let name = self.name.clone();
+                format!("{namespace}{separator}{name}")
+            }
         }
     }
 }
