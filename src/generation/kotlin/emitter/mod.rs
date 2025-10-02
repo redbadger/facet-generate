@@ -839,13 +839,7 @@ fn write_serialize<W: IndentWrite>(
             Ok(())
         }
 
-        Format::Seq(inner_format) => {
-            write!(w, "{field_name}.serialize(serializer) ")?;
-            write_serialize_lambda(w, inner_format, level)?;
-            Ok(())
-        }
-
-        Format::Set(inner_format) => {
+        Format::Seq(inner_format) | Format::Set(inner_format) => {
             write!(w, "{field_name}.serialize(serializer) ")?;
             write_serialize_lambda(w, inner_format, level)?;
             Ok(())

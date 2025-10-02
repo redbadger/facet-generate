@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![cfg(feature = "swift")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{Registry, generation::CodeGen};
 use anyhow::Result;
 use expect_test::ExpectFile;
