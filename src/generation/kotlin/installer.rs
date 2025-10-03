@@ -61,7 +61,7 @@ impl Installer {
 
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
-        // TODO: this should come from somehwere
+        // TODO: this should come from somewhere
         const VERSION: &str = "1.0.0";
 
         let mut dependencies = Vec::new();
@@ -155,7 +155,7 @@ impl SourceInstaller for Installer {
             return Ok(());
         }
 
-        // Track encodings used in this module
+        // Track encoding used in this module
         self.encoding = config.encoding;
 
         // Convert module name to package path (e.g., "com.example.types" -> "com/example/types")

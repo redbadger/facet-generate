@@ -1,7 +1,3 @@
-// Copyright (c) Facebook, Inc. and its affiliates
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
 /// Utility function to generate indented text
 pub mod indent;
 
@@ -17,6 +13,9 @@ pub mod kotlin;
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
+/// Support for code-generation in Swift
+#[cfg(feature = "swift")]
+pub mod swift2;
 /// Support for code-generation in TypeScript
 #[cfg(feature = "typescript")]
 pub mod typescript;
@@ -40,7 +39,10 @@ use std::{
 pub use config::*;
 use indent::IndentWrite;
 
-use crate::Registry;
+use crate::{
+    Registry,
+    reflection::format::{ContainerFormat, QualifiedTypeName},
+};
 
 pub trait CodeGen<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
@@ -70,8 +72,15 @@ impl Display for Language {
     }
 }
 
-#[cfg(all(test, feature = "generate"))]
-mod tests;
+pub struct WithEncoding<T> {
+    pub encoding: Encoding,
+    pub value: T,
+}
+
+pub struct Container<'a> {
+    pub name: &'a QualifiedTypeName,
+    pub format: &'a ContainerFormat,
+}
 
 pub trait Emitter<Language> {
     /// Write the code to the provided `IndentWrite`.
@@ -80,3 +89,6 @@ pub trait Emitter<Language> {
     /// This function may fail if the writer encounters an error while writing the generated code.
     fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()>;
 }
+
+#[cfg(all(test, feature = "generate"))]
+mod tests;
