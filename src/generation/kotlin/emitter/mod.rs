@@ -9,8 +9,8 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
-        module::Module,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation, WithEncoding,
+        indent::IndentWrite, module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -141,17 +141,24 @@ impl Emitter<Kotlin> for Module {
     }
 }
 
-impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
+impl Emitter<Kotlin> for WithEncoding<Container<'_>> {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (encoding, (name, format)) = self;
+        let WithEncoding {
+            encoding,
+            value:
+                Container {
+                    name: QualifiedTypeName { namespace: _, name },
+                    format,
+                },
+        } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                data_object(w, &name.name, None, doc, *encoding, None)?;
+                data_object(w, name, None, doc, *encoding, None)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 data_class(
                     w,
-                    &name.name,
+                    name,
                     None,
                     &[Named {
                         name: "value".to_string(),
@@ -164,13 +171,13 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
                 )?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
-                data_class(w, &name.name, None, &named(formats), doc, *encoding, None)?;
+                data_class(w, name, None, &named(formats), doc, *encoding, None)?;
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    data_object(w, &name.name, None, doc, *encoding, None)?;
+                    data_object(w, name, None, doc, *encoding, None)?;
                 } else {
-                    data_class(w, &name.name, None, fields, doc, *encoding, None)?;
+                    data_class(w, name, None, fields, doc, *encoding, None)?;
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -181,9 +188,9 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));
 
                 if all_unit_variants {
-                    enum_class(w, &name.name, variants, doc, *encoding)?;
+                    enum_class(w, name, variants, doc, *encoding)?;
                 } else {
-                    sealed_interface(w, &name.name, &variant_list, doc, *encoding)?;
+                    sealed_interface(w, name, &variant_list, doc, *encoding)?;
                 }
             }
         }
@@ -226,38 +233,40 @@ pub enum VariantContext {
     EnumClass,
 }
 
-impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
+impl Emitter<Kotlin> for (&WithEncoding<&Named<VariantFormat>>, &VariantContext) {
     #[allow(clippy::too_many_lines)]
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (variant, context, encoding) = *self;
+        let (
+            WithEncoding {
+                encoding,
+                value:
+                    Named {
+                        name,
+                        doc,
+                        value: format,
+                    },
+            },
+            context,
+        ) = self;
 
-        let name = &variant.name;
-        match (&variant.value, context) {
+        match (&format, context) {
             (VariantFormat::Variable(_), _) => {
                 unreachable!("placeholders should not get this far")
             }
             (VariantFormat::Unit, VariantContext::SealedInterface(interface_name, index)) => {
-                data_object(
-                    w,
-                    name,
-                    Some(interface_name),
-                    &variant.doc,
-                    encoding,
-                    Some(*index),
-                )?;
+                data_object(w, name, Some(interface_name), doc, *encoding, Some(*index))?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
-                variant.doc.write(w)?;
-                let name_upper = variant.name.to_uppercase();
+                doc.write(w)?;
+                let name_upper = name.to_uppercase();
                 if encoding.is_json() {
-                    let name = &variant.name;
                     write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
                 } else {
                     write!(w, "{name_upper}")?;
                 }
             }
             (
-                VariantFormat::NewType(format),
+                VariantFormat::NewType(inner),
                 VariantContext::SealedInterface(interface_name, index),
             ) => {
                 data_class(
@@ -267,10 +276,10 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     &[Named {
                         name: "value".to_string(),
                         doc: Doc::new(),
-                        value: Format::clone(format),
+                        value: Format::clone(inner),
                     }],
-                    &variant.doc,
-                    encoding,
+                    doc,
+                    *encoding,
                     Some(*index),
                 )?;
             }
@@ -286,8 +295,8 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     name,
                     Some(interface_name),
                     &named(formats),
-                    &variant.doc,
-                    encoding,
+                    doc,
+                    *encoding,
                     Some(*index),
                 )?;
             }
@@ -303,8 +312,8 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     name,
                     Some(interface_name),
                     fields,
-                    &variant.doc,
-                    encoding,
+                    doc,
+                    *encoding,
                     Some(*index),
                 )?;
             }
@@ -617,12 +626,16 @@ fn enum_class<W: IndentWrite>(
 
     w.indent();
 
-    for (i, variant) in variants {
+    for (i, format) in variants {
         if *i > 0 {
             writeln!(w, ",")?;
         }
 
-        (variant, &VariantContext::EnumClass, encoding).write(w)?;
+        let variant = WithEncoding {
+            encoding,
+            value: format,
+        };
+        (&variant, &VariantContext::EnumClass).write(w)?;
     }
     writeln!(w, ";")?;
     writeln!(w)?;
@@ -660,14 +673,15 @@ fn enum_class<W: IndentWrite>(
             pop_deserializer(w)?;
             write!(w, "return when (index) ")?;
             w.start_block()?;
-            for (i, variant) in variants {
+            for (i, format) in variants {
                 write!(w, "{i} -> ")?;
-                let variant = Named {
-                    name: variant.name.to_string(),
+                let value = &Named {
+                    name: format.name.to_string(),
                     doc: Doc::new(), // remove comments for this printing
-                    value: variant.value.clone(),
+                    value: format.value.clone(),
                 };
-                (&variant, &VariantContext::EnumClass, encoding).write(w)?;
+                let variant = WithEncoding { encoding, value };
+                (&variant, &VariantContext::EnumClass).write(w)?;
                 writeln!(w)?;
             }
             writeln!(
@@ -712,12 +726,16 @@ fn sealed_interface<W: IndentWrite>(
         writeln!(w)?;
     }
 
-    for (index, variant) in variants.iter().enumerate() {
+    for (index, format) in variants.iter().enumerate() {
         if index > 0 {
             writeln!(w)?;
         }
         let ctx = VariantContext::SealedInterface(name.to_string(), index);
-        (variant, &ctx, encoding).write(w)?;
+        let variant = WithEncoding {
+            encoding,
+            value: format,
+        };
+        (&variant, &ctx).write(w)?;
     }
 
     if encoding.is_bincode() {

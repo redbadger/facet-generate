@@ -20,18 +20,22 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
 #[macro_export]
 macro_rules! emit {
-    ($($ty:ident),* as $encoding:path) => {
+    ($($ty:ident),* as $language:ident with $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::indent::{IndentConfig, IndentedWriter};
+            use $crate::generation::{Container, WithEncoding, indent::{IndentConfig, IndentedWriter}};
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*);
-            for (i, item) in registry.iter().enumerate() {
+            for (i, (name, format)) in registry.iter().enumerate() {
                 if i > 0 {
                     writeln!(&mut w)?;
                 }
-                ($encoding, item).write(&mut w)?;
+                let container = WithEncoding {
+                    encoding: $encoding,
+                    value: Container { name, format },
+                };
+                <WithEncoding<Container> as Emitter<$language>>::write(&container, &mut w)?;
             }
             let out = String::from_utf8(out)?;
 
