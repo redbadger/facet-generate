@@ -1891,3 +1891,92 @@ fn struct_with_bytes_field_and_slice() {
     }
     "#);
 }
+
+#[test]
+fn namespaced_child() {
+    #[derive(Facet)]
+    #[facet(namespace = "Test")]
+    struct Child {
+        test: String,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        child: Vec<Child>,
+    }
+
+    let actual = emit_swift!(Parent as Encoding::Bincode).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+    public struct Parent: Hashable {
+        @Indirect public var child: [Child]
+
+        public init(child: [Child]) {
+            self.child = child
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serialize_vector_Test_Child(value: self.child, serializer: serializer)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
+            try deserializer.increase_container_depth()
+            let child = try deserialize_vector_Test_Child(deserializer: deserializer)
+            try deserializer.decrease_container_depth()
+            return Parent.init(child: child)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> Parent {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+
+    public struct Child: Hashable {
+        @Indirect public var test: String
+
+        public init(test: String) {
+            self.test = test
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serializer.serialize_str(value: self.test)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Child {
+            try deserializer.increase_container_depth()
+            let test = try deserializer.deserialize_str()
+            try deserializer.decrease_container_depth()
+            return Child.init(test: test)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
+}

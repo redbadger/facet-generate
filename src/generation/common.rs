@@ -7,7 +7,7 @@ use crate::reflection::format::Format;
 
 pub(crate) fn mangle_type(format: &Format) -> String {
     match format {
-        Format::TypeName(qualified_name) => qualified_name.to_legacy_string(ToString::to_string),
+        Format::TypeName(qualified_name) => qualified_name.to_string(ToString::to_string, "_"),
         Format::Unit => "unit".into(),
         Format::Bool => "bool".into(),
         Format::I8 => "i8".into(),
