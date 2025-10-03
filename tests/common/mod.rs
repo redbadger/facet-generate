@@ -14,7 +14,6 @@ pub struct Test {
 }
 
 #[derive(Facet, Serialize, Deserialize)]
-#[facet(namespace = "another")]
 #[repr(C)]
 pub enum Choice {
     A,

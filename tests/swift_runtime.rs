@@ -5,7 +5,7 @@
 pub mod common;
 
 use common::{Choice, Runtime, Test};
-use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, module::split, swift};
+use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
 use std::{fs::File, io::Write as _, process::Command};
 
 #[test]
@@ -40,13 +40,10 @@ fn test_swift_runtime_on_simple_data(runtime: Runtime) {
     // std::fs::remove_dir_all(my_path).unwrap_or(());
     // std::fs::create_dir_all(my_path).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let package_name = "Testing";
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(runtime.into());
     let registry = common::get_simple_registry();
-    let mut installer = swift::Installer::new(package_name, dir.path(), &[]);
-    for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(runtime.into());
-        installer.install_module(&config, &registry).unwrap();
-    }
+    let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
+    installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 
     let reference = runtime.serialize(&Test {
@@ -100,11 +97,35 @@ catch {{}}
     )
     .unwrap();
 
-    installer.install_manifest(package_name).unwrap();
+    let mut file = File::create(dir.path().join("Package.swift")).unwrap();
+    write!(
+        file,
+        r#"// swift-tools-version:5.3
+
+import PackageDescription
+
+let package = Package(
+    name: "Testing",
+    targets: [
+        .target(
+            name: "Serde",
+            dependencies: []),
+        .target(
+            name: "Testing",
+            dependencies: ["Serde"]),
+        .target(
+            name: "main",
+            dependencies: ["Serde", "Testing"]
+        ),
+    ]
+)
+"#
+    )
+    .unwrap();
 
     let status = Command::new("swift")
         .current_dir(dir.path())
-        .arg("build")
+        .arg("run")
         .status()
         .unwrap();
     assert!(status.success());
