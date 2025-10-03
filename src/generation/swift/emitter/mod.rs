@@ -27,7 +27,6 @@ where
         let mut imports = ["Serde".to_string()]
             .iter()
             .chain(self.generator.config.external_definitions.keys())
-            .chain(self.generator.config.external_packages.keys())
             .map(AsUpperCamelCase)
             .map(|s| s.to_string())
             .collect::<Vec<String>>();

@@ -3,8 +3,9 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Emitter,
+        CodeGen, CodeGeneratorConfig, Container, Emitter, WithEncoding,
         indent::{IndentConfig, IndentedWriter},
+        kotlin::emitter::Kotlin,
         module::Module,
     },
 };
@@ -20,11 +21,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
         CodeGenerator::new(config)
     }
 
-    fn write_output<W: std::io::Write>(
-        &mut self,
-        writer: &mut W,
-        registry: &Registry,
-    ) -> Result<()> {
+    fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
         self.output(writer, registry)
     }
 }
@@ -47,11 +44,15 @@ impl<'a> CodeGenerator<'a> {
         let module = Module::new(&config);
         module.write(w)?;
 
-        for (i, container) in registry.iter().enumerate() {
+        for (i, (name, format)) in registry.iter().enumerate() {
             if i > 0 {
                 writeln!(w)?;
             }
-            (config.encoding, container).write(w)?;
+            let container = WithEncoding {
+                encoding: config.encoding,
+                value: Container { name, format },
+            };
+            <WithEncoding<Container> as Emitter<Kotlin>>::write(&container, w)?;
         }
 
         Ok(())
