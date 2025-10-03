@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.4] - 2025-10-03
+
+### 🐛 Bug Fixes
+
+[Fixes a bug](https://github.com/redbadger/facet-generate/pull/35) when generating function names in Swift for serialization.
+
 ## [0.11.3] - 2025-10-02
 
 ### 🐛 Bug Fixes
