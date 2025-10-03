@@ -3,9 +3,10 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Emitter,
+        CodeGen, CodeGeneratorConfig, Container, Emitter, WithEncoding,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
+        kotlin::emitter::Kotlin,
         module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
@@ -53,13 +54,16 @@ impl<'a> CodeGenerator<'a> {
         let module = Module::new(&config);
         module.write(w)?;
 
-        for (i, container) in updated_registry.iter().enumerate() {
+        for (i, (name, format)) in updated_registry.iter().enumerate() {
             if i > 0 {
                 writeln!(w)?;
             }
-            (config.encoding, container).write(w)?;
+            let container = WithEncoding {
+                encoding: config.encoding,
+                value: Container { name, format },
+            };
+            <WithEncoding<Container> as Emitter<Kotlin>>::write(&container, w)?;
         }
-
         Ok(())
     }
 

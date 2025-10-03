@@ -10,7 +10,7 @@ use std::{
 
 use facet::Facet;
 
-use crate::{emit_swift, generation::Encoding};
+use crate::emit_swift;
 
 #[test]
 fn unit_struct_1() {
