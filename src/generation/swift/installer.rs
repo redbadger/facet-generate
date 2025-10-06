@@ -206,7 +206,7 @@ impl SourceInstaller for Installer {
 
         let targets = self.targets.entry(module_name.clone()).or_default();
         for target in config.external_definitions.keys() {
-            targets.insert(target.clone());
+            targets.insert(target.to_upper_camel_case());
         }
 
         if matches!(config.encoding, Encoding::Bincode | Encoding::Bcs) {
