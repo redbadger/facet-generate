@@ -520,7 +520,6 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone().with_encoding(Encoding::Bincode);
-
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -546,6 +545,83 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
             .target(
                 name: "App",
                 dependencies: ["Api", "Serde"]
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn external_dependency_references_local_dependency() {
+    #[derive(Facet)]
+    #[facet(namespace = "local_dependency")]
+    struct GrandChild {
+        inner: GreatGrandChild,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "external_dependency")]
+    struct GreatGrandChild {
+        inner: String,
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        inner: GrandChild,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        inner: Child,
+    }
+
+    let registry = reflect!(Parent);
+
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(
+        package_name,
+        install_dir.path(),
+        &[ExternalPackage {
+            for_namespace: "external_dependency".to_string(),
+            location: PackageLocation::Path("../ExternalDependency".to_string()),
+            module_name: None,
+            version: None,
+        }],
+    );
+
+    for (module, registry) in split(package_name, &registry) {
+        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        installer.install_module(&config, &registry).unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../ExternalDependency"
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["ExternalDependency", "LocalDependency", "Serde"]
+            ),
+            .target(
+                name: "LocalDependency",
+                dependencies: ["ExternalDependency", "Serde"]
             ),
         ]
     )
