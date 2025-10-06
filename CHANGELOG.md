@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.5] - 2025-10-06
+
+### 🐛 Bug Fixes
+
+* fixes a bug where a target's dependencies sometimes were not in lowerCamelCase.
+* fixes a bug where there were extraneous imports in a module's preamble
+
+see https://github.com/redbadger/facet-generate/pull/38
+
 ## [0.11.4] - 2025-10-03
 
 ### 🐛 Bug Fixes
