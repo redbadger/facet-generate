@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### 🐛 Bug Fixes
 
-* fixes a bug where a target's dependencies sometimes were not in lowerCamelCase.
+* fixes a bug where a target's dependencies sometimes were not in UpperCamelCase.
 * fixes a bug where there were extraneous imports in a module's preamble
 
 see https://github.com/redbadger/facet-generate/pull/38
