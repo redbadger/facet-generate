@@ -22,7 +22,7 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 macro_rules! emit {
     ($($ty:ident),* as $language:ident with $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::{Container, WithEncoding, indent::{IndentConfig, IndentedWriter}};
+            use $crate::generation::{Container, Encoding, WithEncoding, indent::{IndentConfig, IndentedWriter}};
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
@@ -48,7 +48,7 @@ macro_rules! emit {
 macro_rules! emit_swift {
     ($($ty:ident),* as $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::indent::{IndentConfig, IndentedWriter};
+            use $crate::generation::{Encoding, indent::{IndentConfig, IndentedWriter}};
             let mut out = Vec::new();
             let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
@@ -74,7 +74,7 @@ macro_rules! emit_swift {
 macro_rules! emit_java {
     ($($ty:ident),* as $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::indent::{IndentConfig, IndentedWriter};
+            use $crate::generation::{Encoding, indent::{IndentConfig, IndentedWriter}};
             let mut out = Vec::new();
             let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())

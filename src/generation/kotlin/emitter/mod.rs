@@ -201,12 +201,12 @@ impl Emitter<Kotlin> for WithEncoding<Container<'_>> {
 
 impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        self.doc.write(w)?;
+        <Doc as Emitter<Kotlin>>::write(&self.doc, w)?;
 
         let name = &self.name.to_lower_camel_case();
         write!(w, "val {name}: ")?;
 
-        self.value.write(w)?;
+        <Format as Emitter<Kotlin>>::write(&self.value, w)?;
 
         // Add = null default only for top-level Option types
         if matches!(self.value, Format::Option(_)) {
@@ -257,7 +257,7 @@ impl Emitter<Kotlin> for (&WithEncoding<&Named<VariantFormat>>, &VariantContext)
                 data_object(w, name, Some(interface_name), doc, *encoding, Some(*index))?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
-                doc.write(w)?;
+                <Doc as Emitter<Kotlin>>::write(doc, w)?;
                 let name_upper = name.to_uppercase();
                 if encoding.is_json() {
                     write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
@@ -364,6 +364,7 @@ impl Format {
 
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+        let write = <Format as Emitter<Kotlin>>::write::<W>;
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -386,24 +387,24 @@ impl Emitter<Kotlin> for Format {
             Format::Bytes => write!(w, "ByteArray"),
 
             Format::Option(format) => {
-                format.write(w)?;
+                write(format, w)?;
                 write!(w, "?")
             }
             Format::Seq(format) => {
                 write!(w, "List<")?;
-                format.write(w)?;
+                write(format, w)?;
                 write!(w, ">")
             }
             Format::Set(format) => {
                 write!(w, "Set<")?;
-                format.write(w)?;
+                write(format, w)?;
                 write!(w, ">")
             }
             Format::Map { key, value } => {
                 write!(w, "Map<")?;
-                key.write(w)?;
+                write(key, w)?;
                 write!(w, ", ")?;
-                value.write(w)?;
+                write(value, w)?;
                 write!(w, ">")
             }
             Format::Tuple(formats) => {
@@ -412,22 +413,22 @@ impl Emitter<Kotlin> for Format {
                     0 => write!(w, "Unit"),
                     1 => {
                         // A single-element tuple is just the element itself
-                        formats[0].write(w)
+                        write(&formats[0], w)
                     }
                     2 => {
                         write!(w, "Pair<")?;
-                        formats[0].write(w)?;
+                        write(&formats[0], w)?;
                         write!(w, ", ")?;
-                        formats[1].write(w)?;
+                        write(&formats[1], w)?;
                         write!(w, ">")
                     }
                     3 => {
                         write!(w, "Triple<")?;
-                        formats[0].write(w)?;
+                        write(&formats[0], w)?;
                         write!(w, ", ")?;
-                        formats[1].write(w)?;
+                        write(&formats[1], w)?;
                         write!(w, ", ")?;
-                        formats[2].write(w)?;
+                        write(&formats[2], w)?;
                         write!(w, ">")
                     }
                     _ => {
@@ -437,7 +438,7 @@ impl Emitter<Kotlin> for Format {
                             if i > 0 {
                                 write!(w, ", ")?;
                             }
-                            format.write(w)?;
+                            write(format, w)?;
                         }
                         write!(w, ">")
                     }
@@ -445,7 +446,7 @@ impl Emitter<Kotlin> for Format {
             }
             Format::TupleArray { content, size: _ } => {
                 write!(w, "List<")?;
-                content.write(w)?;
+                write(content, w)?;
                 write!(w, ">")
             }
         }
@@ -460,7 +461,7 @@ fn data_object<W: IndentWrite>(
     encoding: Encoding,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    doc.write(w)?;
+    <Doc as Emitter<Kotlin>>::write(doc, w)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -520,7 +521,7 @@ fn data_class<W: IndentWrite>(
     encoding: Encoding,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    doc.write(w)?;
+    <Doc as Emitter<Kotlin>>::write(doc, w)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -531,7 +532,7 @@ fn data_class<W: IndentWrite>(
 
     w.indent();
     for field in fields {
-        field.write(w)?;
+        <Named<Format> as Emitter<Kotlin>>::write(field, w)?;
     }
     w.unindent();
 
@@ -615,16 +616,16 @@ fn enum_class<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    doc.write(w)?;
+    <Doc as Emitter<Kotlin>>::write(doc, w)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
 
-    writeln!(w, "enum class {name} {{")?;
+    writeln!(w, "enum class {name} ")?;
 
-    w.indent();
+    w.start_block()?;
 
     for (i, format) in variants {
         if *i > 0 {
@@ -698,9 +699,7 @@ fn enum_class<W: IndentWrite>(
         _ => (),
     }
 
-    w.unindent();
-
-    writeln!(w, "}}")
+    w.end_block()
 }
 
 fn sealed_interface<W: IndentWrite>(
@@ -710,7 +709,7 @@ fn sealed_interface<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    doc.write(w)?;
+    <Doc as Emitter<Kotlin>>::write(doc, w)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -992,7 +991,7 @@ fn write_deserialize<W: IndentWrite>(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                format.write(w)?;
+                <Format as Emitter<Kotlin>>::write(format, w)?;
             }
             writeln!(w, ">.deserialize(deserializer)")
         }
