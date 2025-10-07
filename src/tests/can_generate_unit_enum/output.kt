@@ -7,5 +7,4 @@ enum class Colors {
     BLUE,
     /// Green is a cool color
     GREEN;
-
 }

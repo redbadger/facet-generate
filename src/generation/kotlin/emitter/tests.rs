@@ -246,7 +246,6 @@ fn enum_with_unit_variants() {
         VARIANT2,
         /// variant three
         VARIANT3;
-
     }
     ");
 }
@@ -264,7 +263,6 @@ fn enum_with_unit_struct_variants() {
     insta::assert_snapshot!(actual, @r"
     enum class MyEnum {
         VARIANT1;
-
     }
     ");
 }

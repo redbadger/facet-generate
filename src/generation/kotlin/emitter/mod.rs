@@ -160,11 +160,7 @@ impl Emitter<Kotlin> for WithEncoding<Container<'_>> {
                     w,
                     name,
                     None,
-                    &[Named {
-                        name: "value".to_string(),
-                        doc: Doc::new(),
-                        value: Format::clone(format),
-                    }],
+                    &[Named::new(format, "value".to_string())],
                     doc,
                     *encoding,
                     None,
@@ -273,11 +269,7 @@ impl Emitter<Kotlin> for (&WithEncoding<&Named<VariantFormat>>, &VariantContext)
                     w,
                     name,
                     Some(interface_name),
-                    &[Named {
-                        name: "value".to_string(),
-                        doc: Doc::new(),
-                        value: Format::clone(inner),
-                    }],
+                    &[Named::new(inner, "value".to_string())],
                     doc,
                     *encoding,
                     Some(*index),
@@ -623,7 +615,7 @@ fn enum_class<W: IndentWrite>(
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
 
-    writeln!(w, "enum class {name} ")?;
+    write!(w, "enum class {name} ")?;
 
     w.start_block()?;
 
@@ -636,13 +628,16 @@ fn enum_class<W: IndentWrite>(
             encoding,
             value: format,
         };
-        (&variant, &VariantContext::EnumClass).write(w)?;
+        <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
+            &(&variant, &VariantContext::EnumClass),
+            w,
+        )?;
     }
     writeln!(w, ";")?;
-    writeln!(w)?;
 
     match encoding {
         Encoding::Json => {
+            writeln!(w)?;
             writedoc!(
                 w,
                 "
@@ -652,6 +647,7 @@ fn enum_class<W: IndentWrite>(
             )?;
         }
         Encoding::Bincode => {
+            writeln!(w)?;
             write!(w, "fun serialize(serializer: Serializer) ")?;
             w.start_block()?;
             push_serializer(w)?;
@@ -676,13 +672,12 @@ fn enum_class<W: IndentWrite>(
             w.start_block()?;
             for (i, format) in variants {
                 write!(w, "{i} -> ")?;
-                let value = &Named {
-                    name: format.name.to_string(),
-                    doc: Doc::new(), // remove comments for this printing
-                    value: format.value.clone(),
-                };
+                let value = &format.without_docs();
                 let variant = WithEncoding { encoding, value };
-                (&variant, &VariantContext::EnumClass).write(w)?;
+                <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
+                    &(&variant, &VariantContext::EnumClass),
+                    w,
+                )?;
                 writeln!(w)?;
             }
             writeln!(
@@ -734,7 +729,10 @@ fn sealed_interface<W: IndentWrite>(
             encoding,
             value: format,
         };
-        (&variant, &ctx).write(w)?;
+        <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
+            &(&variant, &ctx),
+            w,
+        )?;
     }
 
     if encoding.is_bincode() {
@@ -768,11 +766,7 @@ fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
     formats
         .iter()
         .enumerate()
-        .map(|(i, f)| Named {
-            name: format!("field{i}"),
-            doc: Doc::new(),
-            value: f.clone(),
-        })
+        .map(|(i, f)| Named::new(f, format!("field{i}")))
         .collect()
 }
 

@@ -215,6 +215,30 @@ pub struct Named<T> {
     pub value: T,
 }
 
+impl<T> Named<T>
+where
+    T: Clone,
+{
+    /// Creates a new named value
+    #[must_use]
+    pub fn new(value: &T, name: String) -> Self {
+        Self {
+            name,
+            doc: Doc::default(),
+            value: value.clone(),
+        }
+    }
+
+    /// Creates a new named value without documentation.
+    #[must_use]
+    pub fn without_docs(&self) -> Self {
+        Self {
+            doc: Doc::default(),
+            ..self.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 /// A mutable holder for an initially unknown value.
 pub struct Variable<T>(Rc<RefCell<Option<T>>>);

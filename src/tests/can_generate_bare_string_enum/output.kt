@@ -5,5 +5,4 @@ enum class Colors {
     RED,
     BLUE,
     GREEN;
-
 }

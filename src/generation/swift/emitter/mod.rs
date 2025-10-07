@@ -6,7 +6,7 @@ use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 use crate::{
     Registry,
     generation::{common, indent::IndentWrite, swift::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
 /// Shared state for the code generation of a Swift source file.
@@ -417,20 +417,12 @@ return obj
     fn variant_fields(variant: &VariantFormat) -> Vec<Named<Format>> {
         match variant {
             VariantFormat::Unit => Vec::new(),
-            VariantFormat::NewType(format) => vec![Named {
-                name: "x".to_string(),
-                doc: Doc::new(),
-                value: format.as_ref().clone(),
-            }],
+            VariantFormat::NewType(format) => vec![Named::new(format.as_ref(), "x".to_string())],
             VariantFormat::Tuple(formats) => formats
                 .clone()
                 .into_iter()
                 .enumerate()
-                .map(|(i, f)| Named {
-                    name: format!("x{i}"),
-                    doc: Doc::new(),
-                    value: f,
-                })
+                .map(|(i, f)| Named::new(&f, format!("x{i}")))
                 .collect(),
             VariantFormat::Struct(fields) => fields.clone(),
             VariantFormat::Variable(_) => panic!("incorrect value"),
@@ -692,27 +684,17 @@ switch index {{",
     pub fn output_container(&mut self, name: &str, format: &ContainerFormat) -> Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
-                name: "value".to_string(),
-                doc: Doc::new(),
-                value: format.as_ref().clone(),
-            }],
+            ContainerFormat::NewTypeStruct(format, _doc) => {
+                vec![Named::new(format.as_ref(), "value".to_string())]
+            }
             ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
-                .map(|(i, f)| Named {
-                    name: format!("field{i}"),
-                    doc: Doc::new(),
-                    value: f.clone(),
-                })
+                .map(|(i, f)| Named::new(f, format!("field{i}")))
                 .collect(),
             ContainerFormat::Struct(fields, _doc) => fields
                 .iter()
-                .map(|f| Named {
-                    name: f.name.to_lower_camel_case(),
-                    doc: Doc::new(),
-                    value: f.value.clone(),
-                })
+                .map(|f| Named::new(&f.value, f.name.to_lower_camel_case()))
                 .collect(),
             ContainerFormat::Enum(variants, _doc) => {
                 self.output_enum_container(name, variants)?;

@@ -132,18 +132,18 @@ fn struct_with_fields_of_primitive_types() {
         public var i16: Int16
         public var i32: Int32
         public var i64: Int64
-        public var i128: BigInt
+        public var i128: Int128
         public var u8: UInt8
         public var u16: UInt16
         public var u32: UInt32
         public var u64: UInt64
-        public var u128: BigUInt
+        public var u128: UInt128
         public var f32: Float
         public var f64: Double
         public var char: Character
         public var string: String
 
-        public init(unit: (), bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: BigInt, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: BigUInt, f32: Float, f64: Double, char: Character, string: String) {
+        public init(unit: (), bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: Int128, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: UInt128, f32: Float, f64: Double, char: Character, string: String) {
             self.unit = unit
             self.bool = bool
             self.i8 = i8
