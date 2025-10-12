@@ -127,6 +127,24 @@ impl RegistryBuilder {
         }
     }
 
+    fn format_with_namespace_override(&mut self, shape: &Shape, namespace: &str) {
+        let base_name = shape.type_identifier.to_string();
+        let namespaced_key = QualifiedTypeName::namespaced(namespace.to_string(), base_name);
+
+        if !self.registry.contains_key(&namespaced_key) {
+            // Temporarily override the get_name function for this processing
+            let original_key = get_name(shape);
+
+            // Process the type normally first
+            self.format(shape, None);
+
+            // Get the format that was created and move it to the namespaced location
+            if let Some(format) = self.registry.remove(&original_key) {
+                self.registry.insert(namespaced_key, format);
+            }
+        }
+    }
+
     fn format(&mut self, shape: &Shape, namespace: Option<&str>) {
         assert!(
             self.is_supported_generic_type(shape),
@@ -417,14 +435,24 @@ impl RegistryBuilder {
             return;
         }
 
+        // Check for field-level namespace annotation
+        let field_namespace = extract_namespace_from_field_attributes(field);
+
         // Default behavior: determine the proper format and add it
 
         // For user-defined types (structs/enums), get the renamed name before mutable borrow
         // But skip primitives like String, which are also Type::User but should use scalar format
         let field_format = match &field_shape.ty {
             Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
-                let renamed_name = get_name(field_shape);
-                Format::TypeName(renamed_name)
+                if let Some(ref ns) = field_namespace {
+                    // Create qualified name with the field-specified namespace (overrides type's own namespace)
+                    let base_name = field_shape.type_identifier.to_string();
+                    let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                    Format::TypeName(qualified_name)
+                } else {
+                    let renamed_name = get_name(field_shape);
+                    Format::TypeName(renamed_name)
+                }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
                 let target_shape = (pt.target)();
@@ -441,7 +469,13 @@ impl RegistryBuilder {
             };
             named_formats.push(format);
         }
-        self.format(field_shape, namespace);
+        // Process the type - if field has namespace override, process under that namespace
+        if let Some(ref ns) = field_namespace {
+            // Process the type and register it under the field-specified namespace
+            self.format_with_namespace_override(field_shape, ns);
+        } else {
+            self.format(field_shape, namespace);
+        }
     }
 
     fn try_handle_bytes_attribute(&mut self, field: &Field) -> bool {
@@ -674,11 +708,24 @@ impl RegistryBuilder {
         if field_shape.type_identifier == "()" {
             VariantFormat::NewType(Box::new(Format::Unit))
         } else if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty {
-            // For user-defined struct/enum types, create a TypeName reference and process the type
-            let current_namespace = extract_namespace_from_shape(shape);
-            self.format(field_shape, current_namespace.as_deref());
-            let namespaced_name = get_name(field_shape);
-            VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
+            // Check for field-level namespace annotation
+            let field_namespace = extract_namespace_from_field_attributes(&field);
+
+            if let Some(ref ns) = field_namespace {
+                // Process the type under the field-specified namespace
+                self.format_with_namespace_override(field_shape, ns);
+
+                // Create qualified name with the field-specified namespace
+                let base_name = field_shape.type_identifier.to_string();
+                let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                VariantFormat::NewType(Box::new(Format::TypeName(qualified_name)))
+            } else {
+                // For user-defined struct/enum types, create a TypeName reference and process the type
+                let current_namespace = extract_namespace_from_shape(shape);
+                self.format(field_shape, current_namespace.as_deref());
+                let namespaced_name = get_name(field_shape);
+                VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
+            }
         } else {
             // For other types, use the temporary container approach
             self.process_newtype_variant_with_temp_container(variant, field_shape, shape)
@@ -1074,22 +1121,14 @@ fn get_name(shape: &Shape) -> QualifiedTypeName {
         return QualifiedTypeName::root(type_tag.to_string());
     }
 
-    // Check attributes for namespace and name
-    let mut shape_namespace = None;
-    let mut name = None;
+    let shape_namespace = extract_namespace_from_shape(shape);
 
+    // Extract name attribute
+    let mut name = None;
     for attr in shape.attributes {
         if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            // Check for namespace attribute
-            if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
-                if let Some(end_idx) = stripped.find('"') {
-                    shape_namespace = Some(stripped[..end_idx].to_string());
-                }
-            } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
-                shape_namespace = Some(stripped.trim_matches('"').to_string());
-            }
             // Check for rename attribute in the format "name = \"NewName\""
-            else if let Some(stripped) = attr_str.strip_prefix("name = \"") {
+            if let Some(stripped) = attr_str.strip_prefix("name = \"") {
                 if let Some(end_idx) = stripped.find('"') {
                     name = Some(stripped[..end_idx].to_string());
                 }
@@ -1197,12 +1236,25 @@ fn extract_namespace_from_shape(shape: &Shape) -> Option<String> {
     None
 }
 
+fn extract_namespace_from_field_attributes(field: &Field) -> Option<String> {
+    for attr in field.attributes {
+        let FieldAttribute::Arbitrary(attr_str) = attr;
+        if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
+            if let Some(end_idx) = stripped.find('"') {
+                return Some(stripped[..end_idx].to_string());
+            }
+        } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
+            return Some(stripped.trim_matches('"').to_string());
+        }
+    }
+    None
+}
+
 fn is_transparent_struct(shape: &Shape) -> bool {
-    shape.attributes.iter().any(|attr| match attr {
-        ShapeAttribute::Transparent => true,
-        ShapeAttribute::Arbitrary(attr_str) => *attr_str == "transparent",
-        _ => false,
-    })
+    shape
+        .attributes
+        .iter()
+        .any(|attr| matches!(attr, ShapeAttribute::Transparent))
 }
 
 #[derive(Clone, Copy)]
