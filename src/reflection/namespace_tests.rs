@@ -1583,3 +1583,78 @@ fn explicit_namespace_behavior_summary() {
         - []
     ");
 }
+
+#[test]
+fn struct_field_points_to_type_in_a_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        #[facet(namespace = "other_namespace")]
+        value: Child,
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - value:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other_namespace
+                  name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_variant_field_points_to_type_in_a_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Parent {
+        Value(#[facet(namespace = "other_namespace")] Child),
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : ENUM:
+        - 0:
+            Value:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: other_namespace
+                    name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
