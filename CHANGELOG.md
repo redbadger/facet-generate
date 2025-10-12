@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.6] - 2025-10-12
+
+Adds support for specifying namespaces at the call-site. This allows you to specify that the type (struct or enum) that a field points to is in another (possibly external) namespace. See https://github.com/redbadger/facet-generate/pull/39
+
 ## [0.11.5] - 2025-10-06
 
 ### 🐛 Bug Fixes
