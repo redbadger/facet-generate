@@ -1771,3 +1771,160 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
         - []
     ");
 }
+
+#[test]
+fn struct_field_recursively_points_to_type_in_a_namespace() {
+    #[derive(Facet)]
+    struct GrandChild {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        value: GrandChild,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        #[facet(namespace = "other_namespace")]
+        value: Child,
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - value:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other_namespace
+                  name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: Child
+    : STRUCT:
+        - - value:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other_namespace
+                  name: GrandChild
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: GrandChild
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_with_pointer_inherits_namespace() {
+    #[derive(Facet)]
+    struct GrandChild {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Child {
+        value: &'static GrandChild, // Pointer type that should inherit namespace
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        #[facet(namespace = "other_namespace")]
+        value: Child,
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - value:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other_namespace
+                  name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: Child
+    : STRUCT:
+        - - value:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other_namespace
+                  name: GrandChild
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: GrandChild
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_with_collection_inherits_namespace() {
+    #[derive(Facet)]
+    struct Item {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Container {
+        items: Vec<Item>, // Collection type that should inherit namespace
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        #[facet(namespace = "collection_namespace")]
+        container: Container,
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - container:
+              - TYPENAME:
+                  namespace:
+                    NAMED: collection_namespace
+                  name: Container
+              - []
+        - []
+    ? namespace:
+        NAMED: collection_namespace
+      name: Container
+    : STRUCT:
+        - - items:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: collection_namespace
+                    name: Item
+              - []
+        - []
+    ? namespace:
+        NAMED: collection_namespace
+      name: Item
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ");
+}
