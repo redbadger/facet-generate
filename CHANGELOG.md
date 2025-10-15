@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.11.7] - 2025-10-15
+
+Introduces namespace propagation (currently only when using call-site annotations). See https://github.com/redbadger/facet-generate/pull/40.
+
+Propagation of type-level annotations is a breaking change, so will be introduced in 0.12.0.
+
 ## [0.11.6] - 2025-10-12
 
 Adds support for specifying namespaces at the call-site. This allows you to specify that the type (struct or enum) that a field points to is in another (possibly external) namespace. See https://github.com/redbadger/facet-generate/pull/39
