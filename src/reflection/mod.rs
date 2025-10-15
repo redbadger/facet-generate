@@ -806,11 +806,19 @@ impl RegistryBuilder {
         for field in variant.data.fields {
             let field_shape = field.shape();
 
+            // Check for field-level namespace annotation
+            let field_namespace = extract_namespace_from_field_attributes(field);
+
             // Check if the field is user-defined
             let value = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty
             {
                 if field_shape.type_identifier == "()" {
                     Format::Unit
+                } else if let Some(ref ns) = field_namespace {
+                    // Create qualified name with the field-specified namespace (overrides type's own namespace)
+                    let base_name = field_shape.type_identifier.to_string();
+                    let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                    Format::TypeName(qualified_name)
                 } else {
                     let namespaced_name = get_name(field_shape);
                     Format::TypeName(namespaced_name)
@@ -828,8 +836,14 @@ impl RegistryBuilder {
                 });
             }
 
-            let current_namespace = extract_namespace_from_shape(shape);
-            self.format(field_shape, current_namespace.as_deref());
+            // Process the type - if field has namespace override, process under that namespace
+            if let Some(ref ns) = field_namespace {
+                // Process the type and register it under the field-specified namespace
+                self.format_with_namespace_override(field_shape, ns);
+            } else {
+                let current_namespace = extract_namespace_from_shape(shape);
+                self.format(field_shape, current_namespace.as_deref());
+            }
         }
 
         // Extract the formats from the temporary container

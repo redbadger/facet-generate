@@ -1449,7 +1449,7 @@ fn no_namespace_pollution() {
     struct RootContainer {
         alpha: AlphaContainer,
         beta: BetaContainer,
-        unnamespaced: SharedType,
+        not_namespaced: SharedType,
     }
 
     let registry = reflect!(RootContainer);
@@ -1469,7 +1469,7 @@ fn no_namespace_pollution() {
                     NAMED: beta
                   name: BetaContainer
               - []
-          - unnamespaced:
+          - not_namespaced:
               - TYPENAME:
                   namespace: ROOT
                   name: SharedType
@@ -1654,6 +1654,119 @@ fn enum_variant_field_points_to_type_in_a_namespace() {
     : STRUCT:
         - - value:
               - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_struct_variant_field_points_to_type_in_a_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Parent {
+        Value {
+            #[facet(namespace = "other_namespace")]
+            child: Child,
+        },
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : ENUM:
+        - 0:
+            Value:
+              - STRUCT:
+                  - child:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: other_namespace
+                          name: Child
+                      - []
+              - []
+        - []
+    ? namespace:
+        NAMED: other_namespace
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_struct_variant_multiple_fields_with_different_namespaces() {
+    #[derive(Facet)]
+    struct TypeA {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct TypeB {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Parent {
+        Variant {
+            #[facet(namespace = "namespace_a")]
+            field_a: TypeA,
+            #[facet(namespace = "namespace_b")]
+            field_b: TypeB,
+            regular_field: String,
+        },
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : ENUM:
+        - 0:
+            Variant:
+              - STRUCT:
+                  - field_a:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: namespace_a
+                          name: TypeA
+                      - []
+                  - field_b:
+                      - TYPENAME:
+                          namespace:
+                            NAMED: namespace_b
+                          name: TypeB
+                      - []
+                  - regular_field:
+                      - STR
+                      - []
+              - []
+        - []
+    ? namespace:
+        NAMED: namespace_a
+      name: TypeA
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: namespace_b
+      name: TypeB
+    : STRUCT:
+        - - id:
+              - U32
               - []
         - []
     ");
