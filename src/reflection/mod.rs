@@ -32,6 +32,7 @@ pub struct RegistryBuilder {
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
     generic_type_params: HashMap<String, String>,
     processing_nested: bool,
+    current_namespace_context: Option<String>,
 }
 
 impl RegistryBuilder {
@@ -129,18 +130,26 @@ impl RegistryBuilder {
 
     fn format_with_namespace_override(&mut self, shape: &Shape, namespace: &str) {
         let base_name = shape.type_identifier.to_string();
-        let namespaced_key = QualifiedTypeName::namespaced(namespace.to_string(), base_name);
+        let namespaced_key =
+            QualifiedTypeName::namespaced(namespace.to_string(), base_name.clone());
 
         if !self.registry.contains_key(&namespaced_key) {
-            // Temporarily override the get_name function for this processing
-            let original_key = get_name(shape);
+            // Store the previous namespace context
+            let previous_context = self.current_namespace_context.clone();
+            self.current_namespace_context = Some(namespace.to_string());
 
-            // Process the type normally first
-            self.format(shape, None);
+            // Process the type with the namespace context so nested types inherit the namespace
+            self.format(shape, Some(namespace));
 
-            // Get the format that was created and move it to the namespaced location
-            if let Some(format) = self.registry.remove(&original_key) {
-                self.registry.insert(namespaced_key, format);
+            // Restore the previous namespace context
+            self.current_namespace_context = previous_context;
+
+            // Get the format that was created and move it to the namespaced location if needed
+            let original_key = self.get_name_with_mappings(shape);
+            if original_key != namespaced_key {
+                if let Some(format) = self.registry.remove(&original_key) {
+                    self.registry.insert(namespaced_key.clone(), format);
+                }
             }
         }
     }
@@ -200,7 +209,7 @@ impl RegistryBuilder {
     }
 
     fn handle_user_struct(&mut self, shape: &Shape, struct_def: &StructType) {
-        let type_name = get_name(shape);
+        let type_name = self.get_name_with_mappings(shape);
 
         // Update container with the struct format only if not processing nested types
         if !self.processing_nested {
@@ -326,7 +335,7 @@ impl RegistryBuilder {
     }
 
     fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) {
-        let struct_name = get_name(shape);
+        let struct_name = self.get_name_with_mappings(shape);
 
         // Check if already processed using the full namespaced name
         if self.is_processed(&struct_name) {
@@ -365,7 +374,7 @@ impl RegistryBuilder {
 
                     if is_transparent {
                         // For transparent structs, don't create a container - just process the inner type
-                        // This will register the transparent struct's name with its inner type's format
+                        // This will register the transparent struct with its inner type's format
                         self.format(field_shape, current_namespace.as_deref());
                         return;
                     }
@@ -450,15 +459,21 @@ impl RegistryBuilder {
                     let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
                     Format::TypeName(qualified_name)
                 } else {
-                    let renamed_name = get_name(field_shape);
+                    let renamed_name = self.get_name_with_mappings(field_shape);
                     Format::TypeName(renamed_name)
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
                 let target_shape = (pt.target)();
-                get_inner_format(target_shape)
+                get_inner_format_with_context(
+                    target_shape,
+                    self.current_namespace_context.as_deref(),
+                )
             }
-            _ => get_inner_format(field_shape),
+            _ => get_inner_format_with_context(
+                field_shape,
+                self.current_namespace_context.as_deref(),
+            ),
         };
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
@@ -600,7 +615,7 @@ impl RegistryBuilder {
                 let inner_format = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) =
                     &inner_field_shape.ty
                 {
-                    let namespaced_name = get_name(inner_field_shape);
+                    let namespaced_name = self.get_name_with_mappings(inner_field_shape);
                     Format::TypeName(namespaced_name)
                 } else {
                     get_inner_format(inner_field_shape)
@@ -625,7 +640,7 @@ impl RegistryBuilder {
     }
 
     fn format_enum(&mut self, enum_type: &EnumType, shape: &Shape) {
-        let enum_name = get_name(shape);
+        let enum_name = self.get_name_with_mappings(shape);
 
         // Check if already processed using the full namespaced name
         if self.is_processed(&enum_name) {
@@ -723,7 +738,7 @@ impl RegistryBuilder {
                 // For user-defined struct/enum types, create a TypeName reference and process the type
                 let current_namespace = extract_namespace_from_shape(shape);
                 self.format(field_shape, current_namespace.as_deref());
-                let namespaced_name = get_name(field_shape);
+                let namespaced_name = self.get_name_with_mappings(field_shape);
                 VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
             }
         } else {
@@ -806,13 +821,21 @@ impl RegistryBuilder {
         for field in variant.data.fields {
             let field_shape = field.shape();
 
+            // Check for field-level namespace annotation
+            let field_namespace = extract_namespace_from_field_attributes(field);
+
             // Check if the field is user-defined
             let value = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty
             {
                 if field_shape.type_identifier == "()" {
                     Format::Unit
+                } else if let Some(ref ns) = field_namespace {
+                    // Create qualified name with the field-specified namespace (overrides type's own namespace)
+                    let base_name = field_shape.type_identifier.to_string();
+                    let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                    Format::TypeName(qualified_name)
                 } else {
-                    let namespaced_name = get_name(field_shape);
+                    let namespaced_name = self.get_name_with_mappings(field_shape);
                     Format::TypeName(namespaced_name)
                 }
             } else {
@@ -828,8 +851,14 @@ impl RegistryBuilder {
                 });
             }
 
-            let current_namespace = extract_namespace_from_shape(shape);
-            self.format(field_shape, current_namespace.as_deref());
+            // Process the type - if field has namespace override, process under that namespace
+            if let Some(ref ns) = field_namespace {
+                // Process the type and register it under the field-specified namespace
+                self.format_with_namespace_override(field_shape, ns);
+            } else {
+                let current_namespace = extract_namespace_from_shape(shape);
+                self.format(field_shape, current_namespace.as_deref());
+            }
         }
 
         // Extract the formats from the temporary container
@@ -1113,6 +1142,29 @@ impl RegistryBuilder {
         }
         self.processing_nested = false;
     }
+
+    fn get_name_with_mappings(&self, shape: &Shape) -> QualifiedTypeName {
+        // First check if there's a mapping for this type
+        let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
+        if let Some(mapped_name) = self.name_mappings.get(&base_key) {
+            return mapped_name.clone();
+        }
+
+        // Check if we should apply the current namespace context
+        let original_name = get_name(shape);
+        if let Some(ref namespace) = self.current_namespace_context {
+            // If the type doesn't have its own namespace annotation and we're in a namespace context,
+            // apply the context namespace
+            if matches!(original_name.namespace, Namespace::Root) {
+                let namespaced_name =
+                    QualifiedTypeName::namespaced(namespace.clone(), original_name.name.clone());
+                return namespaced_name;
+            }
+        }
+
+        // Fall back to the original get_name logic
+        original_name
+    }
 }
 
 fn get_name(shape: &Shape) -> QualifiedTypeName {
@@ -1272,25 +1324,32 @@ fn should_process_nested_type(shape: &Shape) -> bool {
 }
 
 fn get_inner_format(shape: &Shape) -> Format {
+    get_inner_format_with_context(shape, None)
+}
+
+fn get_inner_format_with_context(shape: &Shape, namespace_context: Option<&str>) -> Format {
     match shape.def {
         Def::Scalar => type_to_format(shape),
         Def::List(inner_list_def) => {
             // Recursively handle nested lists
             let inner_shape = inner_list_def.t();
-            Format::Seq(Box::new(get_inner_format(inner_shape)))
+            Format::Seq(Box::new(get_inner_format_with_context(
+                inner_shape,
+                namespace_context,
+            )))
         }
         Def::Option(option_def) => {
             // Handle Option<T> -> OPTION: T
             let inner_shape = option_def.t();
-            let inner_format = get_inner_format(inner_shape);
+            let inner_format = get_inner_format_with_context(inner_shape, namespace_context);
             Format::Option(Box::new(inner_format))
         }
         Def::Map(map_def) => {
             // Handle Map<K, V> -> MAP: { KEY: K, VALUE: V }
             let key_shape = map_def.k();
             let value_shape = map_def.v();
-            let key_format = get_inner_format(key_shape);
-            let value_format = get_inner_format(value_shape);
+            let key_format = get_inner_format_with_context(key_shape, namespace_context);
+            let value_format = get_inner_format_with_context(value_shape, namespace_context);
             Format::Map {
                 key: Box::new(key_format),
                 value: Box::new(value_format),
@@ -1299,12 +1358,15 @@ fn get_inner_format(shape: &Shape) -> Format {
         Def::Set(set_def) => {
             // Handle Set<T> -> SET: T
             let inner_shape = set_def.t();
-            Format::Set(Box::new(get_inner_format(inner_shape)))
+            Format::Set(Box::new(get_inner_format_with_context(
+                inner_shape,
+                namespace_context,
+            )))
         }
         Def::Array(array_def) => {
             // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
             let inner_shape = array_def.t();
-            let inner_format = get_inner_format(inner_shape);
+            let inner_format = get_inner_format_with_context(inner_shape, namespace_context);
             Format::TupleArray {
                 content: Box::new(inner_format),
                 size: array_def.n,
@@ -1318,7 +1380,8 @@ fn get_inner_format(shape: &Shape) -> Format {
                     let mut tuple_formats = vec![];
                     for field in struct_type.fields {
                         let field_shape = field.shape();
-                        let field_format = get_inner_format(field_shape);
+                        let field_format =
+                            get_inner_format_with_context(field_shape, namespace_context);
                         tuple_formats.push(field_format);
                     }
                     return Format::Tuple(tuple_formats);
@@ -1333,10 +1396,24 @@ fn get_inner_format(shape: &Shape) -> Format {
             {
                 // For pointer types like &'static str, get the format of the target type
                 let target_shape = (pt.target)();
-                get_inner_format(target_shape)
+                get_inner_format_with_context(target_shape, namespace_context)
             } else {
-                // For user-defined types, use TypeName with renamed name if applicable
-                let name = get_name(shape);
+                // For user-defined types, use TypeName with namespace context if available
+                let original_name = get_name(shape);
+                let name = if let Some(namespace) = namespace_context {
+                    // If the type doesn't have its own namespace annotation and we're in a namespace context,
+                    // apply the context namespace
+                    if matches!(original_name.namespace, Namespace::Root) {
+                        QualifiedTypeName::namespaced(
+                            namespace.to_string(),
+                            original_name.name.clone(),
+                        )
+                    } else {
+                        original_name
+                    }
+                } else {
+                    original_name
+                };
 
                 Format::TypeName(name)
             }
@@ -1345,14 +1422,17 @@ fn get_inner_format(shape: &Shape) -> Format {
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();
-            Format::Seq(Box::new(get_inner_format(inner_shape)))
+            Format::Seq(Box::new(get_inner_format_with_context(
+                inner_shape,
+                namespace_context,
+            )))
         }
         Def::Pointer(pointer_def) => {
             // Handle Pointer (Box, Arc, etc.) by recursively processing the inner type
             if let Some(inner_shape) = pointer_def.pointee {
-                get_inner_format(inner_shape())
+                get_inner_format_with_context(inner_shape(), namespace_context)
             } else {
-                // If no pointee, treat as unit
+                // Fallback for pointers without a known pointee
                 Format::Unit
             }
         }
