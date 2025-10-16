@@ -7,7 +7,7 @@ use std::{
 
 use facet::Facet;
 
-use crate::{emit_java, generation::Encoding};
+use crate::emit_java;
 
 #[test]
 fn unit_struct_1() {

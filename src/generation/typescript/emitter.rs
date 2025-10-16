@@ -11,7 +11,7 @@ use crate::{
         Encoding, PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
+        ContainerFormat, Format, FormatHolder as _, Named, Namespace, VariantFormat,
     },
 };
 
@@ -499,19 +499,13 @@ return list;
     ) -> std::io::Result<()> {
         let fields = match variant {
             VariantFormat::Unit => Vec::new(),
-            VariantFormat::NewType(format) => vec![Named {
-                name: "value".to_string(),
-                doc: Doc::new(),
-                value: format.as_ref().clone(),
-            }],
+            VariantFormat::NewType(format) => {
+                vec![Named::new(format.as_ref(), "value".to_string())]
+            }
             VariantFormat::Tuple(formats) => formats
                 .iter()
                 .enumerate()
-                .map(|(i, f)| Named {
-                    name: format!("field{i}"),
-                    doc: Doc::new(),
-                    value: f.clone(),
-                })
+                .map(|(i, f)| Named::new(f, format!("field{i}")))
                 .collect(),
             VariantFormat::Struct(fields) => fields.clone(),
             VariantFormat::Variable(_) => panic!("incorrect value"),
@@ -678,19 +672,13 @@ switch (index) {{",
     ) -> std::io::Result<()> {
         let fields = match format {
             ContainerFormat::UnitStruct(_doc) => Vec::new(),
-            ContainerFormat::NewTypeStruct(format, _doc) => vec![Named {
-                name: "value".to_string(),
-                doc: Doc::new(),
-                value: format.as_ref().clone(),
-            }],
+            ContainerFormat::NewTypeStruct(format, _doc) => {
+                vec![Named::new(format.as_ref(), "value".to_string())]
+            }
             ContainerFormat::TupleStruct(formats, _doc) => formats
                 .iter()
                 .enumerate()
-                .map(|(i, f)| Named {
-                    name: format!("field{i}"),
-                    doc: Doc::new(),
-                    value: f.clone(),
-                })
+                .map(|(i, f)| Named::new(f, format!("field{i}")))
                 .collect::<Vec<_>>(),
             ContainerFormat::Struct(fields, _doc) => fields.clone(),
             ContainerFormat::Enum(variants, _doc) => {
