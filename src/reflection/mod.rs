@@ -20,7 +20,7 @@ use format::{
 
 use crate::Registry;
 
-const SUPPORTED_GENERIC_TYPES: &[&str] = &[
+const SUPPORTED_GENERIC_TYPES: [&str; 10] = [
     "Arc", "Rc", "Box", "Option", "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "DateTime",
 ];
 
@@ -33,6 +33,7 @@ pub struct RegistryBuilder {
     generic_type_params: HashMap<String, String>,
     processing_nested: bool,
     current_namespace_context: Option<Namespace>,
+    type_namespace_sources: HashMap<QualifiedTypeName, bool>, // true = explicit, false = inherited
 }
 
 impl RegistryBuilder {
@@ -65,6 +66,23 @@ impl RegistryBuilder {
 
 impl RegistryBuilder {
     fn push(&mut self, name: QualifiedTypeName, container: ContainerFormat) {
+        self.registry.insert(name.clone(), container);
+        self.current.push(name);
+    }
+
+    fn push_with_type_check(
+        &mut self,
+        name: QualifiedTypeName,
+        container: ContainerFormat,
+        is_explicit: bool,
+    ) {
+        // Check for conflicts: type name in multiple namespaces with mixed explicit/inherited sources
+        self.check_namespace_ambiguity(&name, is_explicit);
+
+        // Record this type name -> namespace source mapping
+        self.type_namespace_sources
+            .insert(name.clone(), is_explicit);
+
         self.registry.insert(name.clone(), container);
         self.current.push(name);
     }
@@ -279,6 +297,7 @@ impl RegistryBuilder {
             Def::Undefined => {
                 self.handle_undefined_def(shape);
             }
+            _ => (),
         }
     }
 
@@ -370,7 +389,12 @@ impl RegistryBuilder {
 
         match struct_type.kind {
             StructKind::Unit => {
-                self.push(struct_name, ContainerFormat::UnitStruct(shape.into()));
+                let is_explicit = extract_namespace_from_shape(shape).is_some();
+                self.push_with_type_check(
+                    struct_name,
+                    ContainerFormat::UnitStruct(shape.into()),
+                    is_explicit,
+                );
                 self.pop();
             }
             StructKind::TupleStruct => {
@@ -390,7 +414,8 @@ impl RegistryBuilder {
 
                     // Handle regular newtype struct
                     let container = ContainerFormat::NewTypeStruct(Box::default(), shape.into());
-                    self.push(struct_name, container);
+                    let is_explicit = extract_namespace_from_shape(shape).is_some();
+                    self.push_with_type_check(struct_name, container, is_explicit);
 
                     // Process the inner field
                     self.format(field_shape);
@@ -399,7 +424,8 @@ impl RegistryBuilder {
                 } else {
                     // Handle tuple struct with multiple fields
                     let container = ContainerFormat::TupleStruct(vec![], shape.into());
-                    self.push(struct_name, container);
+                    let is_explicit = extract_namespace_from_shape(shape).is_some();
+                    self.push_with_type_check(struct_name, container, is_explicit);
                     for field in struct_type.fields {
                         let skip = field.attributes.iter().any(|attr| match attr {
                             FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
@@ -414,7 +440,8 @@ impl RegistryBuilder {
             }
             StructKind::Struct => {
                 let container = ContainerFormat::Struct(vec![], shape.into());
-                self.push(struct_name, container);
+                let is_explicit = extract_namespace_from_shape(shape).is_some();
+                self.push_with_type_check(struct_name, container, is_explicit);
                 for field in struct_type.fields {
                     let skip = field.attributes.iter().any(|attr| match attr {
                         FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
@@ -719,7 +746,8 @@ impl RegistryBuilder {
         let variants = self.process_enum_variants(enum_type, shape);
 
         let container = ContainerFormat::Enum(variants, shape.into());
-        self.push(enum_name, container);
+        let is_explicit = extract_namespace_from_shape(shape).is_some();
+        self.push_with_type_check(enum_name, container, is_explicit);
         self.pop();
 
         // Restore previous context if we changed it
@@ -1240,7 +1268,7 @@ impl RegistryBuilder {
         self.processing_nested = false;
     }
 
-    fn get_name_with_mappings(&self, shape: &Shape) -> QualifiedTypeName {
+    fn get_name_with_mappings(&mut self, shape: &Shape) -> QualifiedTypeName {
         // First check if there's a mapping for this type
         let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
         if let Some(mapped_name) = self.name_mappings.get(&base_key) {
@@ -1255,6 +1283,8 @@ impl RegistryBuilder {
 
         if has_explicit_namespace {
             // If the type has explicit namespace annotation, respect it regardless of context
+            // But still check for namespace conflicts
+            self.check_namespace_ambiguity(&original_name, true);
             return original_name;
         }
 
@@ -1271,6 +1301,10 @@ impl RegistryBuilder {
                         context_ns.clone(),
                         original_name.name.clone(),
                     );
+
+                    // Check for namespace ambiguity for inherited namespaces
+                    self.check_namespace_ambiguity(&namespaced_name, false);
+
                     return namespaced_name;
                 }
             }
@@ -1278,6 +1312,28 @@ impl RegistryBuilder {
 
         // Fall back to the original name (which will be root if no annotation)
         original_name
+    }
+
+    fn check_namespace_ambiguity(&mut self, new_name: &QualifiedTypeName, is_explicit: bool) {
+        // Check for conflicts: type name in multiple namespaces with mixed explicit/inherited sources
+        for (existing_name, existing_is_explicit) in &self.type_namespace_sources {
+            if existing_name.name == new_name.name && existing_name.namespace != new_name.namespace
+            {
+                // Error if at least one is inherited (same type appearing in multiple namespaces)
+                let both_explicit = is_explicit && *existing_is_explicit;
+                assert!(
+                    both_explicit,
+                    "Ambiguous namespace inheritance detected: Type '{}' appears in both namespace '{}' and namespace '{}'. \
+                        This occurs when a type without explicit namespace annotation is inherited from multiple parents with different namespaces. \
+                        Consider adding explicit #[facet(namespace = \"...\")] annotations to resolve the ambiguity.",
+                    new_name.name, existing_name.namespace, new_name.namespace
+                );
+            }
+        }
+
+        // Record this type name -> namespace source mapping
+        self.type_namespace_sources
+            .insert(new_name.clone(), is_explicit);
     }
 }
 
@@ -1564,6 +1620,7 @@ fn get_inner_format_with_context(shape: &Shape, namespace_context: Option<&Names
                 Format::Unit
             }
         }
+        _ => todo!(),
     }
 }
 

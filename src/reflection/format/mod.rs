@@ -25,6 +25,7 @@ use serde::{
 use std::{
     cell::{Ref, RefCell, RefMut},
     collections::BTreeMap,
+    fmt,
     rc::Rc,
 };
 
@@ -36,6 +37,15 @@ pub enum Namespace {
     Root,
     /// A named namespace.
     Named(String),
+}
+
+impl fmt::Display for Namespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Namespace::Root => write!(f, "ROOT"),
+            Namespace::Named(name) => write!(f, r#""{name}""#),
+        }
+    }
 }
 
 /// A qualified type name with namespace information.
@@ -346,7 +356,7 @@ impl FormatHolder for VariantFormat {
 
 impl<T> FormatHolder for Named<T>
 where
-    T: FormatHolder + std::fmt::Debug,
+    T: FormatHolder + fmt::Debug,
 {
     fn visit<'a>(&'a self, f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
         self.value.visit(f)
@@ -409,7 +419,7 @@ mod not_implemented {
 
 impl<T> FormatHolder for Variable<T>
 where
-    T: FormatHolder + std::fmt::Debug + Clone,
+    T: FormatHolder + fmt::Debug + Clone,
 {
     fn visit<'a>(&'a self, _f: &mut dyn FnMut(&'a Format) -> Result<()>) -> Result<()> {
         Err(Error::UnknownFormat)
@@ -658,7 +668,7 @@ where
 {
     type Value = Named<T>;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a single entry map")
     }
 

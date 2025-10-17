@@ -89,11 +89,11 @@ fn nested_namespaced_structs() {
 #[test]
 fn nested_namespaced_enums() {
     mod one {
-        #![allow(unused)]
-
         use facet::Facet;
+
         #[derive(Facet)]
         #[repr(C)]
+        #[allow(unused)]
         pub enum GrandChild {
             None,
         }
@@ -1468,8 +1468,9 @@ fn mixed_containers_with_explicit_namespace() {
 }
 
 #[test]
+#[should_panic(expected = "Ambiguous namespace inheritance detected")]
+/// Same type appearing in **multiple inherited namespaces** including ROOT
 fn no_namespace_pollution() {
-    // Test that types without explicit namespaces don't get duplicated across multiple namespaces
     #[derive(Facet)]
     struct SharedType {
         value: String,
@@ -1494,75 +1495,7 @@ fn no_namespace_pollution() {
         not_namespaced: SharedType,
     }
 
-    let registry = reflect!(RootContainer);
-    insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: RootContainer
-    : STRUCT:
-        - - alpha:
-              - TYPENAME:
-                  namespace:
-                    NAMED: alpha
-                  name: AlphaContainer
-              - []
-          - beta:
-              - TYPENAME:
-                  namespace:
-                    NAMED: beta
-                  name: BetaContainer
-              - []
-          - not_namespaced:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SharedType
-              - []
-        - []
-    ? namespace: ROOT
-      name: SharedType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: alpha
-      name: AlphaContainer
-    : STRUCT:
-        - - shared:
-              - TYPENAME:
-                  namespace:
-                    NAMED: alpha
-                  name: SharedType
-              - []
-        - []
-    ? namespace:
-        NAMED: alpha
-      name: SharedType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: beta
-      name: BetaContainer
-    : STRUCT:
-        - - shared:
-              - TYPENAME:
-                  namespace:
-                    NAMED: beta
-                  name: SharedType
-              - []
-        - []
-    ? namespace:
-        NAMED: beta
-      name: SharedType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ");
+    let _registry = reflect!(RootContainer);
 }
 
 // Tests field-level namespace annotation: `#[facet(namespace = "ns")] field: Type`
@@ -1913,8 +1846,9 @@ fn struct_field_with_collection_inherits_namespace() {
     ");
 }
 
-// Tests `#[facet(namespace = None)]` without quotes - this explicitly clears namespace context
+/// Same type appearing in ROOT (via type-level `#[facet(namespace = None)]`) vs inherited namespace
 #[test]
+#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 fn explicit_none_namespace() {
     #[derive(Facet)]
     struct SimpleType {
@@ -1934,49 +1868,7 @@ fn explicit_none_namespace() {
         simple_direct: SimpleType,
     }
 
-    let registry = reflect!(WrapperType);
-    insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: ExplicitRootType
-    : STRUCT:
-        - - simple:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SimpleType
-              - []
-        - []
-    ? namespace: ROOT
-      name: SimpleType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: wrapper
-      name: SimpleType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: wrapper
-      name: WrapperType
-    : STRUCT:
-        - - explicit_root:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: ExplicitRootType
-              - []
-          - simple_direct:
-              - TYPENAME:
-                  namespace:
-                    NAMED: wrapper
-                  name: SimpleType
-              - []
-        - []
-    ");
+    let _registry = reflect!(WrapperType);
 }
 
 // Tests the difference between `namespace = None` (clears context) and `namespace = "None"` (creates "None" namespace)
@@ -2019,6 +1911,8 @@ fn namespace_named_none_as_string() {
 }
 
 #[test]
+#[should_panic(expected = "Ambiguous namespace inheritance detected")]
+/// Same type appearing in ROOT (via field-level `#[facet(namespace = None)]`) vs inherited namespace
 fn field_level_explicit_none_namespace() {
     #[derive(Facet)]
     struct SimpleType {
@@ -2033,40 +1927,7 @@ fn field_level_explicit_none_namespace() {
         normal_field: SimpleType,
     }
 
-    let registry = reflect!(Container);
-    insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: SimpleType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: container
-      name: Container
-    : STRUCT:
-        - - field:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SimpleType
-              - []
-          - normal_field:
-              - TYPENAME:
-                  namespace:
-                    NAMED: container
-                  name: SimpleType
-              - []
-        - []
-    ? namespace:
-        NAMED: container
-      name: SimpleType
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ");
+    let _registry = reflect!(Container);
 }
 
 #[test]
@@ -2199,48 +2060,165 @@ fn deeply_nested_explicit_none() {
 }
 
 #[test]
-fn mixed_none_and_inheritance_in_same_structure() {
+#[should_panic(expected = "Ambiguous namespace inheritance detected")]
+/// Same type appearing in multiple **inherited namespaces** from different parents
+fn ambiguous_namespace_inheritance_should_error() {
     #[derive(Facet)]
-    struct SimpleType {
+    struct SharedType {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "parent")]
-    struct Container {
-        #[facet(namespace = None)]
-        root_field: SimpleType, // Should be in ROOT
-        inherited_field: SimpleType, // Should be in "parent"
+    #[facet(namespace = "namespace_a")]
+    struct ParentA {
+        shared: SharedType, // SharedType inherits "namespace_a"
     }
 
-    let registry = reflect!(Container);
+    #[derive(Facet)]
+    #[facet(namespace = "namespace_b")]
+    struct ParentB {
+        shared: SharedType, // SharedType inherits "namespace_b" - conflict!
+    }
+
+    // This should cause an error because SharedType appears in both
+    // "namespace_a" and "namespace_b" through different inheritance paths
+    #[derive(Facet)]
+    struct Root {
+        parent_a: ParentA,
+        parent_b: ParentB,
+    }
+
+    let _registry = reflect!(Root);
+}
+
+#[test]
+fn explicit_namespace_prevents_inheritance_ambiguity() {
+    // This test shows that explicit namespace annotations prevent inheritance conflicts
+
+    #[derive(Facet)]
+    #[facet(namespace = "explicit")]
+    struct SharedType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "namespace_a")]
+    struct ParentA {
+        shared: SharedType, // SharedType has explicit "explicit" namespace
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "namespace_b")]
+    struct ParentB {
+        shared: SharedType, // SharedType still has explicit "explicit" namespace - no conflict
+    }
+
+    #[derive(Facet)]
+    struct Root {
+        parent_a: ParentA,
+        parent_b: ParentB,
+    }
+
+    let registry = reflect!(Root);
+
+    // SharedType should only appear once in the "explicit" namespace
+    let shared_type_entries: Vec<_> = registry.keys().filter(|k| k.name == "SharedType").collect();
+
+    assert_eq!(shared_type_entries.len(), 1);
+    assert_eq!(
+        shared_type_entries[0].namespace,
+        crate::reflection::format::Namespace::Named("explicit".to_string())
+    );
+}
+
+#[test]
+fn fixed_namespace_pollution_with_explicit_annotations() {
+    // Test showing how to fix namespace pollution by adding explicit namespace annotations
+    #[derive(Facet)]
+    #[facet(namespace = "shared")]
+    struct SharedType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "alpha")]
+    struct AlphaContainer {
+        shared: SharedType, // SharedType has explicit "shared" namespace
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "beta")]
+    struct BetaContainer {
+        shared: SharedType, // SharedType still has explicit "shared" namespace - no conflict
+    }
+
+    #[derive(Facet)]
+    struct RootContainer {
+        alpha: AlphaContainer,
+        beta: BetaContainer,
+        not_namespaced: SharedType, // SharedType still has explicit "shared" namespace
+    }
+
+    let registry = reflect!(RootContainer);
+
+    // SharedType should only appear once in the "shared" namespace
+    let shared_type_entries: Vec<_> = registry.keys().filter(|k| k.name == "SharedType").collect();
+
+    assert_eq!(shared_type_entries.len(), 1);
+    assert_eq!(
+        shared_type_entries[0].namespace,
+        crate::reflection::format::Namespace::Named("shared".to_string())
+    );
+
+    // Verify the registry structure shows SharedType is only in the "shared" namespace
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
-      name: SimpleType
+      name: RootContainer
     : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ? namespace:
-        NAMED: parent
-      name: Container
-    : STRUCT:
-        - - root_field:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: SimpleType
-              - []
-          - inherited_field:
+        - - alpha:
               - TYPENAME:
                   namespace:
-                    NAMED: parent
-                  name: SimpleType
+                    NAMED: alpha
+                  name: AlphaContainer
+              - []
+          - beta:
+              - TYPENAME:
+                  namespace:
+                    NAMED: beta
+                  name: BetaContainer
+              - []
+          - not_namespaced:
+              - TYPENAME:
+                  namespace:
+                    NAMED: shared
+                  name: SharedType
               - []
         - []
     ? namespace:
-        NAMED: parent
-      name: SimpleType
+        NAMED: alpha
+      name: AlphaContainer
+    : STRUCT:
+        - - shared:
+              - TYPENAME:
+                  namespace:
+                    NAMED: shared
+                  name: SharedType
+              - []
+        - []
+    ? namespace:
+        NAMED: beta
+      name: BetaContainer
+    : STRUCT:
+        - - shared:
+              - TYPENAME:
+                  namespace:
+                    NAMED: shared
+                  name: SharedType
+              - []
+        - []
+    ? namespace:
+        NAMED: shared
+      name: SharedType
     : STRUCT:
         - - value:
               - STR
