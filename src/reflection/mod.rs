@@ -32,7 +32,7 @@ pub struct RegistryBuilder {
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
     generic_type_params: HashMap<String, String>,
     processing_nested: bool,
-    current_namespace_context: Option<String>,
+    current_namespace_context: Option<Namespace>,
 }
 
 impl RegistryBuilder {
@@ -58,7 +58,7 @@ impl RegistryBuilder {
     /// Reflect a type into the registry.
     #[must_use]
     pub fn add_type<'a, T: Facet<'a>>(mut self) -> Self {
-        self.format(T::SHAPE, None);
+        self.format(T::SHAPE);
         self
     }
 }
@@ -136,10 +136,10 @@ impl RegistryBuilder {
         if !self.registry.contains_key(&namespaced_key) {
             // Store the previous namespace context
             let previous_context = self.current_namespace_context.clone();
-            self.current_namespace_context = Some(namespace.to_string());
+            self.current_namespace_context = Some(Namespace::Named(namespace.to_string()));
 
             // Process the type with the namespace context so nested types inherit the namespace
-            self.format(shape, Some(namespace));
+            self.format(shape);
 
             // Restore the previous namespace context
             self.current_namespace_context = previous_context;
@@ -154,7 +154,7 @@ impl RegistryBuilder {
         }
     }
 
-    fn format(&mut self, shape: &Shape, namespace: Option<&str>) {
+    fn format(&mut self, shape: &Shape) {
         assert!(
             self.is_supported_generic_type(shape),
             "Unsupported generic type: {shape}, the type may have already been used with different parameters"
@@ -162,17 +162,17 @@ impl RegistryBuilder {
 
         // First check for special cases in the def system (like Option)
         if let Def::Option(option_def) = shape.def {
-            self.format_option(option_def, namespace);
+            self.format_option(option_def);
             return;
         }
 
         // Try type system first
-        if self.try_format_from_type_system(shape, namespace) {
+        if self.try_format_from_type_system(shape) {
             return;
         }
 
         // Fall back to def system
-        self.format_from_def_system(shape, namespace);
+        self.format_from_def_system(shape);
     }
 
     fn is_supported_generic_type(&mut self, shape: &Shape) -> bool {
@@ -191,7 +191,7 @@ impl RegistryBuilder {
         previous == &current
     }
 
-    fn try_format_from_type_system(&mut self, shape: &Shape, namespace: Option<&str>) -> bool {
+    fn try_format_from_type_system(&mut self, shape: &Shape) -> bool {
         match &shape.ty {
             Type::User(UserType::Struct(struct_def)) => {
                 self.handle_user_struct(shape, struct_def);
@@ -201,9 +201,7 @@ impl RegistryBuilder {
                 self.format_enum(enum_def, shape);
                 true
             }
-            Type::Sequence(sequence_type) => {
-                self.handle_sequence_type(shape, sequence_type, namespace)
-            }
+            Type::Sequence(sequence_type) => self.handle_sequence_type(shape, sequence_type),
             _ => false,
         }
     }
@@ -225,17 +223,12 @@ impl RegistryBuilder {
         self.format_struct(struct_def, shape);
     }
 
-    fn handle_sequence_type(
-        &mut self,
-        shape: &Shape,
-        sequence_type: &SequenceType,
-        namespace: Option<&str>,
-    ) -> bool {
+    fn handle_sequence_type(&mut self, shape: &Shape, sequence_type: &SequenceType) -> bool {
         match sequence_type {
             SequenceType::Slice(slice_type) => {
                 // For slices, use the Def::Slice if available
                 if let Def::Slice(slice_def) = shape.def {
-                    self.format_slice(slice_def, namespace);
+                    self.format_slice(slice_def);
                     true
                 } else {
                     // Fallback: create a slice format from the sequence type info
@@ -243,54 +236,53 @@ impl RegistryBuilder {
                     let inner_format = get_inner_format(target_shape);
                     let slice_format = Format::Seq(Box::new(inner_format));
                     self.update_container_format(slice_format);
-                    self.process_nested_types(target_shape, namespace);
+                    self.process_nested_types(target_shape);
                     true
                 }
             }
             SequenceType::Array(array_type) => {
                 // For arrays, use the Def::Array if available
                 if let Def::Array(array_def) = shape.def {
-                    self.format_array(array_def, namespace);
+                    self.format_array(array_def);
                     true
                 } else {
                     // Fallback: create an array format from the sequence type info
                     let target_shape = array_type.t;
                     let inner_format = get_inner_format(target_shape);
-                    // For arrays without size info, treat as sequences
-                    let array_format = Format::Seq(Box::new(inner_format));
+                    let array_format = Format::Seq(Box::new(inner_format)); // Arrays are also sequences
                     self.update_container_format(array_format);
-                    self.process_nested_types(target_shape, namespace);
+                    self.process_nested_types(target_shape);
                     true
                 }
             }
         }
     }
 
-    fn format_from_def_system(&mut self, shape: &Shape, namespace: Option<&str>) {
+    fn format_from_def_system(&mut self, shape: &Shape) {
         match shape.def {
             Def::Scalar => self.format_scalar(shape),
-            Def::Map(map_def) => self.format_map(map_def, namespace),
-            Def::List(list_def) => self.format_list(list_def, namespace),
-            Def::Slice(slice_def) => self.format_slice(slice_def, namespace),
-            Def::Array(array_def) => self.format_array(array_def, namespace),
-            Def::Option(option_def) => self.format_option(option_def, namespace),
-            Def::Set(set_def) => self.format_set(set_def, namespace),
+            Def::Map(map_def) => self.format_map(map_def),
+            Def::List(list_def) => self.format_list(list_def),
+            Def::Slice(slice_def) => self.format_slice(slice_def),
+            Def::Array(array_def) => self.format_array(array_def),
+            Def::Set(set_def) => self.format_set(set_def),
+            Def::Option(option_def) => self.format_option(option_def),
             Def::Pointer(PointerDef {
                 pointee: Some(inner_shape),
                 ..
             }) => {
-                self.handle_pointer(inner_shape(), namespace);
+                self.handle_pointer(inner_shape());
             }
             Def::Pointer(PointerDef { pointee: None, .. }) => {
                 self.handle_opaque_pointee();
             }
             Def::Undefined => {
-                self.handle_undefined_def(shape, namespace);
+                self.handle_undefined_def(shape);
             }
         }
     }
 
-    fn handle_pointer(&mut self, inner_shape: &Shape, namespace: Option<&str>) {
+    fn handle_pointer(&mut self, inner_shape: &Shape) {
         // For Pointer, we need to update the current container with the inner type's format
         let inner_format = get_format_for_shape(inner_shape);
 
@@ -298,10 +290,10 @@ impl RegistryBuilder {
         self.update_container_format_if_unknown(inner_format);
 
         // Also process the inner type if it's a user-defined type
-        self.process_nested_types(inner_shape, namespace);
+        self.process_nested_types(inner_shape);
     }
 
-    fn handle_undefined_def(&mut self, shape: &Shape, namespace: Option<&str>) {
+    fn handle_undefined_def(&mut self, shape: &Shape) {
         // Handle the case when not yet migrated to the Type enum
         // For primitives, we can try to infer the type
         match &shape.ty {
@@ -323,7 +315,7 @@ impl RegistryBuilder {
                 }
             },
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                self.format((pt.target)(), namespace);
+                self.format((pt.target)());
             }
             _ => {}
         }
@@ -355,7 +347,24 @@ impl RegistryBuilder {
         }
 
         // Extract namespace from this struct if it has one
-        let current_namespace = extract_namespace_from_shape(shape);
+        let type_level_namespace = extract_namespace_from_shape(shape);
+
+        // Set namespace context if this type declares one
+        let previous_context = match type_level_namespace {
+            Some(Namespace::Root) => {
+                // #[facet(namespace = None)] means clear the context for children
+                let prev = self.current_namespace_context.clone();
+                self.current_namespace_context = None;
+                Some(prev)
+            }
+            Some(Namespace::Named(_)) => {
+                // Set the named namespace as context
+                let prev = self.current_namespace_context.clone();
+                self.current_namespace_context = type_level_namespace;
+                Some(prev)
+            }
+            None => None,
+        };
 
         self.mark_processed(struct_name.clone());
 
@@ -375,7 +384,7 @@ impl RegistryBuilder {
                     if is_transparent {
                         // For transparent structs, don't create a container - just process the inner type
                         // This will register the transparent struct with its inner type's format
-                        self.format(field_shape, current_namespace.as_deref());
+                        self.format(field_shape);
                         return;
                     }
 
@@ -384,7 +393,7 @@ impl RegistryBuilder {
                     self.push(struct_name, container);
 
                     // Process the inner field
-                    self.format(field_shape, current_namespace.as_deref());
+                    self.format(field_shape);
 
                     self.pop();
                 } else {
@@ -398,7 +407,7 @@ impl RegistryBuilder {
                         if skip {
                             continue;
                         }
-                        self.format(field.shape(), current_namespace.as_deref());
+                        self.format(field.shape());
                     }
                     self.pop();
                 }
@@ -413,7 +422,7 @@ impl RegistryBuilder {
                     if skip {
                         continue;
                     }
-                    self.handle_struct_field(field, current_namespace.as_deref());
+                    self.handle_struct_field(field);
                 }
                 self.pop();
             }
@@ -422,9 +431,14 @@ impl RegistryBuilder {
                 // they are handled in the StructKind::Struct case above
             }
         }
+
+        // Restore previous context if we changed it
+        if let Some(prev_context) = previous_context {
+            self.current_namespace_context = prev_context;
+        }
     }
 
-    fn handle_struct_field(&mut self, field: &Field, namespace: Option<&str>) {
+    fn handle_struct_field(&mut self, field: &Field) {
         let field_shape = field.shape();
 
         // Check for field-level attributes first
@@ -436,11 +450,11 @@ impl RegistryBuilder {
             return;
         }
 
-        if self.try_handle_option_field(field, namespace) {
+        if self.try_handle_option_field(field) {
             return;
         }
 
-        if self.try_handle_tuple_struct_field(field, namespace) {
+        if self.try_handle_tuple_struct_field(field) {
             return;
         }
 
@@ -456,7 +470,12 @@ impl RegistryBuilder {
                 if let Some(ref ns) = field_namespace {
                     // Create qualified name with the field-specified namespace (overrides type's own namespace)
                     let base_name = field_shape.type_identifier.to_string();
-                    let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                    let qualified_name = match ns {
+                        Namespace::Root => QualifiedTypeName::root(base_name),
+                        Namespace::Named(name) => {
+                            QualifiedTypeName::namespaced(name.clone(), base_name)
+                        }
+                    };
                     Format::TypeName(qualified_name)
                 } else {
                     let renamed_name = self.get_name_with_mappings(field_shape);
@@ -465,15 +484,11 @@ impl RegistryBuilder {
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
                 let target_shape = (pt.target)();
-                get_inner_format_with_context(
-                    target_shape,
-                    self.current_namespace_context.as_deref(),
-                )
+                get_inner_format_with_context(target_shape, self.current_namespace_context.as_ref())
             }
-            _ => get_inner_format_with_context(
-                field_shape,
-                self.current_namespace_context.as_deref(),
-            ),
+            _ => {
+                get_inner_format_with_context(field_shape, self.current_namespace_context.as_ref())
+            }
         };
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
@@ -486,10 +501,20 @@ impl RegistryBuilder {
         }
         // Process the type - if field has namespace override, process under that namespace
         if let Some(ref ns) = field_namespace {
-            // Process the type and register it under the field-specified namespace
-            self.format_with_namespace_override(field_shape, ns);
+            match ns {
+                Namespace::Root => {
+                    // Store previous context and set to explicit root
+                    let previous_context = self.current_namespace_context.clone();
+                    self.current_namespace_context = Some(Namespace::Root);
+                    self.format(field_shape);
+                    self.current_namespace_context = previous_context;
+                }
+                Namespace::Named(name) => {
+                    self.format_with_namespace_override(field_shape, name);
+                }
+            }
         } else {
-            self.format(field_shape, namespace);
+            self.format(field_shape);
         }
     }
 
@@ -541,7 +566,7 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_option_field(&mut self, field: &Field, namespace: Option<&str>) -> bool {
+    fn try_handle_option_field(&mut self, field: &Field) -> bool {
         let field_shape = field.shape();
         // Check if the field is an Option
         if field_shape.type_identifier == "Option" {
@@ -562,7 +587,7 @@ impl RegistryBuilder {
 
                 // If the inner type is a user-defined type, we need to process it too
                 if !matches!(inner_shape.def, Def::Scalar) {
-                    self.format(inner_shape, namespace);
+                    self.format(inner_shape);
                 }
                 return true;
             }
@@ -570,7 +595,7 @@ impl RegistryBuilder {
         false
     }
 
-    fn try_handle_tuple_struct_field(&mut self, field: &Field, _namespace: Option<&str>) -> bool {
+    fn try_handle_tuple_struct_field(&mut self, field: &Field) -> bool {
         let field_shape = field.shape();
         // Check if the field is a tuple struct
         if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
@@ -630,7 +655,20 @@ impl RegistryBuilder {
                 }
 
                 // Process the inner type with the transparent struct's namespace context
-                self.format(inner_field_shape, transparent_namespace.as_deref());
+                let previous_context = if let Some(ref transparent_ns) = transparent_namespace {
+                    let prev = self.current_namespace_context.clone();
+                    self.current_namespace_context = Some(transparent_ns.clone());
+                    Some(prev)
+                } else {
+                    None
+                };
+
+                self.format(inner_field_shape);
+
+                // Restore previous context if we changed it
+                if let Some(prev_context) = previous_context {
+                    self.current_namespace_context = prev_context;
+                }
 
                 return true;
             }
@@ -656,6 +694,26 @@ impl RegistryBuilder {
             self.register_type_mapping(name, enum_name.clone());
         }
 
+        // Extract namespace from this enum if it has one
+        let type_level_namespace = extract_namespace_from_shape(shape);
+
+        // Set namespace context if this type declares one
+        let previous_context = match type_level_namespace {
+            Some(Namespace::Root) => {
+                // #[facet(namespace = None)] means clear the context for children
+                let prev = self.current_namespace_context.clone();
+                self.current_namespace_context = None;
+                Some(prev)
+            }
+            Some(Namespace::Named(_)) => {
+                // Set the named namespace as context
+                let prev = self.current_namespace_context.clone();
+                self.current_namespace_context = type_level_namespace;
+                Some(prev)
+            }
+            None => None,
+        };
+
         self.mark_processed(enum_name.clone());
 
         let variants = self.process_enum_variants(enum_type, shape);
@@ -663,6 +721,11 @@ impl RegistryBuilder {
         let container = ContainerFormat::Enum(variants, shape.into());
         self.push(enum_name, container);
         self.pop();
+
+        // Restore previous context if we changed it
+        if let Some(prev_context) = previous_context {
+            self.current_namespace_context = prev_context;
+        }
     }
 
     fn process_enum_variants(
@@ -727,17 +790,26 @@ impl RegistryBuilder {
             let field_namespace = extract_namespace_from_field_attributes(&field);
 
             if let Some(ref ns) = field_namespace {
-                // Process the type under the field-specified namespace
-                self.format_with_namespace_override(field_shape, ns);
-
-                // Create qualified name with the field-specified namespace
+                // Process the type under the field-specified namespace and create qualified name
                 let base_name = field_shape.type_identifier.to_string();
-                let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                let qualified_name = match ns {
+                    Namespace::Root => {
+                        // Store previous context and set to explicit root
+                        let previous_context = self.current_namespace_context.clone();
+                        self.current_namespace_context = Some(Namespace::Root);
+                        self.format(field_shape);
+                        self.current_namespace_context = previous_context;
+                        QualifiedTypeName::root(base_name)
+                    }
+                    Namespace::Named(name) => {
+                        self.format_with_namespace_override(field_shape, name);
+                        QualifiedTypeName::namespaced(name.clone(), base_name)
+                    }
+                };
                 VariantFormat::NewType(Box::new(Format::TypeName(qualified_name)))
             } else {
                 // For user-defined struct/enum types, create a TypeName reference and process the type
-                let current_namespace = extract_namespace_from_shape(shape);
-                self.format(field_shape, current_namespace.as_deref());
+                self.format(field_shape);
                 let namespaced_name = self.get_name_with_mappings(field_shape);
                 VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
             }
@@ -766,8 +838,7 @@ impl RegistryBuilder {
         );
 
         // Process the field to determine its format
-        let current_namespace = extract_namespace_from_shape(shape);
-        self.format(field_shape, current_namespace.as_deref());
+        self.format(field_shape);
 
         // Extract the format from the temporary container
         let variant_format = if let Some(ContainerFormat::NewTypeStruct(inner_format, _doc)) =
@@ -832,7 +903,12 @@ impl RegistryBuilder {
                 } else if let Some(ref ns) = field_namespace {
                     // Create qualified name with the field-specified namespace (overrides type's own namespace)
                     let base_name = field_shape.type_identifier.to_string();
-                    let qualified_name = QualifiedTypeName::namespaced(ns.clone(), base_name);
+                    let qualified_name = match ns {
+                        Namespace::Root => QualifiedTypeName::root(base_name),
+                        Namespace::Named(name) => {
+                            QualifiedTypeName::namespaced(name.clone(), base_name)
+                        }
+                    };
                     Format::TypeName(qualified_name)
                 } else {
                     let namespaced_name = self.get_name_with_mappings(field_shape);
@@ -854,10 +930,19 @@ impl RegistryBuilder {
             // Process the type - if field has namespace override, process under that namespace
             if let Some(ref ns) = field_namespace {
                 // Process the type and register it under the field-specified namespace
-                self.format_with_namespace_override(field_shape, ns);
+                match ns {
+                    Namespace::Root => {
+                        let previous_context = self.current_namespace_context.clone();
+                        self.current_namespace_context = Some(Namespace::Root);
+                        self.format(field_shape);
+                        self.current_namespace_context = previous_context;
+                    }
+                    Namespace::Named(name) => {
+                        self.format_with_namespace_override(field_shape, name);
+                    }
+                }
             } else {
-                let current_namespace = extract_namespace_from_shape(shape);
-                self.format(field_shape, current_namespace.as_deref());
+                self.format(field_shape);
             }
         }
 
@@ -897,8 +982,20 @@ impl RegistryBuilder {
         // Process all fields
         for field in variant.data.fields {
             // Use the current enum's namespace context for its variant fields
-            let current_namespace = extract_namespace_from_shape(shape);
-            self.format(field.shape(), current_namespace.as_deref());
+            let transparent_namespace = extract_namespace_from_shape(shape);
+            let previous_context = if let Some(ref transparent_ns) = transparent_namespace {
+                let prev = self.current_namespace_context.clone();
+                self.current_namespace_context = Some(transparent_ns.clone());
+                Some(prev)
+            } else {
+                None
+            };
+
+            self.format(field.shape());
+
+            if let Some(prev_context) = previous_context {
+                self.current_namespace_context = prev_context;
+            }
         }
 
         // Extract the formats from the temporary container
@@ -921,7 +1018,7 @@ impl RegistryBuilder {
         variant_format
     }
 
-    fn format_list(&mut self, list_def: ListDef, namespace: Option<&str>) {
+    fn format_list(&mut self, list_def: ListDef) {
         // Get the inner type of the list
         let inner_shape = list_def.t();
 
@@ -933,10 +1030,10 @@ impl RegistryBuilder {
         self.update_container_format(seq_format);
 
         // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape, namespace);
+        self.process_nested_types(inner_shape);
     }
 
-    fn format_map(&mut self, map_def: MapDef, namespace: Option<&str>) {
+    fn format_map(&mut self, map_def: MapDef) {
         // Get the key and value types of the map
         let key_shape = map_def.k();
         let value_shape = map_def.v();
@@ -954,11 +1051,11 @@ impl RegistryBuilder {
         self.update_container_format(map_format);
 
         // Process any user-defined types in the nested structure
-        self.process_nested_types(key_shape, namespace);
-        self.process_nested_types(value_shape, namespace);
+        self.process_nested_types(key_shape);
+        self.process_nested_types(value_shape);
     }
 
-    fn format_slice(&mut self, slice_def: SliceDef, namespace: Option<&str>) {
+    fn format_slice(&mut self, slice_def: SliceDef) {
         // Get the inner type of the slice
         let inner_shape = slice_def.t();
 
@@ -971,10 +1068,10 @@ impl RegistryBuilder {
         self.update_container_format(slice_format);
 
         // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape, namespace);
+        self.process_nested_types(inner_shape);
     }
 
-    fn format_array(&mut self, array_def: ArrayDef, namespace: Option<&str>) {
+    fn format_array(&mut self, array_def: ArrayDef) {
         // Get the inner type and size of the array
         let inner_shape = array_def.t();
         let array_size = array_def.n;
@@ -992,11 +1089,11 @@ impl RegistryBuilder {
 
         // If the inner type is a user-defined type, we need to process it too
         if !matches!(inner_shape.def, Def::Scalar) {
-            self.format(inner_shape, namespace);
+            self.format(inner_shape);
         }
     }
 
-    fn format_option(&mut self, option_def: OptionDef, namespace: Option<&str>) {
+    fn format_option(&mut self, option_def: OptionDef) {
         // Get the inner type of the Option
         let inner_shape = option_def.t();
 
@@ -1008,10 +1105,10 @@ impl RegistryBuilder {
         self.update_container_format(option_format);
 
         // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape, namespace);
+        self.process_nested_types(inner_shape);
     }
 
-    fn format_set(&mut self, set_def: SetDef, namespace: Option<&str>) {
+    fn format_set(&mut self, set_def: SetDef) {
         // Get the element type of the Set
         let element_shape = set_def.t();
 
@@ -1025,7 +1122,7 @@ impl RegistryBuilder {
         self.update_container_format(set_format);
 
         // Process any user-defined types in the nested structure
-        self.process_nested_types(element_shape, namespace);
+        self.process_nested_types(element_shape);
     }
 
     fn handle_opaque_pointee(&mut self) {
@@ -1099,7 +1196,7 @@ impl RegistryBuilder {
         }
     }
 
-    fn process_nested_types(&mut self, shape: &Shape, namespace: Option<&str>) {
+    fn process_nested_types(&mut self, shape: &Shape) {
         self.processing_nested = true;
         match shape.def {
             Def::Scalar => {
@@ -1108,13 +1205,13 @@ impl RegistryBuilder {
             Def::List(inner_list_def) => {
                 // Recursively process nested lists
                 let inner_shape = inner_list_def.t();
-                self.process_nested_types(inner_shape, namespace);
+                self.process_nested_types(inner_shape);
             }
             Def::Option(option_def) => {
                 // Recursively process options
                 let inner_shape = option_def.t();
                 if should_process_nested_type(inner_shape) {
-                    self.process_nested_types(inner_shape, namespace);
+                    self.process_nested_types(inner_shape);
                 }
             }
             Def::Map(map_def) => {
@@ -1122,21 +1219,21 @@ impl RegistryBuilder {
                 let key_shape = map_def.k();
                 let value_shape = map_def.v();
                 if should_process_nested_type(key_shape) {
-                    self.process_nested_types(key_shape, namespace);
+                    self.process_nested_types(key_shape);
                 }
                 if should_process_nested_type(value_shape) {
-                    self.process_nested_types(value_shape, namespace);
+                    self.process_nested_types(value_shape);
                 }
             }
             Def::Slice(slice_def) => {
                 // Recursively process slice inner types
                 let inner_shape = slice_def.t();
-                self.process_nested_types(inner_shape, namespace);
+                self.process_nested_types(inner_shape);
             }
             _ => {
                 // For other user-defined types, process them
                 if should_process_nested_type(shape) {
-                    self.format(shape, namespace);
+                    self.format(shape);
                 }
             }
         }
@@ -1150,19 +1247,36 @@ impl RegistryBuilder {
             return mapped_name.clone();
         }
 
-        // Check if we should apply the current namespace context
+        // Get the original name (which includes explicit namespace annotations)
         let original_name = get_name(shape);
-        if let Some(ref namespace) = self.current_namespace_context {
-            // If the type doesn't have its own namespace annotation and we're in a namespace context,
-            // apply the context namespace
-            if matches!(original_name.namespace, Namespace::Root) {
-                let namespaced_name =
-                    QualifiedTypeName::namespaced(namespace.clone(), original_name.name.clone());
-                return namespaced_name;
+
+        // Check if the type has an explicit namespace annotation
+        let has_explicit_namespace = extract_namespace_from_shape(shape).is_some();
+
+        if has_explicit_namespace {
+            // If the type has explicit namespace annotation, respect it regardless of context
+            return original_name;
+        }
+
+        // If no explicit namespace annotation, apply current context if available
+        if let Some(ref namespace_context) = self.current_namespace_context {
+            match namespace_context {
+                Namespace::Root => {
+                    // Context is explicitly root, use root namespace
+                    return QualifiedTypeName::root(original_name.name.clone());
+                }
+                Namespace::Named(context_ns) => {
+                    // Apply the context namespace
+                    let namespaced_name = QualifiedTypeName::namespaced(
+                        context_ns.clone(),
+                        original_name.name.clone(),
+                    );
+                    return namespaced_name;
+                }
             }
         }
 
-        // Fall back to the original get_name logic
+        // Fall back to the original name (which will be root if no annotation)
         original_name
     }
 }
@@ -1201,7 +1315,10 @@ fn get_name(shape: &Shape) -> QualifiedTypeName {
 
     // Apply namespace - only use explicit namespace annotations, no inheritance
     if let Some(ns) = shape_namespace {
-        QualifiedTypeName::namespaced(ns, base_name)
+        match ns {
+            Namespace::Root => QualifiedTypeName::root(base_name),
+            Namespace::Named(name) => QualifiedTypeName::namespaced(name, base_name),
+        }
     } else {
         QualifiedTypeName::root(base_name)
     }
@@ -1273,30 +1390,38 @@ fn type_to_format(shape: &Shape) -> Format {
     }
 }
 
-fn extract_namespace_from_shape(shape: &Shape) -> Option<String> {
+fn extract_namespace_from_shape(shape: &Shape) -> Option<Namespace> {
     for attr in shape.attributes {
         if let ShapeAttribute::Arbitrary(attr_str) = attr {
             if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
                 if let Some(end_idx) = stripped.find('"') {
-                    return Some(stripped[..end_idx].to_string());
+                    return Some(Namespace::Named(stripped[..end_idx].to_string()));
                 }
             } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
-                return Some(stripped.trim_matches('"').to_string());
+                let trimmed = stripped.trim_matches('"');
+                if trimmed == "None" {
+                    return Some(Namespace::Root);
+                }
+                return Some(Namespace::Named(trimmed.to_string()));
             }
         }
     }
     None
 }
 
-fn extract_namespace_from_field_attributes(field: &Field) -> Option<String> {
+fn extract_namespace_from_field_attributes(field: &Field) -> Option<Namespace> {
     for attr in field.attributes {
         let FieldAttribute::Arbitrary(attr_str) = attr;
         if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
             if let Some(end_idx) = stripped.find('"') {
-                return Some(stripped[..end_idx].to_string());
+                return Some(Namespace::Named(stripped[..end_idx].to_string()));
             }
         } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
-            return Some(stripped.trim_matches('"').to_string());
+            let trimmed = stripped.trim_matches('"');
+            if trimmed == "None" {
+                return Some(Namespace::Root);
+            }
+            return Some(Namespace::Named(trimmed.to_string()));
         }
     }
     None
@@ -1327,7 +1452,7 @@ fn get_inner_format(shape: &Shape) -> Format {
     get_inner_format_with_context(shape, None)
 }
 
-fn get_inner_format_with_context(shape: &Shape, namespace_context: Option<&str>) -> Format {
+fn get_inner_format_with_context(shape: &Shape, namespace_context: Option<&Namespace>) -> Format {
     match shape.def {
         Def::Scalar => type_to_format(shape),
         Def::List(inner_list_def) => {
@@ -1404,10 +1529,13 @@ fn get_inner_format_with_context(shape: &Shape, namespace_context: Option<&str>)
                     // If the type doesn't have its own namespace annotation and we're in a namespace context,
                     // apply the context namespace
                     if matches!(original_name.namespace, Namespace::Root) {
-                        QualifiedTypeName::namespaced(
-                            namespace.to_string(),
-                            original_name.name.clone(),
-                        )
+                        match namespace {
+                            Namespace::Root => QualifiedTypeName::root(original_name.name.clone()),
+                            Namespace::Named(name) => QualifiedTypeName::namespaced(
+                                name.clone(),
+                                original_name.name.clone(),
+                            ),
+                        }
                     } else {
                         original_name
                     }

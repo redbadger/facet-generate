@@ -4,6 +4,8 @@ use facet::Facet;
 
 use crate::reflect;
 
+// Tests type-level namespace annotation: `#[facet(namespace = "ns")] struct Type { ... }`
+// This sets the namespace context for all fields within the type, propagating to nested types.
 #[test]
 fn nested_namespaced_structs() {
     mod one {
@@ -39,13 +41,6 @@ fn nested_namespaced_structs() {
     let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
-      name: GrandChild
-    : STRUCT:
-        - - field:
-              - STR
-              - []
-        - []
-    ? namespace: ROOT
       name: Parent
     : STRUCT:
         - - one:
@@ -67,8 +62,17 @@ fn nested_namespaced_structs() {
     : STRUCT:
         - - child:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: one
                   name: GrandChild
+              - []
+        - []
+    ? namespace:
+        NAMED: one
+      name: GrandChild
+    : STRUCT:
+        - - field:
+              - STR
               - []
         - []
     ? namespace:
@@ -125,14 +129,6 @@ fn nested_namespaced_enums() {
     let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
-      name: GrandChild
-    : ENUM:
-        - 0:
-            None:
-              - UNIT
-              - []
-        - []
-    ? namespace: ROOT
       name: Parent
     : ENUM:
         - 0:
@@ -160,8 +156,18 @@ fn nested_namespaced_enums() {
             Data:
               - NEWTYPE:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: one
                     name: GrandChild
+              - []
+        - []
+    ? namespace:
+        NAMED: one
+      name: GrandChild
+    : ENUM:
+        - 0:
+            None:
+              - UNIT
               - []
         - []
     ? namespace:
@@ -214,13 +220,6 @@ fn nested_namespaced_renamed_structs() {
     let registry = reflect!(Parent);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
-      name: GrandKid
-    : STRUCT:
-        - - field:
-              - STR
-              - []
-        - []
-    ? namespace: ROOT
       name: Parent
     : STRUCT:
         - - one:
@@ -238,11 +237,20 @@ fn nested_namespaced_renamed_structs() {
         - []
     ? namespace:
         NAMED: one
+      name: GrandKid
+    : STRUCT:
+        - - field:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: one
       name: Kid
     : STRUCT:
         - - child:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: one
                   name: GrandKid
               - []
         - []
@@ -797,7 +805,8 @@ fn transparent_struct_explicit_namespace() {
                   name: UserId
               - []
         - []
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: wrappers
       name: UserId
     : NEWTYPESTRUCT:
         - STR
@@ -1022,14 +1031,16 @@ fn collections_with_explicit_namespace() {
 
     let registry = reflect!(UserManager);
     insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: system
       name: UnnamedRole
     : STRUCT:
         - - permissions:
               - SEQ: STR
               - []
         - []
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: system
       name: UnnamedUser
     : STRUCT:
         - - name:
@@ -1043,14 +1054,16 @@ fn collections_with_explicit_namespace() {
         - - users:
               - SEQ:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: system
                     name: UnnamedUser
               - []
           - admins:
               - TUPLEARRAY:
                   CONTENT:
                     TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: system
                       name: UnnamedUser
                   SIZE: 2
               - []
@@ -1065,14 +1078,16 @@ fn collections_with_explicit_namespace() {
                   KEY: STR
                   VALUE:
                     TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: system
                       name: UnnamedRole
               - []
           - nested_lists:
               - SEQ:
                   SEQ:
                     TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: system
                       name: UnnamedUser
               - []
         - []
@@ -1118,7 +1133,8 @@ fn enums_with_explicit_namespace() {
 
     let registry = reflect!(Response);
     insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: api
       name: ErrorData
     : STRUCT:
         - - code:
@@ -1128,7 +1144,8 @@ fn enums_with_explicit_namespace() {
               - STR
               - []
         - []
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: api
       name: ProcessingData
     : STRUCT:
         - - progress:
@@ -1136,15 +1153,9 @@ fn enums_with_explicit_namespace() {
               - []
           - estimate:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: api
                   name: ErrorData
-              - []
-        - []
-    ? namespace: ROOT
-      name: SuccessData
-    : STRUCT:
-        - - result:
-              - STR
               - []
         - []
     ? namespace:
@@ -1155,14 +1166,16 @@ fn enums_with_explicit_namespace() {
             Success:
               - NEWTYPE:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: api
                     name: SuccessData
               - []
           1:
             Error:
               - NEWTYPE:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: api
                     name: ErrorData
               - []
           2:
@@ -1170,12 +1183,14 @@ fn enums_with_explicit_namespace() {
               - STRUCT:
                   - data:
                       - TYPENAME:
-                          namespace: ROOT
+                          namespace:
+                            NAMED: api
                           name: ProcessingData
                       - []
                   - extra:
                       - TYPENAME:
-                          namespace: ROOT
+                          namespace:
+                            NAMED: api
                           name: SuccessData
                       - []
               - []
@@ -1183,15 +1198,25 @@ fn enums_with_explicit_namespace() {
             Multipart:
               - TUPLE:
                   - TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: api
                       name: ErrorData
                   - TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: api
                       name: SuccessData
               - []
           4:
             Empty:
               - UNIT
+              - []
+        - []
+    ? namespace:
+        NAMED: api
+      name: SuccessData
+    : STRUCT:
+        - - result:
+              - STR
               - []
         - []
     ");
@@ -1228,59 +1253,69 @@ fn nested_structs_with_explicit_namespace() {
 
     let registry = reflect!(Container);
     insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: DeepInner
-    : STRUCT:
-        - - value:
-              - I32
-              - []
-        - []
-    ? namespace: ROOT
-      name: MiddleLayer
-    : STRUCT:
-        - - inner:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: DeepInner
-              - []
-          - inner_list:
-              - SEQ:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: DeepInner
-              - []
-        - []
-    ? namespace: ROOT
-      name: TopLayer
-    : STRUCT:
-        - - middle:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: MiddleLayer
-              - []
-          - direct_inner:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: DeepInner
-              - []
-        - []
     ? namespace:
         NAMED: nested
       name: Container
     : STRUCT:
         - - top:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: nested
                   name: TopLayer
               - []
           - middle_direct:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: nested
                   name: MiddleLayer
               - []
           - inner_direct:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: nested
+                  name: DeepInner
+              - []
+        - []
+    ? namespace:
+        NAMED: nested
+      name: DeepInner
+    : STRUCT:
+        - - value:
+              - I32
+              - []
+        - []
+    ? namespace:
+        NAMED: nested
+      name: MiddleLayer
+    : STRUCT:
+        - - inner:
+              - TYPENAME:
+                  namespace:
+                    NAMED: nested
+                  name: DeepInner
+              - []
+          - inner_list:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: nested
+                    name: DeepInner
+              - []
+        - []
+    ? namespace:
+        NAMED: nested
+      name: TopLayer
+    : STRUCT:
+        - - middle:
+              - TYPENAME:
+                  namespace:
+                    NAMED: nested
+                  name: MiddleLayer
+              - []
+          - direct_inner:
+              - TYPENAME:
+                  namespace:
+                    NAMED: nested
                   name: DeepInner
               - []
         - []
@@ -1314,11 +1349,6 @@ fn transparent_struct_chains() {
     let registry = reflect!(IdContainer);
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
-      name: CoreId
-    : NEWTYPESTRUCT:
-        - STR
-        - []
-    ? namespace: ROOT
       name: IdContainer
     : STRUCT:
         - - id:
@@ -1330,10 +1360,17 @@ fn transparent_struct_chains() {
         - []
     ? namespace:
         NAMED: identity
+      name: CoreId
+    : NEWTYPESTRUCT:
+        - STR
+        - []
+    ? namespace:
+        NAMED: identity
       name: NamespacedWrapper
     : NEWTYPESTRUCT:
         - TYPENAME:
-            namespace: ROOT
+            namespace:
+              NAMED: identity
             name: DoubleWrapperId
         - []
     ");
@@ -1361,7 +1398,8 @@ fn mixed_containers_with_explicit_namespace() {
 
     let registry = reflect!(MixedContainer);
     insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
+    ? namespace:
+        NAMED: storage
       name: Item
     : STRUCT:
         - - id:
@@ -1374,20 +1412,23 @@ fn mixed_containers_with_explicit_namespace() {
     : STRUCT:
         - - single:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: storage
                   name: Item
               - []
           - vector:
               - SEQ:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: storage
                     name: Item
               - []
           - array:
               - TUPLEARRAY:
                   CONTENT:
                     TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: storage
                       name: Item
                   SIZE: 3
               - []
@@ -1418,7 +1459,8 @@ fn mixed_containers_with_explicit_namespace() {
                     SEQ:
                       OPTION:
                         TYPENAME:
-                          namespace: ROOT
+                          namespace:
+                            NAMED: storage
                           name: Item
               - []
         - []
@@ -1488,8 +1530,17 @@ fn no_namespace_pollution() {
     : STRUCT:
         - - shared:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: alpha
                   name: SharedType
+              - []
+        - []
+    ? namespace:
+        NAMED: alpha
+      name: SharedType
+    : STRUCT:
+        - - value:
+              - STR
               - []
         - []
     ? namespace:
@@ -1498,92 +1549,24 @@ fn no_namespace_pollution() {
     : STRUCT:
         - - shared:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: beta
                   name: SharedType
               - []
         - []
-    ");
-}
-
-#[test]
-fn explicit_namespace_behavior_summary() {
-    #[derive(Facet)]
-    struct BaseType {
-        value: String,
-    }
-
-    #[derive(Facet)]
-    #[facet(namespace = "first")]
-    struct FirstContainer {
-        item: BaseType,
-    }
-
-    #[derive(Facet)]
-    #[facet(namespace = "second")]
-    struct SecondContainer {
-        item: BaseType,
-    }
-
-    #[derive(Facet)]
-    struct Root {
-        first: FirstContainer,
-        second: SecondContainer,
-        direct: BaseType,
-    }
-
-    let registry = reflect!(Root);
-    insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: BaseType
+    ? namespace:
+        NAMED: beta
+      name: SharedType
     : STRUCT:
         - - value:
               - STR
               - []
         - []
-    ? namespace: ROOT
-      name: Root
-    : STRUCT:
-        - - first:
-              - TYPENAME:
-                  namespace:
-                    NAMED: first
-                  name: FirstContainer
-              - []
-          - second:
-              - TYPENAME:
-                  namespace:
-                    NAMED: second
-                  name: SecondContainer
-              - []
-          - direct:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: BaseType
-              - []
-        - []
-    ? namespace:
-        NAMED: first
-      name: FirstContainer
-    : STRUCT:
-        - - item:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: BaseType
-              - []
-        - []
-    ? namespace:
-        NAMED: second
-      name: SecondContainer
-    : STRUCT:
-        - - item:
-              - TYPENAME:
-                  namespace: ROOT
-                  name: BaseType
-              - []
-        - []
     ");
 }
 
+// Tests field-level namespace annotation: `#[facet(namespace = "ns")] field: Type`
+// This overrides the namespace for a specific field, placing the referenced type in that namespace.
 #[test]
 fn struct_field_points_to_type_in_a_namespace() {
     #[derive(Facet)]
@@ -1772,6 +1755,7 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
     ");
 }
 
+// Tests that field-level namespace annotations propagate recursively to deeply nested types
 #[test]
 fn struct_field_recursively_points_to_type_in_a_namespace() {
     #[derive(Facet)]
@@ -1924,6 +1908,342 @@ fn struct_field_with_collection_inherits_namespace() {
     : STRUCT:
         - - id:
               - U32
+              - []
+        - []
+    ");
+}
+
+// Tests `#[facet(namespace = None)]` without quotes - this explicitly clears namespace context
+#[test]
+fn explicit_none_namespace() {
+    #[derive(Facet)]
+    struct SimpleType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = None)]
+    struct ExplicitRootType {
+        simple: SimpleType,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "wrapper")]
+    struct WrapperType {
+        explicit_root: ExplicitRootType,
+        simple_direct: SimpleType,
+    }
+
+    let registry = reflect!(WrapperType);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: ExplicitRootType
+    : STRUCT:
+        - - simple:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SimpleType
+              - []
+        - []
+    ? namespace: ROOT
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: WrapperType
+    : STRUCT:
+        - - explicit_root:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ExplicitRootType
+              - []
+          - simple_direct:
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrapper
+                  name: SimpleType
+              - []
+        - []
+    ");
+}
+
+// Tests the difference between `namespace = None` (clears context) and `namespace = "None"` (creates "None" namespace)
+#[test]
+fn namespace_named_none_as_string() {
+    #[derive(Facet)]
+    #[facet(namespace = "None")]
+    struct ExplicitNoneNamespace {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "wrapper")]
+    struct Wrapper {
+        none_named: ExplicitNoneNamespace,
+    }
+
+    let registry = reflect!(Wrapper);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace:
+        NAMED: None
+      name: ExplicitNoneNamespace
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: Wrapper
+    : STRUCT:
+        - - none_named:
+              - TYPENAME:
+                  namespace:
+                    NAMED: None
+                  name: ExplicitNoneNamespace
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn field_level_explicit_none_namespace() {
+    #[derive(Facet)]
+    struct SimpleType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "container")]
+    struct Container {
+        #[facet(namespace = None)]
+        field: SimpleType,
+        normal_field: SimpleType,
+    }
+
+    let registry = reflect!(Container);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: container
+      name: Container
+    : STRUCT:
+        - - field:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SimpleType
+              - []
+          - normal_field:
+              - TYPENAME:
+                  namespace:
+                    NAMED: container
+                  name: SimpleType
+              - []
+        - []
+    ? namespace:
+        NAMED: container
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_with_explicit_none_namespace() {
+    #[derive(Facet)]
+    #[facet(namespace = "data")]
+    struct DataType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = None)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum ExplicitRootEnum {
+        Data(DataType),
+        Empty,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "wrapper")]
+    struct Wrapper {
+        root_enum: ExplicitRootEnum,
+        data_direct: DataType,
+    }
+
+    let registry = reflect!(Wrapper);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: ExplicitRootEnum
+    : ENUM:
+        - 0:
+            Data:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace:
+                      NAMED: data
+                    name: DataType
+              - []
+          1:
+            Empty:
+              - UNIT
+              - []
+        - []
+    ? namespace:
+        NAMED: data
+      name: DataType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: Wrapper
+    : STRUCT:
+        - - root_enum:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ExplicitRootEnum
+              - []
+          - data_direct:
+              - TYPENAME:
+                  namespace:
+                    NAMED: data
+                  name: DataType
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn deeply_nested_explicit_none() {
+    #[derive(Facet)]
+    #[facet(namespace = "deep")]
+    struct DeepType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = None)]
+    struct MiddleType {
+        deep: DeepType,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "outer")]
+    struct OuterType {
+        middle: MiddleType,
+        deep_direct: DeepType,
+    }
+
+    let registry = reflect!(OuterType);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: MiddleType
+    : STRUCT:
+        - - deep:
+              - TYPENAME:
+                  namespace:
+                    NAMED: deep
+                  name: DeepType
+              - []
+        - []
+    ? namespace:
+        NAMED: deep
+      name: DeepType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: outer
+      name: OuterType
+    : STRUCT:
+        - - middle:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MiddleType
+              - []
+          - deep_direct:
+              - TYPENAME:
+                  namespace:
+                    NAMED: deep
+                  name: DeepType
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn mixed_none_and_inheritance_in_same_structure() {
+    #[derive(Facet)]
+    struct SimpleType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "parent")]
+    struct Container {
+        #[facet(namespace = None)]
+        root_field: SimpleType, // Should be in ROOT
+        inherited_field: SimpleType, // Should be in "parent"
+    }
+
+    let registry = reflect!(Container);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: parent
+      name: Container
+    : STRUCT:
+        - - root_field:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SimpleType
+              - []
+          - inherited_field:
+              - TYPENAME:
+                  namespace:
+                    NAMED: parent
+                  name: SimpleType
+              - []
+        - []
+    ? namespace:
+        NAMED: parent
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
               - []
         - []
     ");
