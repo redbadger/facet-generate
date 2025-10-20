@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.12.0] - 2025-10-20
+
+### Breaking change!!
+
+Namespaces are now propagated (inherited by child types) regardless of whether they are specified at the type level or the field level (call site). Explicit annotation overrides the namespace inheritance. When overriding a namespace, the new namespace can be the root namespace (use `#[facet(namespace = None)]`) or an explicit namespace (use `#[facet(namespace = "new_namespace")]`). The new namespace will then continue to be propagated to subsequent types. If there is ambiguity (e.g. a type would be in multiple namespaces), the type generation will fail, with an error message indicating the conflicting namespaces.
+
 ## [0.11.7] - 2025-10-15
 
 Introduces namespace propagation (currently only when using call-site annotations). See https://github.com/redbadger/facet-generate/pull/40.

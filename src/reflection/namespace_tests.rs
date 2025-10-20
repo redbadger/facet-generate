@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use facet::Facet;
 
-use crate::reflect;
+use crate::{reflect, reflection::format::Namespace};
 
 // Tests type-level namespace annotation: `#[facet(namespace = "ns")] struct Type { ... }`
 // This sets the namespace context for all fields within the type, propagating to nested types.
@@ -2127,7 +2127,7 @@ fn explicit_namespace_prevents_inheritance_ambiguity() {
     assert_eq!(shared_type_entries.len(), 1);
     assert_eq!(
         shared_type_entries[0].namespace,
-        crate::reflection::format::Namespace::Named("explicit".to_string())
+        Namespace::Named("explicit".to_string())
     );
 }
 
@@ -2167,7 +2167,7 @@ fn fixed_namespace_pollution_with_explicit_annotations() {
     assert_eq!(shared_type_entries.len(), 1);
     assert_eq!(
         shared_type_entries[0].namespace,
-        crate::reflection::format::Namespace::Named("shared".to_string())
+        Namespace::Named("shared".to_string())
     );
 
     // Verify the registry structure shows SharedType is only in the "shared" namespace
@@ -2222,6 +2222,337 @@ fn fixed_namespace_pollution_with_explicit_annotations() {
     : STRUCT:
         - - value:
               - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn mixed_field_and_type_level_explicit_override() {
+    #[derive(Facet)]
+    #[facet(namespace = "parent")]
+    struct Parent {
+        #[facet(namespace = "parent")]
+        child: Child,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "child")]
+    struct Child {
+        value: String,
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace:
+        NAMED: child
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: parent
+      name: Parent
+    : STRUCT:
+        - - child:
+              - TYPENAME:
+                  namespace:
+                    NAMED: child
+                  name: Child
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn field_level_none_vs_type_level_named() {
+    // Test that type-level explicit Named overrides field-level explicit None
+    #[derive(Facet)]
+    #[facet(namespace = "type_wins")]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        #[facet(namespace = None)] // Field-level explicit None
+        child: Child, // But Child has type-level explicit "type_wins"
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - child:
+              - TYPENAME:
+                  namespace:
+                    NAMED: type_wins
+                  name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: type_wins
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn field_level_named_vs_type_level_none() {
+    // Test that type-level explicit None overrides field-level explicit Named
+    #[derive(Facet)]
+    #[facet(namespace = None)]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(namespace = "parent")]
+    struct Parent {
+        #[facet(namespace = "field_loses")] // Field-level explicit Named
+        child: Child, // But Child has type-level explicit None
+    }
+
+    let registry = reflect!(Parent);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: parent
+      name: Parent
+    : STRUCT:
+        - - child:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Child
+              - []
+        - []
+    ");
+}
+
+#[test]
+#[should_panic(expected = "Ambiguous namespace inheritance detected")]
+fn same_type_with_different_field_level_overrides() {
+    // Test that the same type appearing in different namespaces via different field-level overrides
+    // correctly triggers ambiguity detection
+    #[derive(Facet)]
+    struct SharedType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct ContainerA {
+        #[facet(namespace = "namespace_a")]
+        shared: SharedType,
+    }
+
+    #[derive(Facet)]
+    struct ContainerB {
+        #[facet(namespace = "namespace_b")]
+        shared: SharedType,
+    }
+
+    #[derive(Facet)]
+    struct Root {
+        a: ContainerA,
+        b: ContainerB,
+    }
+
+    let _registry = reflect!(Root);
+}
+
+#[test]
+fn collection_inner_types_inherit_field_level_namespace() {
+    // Test that inner types in collections properly inherit field-level namespace overrides
+    #[derive(Facet)]
+    struct Item {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Container {
+        #[facet(namespace = "collection_ns")]
+        items: Vec<Item>,
+        #[facet(namespace = "collection_ns")]
+        item_map: HashMap<String, Item>,
+    }
+
+    let registry = reflect!(Container);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Container
+    : STRUCT:
+        - - items:
+              - SEQ:
+                  TYPENAME:
+                    namespace:
+                      NAMED: collection_ns
+                    name: Item
+              - []
+          - item_map:
+              - MAP:
+                  KEY: STR
+                  VALUE:
+                    TYPENAME:
+                      namespace:
+                        NAMED: collection_ns
+                      name: Item
+              - []
+        - []
+    ? namespace:
+        NAMED: collection_ns
+      name: Item
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_tuple_variant_collection_inheritance() {
+    // Test that collections in enum tuple variants inherit field-level namespace overrides
+    #[derive(Facet)]
+    struct Item1 {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Item2 {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Container {
+        Items(#[facet(namespace = "ns1")] Vec<Item1>),
+        ItemMap(#[facet(namespace = "ns2")] HashMap<String, Item2>),
+    }
+
+    let registry = reflect!(Container);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Container
+    : ENUM:
+        - 0:
+            Items:
+              - NEWTYPE:
+                  SEQ:
+                    TYPENAME:
+                      namespace:
+                        NAMED: ns1
+                      name: Item1
+              - []
+          1:
+            ItemMap:
+              - NEWTYPE:
+                  MAP:
+                    KEY: STR
+                    VALUE:
+                      TYPENAME:
+                        namespace:
+                          NAMED: ns2
+                        name: Item2
+              - []
+        - []
+    ? namespace:
+        NAMED: ns1
+      name: Item1
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ? namespace:
+        NAMED: ns2
+      name: Item2
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_struct_variant_collection_inheritance() {
+    // Test that collections in enum struct variants inherit field-level namespace overrides
+    #[derive(Facet)]
+    struct Item1 {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Item2 {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Container {
+        Data {
+            #[facet(namespace = "ns1")]
+            items: Vec<Item1>,
+            #[facet(namespace = "ns2")]
+            item_map: HashMap<String, Item2>,
+        },
+    }
+
+    let registry = reflect!(Container);
+    insta::assert_yaml_snapshot!(registry, @r"
+    ? namespace: ROOT
+      name: Container
+    : ENUM:
+        - 0:
+            Data:
+              - STRUCT:
+                  - items:
+                      - SEQ:
+                          TYPENAME:
+                            namespace:
+                              NAMED: ns1
+                            name: Item1
+                      - []
+                  - item_map:
+                      - MAP:
+                          KEY: STR
+                          VALUE:
+                            TYPENAME:
+                              namespace:
+                                NAMED: ns2
+                              name: Item2
+                      - []
+              - []
+        - []
+    ? namespace:
+        NAMED: ns1
+      name: Item1
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ? namespace:
+        NAMED: ns2
+      name: Item2
+    : STRUCT:
+        - - id:
+              - U32
               - []
         - []
     ");
