@@ -22,11 +22,80 @@ const SUPPORTED_GENERIC_TYPES: [&str; 10] = [
     "Arc", "Rc", "Box", "Option", "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "DateTime",
 ];
 
-/// Enhanced namespace context that tracks both the namespace and whether it's explicit or implicit
-#[derive(Debug, Clone)]
+/// A namespace context with its source information
+#[derive(Debug, Clone, PartialEq)]
 struct NamespaceContext {
     namespace: Namespace,
-    is_explicit: bool,
+    explicit: bool, // true = explicitly set, false = inherited
+}
+
+impl NamespaceContext {
+    /// Creates a cleared namespace context (explicit root)
+    fn cleared() -> Self {
+        Self {
+            namespace: Namespace::Root,
+            explicit: true,
+        }
+    }
+
+    /// Creates an explicitly set namespace context
+    fn explicit(namespace: Namespace) -> Self {
+        Self {
+            namespace,
+            explicit: true,
+        }
+    }
+
+    /// Checks if this context is explicit
+    fn is_explicit(&self) -> bool {
+        self.explicit
+    }
+
+    /// Checks if this context was cleared (explicit root)
+    fn is_cleared(&self) -> bool {
+        self.explicit && matches!(self.namespace, Namespace::Root)
+    }
+}
+
+/// Action to take with namespace context
+#[derive(Debug, Clone, PartialEq)]
+enum NamespaceAction {
+    /// Set a specific namespace context
+    SetContext(NamespaceContext),
+    /// Inherit the current context unchanged (push current context again)
+    Inherit,
+}
+
+impl NamespaceAction {
+    /// Returns true if this action represents an explicit namespace setting
+    fn is_explicit(&self) -> bool {
+        match self {
+            NamespaceAction::SetContext(ctx) => ctx.is_explicit(),
+            NamespaceAction::Inherit => false, // Inheriting is not explicit
+        }
+    }
+
+    /// Returns true if this action should move a type to a specific namespace
+    fn should_move_to_namespace(&self, target_namespace: &str) -> bool {
+        match self {
+            NamespaceAction::SetContext(ctx) if ctx.is_explicit() => {
+                match &ctx.namespace {
+                    Namespace::Named(type_ns) => {
+                        // Type has explicit namespace - only move if it matches the target namespace
+                        type_ns == target_namespace
+                    }
+                    Namespace::Root => {
+                        // Type explicitly wants to be in root - don't move to named namespace
+                        target_namespace.is_empty() // This would be unusual but handle it
+                    }
+                }
+            }
+            NamespaceAction::SetContext(_) | NamespaceAction::Inherit => {
+                // No type-level explicit annotation - field-level can override
+                true
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -37,7 +106,7 @@ pub struct RegistryBuilder {
     name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
     generic_type_params: HashMap<String, String>,
     processing_nested: bool,
-    current_namespace_context: Option<NamespaceContext>,
+    namespace_context_stack: Vec<NamespaceContext>,
     type_namespace_sources: HashMap<QualifiedTypeName, bool>, // true = explicit, false = inherited
 }
 
@@ -79,8 +148,10 @@ impl RegistryBuilder {
         &mut self,
         name: QualifiedTypeName,
         container: ContainerFormat,
-        is_explicit: bool,
+        shape: &Shape,
     ) {
+        let is_explicit = extract_namespace_from_shape(shape).is_explicit();
+
         // Check for conflicts: type name in multiple namespaces with mixed explicit/inherited sources
         self.check_namespace_ambiguity(&name, is_explicit);
 
@@ -144,17 +215,14 @@ impl RegistryBuilder {
 
         if !self.registry.contains_key(&namespaced_key) {
             // Store the previous namespace context
-            let previous_context = self.current_namespace_context.clone();
-            self.current_namespace_context = Some(NamespaceContext {
-                namespace: Namespace::Named(namespace.to_string()),
-                is_explicit: true,
-            });
+            let context = NamespaceContext::explicit(Namespace::Named(namespace.to_string()));
+            self.push_namespace(NamespaceAction::SetContext(context));
 
             // Process the type with the namespace context so nested types inherit the namespace
             self.format(shape);
 
             // Restore the previous namespace context
-            self.current_namespace_context = previous_context;
+            self.pop_namespace();
 
             // Check if the type has a conflicting type-level explicit namespace
             // If type-level explicit matches what we want, or if no type-level explicit, then move is OK
@@ -163,20 +231,7 @@ impl RegistryBuilder {
             if original_key != namespaced_key {
                 let type_level_namespace = extract_namespace_from_shape(shape);
 
-                let should_move = match type_level_namespace {
-                    Some(Namespace::Named(type_ns)) => {
-                        // Type has explicit namespace - only move if it matches the target namespace
-                        type_ns == namespace
-                    }
-                    Some(Namespace::Root) => {
-                        // Type explicitly wants to be in root - don't move to named namespace
-                        namespace.is_empty() // This would be unusual but handle it
-                    }
-                    None => {
-                        // No type-level explicit annotation - field-level can override
-                        true
-                    }
-                };
+                let should_move = type_level_namespace.should_move_to_namespace(namespace);
 
                 if should_move {
                     if let Some(format) = self.registry.remove(&original_key) {
@@ -250,7 +305,7 @@ impl RegistryBuilder {
                 Format::TypeName(type_name.clone())
             };
 
-            self.update_container_format_if_unknown(format);
+            self.update_container_format(format, UpdateMode::IfUnknown);
         }
 
         self.format_struct(struct_def, shape);
@@ -268,7 +323,7 @@ impl RegistryBuilder {
                     let target_shape = slice_type.t;
                     let inner_format = get_inner_format(target_shape);
                     let slice_format = Format::Seq(Box::new(inner_format));
-                    self.update_container_format(slice_format);
+                    self.update_container_format(slice_format, UpdateMode::Force);
                     self.process_nested_types(target_shape);
                     true
                 }
@@ -283,7 +338,7 @@ impl RegistryBuilder {
                     let target_shape = array_type.t;
                     let inner_format = get_inner_format(target_shape);
                     let array_format = Format::Seq(Box::new(inner_format)); // Arrays are also sequences
-                    self.update_container_format(array_format);
+                    self.update_container_format(array_format, UpdateMode::Force);
                     self.process_nested_types(target_shape);
                     true
                 }
@@ -321,7 +376,7 @@ impl RegistryBuilder {
         let inner_format = get_format_for_shape(inner_shape);
 
         // Update the current container with the Pointer's inner format
-        self.update_container_format_if_unknown(inner_format);
+        self.update_container_format(inner_format, UpdateMode::IfUnknown);
 
         // Also process the inner type if it's a user-defined type
         self.process_nested_types(inner_shape);
@@ -334,15 +389,15 @@ impl RegistryBuilder {
             Type::Primitive(primitive) => match primitive {
                 PrimitiveType::Boolean => {
                     let format = Format::Bool;
-                    self.update_container_format(format);
+                    self.update_container_format(format, UpdateMode::Force);
                 }
                 PrimitiveType::Numeric(NumericType::Float) => {
                     let format = Format::F32; // or F64, but F32 is more common
-                    self.update_container_format(format);
+                    self.update_container_format(format, UpdateMode::Force);
                 }
                 PrimitiveType::Textual(TextualType::Str) => {
                     let format = Format::Str;
-                    self.update_container_format(format);
+                    self.update_container_format(format, UpdateMode::Force);
                 }
                 p => {
                     unimplemented!("Unknown primitive type: {p:?}");
@@ -357,7 +412,7 @@ impl RegistryBuilder {
 
     fn format_scalar(&mut self, shape: &Shape) {
         let format = type_to_format(shape);
-        self.update_container_format(format);
+        self.update_container_format(format, UpdateMode::Force);
     }
 
     fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) {
@@ -367,7 +422,7 @@ impl RegistryBuilder {
         if self.is_processed(&struct_name) {
             // This is a mutual recursion case - only update if there's an unknown format that needs updating
             let format = Format::TypeName(struct_name.clone());
-            self.update_container_format_for_mutual_recursion(format);
+            self.update_container_format(format, UpdateMode::MutualRecursion);
             return;
         }
 
@@ -380,38 +435,20 @@ impl RegistryBuilder {
             self.register_type_mapping(name, struct_name.clone());
         }
 
-        // Extract namespace from this struct if it has one
+        self.mark_processed(struct_name.clone());
+
+        // Extract namespace from this enum if it has one
         let type_level_namespace = extract_namespace_from_shape(shape);
 
-        // Set namespace context if this type declares one
-        let previous_context = match type_level_namespace {
-            Some(Namespace::Root) => {
-                // #[facet(namespace = None)] means clear the context for children
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = None;
-                Some(prev)
-            }
-            Some(Namespace::Named(ns)) => {
-                // Set the named namespace as explicit context
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = Some(NamespaceContext {
-                    namespace: Namespace::Named(ns),
-                    is_explicit: true,
-                });
-                Some(prev)
-            }
-            None => None,
-        };
-
-        self.mark_processed(struct_name.clone());
+        // Handle namespace context for the enum processing
+        self.push_namespace(type_level_namespace);
 
         match struct_type.kind {
             StructKind::Unit => {
-                let is_explicit = extract_namespace_from_shape(shape).is_some();
                 self.push_with_type_check(
-                    struct_name,
+                    struct_name.clone(),
                     ContainerFormat::UnitStruct(shape.into()),
-                    is_explicit,
+                    shape,
                 );
                 self.pop();
             }
@@ -427,13 +464,13 @@ impl RegistryBuilder {
                         // For transparent structs, don't create a container - just process the inner type
                         // This will register the transparent struct with its inner type's format
                         self.format(field_shape);
+                        self.pop_namespace();
                         return;
                     }
 
                     // Handle regular newtype struct
                     let container = ContainerFormat::NewTypeStruct(Box::default(), shape.into());
-                    let is_explicit = extract_namespace_from_shape(shape).is_some();
-                    self.push_with_type_check(struct_name, container, is_explicit);
+                    self.push_with_type_check(struct_name.clone(), container, shape);
 
                     // Process the inner field
                     self.format(field_shape);
@@ -442,8 +479,7 @@ impl RegistryBuilder {
                 } else {
                     // Handle tuple struct with multiple fields
                     let container = ContainerFormat::TupleStruct(vec![], shape.into());
-                    let is_explicit = extract_namespace_from_shape(shape).is_some();
-                    self.push_with_type_check(struct_name, container, is_explicit);
+                    self.push_with_type_check(struct_name.clone(), container, shape);
                     for field in struct_type.fields {
                         let skip = field.attributes.iter().any(|attr| match attr {
                             FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
@@ -458,8 +494,7 @@ impl RegistryBuilder {
             }
             StructKind::Struct => {
                 let container = ContainerFormat::Struct(vec![], shape.into());
-                let is_explicit = extract_namespace_from_shape(shape).is_some();
-                self.push_with_type_check(struct_name, container, is_explicit);
+                self.push_with_type_check(struct_name.clone(), container, shape);
                 for field in struct_type.fields {
                     let skip = field.attributes.iter().any(|attr| match attr {
                         FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
@@ -477,10 +512,7 @@ impl RegistryBuilder {
             }
         }
 
-        // Restore previous context if we changed it
-        if let Some(prev_context) = previous_context {
-            self.current_namespace_context = prev_context;
-        }
+        self.pop_namespace();
     }
 
     fn handle_struct_field(&mut self, field: &Field) {
@@ -506,59 +538,27 @@ impl RegistryBuilder {
         // Check for field-level namespace annotation
         let field_namespace = extract_namespace_from_field_attributes(field);
 
-        // Set field-level namespace context BEFORE processing any formats
-        let previous_context = if let Some(ref ns) = field_namespace {
-            let prev = self.current_namespace_context.clone();
-            self.current_namespace_context = Some(NamespaceContext {
-                namespace: ns.clone(),
-                is_explicit: true,
-            });
-            Some(prev)
-        } else {
-            None
-        };
+        self.push_namespace(field_namespace.clone());
 
         // Now determine the proper format with the field-level context in place
-        let field_format = match &field_shape.ty {
-            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
-                let renamed_name = self.get_name_with_mappings(field_shape);
-                Format::TypeName(renamed_name)
-            }
-            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                let target_shape = (pt.target)();
-                get_inner_format_with_context(
-                    target_shape,
-                    self.current_namespace_context
-                        .as_ref()
-                        .map(|ctx| &ctx.namespace),
-                )
-            }
-            _ => get_inner_format_with_context(
-                field_shape,
-                self.current_namespace_context
-                    .as_ref()
-                    .map(|ctx| &ctx.namespace),
-            ),
-        };
+        let field_format = self.get_user_type_format(field_shape);
 
         // Process the type under the field-level namespace context
-        if let Some(ref ns) = field_namespace {
-            match ns {
-                Namespace::Root => {
+        if let NamespaceAction::SetContext(ctx) = &field_namespace {
+            if ctx.is_explicit() {
+                if let Namespace::Named(name) = &ctx.namespace {
+                    self.format_with_namespace_override(field_shape, name);
+                } else {
                     self.format(field_shape);
                 }
-                Namespace::Named(name) => {
-                    self.format_with_namespace_override(field_shape, name);
-                }
+            } else {
+                self.format(field_shape);
             }
         } else {
             self.format(field_shape);
         }
 
-        // Restore previous namespace context
-        if let Some(prev_context) = previous_context {
-            self.current_namespace_context = prev_context;
-        }
+        self.pop_namespace();
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
             let format = Named {
@@ -707,23 +707,9 @@ impl RegistryBuilder {
                 }
 
                 // Process the inner type with the transparent struct's namespace context
-                let previous_context = if let Some(ref transparent_ns) = transparent_namespace {
-                    let prev = self.current_namespace_context.clone();
-                    self.current_namespace_context = Some(NamespaceContext {
-                        namespace: transparent_ns.clone(),
-                        is_explicit: true,
-                    });
-                    Some(prev)
-                } else {
-                    None
-                };
-
+                self.push_namespace(transparent_namespace);
                 self.format(inner_field_shape);
-
-                // Restore previous context if we changed it
-                if let Some(prev_context) = previous_context {
-                    self.current_namespace_context = prev_context;
-                }
+                self.pop_namespace();
 
                 return true;
             }
@@ -749,42 +735,20 @@ impl RegistryBuilder {
             self.register_type_mapping(name, enum_name.clone());
         }
 
+        self.mark_processed(enum_name.clone());
+
         // Extract namespace from this enum if it has one
         let type_level_namespace = extract_namespace_from_shape(shape);
 
-        // Set namespace context if this type declares one
-        let previous_context = match type_level_namespace {
-            Some(Namespace::Root) => {
-                // #[facet(namespace = None)] means clear the context for children
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = None;
-                Some(prev)
-            }
-            Some(Namespace::Named(ns)) => {
-                // Set the named namespace as explicit context
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = Some(NamespaceContext {
-                    namespace: Namespace::Named(ns),
-                    is_explicit: true,
-                });
-                Some(prev)
-            }
-            None => None,
-        };
-
-        self.mark_processed(enum_name.clone());
+        // Handle namespace context for the enum processing
+        self.push_namespace(type_level_namespace);
 
         let variants = self.process_enum_variants(enum_type, shape);
-
         let container = ContainerFormat::Enum(variants, shape.into());
-        let is_explicit = extract_namespace_from_shape(shape).is_some();
-        self.push_with_type_check(enum_name, container, is_explicit);
+        self.push_with_type_check(enum_name.clone(), container, shape);
         self.pop();
 
-        // Restore previous context if we changed it
-        if let Some(prev_context) = previous_context {
-            self.current_namespace_context = prev_context;
-        }
+        self.pop_namespace();
     }
 
     fn process_enum_variants(
@@ -848,31 +812,35 @@ impl RegistryBuilder {
             // Check for field-level namespace annotation
             let field_namespace = extract_namespace_from_field_attributes(&field);
 
-            if let Some(ref ns) = field_namespace {
-                // Process the type under the field-specified namespace and create qualified name
-                let base_name = field_shape.type_identifier.to_string();
-                let qualified_name = match ns {
-                    Namespace::Root => {
-                        let previous_context = self.current_namespace_context.clone();
-                        self.current_namespace_context = Some(NamespaceContext {
-                            namespace: Namespace::Root,
-                            is_explicit: true,
-                        });
-                        self.format(field_shape);
-                        self.current_namespace_context = previous_context;
-                        QualifiedTypeName::root(base_name)
-                    }
-                    Namespace::Named(name) => {
-                        self.format_with_namespace_override(field_shape, name);
-                        QualifiedTypeName::namespaced(name.clone(), base_name)
-                    }
-                };
-                VariantFormat::NewType(Box::new(Format::TypeName(qualified_name)))
-            } else {
-                // For user-defined struct/enum types, create a TypeName reference and process the type
-                self.format(field_shape);
-                let namespaced_name = self.get_name_with_mappings(field_shape);
-                VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
+            match field_namespace {
+                NamespaceAction::SetContext(ctx) if ctx.is_explicit() => {
+                    // Process the type under the field-specified namespace and create qualified name
+                    let base_name = field_shape.type_identifier.to_string();
+                    let qualified_name = match &ctx.namespace {
+                        Namespace::Root => {
+                            let context = NamespaceContext::explicit(Namespace::Root);
+                            self.push_namespace(NamespaceAction::SetContext(context));
+                            self.format(field_shape);
+                            self.pop_namespace();
+                            QualifiedTypeName::root(base_name)
+                        }
+                        Namespace::Named(name) => {
+                            let context =
+                                NamespaceContext::explicit(Namespace::Named(name.clone()));
+                            self.push_namespace(NamespaceAction::SetContext(context));
+                            self.format(field_shape);
+                            self.pop_namespace();
+                            QualifiedTypeName::namespaced(name.clone(), base_name)
+                        }
+                    };
+                    VariantFormat::NewType(Box::new(Format::TypeName(qualified_name)))
+                }
+                NamespaceAction::SetContext(_) | NamespaceAction::Inherit => {
+                    // For user-defined struct/enum types, create a TypeName reference and process the type
+                    self.format(field_shape);
+                    let namespaced_name = self.get_name_with_mappings(field_shape);
+                    VariantFormat::NewType(Box::new(Format::TypeName(namespaced_name)))
+                }
             }
         } else {
             // For other types, use the temporary container approach
@@ -891,33 +859,15 @@ impl RegistryBuilder {
         // Check for field-level namespace annotation
         let field_namespace = extract_namespace_from_field_attributes(&field);
 
-        // Set field-level namespace context BEFORE processing
-        let previous_context = if let Some(ref ns) = field_namespace {
-            let prev = self.current_namespace_context.clone();
-            self.current_namespace_context = Some(NamespaceContext {
-                namespace: ns.clone(),
-                is_explicit: true,
-            });
-            Some(prev)
-        } else {
-            None
-        };
+        self.push_namespace(field_namespace);
 
         // Build the format directly with the namespace context in place
-        let inner_format = get_inner_format_with_context(
-            field_shape,
-            self.current_namespace_context
-                .as_ref()
-                .map(|ctx| &ctx.namespace),
-        );
+        let inner_format = get_inner_format_with_context(field_shape, self.current_namespace());
 
         // Also ensure the type itself gets processed with the namespace context
         self.format(field_shape);
 
-        // Restore previous namespace context
-        if let Some(prev_context) = previous_context {
-            self.current_namespace_context = prev_context;
-        }
+        self.pop_namespace();
 
         VariantFormat::NewType(Box::new(inner_format))
     }
@@ -948,54 +898,27 @@ impl RegistryBuilder {
             // Check for field-level namespace annotation
             let field_namespace = extract_namespace_from_field_attributes(field);
 
-            // Set field-level namespace context BEFORE processing any formats
-            let previous_context = if let Some(ref ns) = field_namespace {
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = Some(NamespaceContext {
-                    namespace: ns.clone(),
-                    is_explicit: true,
-                });
-                Some(prev)
-            } else {
-                None
-            };
+            self.push_namespace(field_namespace.clone());
 
-            // Now determine the proper format with the field-level context in place
-            let value = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty
-            {
-                if field_shape.type_identifier == "()" {
-                    Format::Unit
-                } else {
-                    let renamed_name = self.get_name_with_mappings(field_shape);
-                    Format::TypeName(renamed_name)
-                }
-            } else {
-                get_inner_format_with_context(
-                    field_shape,
-                    self.current_namespace_context
-                        .as_ref()
-                        .map(|ctx| &ctx.namespace),
-                )
-            };
+            // Determine the proper format with the field-level context in place
+            let value = self.get_user_type_format(field_shape);
 
             // Process the type under the field-level namespace context
-            if let Some(ref ns) = field_namespace {
-                match ns {
-                    Namespace::Root => {
+            if let NamespaceAction::SetContext(ctx) = &field_namespace {
+                if ctx.is_explicit() {
+                    if let Namespace::Named(name) = &ctx.namespace {
+                        self.format_with_namespace_override(field_shape, name);
+                    } else {
                         self.format(field_shape);
                     }
-                    Namespace::Named(name) => {
-                        self.format_with_namespace_override(field_shape, name);
-                    }
+                } else {
+                    self.format(field_shape);
                 }
             } else {
                 self.format(field_shape);
             }
 
-            // Restore previous namespace context
-            if let Some(prev_context) = previous_context {
-                self.current_namespace_context = prev_context;
-            }
+            self.pop_namespace();
 
             if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                 named_formats.push(Named {
@@ -1033,22 +956,10 @@ impl RegistryBuilder {
         for field in variant.data.fields {
             // Use the current enum's namespace context for its variant fields
             let transparent_namespace = extract_namespace_from_shape(shape);
-            let previous_context = if let Some(ref transparent_ns) = transparent_namespace {
-                let prev = self.current_namespace_context.clone();
-                self.current_namespace_context = Some(NamespaceContext {
-                    namespace: transparent_ns.clone(),
-                    is_explicit: true,
-                });
-                Some(prev)
-            } else {
-                None
-            };
 
+            self.push_namespace(transparent_namespace);
             self.format(field.shape());
-
-            if let Some(prev_context) = previous_context {
-                self.current_namespace_context = prev_context;
-            }
+            self.pop_namespace();
         }
 
         // Extract the formats from the temporary container
@@ -1076,7 +987,7 @@ impl RegistryBuilder {
         let seq_format = Format::Seq(Box::new(inner_format));
 
         // Update the current container with the sequence format
-        self.update_container_format(seq_format);
+        self.update_container_format(seq_format, UpdateMode::Force);
 
         // Process any user-defined types in the nested structure
         self.process_nested_types(inner_shape);
@@ -1097,7 +1008,7 @@ impl RegistryBuilder {
         };
 
         // Update the current container with the map format
-        self.update_container_format(map_format);
+        self.update_container_format(map_format, UpdateMode::Force);
 
         // Process any user-defined types in the nested structure
         self.process_nested_types(key_shape);
@@ -1114,7 +1025,7 @@ impl RegistryBuilder {
         let slice_format = Format::Seq(Box::new(inner_format));
 
         // Update the current container with the slice format
-        self.update_container_format(slice_format);
+        self.update_container_format(slice_format, UpdateMode::Force);
 
         // Process any user-defined types in the nested structure
         self.process_nested_types(inner_shape);
@@ -1134,7 +1045,7 @@ impl RegistryBuilder {
         };
 
         // Update the current container with the array format
-        self.update_container_format(array_format);
+        self.update_container_format(array_format, UpdateMode::Force);
 
         // If the inner type is a user-defined type, we need to process it too
         if !matches!(inner_shape.def, Def::Scalar) {
@@ -1151,7 +1062,7 @@ impl RegistryBuilder {
         let option_format = Format::Option(Box::new(inner_format));
 
         // Update the current container with the option format
-        self.update_container_format(option_format);
+        self.update_container_format(option_format, UpdateMode::Force);
 
         // Process any user-defined types in the nested structure
         self.process_nested_types(inner_shape);
@@ -1168,7 +1079,7 @@ impl RegistryBuilder {
         let set_format = Format::Set(Box::new(element_format));
 
         // Update the current container with the set format
-        self.update_container_format(set_format);
+        self.update_container_format(set_format, UpdateMode::Force);
 
         // Process any user-defined types in the nested structure
         self.process_nested_types(element_shape);
@@ -1177,22 +1088,66 @@ impl RegistryBuilder {
     fn handle_opaque_pointee(&mut self) {
         // For pointers that point to opaque types, treat as unit type for now
         let format = Format::Unit;
-        self.update_container_format(format);
+        self.update_container_format(format, UpdateMode::Force);
     }
 
-    fn update_container_format(&mut self, format: Format) {
-        self.update_container_format_with_mode(format, UpdateMode::Force);
+    /// Push a namespace action onto the stack (always pushes something)
+    fn push_namespace(&mut self, action: NamespaceAction) {
+        let context = match action {
+            NamespaceAction::SetContext(ctx) => ctx,
+            NamespaceAction::Inherit => {
+                // Push the current context again (or cleared context if none exists)
+                self.namespace_context_stack
+                    .last()
+                    .cloned()
+                    .unwrap_or_else(NamespaceContext::cleared)
+            }
+        };
+        self.namespace_context_stack.push(context);
     }
 
-    fn update_container_format_if_unknown(&mut self, format: Format) {
-        self.update_container_format_with_mode(format, UpdateMode::IfUnknown);
+    /// Pop the current namespace context from the stack
+    fn pop_namespace(&mut self) {
+        self.namespace_context_stack.pop();
     }
 
-    fn update_container_format_for_mutual_recursion(&mut self, format: Format) {
-        self.update_container_format_with_mode(format, UpdateMode::MutualRecursion);
+    /// Get the current namespace context (top of stack)
+    fn current_namespace_context(&self) -> Option<&NamespaceContext> {
+        match self.namespace_context_stack.last() {
+            Some(ctx) if ctx.is_cleared() => {
+                // This is a "cleared context" marker, so return None
+                None
+            }
+            Some(ctx) => Some(ctx),
+            None => None,
+        }
     }
 
-    fn update_container_format_with_mode(&mut self, format: Format, mode: UpdateMode) {
+    /// Get the current namespace (if any) for use with format functions
+    fn current_namespace(&self) -> Option<&Namespace> {
+        self.current_namespace_context().map(|ctx| &ctx.namespace)
+    }
+
+    /// Helper method to determine format for user-defined types with namespace context
+    fn get_user_type_format(&mut self, field_shape: &Shape) -> Format {
+        match &field_shape.ty {
+            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
+                if field_shape.type_identifier == "()" {
+                    Format::Unit
+                } else {
+                    let renamed_name = self.get_name_with_mappings(field_shape);
+                    Format::TypeName(renamed_name)
+                }
+            }
+            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
+                let target_shape = (pt.target)();
+                get_inner_format_with_context(target_shape, self.current_namespace())
+            }
+            _ => get_inner_format_with_context(field_shape, self.current_namespace()),
+        }
+    }
+
+    fn update_container_format(&mut self, format: Format, mode: UpdateMode) {
         if let Some(container_format) = self.get_mut() {
             match container_format {
                 ContainerFormat::UnitStruct(_doc) => {}
@@ -1300,7 +1255,7 @@ impl RegistryBuilder {
         let original_name = get_name(shape);
 
         // Check if the type has an explicit namespace annotation (type-level explicit)
-        let has_explicit_namespace = extract_namespace_from_shape(shape).is_some();
+        let has_explicit_namespace = extract_namespace_from_shape(shape).is_explicit();
 
         if has_explicit_namespace {
             // Type-level explicit namespace annotation overrides everything (including field-level explicit)
@@ -1309,12 +1264,12 @@ impl RegistryBuilder {
         }
 
         // If no type-level explicit namespace annotation, apply current context if available
-        if let Some(ref namespace_context) = self.current_namespace_context {
+        if let Some(namespace_context) = self.current_namespace_context() {
             match &namespace_context.namespace {
                 Namespace::Root => {
                     // Context is explicitly root, use root namespace
                     let root_name = QualifiedTypeName::root(original_name.name.clone());
-                    self.check_namespace_ambiguity(&root_name, namespace_context.is_explicit);
+                    self.check_namespace_ambiguity(&root_name, namespace_context.is_explicit());
                     return root_name;
                 }
                 Namespace::Named(context_ns) => {
@@ -1324,7 +1279,10 @@ impl RegistryBuilder {
                         original_name.name.clone(),
                     );
 
-                    self.check_namespace_ambiguity(&namespaced_name, namespace_context.is_explicit);
+                    self.check_namespace_ambiguity(
+                        &namespaced_name,
+                        namespace_context.is_explicit(),
+                    );
 
                     return namespaced_name;
                 }
@@ -1391,13 +1349,12 @@ fn get_name(shape: &Shape) -> QualifiedTypeName {
     };
 
     // Apply namespace - only use explicit namespace annotations, no inheritance
-    if let Some(ns) = shape_namespace {
-        match ns {
+    match shape_namespace {
+        NamespaceAction::SetContext(ctx) => match &ctx.namespace {
             Namespace::Root => QualifiedTypeName::root(base_name),
-            Namespace::Named(name) => QualifiedTypeName::namespaced(name, base_name),
-        }
-    } else {
-        QualifiedTypeName::root(base_name)
+            Namespace::Named(name) => QualifiedTypeName::namespaced(name.clone(), base_name),
+        },
+        NamespaceAction::Inherit => QualifiedTypeName::root(base_name),
     }
 }
 
@@ -1464,39 +1421,42 @@ fn type_to_format(shape: &Shape) -> Format {
     }
 }
 
-fn extract_namespace_from_shape(shape: &Shape) -> Option<Namespace> {
-    for attr in shape.attributes {
-        if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
-                if let Some(end_idx) = stripped.find('"') {
-                    return Some(Namespace::Named(stripped[..end_idx].to_string()));
-                }
-            } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
-                let trimmed = stripped.trim_matches('"');
-                if trimmed == "None" {
-                    return Some(Namespace::Root);
-                }
-                return Some(Namespace::Named(trimmed.to_string()));
-            }
-        }
-    }
-    None
+fn extract_namespace_from_shape(shape: &Shape) -> NamespaceAction {
+    shape
+        .attributes
+        .iter()
+        .find_map(|a| match a {
+            ShapeAttribute::Arbitrary(attr_str) => extract_namespace(attr_str),
+            _ => None,
+        })
+        .unwrap_or(NamespaceAction::Inherit)
 }
 
-fn extract_namespace_from_field_attributes(field: &Field) -> Option<Namespace> {
-    for attr in field.attributes {
-        let FieldAttribute::Arbitrary(attr_str) = attr;
-        if let Some(stripped) = attr_str.strip_prefix("namespace = \"") {
-            if let Some(end_idx) = stripped.find('"') {
-                return Some(Namespace::Named(stripped[..end_idx].to_string()));
-            }
-        } else if let Some(stripped) = attr_str.strip_prefix("namespace = ") {
-            let trimmed = stripped.trim_matches('"');
-            if trimmed == "None" {
-                return Some(Namespace::Root);
-            }
-            return Some(Namespace::Named(trimmed.to_string()));
+fn extract_namespace_from_field_attributes(field: &Field) -> NamespaceAction {
+    field
+        .attributes
+        .iter()
+        .find_map(|FieldAttribute::Arbitrary(attr_str)| extract_namespace(attr_str))
+        .unwrap_or(NamespaceAction::Inherit)
+}
+
+fn extract_namespace(attribute: &str) -> Option<NamespaceAction> {
+    if let Some(stripped) = attribute.strip_prefix("namespace = \"") {
+        if let Some(end_idx) = stripped.find('"') {
+            let namespace = Namespace::Named(stripped[..end_idx].to_string());
+            return Some(NamespaceAction::SetContext(NamespaceContext::explicit(
+                namespace,
+            )));
         }
+    } else if let Some(stripped) = attribute.strip_prefix("namespace = ") {
+        let trimmed = stripped.trim_matches('"');
+        if trimmed == "None" {
+            return Some(NamespaceAction::SetContext(NamespaceContext::cleared()));
+        }
+        let namespace = Namespace::Named(trimmed.to_string());
+        return Some(NamespaceAction::SetContext(NamespaceContext::explicit(
+            namespace,
+        )));
     }
     None
 }
@@ -1648,3 +1608,35 @@ mod tests;
 #[cfg(test)]
 #[path = "namespace_tests.rs"]
 mod namespace_tests;
+
+#[cfg(test)]
+mod function_tests {
+    use super::*;
+
+    #[test]
+    fn extract_namespaces() {
+        assert_eq!(extract_namespace("some string"), None);
+        assert_eq!(
+            extract_namespace("namespace = None"),
+            Some(NamespaceAction::SetContext(NamespaceContext::cleared()))
+        );
+        assert_eq!(
+            extract_namespace("namespace = my_namespace"),
+            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
+                Namespace::Named("my_namespace".to_string())
+            )))
+        );
+        assert_eq!(
+            extract_namespace(r#"namespace = "None""#),
+            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
+                Namespace::Named("None".to_string())
+            )))
+        );
+        assert_eq!(
+            extract_namespace(r#"namespace = "my_namespace""#),
+            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
+                Namespace::Named("my_namespace".to_string())
+            )))
+        );
+    }
+}

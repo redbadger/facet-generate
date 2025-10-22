@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use facet::Facet;
 
-use crate::{reflect, reflection::format::Namespace};
+use crate::{
+    reflect,
+    reflection::{NamespaceAction, NamespaceContext, RegistryBuilder, format::Namespace},
+};
 
 // Tests type-level namespace annotation: `#[facet(namespace = "ns")] struct Type { ... }`
 // This sets the namespace context for all fields within the type, propagating to nested types.
@@ -2556,4 +2559,152 @@ fn enum_struct_variant_collection_inheritance() {
               - []
         - []
     ");
+}
+
+#[test]
+fn test_namespace_context_carries_causality() {
+    // Demonstrate how the new design captures the action that created each context
+
+    // Explicit context knows it was explicitly set
+    let explicit_ctx = NamespaceContext::explicit(Namespace::Named("test".to_string()));
+    assert!(explicit_ctx.is_explicit());
+    assert!(!explicit_ctx.is_cleared());
+    assert_eq!(explicit_ctx.namespace, Namespace::Named("test".to_string()));
+
+    // Test an explicit context in a named namespace
+    let named_ctx = NamespaceContext::explicit(Namespace::Named("named".to_string()));
+    assert!(named_ctx.is_explicit());
+    assert!(!named_ctx.is_cleared());
+    assert_eq!(named_ctx.namespace, Namespace::Named("named".to_string()));
+
+    // Cleared context knows it was cleared
+    let cleared_ctx = NamespaceContext::cleared();
+    assert!(cleared_ctx.is_explicit());
+    assert!(cleared_ctx.is_cleared());
+    assert_eq!(cleared_ctx.namespace, Namespace::Root);
+
+    // The context now eliminates the semantic duplication between
+    // Test that explicit context has the right properties
+    assert!(explicit_ctx.is_explicit());
+    assert_eq!(explicit_ctx.namespace, Namespace::Named("test".to_string()));
+
+    // Test that named context has the right properties
+    assert!(named_ctx.is_explicit());
+    assert_eq!(named_ctx.namespace, Namespace::Named("named".to_string()));
+
+    // Test that cleared context has the right properties
+    assert!(cleared_ctx.is_explicit());
+    assert!(cleared_ctx.is_cleared());
+    assert_eq!(cleared_ctx.namespace, Namespace::Root);
+}
+
+#[test]
+fn test_push_namespace_action_creates_context_with_causality() {
+    let mut builder = RegistryBuilder::new();
+
+    // Test that pushing an explicit action creates a context that knows it was explicit
+    builder.push_namespace(NamespaceAction::SetContext(NamespaceContext::explicit(
+        Namespace::Named("explicit".to_string()),
+    )));
+
+    let current_ctx = builder.current_namespace_context().unwrap();
+    assert!(current_ctx.is_explicit());
+    assert!(!current_ctx.is_cleared());
+    assert_eq!(
+        current_ctx.namespace,
+        Namespace::Named("explicit".to_string())
+    );
+
+    // Test inherit action - it should copy the current context
+    builder.push_namespace(NamespaceAction::Inherit);
+
+    let inherited_ctx = builder.current_namespace_context().unwrap();
+    // The inherited context should have the same namespace but different causality
+    assert_eq!(
+        inherited_ctx.namespace,
+        Namespace::Named("explicit".to_string())
+    );
+    // When we inherit, we get the exact same context (including its original causality)
+    assert!(inherited_ctx.is_explicit()); // Still explicit because we inherited an explicit context
+
+    builder.pop_namespace(); // Pop the inherited context
+
+    // Test clear action
+    builder.push_namespace(NamespaceAction::SetContext(NamespaceContext::cleared()));
+
+    // Clear action creates a context that registers as "no context"
+    let cleared_result = builder.current_namespace_context();
+    assert!(cleared_result.is_none()); // Should return None for cleared contexts
+
+    // But the actual context on the stack knows it was cleared
+    let actual_ctx = builder.namespace_context_stack.last().unwrap();
+    assert!(actual_ctx.is_cleared());
+
+    builder.pop_namespace(); // Clean up
+    builder.pop_namespace(); // Back to original explicit context
+}
+
+#[test]
+fn test_consistent_clear_action_for_namespace_none() {
+    // Test that both type-level and field-level namespace extraction
+    // consistently produce appropriate NamespaceAction
+
+    // This test would need actual Shape/Field objects with attributes to be meaningful
+    // For now, we can test the behavior directly
+
+    // Test that Clear action is explicit
+    let clear_action = NamespaceAction::SetContext(NamespaceContext::cleared());
+    assert!(clear_action.is_explicit());
+
+    // Test that Inherit action is not explicit
+    let inherit_action = NamespaceAction::Inherit;
+    assert!(!inherit_action.is_explicit());
+}
+
+#[test]
+fn test_namespace_action_helper_methods() {
+    // Test the helper methods on NamespaceAction
+
+    // Test is_explicit()
+    assert!(NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Root)).is_explicit());
+    assert!(
+        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
+            "test".to_string()
+        )))
+        .is_explicit()
+    );
+    assert!(NamespaceAction::SetContext(NamespaceContext::cleared()).is_explicit());
+    assert!(!NamespaceAction::Inherit.is_explicit());
+    // Note: inherited contexts are created through normal processing flow,
+    // not through direct construction, so we test explicit contexts here
+    assert!(
+        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
+            "test".to_string()
+        )))
+        .is_explicit()
+    );
+
+    // Test should_move_to_namespace()
+    assert!(
+        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
+            "test".to_string()
+        )))
+        .should_move_to_namespace("test")
+    );
+    assert!(
+        !NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
+            "test".to_string()
+        )))
+        .should_move_to_namespace("other")
+    );
+    assert!(
+        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Root))
+            .should_move_to_namespace("")
+    );
+    assert!(
+        !NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Root))
+            .should_move_to_namespace("test")
+    );
+    assert!(NamespaceAction::SetContext(NamespaceContext::cleared()).should_move_to_namespace(""));
+    assert!(NamespaceAction::Inherit.should_move_to_namespace("anything"));
 }
