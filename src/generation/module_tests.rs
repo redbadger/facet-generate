@@ -35,7 +35,6 @@ fn single_namespace() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -117,7 +116,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -142,7 +140,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:
@@ -170,7 +167,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:
@@ -240,7 +236,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -268,7 +263,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:

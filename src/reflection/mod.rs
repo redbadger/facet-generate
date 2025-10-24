@@ -117,8 +117,9 @@ impl RegistryBuilder {
     }
 
     /// Builds the registry from the current state.
-    /// # Errors
-    /// Will error if the registry is invalid, usually due to incomplete reflection.
+    /// # Panics
+    /// Will panic with a suitable error message if the registry is invalid,
+    /// usually due to incomplete reflection.
     #[must_use]
     pub fn build(self) -> Registry {
         for (type_name, format) in &self.registry {

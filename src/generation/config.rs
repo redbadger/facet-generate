@@ -24,7 +24,6 @@ pub struct CodeGeneratorConfig {
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
     pub custom_code: CustomCode,
-    pub c_style_enums: bool,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
 }
@@ -125,7 +124,6 @@ impl CodeGeneratorConfig {
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
             custom_code: BTreeMap::new(),
-            c_style_enums: false,
             package_manifest: true,
             features: BTreeSet::new(),
         }
@@ -184,14 +182,6 @@ impl CodeGeneratorConfig {
         self
     }
 
-    /// Generate C-style enums (without variant data) as the target language
-    /// native enum type in supported languages.
-    #[must_use]
-    pub fn with_c_style_enums(mut self, c_style_enums: bool) -> Self {
-        self.c_style_enums = c_style_enums;
-        self
-    }
-
     /// Generate a package manifest file for the target language.
     #[must_use]
     pub fn with_package_manifest(mut self, package_manifest: bool) -> Self {
@@ -199,6 +189,11 @@ impl CodeGeneratorConfig {
         self
     }
 
+    /// Updates a config with features present in the specified registry.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the registry is not properly formatted.
     pub fn update_from(&mut self, registry: &Registry) {
         for format in registry.values() {
             format
@@ -226,7 +221,7 @@ impl CodeGeneratorConfig {
                     }
                     Ok(())
                 })
-                .unwrap();
+                .expect("Failed to parse registry");
         }
 
         for name in registry.keys() {
