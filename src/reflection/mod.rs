@@ -5,6 +5,7 @@ pub mod regression_tests;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     string::ToString,
+    sync::LazyLock,
 };
 
 use facet::{
@@ -12,11 +13,12 @@ use facet::{
     PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape, ShapeAttribute, SliceDef,
     StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
 };
+use regex::Regex;
+
+use crate::Registry;
 use format::{
     ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
-
-use crate::Registry;
 
 const SUPPORTED_GENERIC_TYPES: [&str; 10] = [
     "Arc", "Rc", "Box", "Option", "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "DateTime",
@@ -1423,43 +1425,63 @@ fn type_to_format(shape: &Shape) -> Format {
 }
 
 fn extract_namespace_from_shape(shape: &Shape) -> NamespaceAction {
-    shape
-        .attributes
-        .iter()
-        .find_map(|a| match a {
-            ShapeAttribute::Arbitrary(attr_str) => extract_namespace(attr_str),
-            _ => None,
-        })
-        .unwrap_or(NamespaceAction::Inherit)
+    for attr in shape.attributes {
+        if let ShapeAttribute::Arbitrary(attr_str) = attr {
+            match extract_namespace(attr_str) {
+                Ok(None) => (),
+                Ok(Some(namespace)) => return namespace,
+                Err(e) => panic!("Failed to extract namespace: {e}"),
+            }
+        }
+    }
+    NamespaceAction::Inherit
 }
 
 fn extract_namespace_from_field_attributes(field: &Field) -> NamespaceAction {
-    field
-        .attributes
-        .iter()
-        .find_map(|FieldAttribute::Arbitrary(attr_str)| extract_namespace(attr_str))
-        .unwrap_or(NamespaceAction::Inherit)
+    for attr in field.attributes {
+        let FieldAttribute::Arbitrary(attr_str) = attr;
+        match extract_namespace(attr_str) {
+            Ok(None) => (),
+            Ok(Some(namespace)) => return namespace,
+            Err(e) => panic!("Failed to extract namespace: {e}"),
+        }
+    }
+    NamespaceAction::Inherit
 }
 
-fn extract_namespace(attribute: &str) -> Option<NamespaceAction> {
-    if let Some(stripped) = attribute.strip_prefix("namespace = \"") {
-        if let Some(end_idx) = stripped.find('"') {
-            let namespace = Namespace::Named(stripped[..end_idx].to_string());
-            return Some(NamespaceAction::SetContext(NamespaceContext::explicit(
-                namespace,
+fn extract_namespace(attribute: &str) -> Result<Option<NamespaceAction>, String> {
+    const INVALID_FORMAT: &str =
+        r#"Attribute should be either `#[namespace = "my_namespace"]` or `#[namespace = None]`"#;
+    const INVALID_IDENTIFIER: &str = "Invalid namespace identifier";
+    static IS_NAMESPACE_ATTR: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^namespace\s*=\s*(.*)$").expect("Invalid regex"));
+    static HAS_QUOTES: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#"^"(.*)"$"#).expect("Invalid regex"));
+    static VALID_IDENT: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[a-zA-Z_]\w*$").expect("Invalid regex"));
+
+    let Some(s) = IS_NAMESPACE_ATTR.captures(attribute) else {
+        return Ok(None);
+    };
+
+    let s = &s[1];
+    let Some(s) = HAS_QUOTES.captures(s) else {
+        if s == "None" {
+            return Ok(Some(NamespaceAction::SetContext(
+                NamespaceContext::cleared(),
             )));
         }
-    } else if let Some(stripped) = attribute.strip_prefix("namespace = ") {
-        let trimmed = stripped.trim_matches('"');
-        if trimmed == "None" {
-            return Some(NamespaceAction::SetContext(NamespaceContext::cleared()));
-        }
-        let namespace = Namespace::Named(trimmed.to_string());
-        return Some(NamespaceAction::SetContext(NamespaceContext::explicit(
-            namespace,
-        )));
+        return Err(INVALID_FORMAT.to_string());
+    };
+
+    let s = &s[1];
+    if !VALID_IDENT.is_match(s) {
+        return Err(INVALID_IDENTIFIER.to_string());
     }
-    None
+
+    Ok(Some(NamespaceAction::SetContext(
+        NamespaceContext::explicit(Namespace::Named(s.to_string())),
+    )))
 }
 
 fn is_transparent_struct(shape: &Shape) -> bool {
@@ -1615,29 +1637,60 @@ mod function_tests {
     use super::*;
 
     #[test]
-    fn extract_namespaces() {
-        assert_eq!(extract_namespace("some string"), None);
-        assert_eq!(
-            extract_namespace("namespace = None"),
-            Some(NamespaceAction::SetContext(NamespaceContext::cleared()))
-        );
-        assert_eq!(
-            extract_namespace("namespace = my_namespace"),
-            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
-                Namespace::Named("my_namespace".to_string())
-            )))
-        );
-        assert_eq!(
-            extract_namespace(r#"namespace = "None""#),
-            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
-                Namespace::Named("None".to_string())
-            )))
-        );
-        assert_eq!(
-            extract_namespace(r#"namespace = "my_namespace""#),
-            Some(NamespaceAction::SetContext(NamespaceContext::explicit(
-                Namespace::Named("my_namespace".to_string())
-            )))
-        );
+    fn extract_namespace_tests() {
+        const INVALID_FORMAT: &str = r#"Attribute should be either `#[namespace = "my_namespace"]` or `#[namespace = None]`"#;
+        const INVALID_IDENTIFIER: &str = "Invalid namespace identifier";
+        let tests = [
+            ("not a namespace attribute", "some string", Ok(None)),
+            (
+                "error, no quotes around namespace",
+                "namespace = my_namespace",
+                Err(INVALID_FORMAT.to_string()),
+            ),
+            (
+                "error, invalid namespace",
+                r#"namespace = "%^t6!!""#,
+                Err(INVALID_IDENTIFIER.to_string()),
+            ),
+            (
+                "set namespace",
+                r#"namespace = "my_namespace""#,
+                Ok(Some(NamespaceAction::SetContext(
+                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
+                ))),
+            ),
+            (
+                "no space before equals",
+                r#"namespace= "my_namespace""#,
+                Ok(Some(NamespaceAction::SetContext(
+                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
+                ))),
+            ),
+            (
+                "no space after equals",
+                r#"namespace ="my_namespace""#,
+                Ok(Some(NamespaceAction::SetContext(
+                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
+                ))),
+            ),
+            (
+                "clear namespace",
+                "namespace = None",
+                Ok(Some(NamespaceAction::SetContext(
+                    NamespaceContext::cleared(),
+                ))),
+            ),
+            (
+                "set namespace to the name None",
+                r#"namespace = "None""#,
+                Ok(Some(NamespaceAction::SetContext(
+                    NamespaceContext::explicit(Namespace::Named("None".to_string())),
+                ))),
+            ),
+        ];
+
+        for (test, input, expected) in tests {
+            assert_eq!(extract_namespace(input), expected, "{test}: {input}");
+        }
     }
 }

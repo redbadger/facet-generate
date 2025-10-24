@@ -16,6 +16,7 @@ heck = "0.5.0"
 include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
 indoc = { version = "2.0.7", optional = true }
+regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
 textwrap = "0.16.2"
@@ -33,7 +34,6 @@ facet = { version = "0.30.0", features = ["chrono", "url"] }
 ignore = "0.4.24"
 insta = { version = "1.43.2", features = ["yaml", "json"] }
 maplit = "1.0.2"
-regex = "1.12.2"
 strum = { version = "0.27.2", features = ["derive"] }
 tempfile = "3.23.0"
 url = "2.5.7"

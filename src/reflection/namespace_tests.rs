@@ -710,71 +710,15 @@ fn namespace_with_byte_attributes() {
 }
 
 #[test]
-fn deeply_nested_namespaces() {
-    mod level1 {
-        use facet::Facet;
-
-        pub mod level2 {
-            use facet::Facet;
-
-            #[derive(Facet)]
-            #[facet(namespace = "level1.level2")]
-            pub struct DeepStruct {
-                value: String,
-            }
-        }
-
-        #[derive(Facet)]
-        #[facet(namespace = "level1")]
-        pub struct MiddleStruct {
-            deep: level2::DeepStruct,
-        }
-    }
-
+#[should_panic(expected = "Invalid namespace identifier")]
+fn invalid_namespace_identifier() {
     #[derive(Facet)]
-    struct RootStruct {
-        middle: level1::MiddleStruct,
-        deep_direct: level1::level2::DeepStruct,
+    #[facet(namespace = "x.y")]
+    pub struct MyStruct {
+        value: String,
     }
 
-    let registry = reflect!(RootStruct);
-    insta::assert_yaml_snapshot!(registry, @r"
-    ? namespace: ROOT
-      name: RootStruct
-    : STRUCT:
-        - - middle:
-              - TYPENAME:
-                  namespace:
-                    NAMED: level1
-                  name: MiddleStruct
-              - []
-          - deep_direct:
-              - TYPENAME:
-                  namespace:
-                    NAMED: level1.level2
-                  name: DeepStruct
-              - []
-        - []
-    ? namespace:
-        NAMED: level1
-      name: MiddleStruct
-    : STRUCT:
-        - - deep:
-              - TYPENAME:
-                  namespace:
-                    NAMED: level1.level2
-                  name: DeepStruct
-              - []
-        - []
-    ? namespace:
-        NAMED: level1.level2
-      name: DeepStruct
-    : STRUCT:
-        - - value:
-              - STR
-              - []
-        - []
-    ");
+    let _registry = reflect!(MyStruct);
 }
 
 #[test]
