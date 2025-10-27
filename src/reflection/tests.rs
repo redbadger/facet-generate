@@ -13,7 +13,7 @@ fn unit_struct() {
     #[derive(Facet)]
     struct MyUnitStruct;
 
-    insta::assert_yaml_snapshot!(reflect!(MyUnitStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyUnitStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyUnitStruct
     : UNITSTRUCT: []
@@ -27,7 +27,7 @@ fn unit_struct_with_doc() {
     #[derive(Facet)]
     struct MyUnitStruct;
 
-    insta::assert_yaml_snapshot!(reflect!(MyUnitStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyUnitStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyUnitStruct
     : UNITSTRUCT:
@@ -41,7 +41,7 @@ fn newtype_bool() {
     #[derive(Facet)]
     struct MyNewType(bool);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -55,7 +55,7 @@ fn newtype_unit() {
     #[derive(Facet)]
     struct MyNewType(());
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -69,7 +69,7 @@ fn newtype_static_str() {
     #[derive(Facet)]
     struct MyNewType(&'static str);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -83,7 +83,7 @@ fn newtype_u8() {
     #[derive(Facet)]
     struct MyNewType(u8);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -97,7 +97,7 @@ fn newtype_u16() {
     #[derive(Facet)]
     struct MyNewType(u16);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -111,7 +111,7 @@ fn newtype_u32() {
     #[derive(Facet)]
     struct MyNewType(u32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -125,7 +125,7 @@ fn newtype_u64() {
     #[derive(Facet)]
     struct MyNewType(u64);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -139,7 +139,7 @@ fn newtype_u128() {
     #[derive(Facet)]
     struct MyNewType(u128);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -153,7 +153,7 @@ fn newtype_i8() {
     #[derive(Facet)]
     struct MyNewType(i8);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -167,7 +167,7 @@ fn newtype_i16() {
     #[derive(Facet)]
     struct MyNewType(i16);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -181,7 +181,7 @@ fn newtype_i32() {
     #[derive(Facet)]
     struct MyNewType(i32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -195,7 +195,7 @@ fn newtype_i64() {
     #[derive(Facet)]
     struct MyNewType(i64);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -209,7 +209,7 @@ fn newtype_i128() {
     #[derive(Facet)]
     struct MyNewType(i128);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -223,7 +223,7 @@ fn newtype_f32() {
     #[derive(Facet)]
     struct MyNewType(f32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -237,7 +237,7 @@ fn newtype_f64() {
     #[derive(Facet)]
     struct MyNewType(f64);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -251,7 +251,7 @@ fn newtype_char() {
     #[derive(Facet)]
     struct MyNewType(char);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -268,7 +268,7 @@ fn nested_newtype() {
     #[derive(Facet)]
     struct MyNewType(Inner);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -289,7 +289,7 @@ fn newtype_with_list() {
     #[derive(Facet)]
     struct MyNewType(Vec<i32>);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -306,7 +306,7 @@ fn newtype_with_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Inner>);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -328,7 +328,7 @@ fn newtype_with_nested_list() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<i32>>);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -346,7 +346,7 @@ fn newtype_with_nested_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<Inner>>);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -372,7 +372,7 @@ fn newtype_with_triple_nested_list_of_named_type() {
     #[derive(Facet)]
     struct MyNewType(Vec<Vec<Vec<Inner>>>);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -396,7 +396,7 @@ fn newtype_with_tuple_array() {
     #[derive(Facet)]
     struct MyNewType([i32; 3]);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -412,7 +412,7 @@ fn tuple_struct() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, i32, bool);
 
-    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyTupleStruct
     : TUPLESTRUCT:
@@ -428,7 +428,7 @@ fn tuple_struct_with_unit() {
     #[derive(Facet)]
     struct MyTupleStruct(u8, (), i32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyTupleStruct
     : TUPLESTRUCT:
@@ -446,7 +446,7 @@ fn option_of_unit() {
         a: Option<()>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -464,7 +464,7 @@ fn option_of_list() {
         a: Option<Vec<i32>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -483,7 +483,7 @@ fn option_of_nested_list() {
         a: Option<Vec<Vec<i32>>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -506,7 +506,7 @@ fn option_of_list_of_named_type() {
         a: Option<Vec<Inner>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -533,7 +533,7 @@ fn list_of_options() {
         a: Vec<Option<i32>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -555,7 +555,7 @@ fn list_of_options_of_named_type() {
         a: Vec<Option<Inner>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -582,7 +582,7 @@ fn nested_list_with_options() {
         a: Vec<Vec<Option<i32>>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -603,7 +603,7 @@ fn nested_tuple_struct_1() {
     #[derive(Facet)]
     struct MyTupleStruct(Inner, u8);
 
-    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -628,7 +628,7 @@ fn nested_tuple_struct_2() {
     #[derive(Facet)]
     struct MyTupleStruct(i32, Inner, u8);
 
-    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : TUPLESTRUCT:
@@ -657,7 +657,7 @@ fn struct_with_doc() {
         a: u8,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -677,7 +677,7 @@ fn struct_with_field_doc() {
         a: u8,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -695,7 +695,7 @@ fn struct_with_static_str() {
         a: &'static str,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -713,7 +713,7 @@ fn struct_with_vec_of_u8() {
         a: Vec<u8>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -732,7 +732,7 @@ fn struct_with_vec_of_u8_to_bytes() {
         a: Vec<u8>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -750,7 +750,7 @@ fn struct_with_slice_of_u8() {
         a: &'a [u8],
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -769,7 +769,7 @@ fn struct_with_slice_of_u8_to_bytes() {
         a: &'a [u8],
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -790,7 +790,7 @@ fn struct_with_scalar_fields() {
         d: (),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -817,7 +817,7 @@ fn struct_with_tuple_field() {
         a: (u8, i32),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -844,7 +844,7 @@ fn struct_with_option_fields() {
         b: Option<u8>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : STRUCT:
@@ -885,7 +885,7 @@ fn struct_with_fields_of_newtypes_and_tuple_structs() {
         b: Inner2,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner1
     : NEWTYPESTRUCT:
@@ -924,7 +924,7 @@ fn enum_with_unit_variants() {
         Variant2,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -955,7 +955,7 @@ fn enum_with_newtype_variants() {
         Variant7(()),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1004,7 +1004,7 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
         Variant2(u8),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -1038,7 +1038,7 @@ fn enum_with_tuple_struct_variants() {
         Variant2(i8, u32),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1076,7 +1076,7 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
         Variant2(i8, Inner),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -1119,7 +1119,7 @@ fn enum_with_inline_struct_variants() {
         Variant2(Inner),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : STRUCT:
@@ -1180,7 +1180,7 @@ fn enum_with_struct_variants_mixed_types() {
         },
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : NEWTYPESTRUCT:
@@ -1243,7 +1243,7 @@ fn enum_with_struct_variant() {
         C { x: u8 },
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1276,7 +1276,7 @@ fn struct_with_skip_serializing() {
         c: u8,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1295,7 +1295,7 @@ fn tuple_struct_with_skip_serializing() {
     #[derive(Facet)]
     struct MyStruct(u8, #[facet(skip)] u16, u32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : TUPLESTRUCT:
@@ -1317,7 +1317,7 @@ fn enum_with_skip_serializing() {
         Variant3,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1344,7 +1344,7 @@ fn transparent() {
         inner: Inner,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1364,7 +1364,7 @@ fn map_of_string_and_bool() {
         Map(BTreeMap<String, bool>),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1388,7 +1388,7 @@ fn set_of_string() {
         Set(BTreeSet<String>),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: MyEnum
     : ENUM:
@@ -1426,7 +1426,7 @@ fn test_fixed_issues() {
     }
 
     // This should not panic - all Variable placeholders should be resolved
-    let registry = reflect!(WithSet, EnumWithSet, ComplexNested);
+    let registry = reflect!(WithSet, EnumWithSet, ComplexNested).unwrap();
 
     // Verify all types were processed
     assert!(!registry.is_empty());
@@ -1455,7 +1455,7 @@ fn sequence_and_map_types() {
         btree_set: BTreeSet<String>,
     }
 
-    insta::assert_yaml_snapshot!(&reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(&reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1500,7 +1500,7 @@ fn map_with_user_defined_types() {
         nested_map: BTreeMap<String, Option<u64>>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1556,7 +1556,7 @@ fn complex_map() {
         Map(BTreeMap<([u32; 2], [u8; 4]), ()>),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(ComplexMap), @r"
+    insta::assert_yaml_snapshot!(reflect!(ComplexMap).unwrap(), @r"
     ? namespace: ROOT
       name: ComplexMap
     : ENUM:
@@ -1591,7 +1591,7 @@ fn struct_with_box_of_t() {
         boxed: Box<UserProfile>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1627,7 +1627,7 @@ fn struct_with_arc_of_t() {
         boxed: Arc<UserProfile>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -1691,7 +1691,7 @@ fn own_result_enum() {
         Timeout,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(HttpResult), @r"
+    insta::assert_yaml_snapshot!(reflect!(HttpResult).unwrap(), @r"
     ? namespace: ROOT
       name: HttpError
     : ENUM:
@@ -1764,7 +1764,7 @@ fn struct_rename() {
         active: bool,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(EffectFfi), @r"
+    insta::assert_yaml_snapshot!(reflect!(EffectFfi).unwrap(), @r"
     ? namespace: ROOT
       name: Effect
     : STRUCT:
@@ -1789,7 +1789,7 @@ fn enum_rename() {
         Two,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(EffectFfi), @r"
+    insta::assert_yaml_snapshot!(reflect!(EffectFfi).unwrap(), @r"
     ? namespace: ROOT
       name: Effect
     : ENUM:
@@ -1819,7 +1819,7 @@ fn struct_rename_with_named_type() {
         effect: EffectFfi,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(Request), @r"
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @r"
     ? namespace: ROOT
       name: Effect
     : STRUCT:
@@ -1847,7 +1847,7 @@ fn self_referencing_type() {
     #[derive(Facet)]
     struct SimpleList(Option<Box<SimpleList>>);
 
-    insta::assert_debug_snapshot!(reflect!(SimpleList), @r#"
+    insta::assert_debug_snapshot!(reflect!(SimpleList).unwrap(), @r#"
     {
         QualifiedTypeName {
             namespace: Root,
@@ -1878,7 +1878,7 @@ fn complex_self_referencing_type() {
         children: Option<Vec<Box<Node>>>,
     }
 
-    insta::assert_debug_snapshot!(reflect!(Node), @r#"
+    insta::assert_debug_snapshot!(reflect!(Node).unwrap(), @r#"
     {
         QualifiedTypeName {
             namespace: Root,
@@ -1932,7 +1932,7 @@ fn tree_struct_with_mutual_recursion() {
         TreeWithMutualRecursion(Tree<Box<Test>>),
     }
 
-    insta::assert_debug_snapshot!(reflect!(Test), @r#"
+    insta::assert_debug_snapshot!(reflect!(Test).unwrap(), @r#"
     {
         QualifiedTypeName {
             namespace: Root,
@@ -2012,7 +2012,7 @@ fn tree_enum_with_mutual_recursion() {
         tree_with_mutual_recursion: Tree<Box<Test>>,
     }
 
-    insta::assert_debug_snapshot!(reflect!(Test), @r#"
+    insta::assert_debug_snapshot!(reflect!(Test).unwrap(), @r#"
     {
         QualifiedTypeName {
             namespace: Root,
@@ -2071,7 +2071,7 @@ fn newtype_str_ref() {
     #[derive(Facet)]
     struct MyNewType<'a>(&'a str);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -2087,7 +2087,7 @@ fn struct_with_str_ref() {
         a: &'a str,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2103,7 +2103,7 @@ fn newtype_slice_ref() {
     #[derive(Facet)]
     struct MyNewType<'a>(&'a [u8]);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -2119,7 +2119,7 @@ fn struct_with_slice_ref() {
         a: &'a [u8],
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2135,7 +2135,7 @@ fn newtype_mut_ref() {
     #[derive(Facet)]
     struct MyNewType<'a>(&'a mut str);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: MyNewType
     : NEWTYPESTRUCT:
@@ -2151,7 +2151,7 @@ fn struct_with_mut_ref() {
         a: &'a mut [u8],
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2172,7 +2172,7 @@ fn newtype_struct_ref() {
     #[derive(Facet)]
     struct MyNewType<'a>(&'a Inner);
 
-    insta::assert_yaml_snapshot!(reflect!(MyNewType), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyNewType).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : STRUCT:
@@ -2202,7 +2202,7 @@ fn struct_with_struct_ref() {
         a: &'a Inner,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : STRUCT:
@@ -2238,7 +2238,7 @@ fn enum_with_ref_variants() {
         StructRef(&'a Inner),
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyEnum), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
     ? namespace: ROOT
       name: Inner
     : STRUCT:
@@ -2277,7 +2277,7 @@ fn struct_with_vec_ref() {
         b: &'a [Vec<String>],
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2300,7 +2300,7 @@ fn references_with_options() {
         b: &'a Option<String>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2319,7 +2319,7 @@ fn tuple_struct_with_multiple_refs() {
     #[derive(Facet)]
     struct MyTupleStruct<'a>(&'a str, &'a [u8], &'a i32);
 
-    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyTupleStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyTupleStruct
     : TUPLESTRUCT:
@@ -2338,7 +2338,7 @@ fn struct_with_rc() {
         a: Rc<String>,
     }
 
-    insta::assert_yaml_snapshot!(reflect!(MyStruct), @r"
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
     ? namespace: ROOT
       name: MyStruct
     : STRUCT:
@@ -2358,7 +2358,7 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
         Variant1((i32, u8)),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     // TODO: this output is obviously wrong, the `name: (⋯)` is because it's an anonymous tuple struct
     // so what should be name be (if it's a separate type)?
     insta::assert_yaml_snapshot!(registry, @r"
@@ -2395,7 +2395,7 @@ fn enum_with_tuple_variant_of_user_types_in_a_mod() {
         MyVariant(api::Test1, api::Test2),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2437,7 +2437,7 @@ fn enum_with_tuple_variant_of_lists_of_user_types() {
         MyVariant(Vec<Test1>, Vec<Test2>),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2481,7 +2481,7 @@ fn enum_with_tuple_variant_of_option_of_user_types() {
         MyVariant(Option<Test1>, Option<Test2>),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2526,7 +2526,7 @@ fn enum_with_tuple_variant_of_map_of_user_types() {
         MyVariant(HashMap<String, Test1>, HashMap<String, Test2>),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2574,7 +2574,7 @@ fn enum_with_tuple_variant_of_set_of_user_types() {
         MyVariant(HashSet<Test1>, HashSet<Test2>),
     }
 
-    let registry = reflect!(MyEnum);
+    let registry = reflect!(MyEnum).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2617,7 +2617,7 @@ fn chrono_date_time() {
         field2: MyEnum,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyEnum
@@ -2661,7 +2661,7 @@ fn generics_supported_if_used_once() {
         field1: SupportedGenerics<String>,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MyStruct
@@ -2684,7 +2684,6 @@ fn generics_supported_if_used_once() {
 
 /// TODO: Eventually we should support generics used more than once
 #[test]
-#[should_panic(expected = "Unsupported generic type")]
 fn generics_unsupported_if_used_twice() {
     #[derive(Facet)]
     struct UnsupportedGenerics<T> {
@@ -2697,5 +2696,7 @@ fn generics_unsupported_if_used_twice() {
         field2: UnsupportedGenerics<u16>,
     }
 
-    let _registry = reflect!(MyStruct);
+    let err = reflect!(MyStruct).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @"failed to add type MyStruct: unsupported generic type: UnsupportedGenerics<u16>, the type may have already been used with different parameters");
 }

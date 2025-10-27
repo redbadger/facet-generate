@@ -41,7 +41,7 @@ fn nested_namespaced_structs() {
         two: two::Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -129,7 +129,7 @@ fn nested_namespaced_enums() {
         Two(two::Child),
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -220,7 +220,7 @@ fn nested_namespaced_renamed_structs() {
         two: two::Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -291,7 +291,7 @@ fn namespaced_collections() {
         groups: Vec<Group>,
     }
 
-    let registry = reflect!(Response);
+    let registry = reflect!(Response).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Response
@@ -376,7 +376,7 @@ fn namespaced_maps() {
         user_counts: HashMap<String, u32>,
     }
 
-    let registry = reflect!(Database);
+    let registry = reflect!(Database).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Database
@@ -457,7 +457,7 @@ fn complex_namespaced_enums() {
         events: Vec<events::Event>,
     }
 
-    let registry = reflect!(EventLog);
+    let registry = reflect!(EventLog).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: EventLog
@@ -550,7 +550,7 @@ fn namespaced_transparent_structs() {
         wrapped_id: TransparentWrapper,
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -604,7 +604,7 @@ fn cross_namespace_references() {
         records: Vec<Record>,
     }
 
-    let registry = reflect!(System);
+    let registry = reflect!(System).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: System
@@ -680,7 +680,7 @@ fn namespace_with_byte_attributes() {
         binary: data::BinaryData,
     }
 
-    let registry = reflect!(Document);
+    let registry = reflect!(Document).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Document
@@ -710,7 +710,6 @@ fn namespace_with_byte_attributes() {
 }
 
 #[test]
-#[should_panic(expected = "Invalid namespace identifier")]
 fn invalid_namespace_identifier() {
     #[derive(Facet)]
     #[facet(namespace = "x.y")]
@@ -718,7 +717,12 @@ fn invalid_namespace_identifier() {
         value: String,
     }
 
-    let _registry = reflect!(MyStruct);
+    let err = reflect!(MyStruct).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @"failed to add type MyStruct: invalid namespace identifier"
+    );
 }
 
 #[test]
@@ -741,7 +745,7 @@ fn transparent_struct_explicit_namespace() {
         wrapped_id: wrappers::TransparentWrapper,
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -831,7 +835,7 @@ fn explicit_namespace_declarations() {
         efficient: RootGroup,
     }
 
-    let registry = reflect!(RootContainer);
+    let registry = reflect!(RootContainer).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ApiContainer
@@ -976,7 +980,7 @@ fn collections_with_explicit_namespace() {
         nested_lists: Vec<Vec<UnnamedUser>>,
     }
 
-    let registry = reflect!(UserManager);
+    let registry = reflect!(UserManager).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: system
@@ -1078,7 +1082,7 @@ fn enums_with_explicit_namespace() {
         Empty,
     }
 
-    let registry = reflect!(Response);
+    let registry = reflect!(Response).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: api
@@ -1198,7 +1202,7 @@ fn nested_structs_with_explicit_namespace() {
         inner_direct: DeepInner,
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: nested
@@ -1293,7 +1297,7 @@ fn transparent_struct_chains() {
         id: NamespacedWrapper,
     }
 
-    let registry = reflect!(IdContainer);
+    let registry = reflect!(IdContainer).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: IdContainer
@@ -1343,7 +1347,7 @@ fn mixed_containers_with_explicit_namespace() {
         complex_map: HashMap<String, Vec<Option<Item>>>,
     }
 
-    let registry = reflect!(MixedContainer);
+    let registry = reflect!(MixedContainer).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: storage
@@ -1415,7 +1419,6 @@ fn mixed_containers_with_explicit_namespace() {
 }
 
 #[test]
-#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 /// Same type appearing in **multiple inherited namespaces** including ROOT
 fn no_namespace_pollution() {
     #[derive(Facet)]
@@ -1442,7 +1445,12 @@ fn no_namespace_pollution() {
         not_namespaced: SharedType,
     }
 
-    let _registry = reflect!(RootContainer);
+    let err = reflect!(RootContainer).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type RootContainer: ambiguous namespace inheritance: "SharedType" in both "alpha" and "beta""#
+    );
 }
 
 // Tests field-level namespace annotation: `#[facet(namespace = "ns")] field: Type`
@@ -1460,7 +1468,7 @@ fn struct_field_points_to_type_in_a_namespace() {
         value: Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1497,7 +1505,7 @@ fn enum_variant_field_points_to_type_in_a_namespace() {
         Value(#[facet(namespace = "other_namespace")] Child),
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1539,7 +1547,7 @@ fn enum_struct_variant_field_points_to_type_in_a_namespace() {
         },
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1591,7 +1599,7 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
         },
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1654,7 +1662,7 @@ fn struct_field_recursively_points_to_type_in_a_namespace() {
         value: Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1706,7 +1714,7 @@ fn struct_field_with_pointer_inherits_namespace() {
         value: Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1758,7 +1766,7 @@ fn struct_field_with_collection_inherits_namespace() {
         container: Container,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -1795,7 +1803,6 @@ fn struct_field_with_collection_inherits_namespace() {
 
 /// Same type appearing in ROOT (via type-level `#[facet(namespace = None)]`) vs inherited namespace
 #[test]
-#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 fn explicit_none_namespace() {
     #[derive(Facet)]
     struct SimpleType {
@@ -1815,7 +1822,12 @@ fn explicit_none_namespace() {
         simple_direct: SimpleType,
     }
 
-    let _registry = reflect!(WrapperType);
+    let err = reflect!(WrapperType).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type WrapperType: ambiguous namespace inheritance: "SimpleType" in both "ROOT" and "wrapper""#
+    );
 }
 
 // Tests the difference between `namespace = None` (clears context) and `namespace = "None"` (creates "None" namespace)
@@ -1833,7 +1845,7 @@ fn namespace_named_none_as_string() {
         none_named: ExplicitNoneNamespace,
     }
 
-    let registry = reflect!(Wrapper);
+    let registry = reflect!(Wrapper).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: None
@@ -1858,7 +1870,6 @@ fn namespace_named_none_as_string() {
 }
 
 #[test]
-#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 /// Same type appearing in ROOT (via field-level `#[facet(namespace = None)]`) vs inherited namespace
 fn field_level_explicit_none_namespace() {
     #[derive(Facet)]
@@ -1874,7 +1885,12 @@ fn field_level_explicit_none_namespace() {
         normal_field: SimpleType,
     }
 
-    let _registry = reflect!(Container);
+    let err = reflect!(Container).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type Container: ambiguous namespace inheritance: "SimpleType" in both "ROOT" and "container""#
+    );
 }
 
 #[test]
@@ -1901,7 +1917,7 @@ fn enum_with_explicit_none_namespace() {
         data_direct: DataType,
     }
 
-    let registry = reflect!(Wrapper);
+    let registry = reflect!(Wrapper).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: ExplicitRootEnum
@@ -1967,7 +1983,7 @@ fn deeply_nested_explicit_none() {
         deep_direct: DeepType,
     }
 
-    let registry = reflect!(OuterType);
+    let registry = reflect!(OuterType).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: MiddleType
@@ -2007,7 +2023,6 @@ fn deeply_nested_explicit_none() {
 }
 
 #[test]
-#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 /// Same type appearing in multiple **inherited namespaces** from different parents
 fn ambiguous_namespace_inheritance_should_error() {
     #[derive(Facet)]
@@ -2035,7 +2050,12 @@ fn ambiguous_namespace_inheritance_should_error() {
         parent_b: ParentB,
     }
 
-    let _registry = reflect!(Root);
+    let err = reflect!(Root).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type Root: ambiguous namespace inheritance: "SharedType" in both "namespace_a" and "namespace_b""#
+    );
 }
 
 #[test]
@@ -2066,7 +2086,7 @@ fn explicit_namespace_prevents_inheritance_ambiguity() {
         parent_b: ParentB,
     }
 
-    let registry = reflect!(Root);
+    let registry = reflect!(Root).unwrap();
 
     // SharedType should only appear once in the "explicit" namespace
     let shared_type_entries: Vec<_> = registry.keys().filter(|k| k.name == "SharedType").collect();
@@ -2106,7 +2126,7 @@ fn fixed_namespace_pollution_with_explicit_annotations() {
         not_namespaced: SharedType, // SharedType still has explicit "shared" namespace
     }
 
-    let registry = reflect!(RootContainer);
+    let registry = reflect!(RootContainer).unwrap();
 
     // SharedType should only appear once in the "shared" namespace
     let shared_type_entries: Vec<_> = registry.keys().filter(|k| k.name == "SharedType").collect();
@@ -2189,7 +2209,7 @@ fn mixed_field_and_type_level_explicit_override() {
         value: String,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace:
         NAMED: child
@@ -2228,7 +2248,7 @@ fn field_level_none_vs_type_level_named() {
         child: Child, // But Child has type-level explicit "type_wins"
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Parent
@@ -2267,7 +2287,7 @@ fn field_level_named_vs_type_level_none() {
         child: Child, // But Child has type-level explicit None
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Child
@@ -2290,7 +2310,6 @@ fn field_level_named_vs_type_level_none() {
 }
 
 #[test]
-#[should_panic(expected = "Ambiguous namespace inheritance detected")]
 fn same_type_with_different_field_level_overrides() {
     // Test that the same type appearing in different namespaces via different field-level overrides
     // correctly triggers ambiguity detection
@@ -2317,7 +2336,12 @@ fn same_type_with_different_field_level_overrides() {
         b: ContainerB,
     }
 
-    let _registry = reflect!(Root);
+    let err = reflect!(Root).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type Root: ambiguous namespace inheritance: "SharedType" in both "namespace_a" and "namespace_b""#
+    );
 }
 
 #[test]
@@ -2336,7 +2360,7 @@ fn collection_inner_types_inherit_field_level_namespace() {
         item_map: HashMap<String, Item>,
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -2390,7 +2414,7 @@ fn enum_tuple_variant_collection_inheritance() {
         ItemMap(#[facet(namespace = "ns2")] HashMap<String, Item2>),
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container
@@ -2460,7 +2484,7 @@ fn enum_struct_variant_collection_inheritance() {
         },
     }
 
-    let registry = reflect!(Container);
+    let registry = reflect!(Container).unwrap();
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
       name: Container

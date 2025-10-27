@@ -144,7 +144,7 @@ fn manifest_with_serde_module() {
         name: String,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
@@ -184,7 +184,7 @@ fn manifest_with_namespaces() {
         child: Child,
     }
 
-    let registry = reflect!(Root);
+    let registry = reflect!(Root).unwrap();
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
@@ -221,7 +221,7 @@ fn manifest_with_external_namespace_dependencies() {
         child: Child,
     }
 
-    let registry = reflect!(Root);
+    let registry = reflect!(Root).unwrap();
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();

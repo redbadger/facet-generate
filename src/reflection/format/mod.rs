@@ -43,7 +43,7 @@ impl fmt::Display for Namespace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Namespace::Root => write!(f, "ROOT"),
-            Namespace::Named(name) => write!(f, r#""{name}""#),
+            Namespace::Named(name) => write!(f, "{name}"),
         }
     }
 }
@@ -55,6 +55,12 @@ pub struct QualifiedTypeName {
     pub namespace: Namespace,
     /// The simple name of the type.
     pub name: String,
+}
+
+impl fmt::Display for QualifiedTypeName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}::{}", self.namespace, self.name)
+    }
 }
 
 impl From<&str> for QualifiedTypeName {
@@ -88,7 +94,7 @@ impl QualifiedTypeName {
 
     /// Build a string from the qualified type name using the supplied namespace formatter and separator.
     #[must_use]
-    pub fn to_string(&self, namespace_formatter: fn(&str) -> String, separator: &str) -> String {
+    pub fn format(&self, namespace_formatter: fn(&str) -> String, separator: &str) -> String {
         match &self.namespace {
             Namespace::Root => self.name.clone(),
             Namespace::Named(ns) => {

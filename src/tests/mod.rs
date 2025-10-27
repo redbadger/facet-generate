@@ -44,8 +44,9 @@ macro_rules! test {
         #[test]
         fn $language() -> Result<()> {
             let registry = RegistryBuilder::new()
-                $(.add_type::<$ty>())*
-                .build();
+                $(.add_type::<$ty>().unwrap())*
+                .build()
+                .unwrap();
             let package_name = test!(@package $language).to_string();
             let cfg = CodeGeneratorConfig::new(package_name);
             let generator = <$language::CodeGenerator as CodeGen>::new(&cfg);

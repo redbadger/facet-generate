@@ -14,6 +14,7 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet, HashSet};
 
     use crate::{
+        error::Error,
         reflect,
         reflection::format::{Doc, Namespace, QualifiedTypeName},
     };
@@ -40,7 +41,7 @@ mod tests {
         }
 
         // This should complete successfully - no more panics on Set types
-        let registry = reflect!(WithSets, EnumWithSet);
+        let registry = reflect!(WithSets, EnumWithSet).unwrap();
         assert!(!registry.is_empty());
     }
 
@@ -55,7 +56,7 @@ mod tests {
         }
 
         // All Variable placeholders should be resolved correctly
-        let registry = reflect!(NestedSets);
+        let registry = reflect!(NestedSets).unwrap();
         assert!(!registry.is_empty());
     }
 
@@ -69,7 +70,7 @@ mod tests {
         }
 
         // This should work fine - all Variables should be resolved
-        let registry = reflect!(SimpleStruct);
+        let registry = reflect!(SimpleStruct).unwrap();
         assert!(!registry.is_empty());
 
         // Verify the type was processed correctly
@@ -110,7 +111,7 @@ mod tests {
 
         // The temp container workflow in process_newtype_variant_with_temp_container
         // should now properly resolve all Variables
-        let registry = reflect!(WithNewtypeVariant);
+        let registry = reflect!(WithNewtypeVariant).unwrap();
         assert!(!registry.is_empty());
     }
 
@@ -145,7 +146,7 @@ mod tests {
         }
 
         // All of these previously problematic patterns should now work
-        let registry = reflect!(Complex, ComplexEnum);
+        let registry = reflect!(Complex, ComplexEnum).unwrap();
         assert!(!registry.is_empty());
 
         // Should have processed both types
@@ -161,7 +162,6 @@ mod tests {
     /// Diagnostic test: Manually create unresolved Variables to verify `build()` catches them
     /// This simulates what used to happen in the problematic code paths
     #[test]
-    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_build_catches_unresolved_variables() {
         let mut builder = RegistryBuilder::new();
 
@@ -172,15 +172,21 @@ mod tests {
         };
 
         let unresolved_container = ContainerFormat::NewTypeStruct(Box::default(), Doc::new());
-        builder.registry.insert(type_name, unresolved_container);
+        builder
+            .registry
+            .insert(type_name.clone(), unresolved_container);
 
-        // This should still panic - the safety check works
-        let _registry = builder.build();
+        assert_eq!(
+            builder.build(),
+            Err(Error::ReflectionError {
+                type_name: type_name.to_string(),
+                message: "incomplete reflection detected".to_string()
+            })
+        );
     }
 
     /// Test with enum variants that have unresolved Variables
     #[test]
-    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_enum_with_unresolved_variant_caught() {
         let mut builder = RegistryBuilder::new();
 
@@ -201,15 +207,19 @@ mod tests {
             name: "EnumWithUnresolvedVariant".to_string(),
         };
 
-        builder.registry.insert(type_name, enum_container);
+        builder.registry.insert(type_name.clone(), enum_container);
 
-        // This should still panic - the safety mechanism works
-        let _registry = builder.build();
+        assert_eq!(
+            builder.build(),
+            Err(Error::ReflectionError {
+                type_name: type_name.to_string(),
+                message: "incomplete reflection detected".to_string()
+            })
+        );
     }
 
     /// Test with struct fields that have unresolved Variables
     #[test]
-    #[should_panic(expected = "There was a problem reflecting type")]
     fn test_struct_with_unresolved_field_caught() {
         let mut builder = RegistryBuilder::new();
 
@@ -226,10 +236,15 @@ mod tests {
             name: "StructWithUnresolvedField".to_string(),
         };
 
-        builder.registry.insert(type_name, struct_container);
+        builder.registry.insert(type_name.clone(), struct_container);
 
-        // This should still panic - the safety mechanism works
-        let _registry = builder.build();
+        assert_eq!(
+            builder.build(),
+            Err(Error::ReflectionError {
+                type_name: type_name.to_string(),
+                message: "incomplete reflection detected".to_string()
+            })
+        );
     }
 
     /// Regression test: Verify the original failing case now works
@@ -247,7 +262,7 @@ mod tests {
         }
 
         // This used to panic, now it should work
-        let registry = reflect!(MyEnum);
+        let registry = reflect!(MyEnum).unwrap();
         assert!(!registry.is_empty());
 
         // Should contain the enum type
@@ -260,7 +275,6 @@ mod tests {
 
     /// This will pass eventually, once we fully support generic types.
     #[test]
-    #[should_panic(expected = "Unsupported generic type")]
     fn test_enum_with_anon_struct_variants_with_result_of_t() {
         use thiserror::Error;
 
@@ -297,6 +311,11 @@ mod tests {
             Variant2 { result: MyResult<i32> },
         }
 
-        let _registry = reflect!(MyEnum);
+        let err = reflect!(MyEnum).unwrap_err();
+
+        insta::assert_snapshot!(
+            err.root_cause(),
+            @"failed to add type MyEnum: unsupported generic type: MyResult<i32>, the type may have already been used with different parameters"
+        );
     }
 }

@@ -221,7 +221,7 @@ impl CodeGeneratorConfig {
                     }
                     Ok(())
                 })
-                .expect("Failed to parse registry");
+                .expect("failed to parse registry");
         }
 
         for name in registry.keys() {
