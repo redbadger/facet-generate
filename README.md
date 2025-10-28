@@ -98,7 +98,17 @@ insta::assert_yaml_snapshot!(registry, @r"
 
 ##### Namespaces
 
-Types that are explictly annotated as belonging to a specific namespace are emitted as separate modules. In Swift this means they are a separate target in the current package. In Java, they are emitted as a child namespace of the package's namespace. In TypeScript they are emitted alongside as a separate `.ts` file.
+Types that are explicitly annotated as belonging to a specific namespace are emitted as separate modules. These can be within the same package, or in a separate package if specified in the config during type generation (using [`ExternalPackage`](https://docs.rs/facet_generate/latest/facet_generate/generation/struct.ExternalPackage.html)).
+
+* In Swift, namespaces become a separate target in the current package
+* In Java, they are emitted as a child namespace of the package's namespace
+* In TypeScript they are emitted alongside as a separate `.ts` file
+
+* Once a namespace is set (via `#[facet(namespace = "my_ns")]`) either at field-level (call-site) or type-level (called site), it will propagate to child types. The latest namespace is in effect until changed or cancelled. Type-level annotations take priority over field-level annotations.
+* A namespace context can be unset (via `#[facet(namespace = None)]`). This is still an explicit annotation, so it cancels any implicit annotations being carried forwards from higher in the graph. It places the type (and any child types) in the ROOT namespace.
+* Namespaces are propagated through field level references, including via pointers and collections.
+* Any ambiguity (i.e. a type is reached via more than one path, each with a different implicit namespace) will cause the typegen to emit an error, detailing the type involved and the namespaces that clash. The fix is then to either explicitly set (or unset) the type's namespace, or to align the inherited namespaces.
+
 
 ```rust
 #[derive(Facet)]
@@ -128,7 +138,6 @@ struct EffectFfi {
     active: bool,
 }
 ```
-
 
 ##### Skipping struct fields or enum variants
 
