@@ -1,5 +1,3 @@
-#![allow(clippy::missing_panics_doc)]
-
 pub mod error;
 pub mod generation;
 pub mod reflection;
@@ -26,7 +24,7 @@ macro_rules! emit {
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
-            let registry = $crate::reflect!($($ty),*);
+            let registry = $crate::reflect!($($ty),*)?;
             for (i, item) in registry.iter().enumerate() {
                 if i > 0 {
                     writeln!(&mut w)?;
@@ -55,7 +53,7 @@ macro_rules! emit_swift {
                 generator: &generator,
                 current_namespace: Vec::new(),
             };
-            let registry = $crate::reflect!($($ty),*);
+            let registry = $crate::reflect!($($ty),*)?;
             for (name, format) in &registry {
                 emitter.output_container(&name.name, format).unwrap();
             }
@@ -82,7 +80,7 @@ macro_rules! emit_java {
                 current_namespace: Vec::new(),
                 current_reserved_names: HashMap::new(),
             };
-            let registry = $crate::reflect!($($ty),*);
+            let registry = $crate::reflect!($($ty),*)?;
             for (name, format) in &registry {
                 emitter.output_container(&name.name, format).unwrap();
             }
@@ -96,8 +94,12 @@ macro_rules! emit_java {
 #[macro_export]
 macro_rules! reflect {
     ($($ty:ident),*) => {
-        $crate::reflection::RegistryBuilder::new()
-            $(.add_type::<$ty>())*
-            .build()
+        || -> anyhow::Result<std::collections::BTreeMap<$crate::reflection::format::QualifiedTypeName, $crate::reflection::format::ContainerFormat>> {
+            let registry = $crate::reflection::RegistryBuilder::new()
+                $(.add_type::<$ty>().map_err(|e| anyhow::anyhow!("failed to add type {}: {}", stringify!($ty), e))?)*
+                .build()
+                .map_err(|e| anyhow::anyhow!("failed to build registry: {e}"))?;
+            Ok(registry)
+        }()
     };
 }

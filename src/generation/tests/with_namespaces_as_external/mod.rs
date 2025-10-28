@@ -42,7 +42,7 @@ fn test() {
         Child(Child),
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
 
     let this_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .join(file!())

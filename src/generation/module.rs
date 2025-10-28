@@ -50,6 +50,9 @@ impl Ord for Module {
 }
 
 /// Splits a registry by namespace.
+///
+/// # Panics
+/// Panics if the registry is invalid.
 #[must_use]
 pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
     // First, group types by their target namespace

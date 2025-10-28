@@ -22,7 +22,7 @@ pub enum Choice {
 }
 
 pub fn get_simple_registry() -> Registry {
-    reflect!(Test)
+    reflect!(Test).unwrap()
 }
 
 // More complex data format used to test re-serialization and basic fuzzing.
@@ -134,7 +134,7 @@ pub enum CStyleEnum {
 
 /// The registry corresponding to the test data structures above.
 pub fn get_registry() -> Registry {
-    reflect!(SerdeData)
+    reflect!(SerdeData).unwrap()
 }
 
 /// Manually generate sample values.

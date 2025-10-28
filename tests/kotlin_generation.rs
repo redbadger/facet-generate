@@ -14,7 +14,7 @@ pub mod common;
 fn test_that_kotlin_code_compiles() {
     type Test = common::PrimitiveTypes;
 
-    let registry = reflect!(Test);
+    let registry = reflect!(Test).unwrap();
     let dir = tempdir().unwrap();
     let dir = dir.path().to_path_buf().join("testing");
 

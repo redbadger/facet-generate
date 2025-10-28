@@ -46,7 +46,7 @@ fn manifest_with_serde_as_target() {
         name: String,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -95,7 +95,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
         name: String,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -153,7 +153,7 @@ fn manifest_with_serde_as_a_local_dependency() {
         name: String,
     }
 
-    let registry = reflect!(MyStruct);
+    let registry = reflect!(MyStruct).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -215,7 +215,7 @@ fn manifest_with_namespaces() {
         child: Child,
     }
 
-    let registry = reflect!(Root);
+    let registry = reflect!(Root).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -266,7 +266,7 @@ fn manifest_with_disjoint_namespaces() {
         id: u32,
     }
 
-    let registry = reflect!(Root, Another);
+    let registry = reflect!(Root, Another).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -364,7 +364,7 @@ fn manifest_with_namespaces_and_dependencies() {
         child: Child,
     }
 
-    let registry = reflect!(Root);
+    let registry = reflect!(Root).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -429,7 +429,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
         id: u32,
     }
 
-    let registry = reflect!(Root, Another);
+    let registry = reflect!(Root, Another).unwrap();
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
@@ -502,7 +502,7 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
         event: Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
 
     let package_name = "App";
     let install_dir = tempfile::tempdir().unwrap();
@@ -575,7 +575,7 @@ fn external_dependency_references_local_dependency() {
         inner: Child,
     }
 
-    let registry = reflect!(Parent);
+    let registry = reflect!(Parent).unwrap();
 
     let package_name = "App";
     let install_dir = tempfile::tempdir().unwrap();

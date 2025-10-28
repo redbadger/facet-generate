@@ -727,7 +727,7 @@ fn quote_deserialize(format: &Format) -> String {
     match format {
         Format::TypeName(name) => format!(
             "try {}.deserialize(deserializer: deserializer)",
-            &name.to_string(ToUpperCamelCase::to_upper_camel_case, ".")
+            &name.format(ToUpperCamelCase::to_upper_camel_case, ".")
         ),
         Format::Unit => "try deserializer.deserialize_unit()".to_string(),
         Format::Bool => "try deserializer.deserialize_bool()".to_string(),

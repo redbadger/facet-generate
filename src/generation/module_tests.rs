@@ -27,7 +27,7 @@ fn single_namespace() {
         two: ChildTwo,
     }
 
-    let registries = split("Root", &reflect!(Parent));
+    let registries = split("Root", &reflect!(Parent).unwrap());
     insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
       encoding: None
@@ -35,7 +35,6 @@ fn single_namespace() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -105,7 +104,7 @@ fn root_namespace_with_two_child_namespaces() {
         two: ChildTwo,
     }
 
-    let registries = split("Root", &reflect!(Parent));
+    let registries = split("Root", &reflect!(Parent).unwrap());
     insta::assert_yaml_snapshot!(registries, @r"
     ? module_name: Root
       encoding: None
@@ -117,7 +116,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -142,7 +140,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:
@@ -170,7 +167,6 @@ fn root_namespace_with_two_child_namespaces() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:
@@ -206,7 +202,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
         event: Child,
     }
 
-    let registries = split("App", &reflect!(Parent));
+    let registries = split("App", &reflect!(Parent).unwrap());
 
     // The App module should contain external dependencies to "api" namespace
     // even though Parent itself doesn't directly reference it - Child does
@@ -240,7 +236,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace: ROOT
@@ -268,7 +263,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
       external_packages: {}
       comments: {}
       custom_code: {}
-      c_style_enums: false
       package_manifest: true
       features: []
     : ? namespace:

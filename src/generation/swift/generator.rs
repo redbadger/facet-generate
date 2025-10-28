@@ -41,10 +41,6 @@ impl<'a> CodeGenerator<'a> {
     /// Create a Swift code generator for the given config.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {
-        assert!(
-            !config.c_style_enums,
-            "Swift does not support generating c-style enums"
-        );
         let mut external_qualified_names = HashMap::new();
         for (namespace, names) in &config.external_definitions {
             let module = {
