@@ -89,25 +89,25 @@ where
     fn quote_type(&self, format: &Format) -> String {
         match format {
             Format::TypeName(qualified_name) => self.quote_qualified_name(&qualified_name.name),
-            Format::Unit => "com.novi.serde.Unit".into(),
-            Format::Bool => "Boolean".into(),
-            Format::I8 => "Byte".into(),
-            Format::I16 => "Short".into(),
-            Format::I32 => "Integer".into(),
-            Format::I64 => "Long".into(),
-            Format::I128 => "java.math.@com.novi.serde.Int128 BigInteger".into(),
-            Format::U8 => "@com.novi.serde.Unsigned Byte".into(),
-            Format::U16 => "@com.novi.serde.Unsigned Short".into(),
-            Format::U32 => "@com.novi.serde.Unsigned Integer".into(),
-            Format::U64 => "@com.novi.serde.Unsigned Long".into(),
+            Format::Unit => "com.novi.serde.Unit".to_string(),
+            Format::Bool => "Boolean".to_string(),
+            Format::I8 => "Byte".to_string(),
+            Format::I16 => "Short".to_string(),
+            Format::I32 => "Integer".to_string(),
+            Format::I64 => "Long".to_string(),
+            Format::I128 => "java.math.@com.novi.serde.Int128 BigInteger".to_string(),
+            Format::U8 => "@com.novi.serde.Unsigned Byte".to_string(),
+            Format::U16 => "@com.novi.serde.Unsigned Short".to_string(),
+            Format::U32 => "@com.novi.serde.Unsigned Integer".to_string(),
+            Format::U64 => "@com.novi.serde.Unsigned Long".to_string(),
             Format::U128 => {
-                "java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger".into()
+                "java.math.@com.novi.serde.Unsigned @com.novi.serde.Int128 BigInteger".to_string()
             }
-            Format::F32 => "Float".into(),
-            Format::F64 => "Double".into(),
-            Format::Char => "Character".into(),
-            Format::Str => "String".into(),
-            Format::Bytes => "com.novi.serde.Bytes".into(),
+            Format::F32 => "Float".to_string(),
+            Format::F64 => "Double".to_string(),
+            Format::Char => "Character".to_string(),
+            Format::Str => "String".to_string(),
+            Format::Bytes => "com.novi.serde.Bytes".to_string(),
 
             Format::Option(format) => format!("java.util.Optional<{}>", self.quote_type(format)),
             Format::Seq(format) | Format::Set(format) => {

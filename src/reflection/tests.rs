@@ -1267,6 +1267,49 @@ fn enum_with_struct_variant() {
 }
 
 #[test]
+fn struct_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    struct WithFacet {
+        #[facet(opaque)]
+        ignore: WithoutFacet,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : STRUCT:
+        - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_variant_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore {
+            #[facet(opaque)]
+            ignore: WithoutFacet,
+        },
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - STRUCT: []
+              - []
+        - []
+    ");
+}
+
+#[test]
 fn struct_with_skip_serializing() {
     #[derive(Facet)]
     struct MyStruct {
