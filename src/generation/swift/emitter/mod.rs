@@ -663,7 +663,7 @@ switch index {{",
                         .join(", "),
                     _ => fields
                         .iter()
-                        .map(|f| f.name.to_string())
+                        .map(|f| f.name.clone())
                         .collect::<Vec<_>>()
                         .join(", "),
                 };

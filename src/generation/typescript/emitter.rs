@@ -53,7 +53,7 @@ where
                             if let Some(mod_name) = &path.module_name {
                                 format!("{name}/{mod_name}")
                             } else {
-                                name.to_string()
+                                name.clone()
                             }
                         }
                         PackageLocation::Url(_) => path.for_namespace.clone(),
@@ -87,7 +87,7 @@ where
                             if let Some(mod_name) = &path.module_name {
                                 format!("{name}/{mod_name}")
                             } else {
-                                name.to_string()
+                                name.clone()
                             }
                         }
                         PackageLocation::Url(_) => path.for_namespace.clone(),
@@ -614,7 +614,7 @@ return list;
                 name,
                 fields
                     .iter()
-                    .map(|f| f.name.to_string())
+                    .map(|f| f.name.clone())
                     .collect::<Vec<_>>()
                     .join(",")
             )?;

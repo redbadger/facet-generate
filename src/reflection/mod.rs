@@ -922,22 +922,25 @@ impl RegistryBuilder {
 
         self.push_namespace(field_namespace);
 
-        // Build the format directly with the namespace context in place
-        let inner_format =
-            match get_inner_format_with_context(field_shape, self.current_namespace()) {
-                Ok(format) => format,
-                Err(err) => {
-                    self.pop_namespace();
-                    return Err(err);
-                }
-            };
+        // Check if this field should be skipped (opaque types)
+        let Some(format) = self.get_user_type_format(field_shape)? else {
+            // If the field should be skipped, make this a unit variant
+            self.pop_namespace();
+            return Ok(VariantFormat::Unit);
+        };
+
+        // If the field is Unit (opaque), also make this a unit variant
+        if matches!(format, Format::Unit) {
+            self.pop_namespace();
+            return Ok(VariantFormat::Unit);
+        }
 
         // Also ensure the type itself gets processed with the namespace context
         self.format(field_shape)?;
 
         self.pop_namespace();
 
-        Ok(VariantFormat::NewType(Box::new(inner_format)))
+        Ok(VariantFormat::NewType(Box::new(format)))
     }
 
     fn process_multi_field_variant(
@@ -1247,10 +1250,21 @@ impl RegistryBuilder {
                     Err(_) => Ok(None), // Skip if inner format fails
                 }
             }
-            _ => match get_inner_format_with_context(field_shape, self.current_namespace()) {
-                Ok(format) => Ok(Some(format)),
-                Err(_) => Ok(None), // Skip if inner format fails
-            },
+            _ => {
+                // Check if this is a scalar opaque type that should be skipped
+                if let Def::Scalar = field_shape.def {
+                    match type_to_format(field_shape) {
+                        Ok(Some(format)) => Ok(Some(format)),
+                        Ok(None) => Ok(None), // This is an opaque type that should be skipped
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    match get_inner_format_with_context(field_shape, self.current_namespace()) {
+                        Ok(format) => Ok(Some(format)),
+                        Err(_) => Ok(None), // Skip if inner format fails
+                    }
+                }
+            }
         }
     }
 
@@ -1617,6 +1631,7 @@ fn get_inner_format(shape: &Shape) -> Result<Format, Error> {
     get_inner_format_with_context(shape, None)
 }
 
+#[allow(clippy::too_many_lines)]
 fn get_inner_format_with_context(
     shape: &Shape,
     namespace_context: Option<&Namespace>,
@@ -1722,7 +1737,6 @@ fn get_inner_format_with_context(
                 Format::TypeName(name)
             }
         }
-
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();
