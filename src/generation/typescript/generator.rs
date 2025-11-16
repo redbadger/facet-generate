@@ -45,7 +45,7 @@ impl<'a> CodeGenerator<'a> {
         for (namespace, names) in &config.external_definitions {
             for name in names {
                 external_qualified_names.insert(
-                    name.to_string(),
+                    name.clone(),
                     format!("{}.{}", namespace.to_upper_camel_case(), name),
                 );
             }

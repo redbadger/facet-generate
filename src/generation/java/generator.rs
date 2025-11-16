@@ -80,7 +80,7 @@ impl<'a> CodeGenerator<'a> {
                 };
 
             for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{package_name}.{name}"));
+                external_qualified_names.insert(name.clone(), format!("{package_name}.{name}"));
             }
         }
         Self {

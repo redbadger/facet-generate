@@ -663,7 +663,7 @@ fn enum_class<W: IndentWrite>(
             for (i, variant) in variants {
                 write!(w, "{i} -> ")?;
                 let variant = Named {
-                    name: variant.name.to_string(),
+                    name: variant.name.clone(),
                     doc: Doc::new(), // remove comments for this printing
                     value: variant.value.clone(),
                 };

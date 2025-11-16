@@ -85,7 +85,7 @@ pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
                             // Only consider it external if it's a different namespace
                             if ns != &namespace_key {
                                 all_external_definitions
-                                    .entry(ns.to_string())
+                                    .entry(ns.clone())
                                     .or_default()
                                     .push(qualified_name.name.clone());
                             }

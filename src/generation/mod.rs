@@ -22,12 +22,7 @@ pub mod swift;
 pub mod typescript;
 
 /// Common logic for codegen.
-#[cfg(any(
-    feature = "java",
-    feature = "kotlin",
-    feature = "swift",
-    feature = "typescript"
-))]
+#[cfg(any(feature = "java", feature = "swift", feature = "typescript"))]
 pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;

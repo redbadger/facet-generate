@@ -437,8 +437,10 @@ impl RegistryBuilder {
     }
 
     fn format_scalar(&mut self, shape: &Shape) -> Result<(), Error> {
-        let format = type_to_format(shape)?;
-        self.update_container_format(format, UpdateMode::Force);
+        if let Some(format) = type_to_format(shape)? {
+            self.update_container_format(format, UpdateMode::Force);
+        }
+        // If type_to_format returns None, we skip this field
         Ok(())
     }
 
@@ -531,6 +533,17 @@ impl RegistryBuilder {
                     }
                     self.handle_struct_field(field)?;
                 }
+
+                // If all fields were skipped, convert to UnitStruct to avoid empty data class issues
+                if let Some(ContainerFormat::Struct(fields, doc)) = self.get_mut() {
+                    if fields.is_empty() {
+                        let unit_container = ContainerFormat::UnitStruct(doc.clone());
+                        if let Some(current_name) = self.current.last() {
+                            self.registry.insert(current_name.clone(), unit_container);
+                        }
+                    }
+                }
+
                 self.pop();
             }
             StructKind::Tuple => {
@@ -569,7 +582,11 @@ impl RegistryBuilder {
         self.push_namespace(field_namespace.clone());
 
         // Now determine the proper format with the field-level context in place
-        let field_format = self.get_user_type_format(field_shape)?;
+        let Some(field_format) = self.get_user_type_format(field_shape)? else {
+            // Skip this field if format is None (e.g. unknown opaque types)
+            self.pop_namespace();
+            return Ok(());
+        };
 
         // Process the type under the field-level namespace context
         if let NamespaceAction::SetContext(ctx) = &field_namespace {
@@ -905,15 +922,25 @@ impl RegistryBuilder {
 
         self.push_namespace(field_namespace);
 
-        // Build the format directly with the namespace context in place
-        let inner_format = get_inner_format_with_context(field_shape, self.current_namespace())?;
+        // Check if this field should be skipped (opaque types)
+        let Some(format) = self.get_user_type_format(field_shape)? else {
+            // If the field should be skipped, make this a unit variant
+            self.pop_namespace();
+            return Ok(VariantFormat::Unit);
+        };
+
+        // If the field is Unit (opaque), also make this a unit variant
+        if matches!(format, Format::Unit) {
+            self.pop_namespace();
+            return Ok(VariantFormat::Unit);
+        }
 
         // Also ensure the type itself gets processed with the namespace context
         self.format(field_shape)?;
 
         self.pop_namespace();
 
-        Ok(VariantFormat::NewType(Box::new(inner_format)))
+        Ok(VariantFormat::NewType(Box::new(format)))
     }
 
     fn process_multi_field_variant(
@@ -953,7 +980,11 @@ impl RegistryBuilder {
             self.push_namespace(field_namespace.clone());
 
             // Determine the proper format with the field-level context in place
-            let value = self.get_user_type_format(field_shape)?;
+            let Some(value) = self.get_user_type_format(field_shape)? else {
+                // Skip this field if format couldn't be determined
+                self.pop_namespace();
+                continue;
+            };
 
             // Process the type under the field-level namespace context
             if let NamespaceAction::SetContext(ctx) = &field_namespace {
@@ -982,12 +1013,17 @@ impl RegistryBuilder {
         }
 
         // Extract the formats from the temporary container
-        let variant_format =
-            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.registry.get(&temp) {
-                VariantFormat::Struct(named_formats.clone())
-            } else {
-                VariantFormat::Unit
-            };
+        let variant_format = match self.registry.get(&temp) {
+            Some(ContainerFormat::Struct(named_formats, _doc)) => {
+                if named_formats.is_empty() {
+                    // If all fields were skipped, this should be a unit variant
+                    VariantFormat::Unit
+                } else {
+                    VariantFormat::Struct(named_formats.clone())
+                }
+            }
+            _ => VariantFormat::Unit, // Handles missing entries
+        };
 
         // Clean up the temporary container
         let _removed = self.registry.remove(&temp);
@@ -1197,21 +1233,38 @@ impl RegistryBuilder {
     }
 
     /// Helper method to determine format for user-defined types with namespace context
-    fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Format, Error> {
+    fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
         match &field_shape.ty {
             Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
                 if field_shape.type_identifier == "()" {
-                    Ok(Format::Unit)
+                    Ok(Some(Format::Unit))
                 } else {
                     let renamed_name = self.get_name_with_mappings(field_shape)?;
-                    Ok(Format::TypeName(renamed_name))
+                    Ok(Some(Format::TypeName(renamed_name)))
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
                 let target_shape = (pt.target)();
-                get_inner_format_with_context(target_shape, self.current_namespace())
+                match get_inner_format_with_context(target_shape, self.current_namespace()) {
+                    Ok(format) => Ok(Some(format)),
+                    Err(_) => Ok(None), // Skip if inner format fails
+                }
             }
-            _ => get_inner_format_with_context(field_shape, self.current_namespace()),
+            _ => {
+                // Check if this is a scalar opaque type that should be skipped
+                if let Def::Scalar = field_shape.def {
+                    match type_to_format(field_shape) {
+                        Ok(Some(format)) => Ok(Some(format)),
+                        Ok(None) => Ok(None), // This is an opaque type that should be skipped
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    match get_inner_format_with_context(field_shape, self.current_namespace()) {
+                        Ok(format) => Ok(Some(format)),
+                        Err(_) => Ok(None), // Skip if inner format fails
+                    }
+                }
+            }
         }
     }
 
@@ -1439,9 +1492,9 @@ fn get_format_for_shape(shape: &Shape) -> Result<Format, Error> {
     get_inner_format(shape)
 }
 
-fn type_to_format(shape: &Shape) -> Result<Format, Error> {
+fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
     let format = match &shape.ty {
-        Type::Primitive(primitive) => match primitive {
+        Type::Primitive(primitive) => Some(match primitive {
             PrimitiveType::Boolean => Format::Bool,
             PrimitiveType::Numeric(numeric_type) => match numeric_type {
                 NumericType::Float => {
@@ -1485,10 +1538,10 @@ fn type_to_format(shape: &Shape) -> Result<Format, Error> {
                 TextualType::Char => Format::Char,
             },
             PrimitiveType::Never => unimplemented!("Never type not supported"),
-        },
+        }),
         Type::User(UserType::Opaque) => match shape.type_identifier {
-            "String" | "DateTime<Utc>" => Format::Str,
-            _ => unimplemented!("Unsupported opaque type: {}", shape.type_identifier),
+            "String" | "DateTime<Utc>" => Some(Format::Str),
+            _ => None,
         },
         _ => unimplemented!("Unsupported type for scalar format: {:?}", shape.ty),
     };
@@ -1578,12 +1631,21 @@ fn get_inner_format(shape: &Shape) -> Result<Format, Error> {
     get_inner_format_with_context(shape, None)
 }
 
+#[allow(clippy::too_many_lines)]
 fn get_inner_format_with_context(
     shape: &Shape,
     namespace_context: Option<&Namespace>,
 ) -> Result<Format, Error> {
     let format = match shape.def {
-        Def::Scalar => type_to_format(shape)?,
+        Def::Scalar => match type_to_format(shape)? {
+            Some(format) => format,
+            None => {
+                return Err(Error::ReflectionError {
+                    type_name: shape.type_identifier.to_string(),
+                    message: "Scalar type is not supported and should be skipped".to_string(),
+                });
+            }
+        },
         Def::List(inner_list_def) => {
             // Recursively handle nested lists
             let inner_shape = inner_list_def.t();
@@ -1675,7 +1737,6 @@ fn get_inner_format_with_context(
                 Format::TypeName(name)
             }
         }
-
         Def::Slice(slice_def) => {
             // Handle Slice<T> -> SEQ: T
             let inner_shape = slice_def.t();

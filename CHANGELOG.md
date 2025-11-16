@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.12.1] - 2025-11-16
+
+Support for `#[facet(opaque)]` on struct fields. This attribute can be used to indicate that a field should be treated as opaque, meaning that it should not be reflected or serialized. You can use this when a struct field references another type that does not implement the `Facet` trait.
+
+The intermediate representation will describe a struct without opaque fields. If this results in a struct with no fields, it will be represented as a unit struct. This applies to both structs and struct variants of enums.
+
+Example, in a struct:
+
+```rust
+struct WithoutFacet;
+#[derive(Facet)]
+struct WithFacet {
+    #[facet(opaque)]
+    ignore: WithoutFacet,
+}
+```
+
+Example, in an enum struct variant:
+
+```rust
+struct WithoutFacet;
+#[derive(Facet)]
+#[repr(C)]
+enum WithFacet {
+    WithNonFacetType {
+        #[facet(opaque)]
+        ignore: WithoutFacet,
+    },
+}
+```
+
+Example, in a tuple struct variant:
+
+```rust
+struct WithoutFacet;
+#[derive(Facet)]
+#[repr(C)]
+enum WithFacet {
+    WithNonFacetType(String, #[facet(opaque)] WithoutFacet),
+}
+```
+
 ## [0.12.0] - 2025-10-20
 
 ### Breaking changes!!

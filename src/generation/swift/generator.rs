@@ -49,7 +49,7 @@ impl<'a> CodeGenerator<'a> {
             }
             .to_upper_camel_case();
             for name in names {
-                external_qualified_names.insert(name.to_string(), format!("{module}.{name}"));
+                external_qualified_names.insert(name.clone(), format!("{module}.{name}"));
             }
         }
         Self {

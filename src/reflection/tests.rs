@@ -1267,6 +1267,142 @@ fn enum_with_struct_variant() {
 }
 
 #[test]
+fn struct_with_only_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    struct WithFacet {
+        #[facet(opaque)]
+        ignore: WithoutFacet,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : UNITSTRUCT: []
+    ");
+}
+
+#[test]
+fn struct_variant_with_only_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore {
+            #[facet(opaque)]
+            ignore: WithoutFacet,
+        },
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn tuple_variant_with_only_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore(#[facet(opaque)] WithoutFacet),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    struct WithFacet {
+        normal_field: u32,
+        #[facet(opaque)]
+        ignore: WithoutFacet,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : STRUCT:
+        - - normal_field:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_variant_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore {
+            normal_field: u32,
+            #[facet(opaque)]
+            ignore: WithoutFacet,
+        },
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - STRUCT:
+                  - normal_field:
+                      - U32
+                      - []
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn tuple_variant_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore(String, #[facet(opaque)] WithoutFacet),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - TUPLE:
+                  - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
 fn struct_with_skip_serializing() {
     #[derive(Facet)]
     struct MyStruct {
