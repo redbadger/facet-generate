@@ -1267,7 +1267,7 @@ fn enum_with_struct_variant() {
 }
 
 #[test]
-fn struct_with_opaque() {
+fn struct_with_only_opaque() {
     struct WithoutFacet;
     #[derive(Facet)]
     struct WithFacet {
@@ -1278,14 +1278,12 @@ fn struct_with_opaque() {
     insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
     ? namespace: ROOT
       name: WithFacet
-    : STRUCT:
-        - []
-        - []
+    : UNITSTRUCT: []
     ");
 }
 
 #[test]
-fn struct_variant_with_opaque() {
+fn struct_variant_with_only_opaque() {
     struct WithoutFacet;
     #[derive(Facet)]
     #[repr(C)]
@@ -1303,7 +1301,57 @@ fn struct_variant_with_opaque() {
     : ENUM:
         - 0:
             Ignore:
-              - STRUCT: []
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    struct WithFacet {
+        normal_field: u32,
+        #[facet(opaque)]
+        ignore: WithoutFacet,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : STRUCT:
+        - - normal_field:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_variant_with_opaque() {
+    struct WithoutFacet;
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum WithFacet {
+        Ignore {
+            normal_field: u32,
+            #[facet(opaque)]
+            ignore: WithoutFacet,
+        },
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(WithFacet).unwrap(), @r"
+    ? namespace: ROOT
+      name: WithFacet
+    : ENUM:
+        - 0:
+            Ignore:
+              - STRUCT:
+                  - normal_field:
+                      - U32
+                      - []
               - []
         - []
     ");

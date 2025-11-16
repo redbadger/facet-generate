@@ -533,6 +533,17 @@ impl RegistryBuilder {
                     }
                     self.handle_struct_field(field)?;
                 }
+
+                // If all fields were skipped, convert to UnitStruct to avoid empty data class issues
+                if let Some(ContainerFormat::Struct(fields, doc)) = self.get_mut() {
+                    if fields.is_empty() {
+                        let unit_container = ContainerFormat::UnitStruct(doc.clone());
+                        if let Some(current_name) = self.current.last() {
+                            self.registry.insert(current_name.clone(), unit_container);
+                        }
+                    }
+                }
+
                 self.pop();
             }
             StructKind::Tuple => {
@@ -999,12 +1010,17 @@ impl RegistryBuilder {
         }
 
         // Extract the formats from the temporary container
-        let variant_format =
-            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.registry.get(&temp) {
-                VariantFormat::Struct(named_formats.clone())
-            } else {
-                VariantFormat::Unit
-            };
+        let variant_format = match self.registry.get(&temp) {
+            Some(ContainerFormat::Struct(named_formats, _doc)) => {
+                if named_formats.is_empty() {
+                    // If all fields were skipped, this should be a unit variant
+                    VariantFormat::Unit
+                } else {
+                    VariantFormat::Struct(named_formats.clone())
+                }
+            }
+            _ => VariantFormat::Unit, // Handles missing entries
+        };
 
         // Clean up the temporary container
         let _removed = self.registry.remove(&temp);
