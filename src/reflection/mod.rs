@@ -380,7 +380,7 @@ impl RegistryBuilder {
                 pointee: Some(inner_shape),
                 ..
             }) => {
-                self.handle_pointer(inner_shape())?;
+                self.handle_pointer(inner_shape)?;
             }
             Def::Pointer(PointerDef { pointee: None, .. }) => {
                 self.handle_opaque_pointee();
@@ -428,7 +428,7 @@ impl RegistryBuilder {
                 }
             },
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                self.format((pt.target)())?;
+                self.format(pt.target)?;
             }
             _ => {}
         }
@@ -510,8 +510,10 @@ impl RegistryBuilder {
                     let container = ContainerFormat::TupleStruct(vec![], shape.into());
                     self.push_with_type_check(struct_name.clone(), container, shape)?;
                     for field in struct_type.fields {
-                        let skip = field.attributes.iter().any(|attr| match attr {
-                            FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                        let skip = field.attributes.iter().any(|attr| {
+                            matches!(attr ,
+                                FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
+                            )
                         });
                         if skip {
                             continue;
@@ -525,8 +527,10 @@ impl RegistryBuilder {
                 let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push_with_type_check(struct_name.clone(), container, shape)?;
                 for field in struct_type.fields {
-                    let skip = field.attributes.iter().any(|attr| match attr {
-                        FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                    let skip = field.attributes.iter().any(|attr| {
+                        matches!(attr ,
+                            FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
+                        )
                     });
                     if skip {
                         continue;
@@ -560,8 +564,10 @@ impl RegistryBuilder {
         let field_shape = field.shape();
 
         // Check for field-level attributes first
-        let has_bytes_attribute = field.attributes.iter().any(|attr| match attr {
-            FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
+        let has_bytes_attribute = field.attributes.iter().any(|attr| {
+            matches!(attr ,
+                FieldAttribute::Arbitrary(attr_str) if *attr_str == "bytes",
+            )
         });
 
         if has_bytes_attribute && self.try_handle_bytes_attribute(field) {
@@ -637,14 +643,14 @@ impl RegistryBuilder {
         }
 
         // Handle bytes attribute for &[u8] slices
-        if field_shape.type_identifier == "&[_]" {
+        if field_shape.type_identifier == "&" {
             // Check if it's a smart pointer to a slice of u8
             if let Def::Pointer(PointerDef {
                 pointee: Some(target_shape_fn),
                 ..
             }) = field_shape.def
             {
-                let target_shape = target_shape_fn();
+                let target_shape = target_shape_fn;
                 if let Def::Slice(slice_def) = target_shape.def {
                     let element_shape = slice_def.t();
                     if element_shape.type_identifier == "u8" {
@@ -1244,7 +1250,7 @@ impl RegistryBuilder {
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                let target_shape = (pt.target)();
+                let target_shape = pt.target;
                 match get_inner_format_with_context(target_shape, self.current_namespace()) {
                     Ok(format) => Ok(Some(format)),
                     Err(_) => Ok(None), // Skip if inner format fails
@@ -1486,7 +1492,7 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
 
 fn get_format_for_shape(shape: &Shape) -> Result<Format, Error> {
     let shape = match &shape.ty {
-        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => (pt.target)(),
+        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => pt.target,
         _ => shape,
     };
     get_inner_format(shape)
@@ -1564,11 +1570,12 @@ fn extract_namespace_from_shape(shape: &Shape) -> Result<NamespaceAction, Error>
 
 fn extract_namespace_from_field_attributes(field: &Field) -> Result<NamespaceAction, Error> {
     for attr in field.attributes {
-        let FieldAttribute::Arbitrary(attr_str) = attr;
-        match extract_namespace(attr_str) {
-            Ok(None) => (),
-            Ok(Some(namespace)) => return Ok(namespace),
-            Err(e) => return Err(e),
+        if let FieldAttribute::Arbitrary(attr_str) = attr {
+            match extract_namespace(attr_str) {
+                Ok(None) => (),
+                Ok(Some(namespace)) => return Ok(namespace),
+                Err(e) => return Err(e),
+            }
         }
     }
     Ok(NamespaceAction::Inherit)
@@ -1711,7 +1718,7 @@ fn get_inner_format_with_context(
                 &shape.ty
             {
                 // For pointer types like &'static str, get the format of the target type
-                let target_shape = (pt.target)();
+                let target_shape = pt.target;
                 get_inner_format_with_context(target_shape, namespace_context)?
             } else {
                 // For user-defined types, use TypeName with namespace context if available
@@ -1748,7 +1755,7 @@ fn get_inner_format_with_context(
         Def::Pointer(pointer_def) => {
             // Handle Pointer (Box, Arc, etc.) by recursively processing the inner type
             if let Some(inner_shape) = pointer_def.pointee {
-                get_inner_format_with_context(inner_shape(), namespace_context)?
+                get_inner_format_with_context(inner_shape, namespace_context)?
             } else {
                 // Fallback for pointers without a known pointee
                 Format::Unit

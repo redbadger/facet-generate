@@ -11,7 +11,7 @@ rust-version = "1.87"
 
 [dependencies]
 derive_builder = "0.20.2"
-facet = "=0.30"
+facet = "=0.31"
 heck = "0.5.0"
 include_dir = { version = "0.7.4", optional = true }
 indent = "0.1.1"
@@ -30,7 +30,7 @@ bincode = "=1"
 chrono = "0.4.42"
 difficient = "0.1.0"
 expect-test = "1.5.1"
-facet = { version = "=0.30", features = ["chrono", "url"] }
+facet = { version = "=0.31", features = ["chrono", "url"] }
 ignore = "0.4"
 insta = { version = "1.43.2", features = ["yaml", "json"] }
 maplit = "1.0.2"

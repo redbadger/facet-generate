@@ -2495,7 +2495,7 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
     }
 
     let registry = reflect!(MyEnum).unwrap();
-    // TODO: this output is obviously wrong, the `name: (⋯)` is because it's an anonymous tuple struct
+    // TODO: this output is obviously wrong, the `name: (…)` is because it's an anonymous tuple struct
     // so what should be name be (if it's a separate type)?
     insta::assert_yaml_snapshot!(registry, @r"
     ? namespace: ROOT
@@ -2506,7 +2506,7 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
               - NEWTYPE:
                   TYPENAME:
                     namespace: ROOT
-                    name: (⋯)
+                    name: (…)
               - []
         - []
     ");
