@@ -1311,18 +1311,12 @@ fn transparent_struct_chains() {
         - []
     ? namespace:
         NAMED: identity
-      name: CoreId
-    : NEWTYPESTRUCT:
-        - STR
-        - []
-    ? namespace:
-        NAMED: identity
       name: NamespacedWrapper
     : NEWTYPESTRUCT:
         - TYPENAME:
             namespace:
               NAMED: identity
-            name: DoubleWrapperId
+            name: CoreId
         - []
     ");
 }

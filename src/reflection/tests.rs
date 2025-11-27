@@ -744,6 +744,201 @@ fn struct_with_vec_of_u8_to_bytes() {
 }
 
 #[test]
+fn newtype_with_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct(#[facet(bytes)] Vec<u8>);
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : NEWTYPESTRUCT:
+        - BYTES
+        - []
+    ");
+}
+
+#[test]
+fn nested_newtype_transparent_with_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    #[derive(Facet)]
+    struct MyWrapper(MyBytes);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        wrapper: MyWrapper,
+        bytes: MyBytes,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - wrapper:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MyWrapper
+              - []
+          - bytes:
+              - BYTES
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyWrapper
+    : NEWTYPESTRUCT:
+        - BYTES
+        - []
+    ");
+}
+
+#[test]
+fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    #[derive(Facet)]
+    struct MyWrapper(MyBytes);
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum MyEnum {
+        VariantA,
+        VariantB {
+            wrapper: MyWrapper,
+            bytes: MyBytes,
+        },
+        VariantC(MyBytes),
+        VariantD {
+            #[facet(bytes)]
+            bytes: Vec<u8>,
+            array: Vec<u8>,
+        },
+        VariantE(MyBytes),
+        VariantF(#[facet(bytes)] Vec<u8>),
+        VariantG(#[facet(bytes)] Vec<u8>, u32),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            VariantA:
+              - UNIT
+              - []
+          1:
+            VariantB:
+              - STRUCT:
+                  - wrapper:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: MyWrapper
+                      - []
+                  - bytes:
+                      - BYTES
+                      - []
+              - []
+          2:
+            VariantC:
+              - NEWTYPE: BYTES
+              - []
+          3:
+            VariantD:
+              - STRUCT:
+                  - bytes:
+                      - BYTES
+                      - []
+                  - array:
+                      - SEQ: U8
+                      - []
+              - []
+          4:
+            VariantE:
+              - NEWTYPE: BYTES
+              - []
+          5:
+            VariantF:
+              - NEWTYPE: BYTES
+              - []
+          6:
+            VariantG:
+              - TUPLE:
+                  - BYTES
+                  - U32
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyWrapper
+    : NEWTYPESTRUCT:
+        - BYTES
+        - []
+    ");
+}
+
+#[test]
+fn nested_tuple_struct_with_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct(#[facet(bytes)] Vec<u8>);
+    #[derive(Facet)]
+    struct MyWrapper(MyStruct);
+
+    insta::assert_yaml_snapshot!(reflect!(MyWrapper).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : NEWTYPESTRUCT:
+        - BYTES
+        - []
+    ? namespace: ROOT
+      name: MyWrapper
+    : NEWTYPESTRUCT:
+        - TYPENAME:
+            namespace: ROOT
+            name: MyStruct
+        - []
+    ");
+}
+
+#[test]
+fn struct_bytes_bytes() {
+    #[derive(Facet)]
+    struct MyStruct {
+        #[facet(bytes)]
+        a: bytes::Bytes,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - BYTES
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_with_opt_vec_of_u8_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct {
+        #[facet(bytes)]
+        a: Option<Vec<u8>>,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - a:
+              - OPTION: BYTES
+              - []
+        - []
+    ");
+}
+
+#[test]
 fn struct_with_slice_of_u8() {
     #[derive(Facet)]
     struct MyStruct<'a> {

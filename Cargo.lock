@@ -74,6 +74,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "46c5e41b57b8bba42a04676d81cb89e9ee8e859a1a66f80a5a72e1cb76b34d43"
 
 [[package]]
+name = "bytes"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b35204fbdc0b3f4446b89fc1ac2cf84a8a68971995d0bf2e925ec7cd960f9cb3"
+
+[[package]]
 name = "cc"
 version = "1.2.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -331,6 +337,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8464c389054f871191fbd688bade5e4f21f59948a56029ea37f2359f3dc330"
 dependencies = [
  "bitflags",
+ "bytes",
  "chrono",
  "impls",
  "url",
@@ -374,6 +381,7 @@ dependencies = [
  "anyhow",
  "bcs",
  "bincode",
+ "bytes",
  "chrono",
  "derive_builder",
  "difficient",
