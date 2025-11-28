@@ -848,6 +848,13 @@ impl RegistryBuilder {
             return Ok(VariantFormat::NewType(Box::new(value)));
         }
         let field_shape = field.shape();
+        if is_transparent_shape(field_shape)
+            && let Some(inner) = field_shape.inner
+        {
+            if let Some(format) = self.get_user_type_format(inner)? {
+                return Ok(VariantFormat::NewType(Box::new(format)));
+            }
+        }
 
         if field_shape.type_identifier == "()" {
             Ok(VariantFormat::NewType(Box::new(Format::Unit)))
@@ -876,7 +883,6 @@ impl RegistryBuilder {
                             QualifiedTypeName::namespaced(name.clone(), base_name)
                         }
                     };
-
                     Ok(VariantFormat::NewType(Box::new(Format::TypeName(
                         qualified_name,
                     ))))
@@ -1720,6 +1726,13 @@ fn bytes_attribute_format(field: &Field) -> Option<Format> {
     }
 
     if field_shape.type_identifier == "Bytes" {
+        return Some(format());
+    }
+
+    // Handle fixed byte arrays
+    if let Def::Array(ArrayDef { t, .. }) = field_shape.def
+        && t.type_identifier == "u8"
+    {
         return Some(format());
     }
 

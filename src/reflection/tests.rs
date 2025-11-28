@@ -758,6 +758,20 @@ fn newtype_with_vec_of_u8_to_bytes() {
 }
 
 #[test]
+fn newtype_with_fixed_array_to_bytes() {
+    #[derive(Facet)]
+    struct MyStruct(#[facet(bytes)] [u8; 32]);
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : NEWTYPESTRUCT:
+        - BYTES
+        - []
+    ");
+}
+
+#[test]
 fn nested_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
