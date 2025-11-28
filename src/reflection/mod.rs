@@ -258,7 +258,13 @@ impl RegistryBuilder {
         Ok(())
     }
 
-    fn format(&mut self, shape: &Shape) -> Result<(), Error> {
+    fn format(&mut self, mut shape: &Shape) -> Result<(), Error> {
+        if is_transparent_shape(shape)
+            && let Some(inner) = shape.inner
+        {
+            shape = inner;
+        }
+
         if !self.is_supported_generic_type(shape) {
             return Err(Error::UnsupportedGenericType(shape.to_string()));
         }
@@ -522,7 +528,7 @@ impl RegistryBuilder {
                         if skip {
                             continue;
                         }
-                        if !self.try_handle_bytes_attribute(&field) {
+                        if !self.try_handle_bytes_attribute(field) {
                             self.format(field.shape())?;
                         }
                     }
@@ -1039,7 +1045,7 @@ impl RegistryBuilder {
 
         // Process all fields
         for field in variant.data.fields {
-            if let Some(value) = bytes_attribute_format(&field) {
+            if let Some(value) = bytes_attribute_format(field) {
                 if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.get_mut() {
                     formats.push(value);
                 }
@@ -1232,12 +1238,12 @@ impl RegistryBuilder {
     }
 
     /// Helper method to determine format for user-defined types with namespace context
-    fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
-        // if is_transparent_shape(field_shape)
-        //     && let Some(inner) = field_shape.inner
-        // {
-        //     field_shape = inner;
-        // }
+    fn get_user_type_format(&mut self, mut field_shape: &Shape) -> Result<Option<Format>, Error> {
+        if is_transparent_shape(field_shape)
+            && let Some(inner) = field_shape.inner
+        {
+            field_shape = inner;
+        }
         match &field_shape.ty {
             Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
                 if field_shape.type_identifier == "()" {

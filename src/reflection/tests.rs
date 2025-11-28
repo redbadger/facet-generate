@@ -793,6 +793,41 @@ fn nested_newtype_transparent_with_vec_of_u8_to_bytes() {
 }
 
 #[test]
+fn nested_newtype_transparent_with_str() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct MyString(String);
+    #[derive(Facet)]
+    struct MyWrapper(MyString);
+
+    #[derive(Facet)]
+    struct MyStruct {
+        wrapper: MyWrapper,
+        str: MyString,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyStruct
+    : STRUCT:
+        - - wrapper:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: MyWrapper
+              - []
+          - str:
+              - STR
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyWrapper
+    : NEWTYPESTRUCT:
+        - STR
+        - []
+    ");
+}
+
+#[test]
 fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
@@ -815,9 +850,8 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
             bytes: Vec<u8>,
             array: Vec<u8>,
         },
-        VariantE(MyBytes),
-        VariantF(#[facet(bytes)] Vec<u8>),
-        VariantG(#[facet(bytes)] Vec<u8>, u32),
+        VariantE(#[facet(bytes)] Vec<u8>),
+        VariantF(#[facet(bytes)] Vec<u8>, u32),
     }
 
     insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
@@ -860,10 +894,6 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
               - []
           5:
             VariantF:
-              - NEWTYPE: BYTES
-              - []
-          6:
-            VariantG:
               - TUPLE:
                   - BYTES
                   - U32
@@ -873,6 +903,63 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
       name: MyWrapper
     : NEWTYPESTRUCT:
         - BYTES
+        - []
+    ");
+}
+
+#[test]
+fn nested_enum_newtype_transparent_with_str() {
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct MyString(String);
+    #[derive(Facet)]
+    struct MyWrapper(MyString);
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum MyEnum {
+        VariantA,
+        VariantB { wrapper: MyWrapper, str: MyString },
+        VariantC(MyString),
+        VariantD(MyString, u32),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            VariantA:
+              - UNIT
+              - []
+          1:
+            VariantB:
+              - STRUCT:
+                  - wrapper:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: MyWrapper
+                      - []
+                  - str:
+                      - STR
+                      - []
+              - []
+          2:
+            VariantC:
+              - NEWTYPE: STR
+              - []
+          3:
+            VariantD:
+              - TUPLE:
+                  - STR
+                  - U32
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyWrapper
+    : NEWTYPESTRUCT:
+        - STR
         - []
     ");
 }
