@@ -850,6 +850,89 @@ fn nested_newtype_transparent_with_str() {
 }
 
 #[test]
+fn nested_unit_enum() {
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum MyUnit {
+        A,
+        B,
+        C,
+    }
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum MyEnum {
+        Struct { unit: MyUnit, opt: Option<MyUnit> },
+        NewType(MyUnit),
+        NewTypeOpt(Option<MyUnit>),
+        Tuple(bool, Option<MyUnit>),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
+    ? namespace: ROOT
+      name: MyEnum
+    : ENUM:
+        - 0:
+            Struct:
+              - STRUCT:
+                  - unit:
+                      - TYPENAME:
+                          namespace: ROOT
+                          name: MyUnit
+                      - []
+                  - opt:
+                      - OPTION:
+                          TYPENAME:
+                            namespace: ROOT
+                            name: MyUnit
+                      - []
+              - []
+          1:
+            NewType:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: MyUnit
+              - []
+          2:
+            NewTypeOpt:
+              - NEWTYPE:
+                  OPTION:
+                    TYPENAME:
+                      namespace: ROOT
+                      name: MyUnit
+              - []
+          3:
+            Tuple:
+              - TUPLE:
+                  - BOOL
+                  - OPTION:
+                      TYPENAME:
+                        namespace: ROOT
+                        name: MyUnit
+              - []
+        - []
+    ? namespace: ROOT
+      name: MyUnit
+    : ENUM:
+        - 0:
+            A:
+              - UNIT
+              - []
+          1:
+            B:
+              - UNIT
+              - []
+          2:
+            C:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
 fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]

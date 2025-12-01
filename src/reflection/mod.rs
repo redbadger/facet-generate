@@ -855,6 +855,13 @@ impl RegistryBuilder {
                 return Ok(VariantFormat::NewType(Box::new(format)));
             }
         }
+        if let Def::Option(v) = field_shape.def {
+            if let Some(format) = self.get_user_type_format(v.t)? {
+                return Ok(VariantFormat::NewType(Box::new(Format::Option(Box::new(
+                    format,
+                )))));
+            }
+        }
 
         if field_shape.type_identifier == "()" {
             Ok(VariantFormat::NewType(Box::new(Format::Unit)))
@@ -1255,8 +1262,15 @@ impl RegistryBuilder {
                 if field_shape.type_identifier == "()" {
                     Ok(Some(Format::Unit))
                 } else {
-                    let renamed_name = self.get_name_with_mappings(field_shape)?;
-                    Ok(Some(Format::TypeName(renamed_name)))
+                    if let Def::Option(v) = field_shape.def {
+                        let renamed_name = self.get_name_with_mappings(v.t)?;
+                        Ok(Some(Format::Option(Box::new(Format::TypeName(
+                            renamed_name,
+                        )))))
+                    } else {
+                        let renamed_name = self.get_name_with_mappings(field_shape)?;
+                        Ok(Some(Format::TypeName(renamed_name)))
+                    }
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
@@ -1649,7 +1663,7 @@ fn is_transparent_shape(shape: &Shape) -> bool {
         .any(|attr| matches!(attr, ShapeAttribute::Transparent))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum UpdateMode {
     /// Unconditionally update the container format
     Force,
