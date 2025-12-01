@@ -1509,10 +1509,15 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
 }
 
 fn get_format_for_shape(shape: &Shape) -> Result<Format, Error> {
-    let shape = match &shape.ty {
+    let mut shape = match &shape.ty {
         Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => pt.target,
         _ => shape,
     };
+    if is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        shape = inner;
+    }
     get_inner_format(shape)
 }
 
@@ -1766,9 +1771,14 @@ fn get_inner_format(shape: &Shape) -> Result<Format, Error> {
 
 #[allow(clippy::too_many_lines)]
 fn get_inner_format_with_context(
-    shape: &Shape,
+    mut shape: &Shape,
     namespace_context: Option<&Namespace>,
 ) -> Result<Format, Error> {
+    if is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        shape = inner;
+    }
     let format = match shape.def {
         Def::Scalar => match type_to_format(shape)? {
             Some(format) => format,

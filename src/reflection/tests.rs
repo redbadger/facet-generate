@@ -818,6 +818,8 @@ fn nested_newtype_transparent_with_str() {
     struct MyStruct {
         wrapper: MyWrapper,
         str: MyString,
+        opt: Option<MyString>,
+        seq: Vec<MyString>,
     }
 
     insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @r"
@@ -831,6 +833,12 @@ fn nested_newtype_transparent_with_str() {
               - []
           - str:
               - STR
+              - []
+          - opt:
+              - OPTION: STR
+              - []
+          - seq:
+              - SEQ: STR
               - []
         - []
     ? namespace: ROOT
@@ -937,6 +945,8 @@ fn nested_enum_newtype_transparent_with_str() {
         VariantB { wrapper: MyWrapper, str: MyString },
         VariantC(MyString),
         VariantD(MyString, u32),
+        VariantE(Option<MyString>),
+        VariantF { seq: Vec<MyString> },
     }
 
     insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @r"
@@ -968,6 +978,18 @@ fn nested_enum_newtype_transparent_with_str() {
               - TUPLE:
                   - STR
                   - U32
+              - []
+          4:
+            VariantE:
+              - NEWTYPE:
+                  OPTION: STR
+              - []
+          5:
+            VariantF:
+              - STRUCT:
+                  - seq:
+                      - SEQ: STR
+                      - []
               - []
         - []
     ? namespace: ROOT
