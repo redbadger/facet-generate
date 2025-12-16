@@ -636,7 +636,7 @@ impl RegistryBuilder {
             return false;
         };
         match container {
-            ContainerFormat::NewTypeStruct(format, _doc) => *format = Box::new(value),
+            ContainerFormat::NewTypeStruct(format, _doc) => **format = value,
             ContainerFormat::TupleStruct(formats, _doc) => formats.push(value),
             ContainerFormat::Struct(nameds, _doc) => nameds.push(Named {
                 name: field.name.to_string(),
@@ -1261,16 +1261,14 @@ impl RegistryBuilder {
             Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
                 if field_shape.type_identifier == "()" {
                     Ok(Some(Format::Unit))
+                } else if let Def::Option(v) = field_shape.def {
+                    let renamed_name = self.get_name_with_mappings(v.t)?;
+                    Ok(Some(Format::Option(Box::new(Format::TypeName(
+                        renamed_name,
+                    )))))
                 } else {
-                    if let Def::Option(v) = field_shape.def {
-                        let renamed_name = self.get_name_with_mappings(v.t)?;
-                        Ok(Some(Format::Option(Box::new(Format::TypeName(
-                            renamed_name,
-                        )))))
-                    } else {
-                        let renamed_name = self.get_name_with_mappings(field_shape)?;
-                        Ok(Some(Format::TypeName(renamed_name)))
-                    }
+                    let renamed_name = self.get_name_with_mappings(field_shape)?;
+                    Ok(Some(Format::TypeName(renamed_name)))
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
