@@ -258,7 +258,13 @@ impl RegistryBuilder {
         Ok(())
     }
 
-    fn format(&mut self, shape: &Shape) -> Result<(), Error> {
+    fn format(&mut self, mut shape: &Shape) -> Result<(), Error> {
+        if is_transparent_shape(shape)
+            && let Some(inner) = shape.inner
+        {
+            shape = inner;
+        }
+
         if !self.is_supported_generic_type(shape) {
             return Err(Error::UnsupportedGenericType(shape.to_string()));
         }
@@ -380,7 +386,7 @@ impl RegistryBuilder {
                 pointee: Some(inner_shape),
                 ..
             }) => {
-                self.handle_pointer(inner_shape())?;
+                self.handle_pointer(inner_shape)?;
             }
             Def::Pointer(PointerDef { pointee: None, .. }) => {
                 self.handle_opaque_pointee();
@@ -428,7 +434,7 @@ impl RegistryBuilder {
                 }
             },
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                self.format((pt.target)())?;
+                self.format(pt.target)?;
             }
             _ => {}
         }
@@ -487,12 +493,14 @@ impl RegistryBuilder {
                     let field_shape = field.shape();
 
                     // Check if this is a transparent struct
-                    let is_transparent = is_transparent_struct(shape);
+                    let is_transparent = is_transparent_shape(shape);
 
                     if is_transparent {
                         // For transparent structs, don't create a container - just process the inner type
                         // This will register the transparent struct with its inner type's format
-                        self.format(field_shape)?;
+                        if !self.try_handle_bytes_attribute(&field) {
+                            self.format(field_shape)?;
+                        }
                         self.pop_namespace();
                         return Ok(());
                     }
@@ -502,7 +510,9 @@ impl RegistryBuilder {
                     self.push_with_type_check(struct_name.clone(), container, shape)?;
 
                     // Process the inner field
-                    self.format(field_shape)?;
+                    if !self.try_handle_bytes_attribute(&field) {
+                        self.format(field_shape)?;
+                    }
 
                     self.pop();
                 } else {
@@ -510,13 +520,17 @@ impl RegistryBuilder {
                     let container = ContainerFormat::TupleStruct(vec![], shape.into());
                     self.push_with_type_check(struct_name.clone(), container, shape)?;
                     for field in struct_type.fields {
-                        let skip = field.attributes.iter().any(|attr| match attr {
-                            FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                        let skip = field.attributes.iter().any(|attr| {
+                            matches!(attr ,
+                                FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
+                            )
                         });
                         if skip {
                             continue;
                         }
-                        self.format(field.shape())?;
+                        if !self.try_handle_bytes_attribute(field) {
+                            self.format(field.shape())?;
+                        }
                     }
                     self.pop();
                 }
@@ -525,8 +539,10 @@ impl RegistryBuilder {
                 let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push_with_type_check(struct_name.clone(), container, shape)?;
                 for field in struct_type.fields {
-                    let skip = field.attributes.iter().any(|attr| match attr {
-                        FieldAttribute::Arbitrary(attr_str) => *attr_str == "skip",
+                    let skip = field.attributes.iter().any(|attr| {
+                        matches!(attr ,
+                            FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
+                        )
                     });
                     if skip {
                         continue;
@@ -560,11 +576,7 @@ impl RegistryBuilder {
         let field_shape = field.shape();
 
         // Check for field-level attributes first
-        let has_bytes_attribute = field.attributes.iter().any(|attr| match attr {
-            FieldAttribute::Arbitrary(attr_str) => *attr_str == "bytes",
-        });
-
-        if has_bytes_attribute && self.try_handle_bytes_attribute(field) {
+        if self.try_handle_bytes_attribute(field) {
             return Ok(());
         }
 
@@ -617,51 +629,23 @@ impl RegistryBuilder {
     }
 
     fn try_handle_bytes_attribute(&mut self, field: &Field) -> bool {
-        let field_shape = field.shape();
-        // Handle bytes attribute for Vec<u8>
-        if field_shape.type_identifier == "Vec" {
-            // Check if it's actually Vec<u8> by examining the definition
-            if let Def::List(list_def) = field_shape.def {
-                let inner_shape = list_def.t();
-                if inner_shape.type_identifier == "u8" {
-                    if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                        named_formats.push(Named {
-                            name: field.name.to_string(),
-                            doc: field.shape().into(),
-                            value: Format::Bytes,
-                        });
-                    }
-                    return true;
-                }
-            }
+        let Some(value) = bytes_attribute_format(field) else {
+            return false;
+        };
+        let Some(container) = self.get_mut() else {
+            return false;
+        };
+        match container {
+            ContainerFormat::NewTypeStruct(format, _doc) => **format = value,
+            ContainerFormat::TupleStruct(formats, _doc) => formats.push(value),
+            ContainerFormat::Struct(nameds, _doc) => nameds.push(Named {
+                name: field.name.to_string(),
+                doc: field.shape().into(),
+                value,
+            }),
+            _ => return false,
         }
-
-        // Handle bytes attribute for &[u8] slices
-        if field_shape.type_identifier == "&[_]" {
-            // Check if it's a smart pointer to a slice of u8
-            if let Def::Pointer(PointerDef {
-                pointee: Some(target_shape_fn),
-                ..
-            }) = field_shape.def
-            {
-                let target_shape = target_shape_fn();
-                if let Def::Slice(slice_def) = target_shape.def {
-                    let element_shape = slice_def.t();
-                    if element_shape.type_identifier == "u8" {
-                        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                            named_formats.push(Named {
-                                name: field.name.to_string(),
-                                doc: field.into(),
-                                value: Format::Bytes,
-                            });
-                        }
-                        return true;
-                    }
-                }
-            }
-        }
-
-        false
+        true
     }
 
     fn try_handle_option_field(&mut self, field: &Field) -> Result<bool, Error> {
@@ -724,7 +708,7 @@ impl RegistryBuilder {
             // Check if the referenced struct is transparent
             let is_referenced_transparent = inner_struct.kind == StructKind::TupleStruct
                 && inner_struct.fields.len() == 1
-                && is_transparent_struct(field_shape);
+                && is_transparent_shape(field_shape);
 
             if is_referenced_transparent {
                 // For transparent struct references, use the inner type directly with namespace context
@@ -860,7 +844,24 @@ impl RegistryBuilder {
         shape: &Shape,
     ) -> Result<VariantFormat, Error> {
         let field = variant.data.fields[0];
+        if let Some(value) = bytes_attribute_format(&field) {
+            return Ok(VariantFormat::NewType(Box::new(value)));
+        }
         let field_shape = field.shape();
+        if is_transparent_shape(field_shape)
+            && let Some(inner) = field_shape.inner
+        {
+            if let Some(format) = self.get_user_type_format(inner)? {
+                return Ok(VariantFormat::NewType(Box::new(format)));
+            }
+        }
+        if let Def::Option(v) = field_shape.def {
+            if let Some(format) = self.get_user_type_format(v.t)? {
+                return Ok(VariantFormat::NewType(Box::new(Format::Option(Box::new(
+                    format,
+                )))));
+            }
+        }
 
         if field_shape.type_identifier == "()" {
             Ok(VariantFormat::NewType(Box::new(Format::Unit)))
@@ -889,7 +890,6 @@ impl RegistryBuilder {
                             QualifiedTypeName::namespaced(name.clone(), base_name)
                         }
                     };
-
                     Ok(VariantFormat::NewType(Box::new(Format::TypeName(
                         qualified_name,
                     ))))
@@ -974,6 +974,18 @@ impl RegistryBuilder {
         for field in variant.data.fields {
             let field_shape = field.shape();
 
+            // Check for field-level attributes first
+            if let Some(value) = bytes_attribute_format(field) {
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+                    named_formats.push(Named {
+                        name: field.name.to_string(),
+                        doc: field.into(),
+                        value,
+                    });
+                }
+                continue;
+            }
+
             // Check for field-level namespace annotation
             let field_namespace = extract_namespace_from_field_attributes(field)?;
 
@@ -1046,6 +1058,12 @@ impl RegistryBuilder {
 
         // Process all fields
         for field in variant.data.fields {
+            if let Some(value) = bytes_attribute_format(field) {
+                if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.get_mut() {
+                    formats.push(value);
+                }
+                continue;
+            }
             // Use the namespace context of the current enum for its variant fields
             let transparent_namespace = extract_namespace_from_shape(shape)?;
 
@@ -1233,18 +1251,28 @@ impl RegistryBuilder {
     }
 
     /// Helper method to determine format for user-defined types with namespace context
-    fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
+    fn get_user_type_format(&mut self, mut field_shape: &Shape) -> Result<Option<Format>, Error> {
+        if is_transparent_shape(field_shape)
+            && let Some(inner) = field_shape.inner
+        {
+            field_shape = inner;
+        }
         match &field_shape.ty {
             Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
                 if field_shape.type_identifier == "()" {
                     Ok(Some(Format::Unit))
+                } else if let Def::Option(v) = field_shape.def {
+                    let renamed_name = self.get_name_with_mappings(v.t)?;
+                    Ok(Some(Format::Option(Box::new(Format::TypeName(
+                        renamed_name,
+                    )))))
                 } else {
                     let renamed_name = self.get_name_with_mappings(field_shape)?;
                     Ok(Some(Format::TypeName(renamed_name)))
                 }
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                let target_shape = (pt.target)();
+                let target_shape = pt.target;
                 match get_inner_format_with_context(target_shape, self.current_namespace()) {
                     Ok(format) => Ok(Some(format)),
                     Err(_) => Ok(None), // Skip if inner format fails
@@ -1453,17 +1481,25 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
     // Extract name attribute
     let mut name = None;
     for attr in shape.attributes {
-        if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            // Check for rename attribute in the format "name = \"NewName\""
-            if let Some(stripped) = attr_str.strip_prefix("name = \"") {
-                if let Some(end_idx) = stripped.find('"') {
-                    name = Some(stripped[..end_idx].to_string());
+        match attr {
+            ShapeAttribute::Arbitrary(attr_str) => {
+                // Check for rename attribute in the format "name = \"NewName\""
+                if let Some(stripped) = attr_str.strip_prefix("name = \"") {
+                    if let Some(end_idx) = stripped.find('"') {
+                        name = Some(stripped[..end_idx].to_string());
+                    }
+                }
+                // Check for rename attribute without quotes "name = NewName"
+                else if let Some(stripped) = attr_str.strip_prefix("name = ") {
+                    name = Some(stripped.trim_matches('"').to_string());
                 }
             }
-            // Check for rename attribute without quotes "name = NewName"
-            else if let Some(stripped) = attr_str.strip_prefix("name = ") {
-                name = Some(stripped.trim_matches('"').to_string());
+            ShapeAttribute::Transparent => {
+                if let Some(inner) = shape.inner {
+                    return get_name(inner);
+                }
             }
+            _ => (),
         }
     }
 
@@ -1485,10 +1521,15 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
 }
 
 fn get_format_for_shape(shape: &Shape) -> Result<Format, Error> {
-    let shape = match &shape.ty {
-        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => (pt.target)(),
+    let mut shape = match &shape.ty {
+        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => pt.target,
         _ => shape,
     };
+    if is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        shape = inner;
+    }
     get_inner_format(shape)
 }
 
@@ -1537,13 +1578,19 @@ fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
                 TextualType::Str => Format::Str,
                 TextualType::Char => Format::Char,
             },
-            PrimitiveType::Never => unimplemented!("Never type not supported"),
+            PrimitiveType::Never => {
+                unimplemented!("Never type not supported: {}", shape.type_identifier)
+            }
         }),
         Type::User(UserType::Opaque) => match shape.type_identifier {
             "String" | "DateTime<Utc>" => Some(Format::Str),
             _ => None,
         },
-        _ => unimplemented!("Unsupported type for scalar format: {:?}", shape.ty),
+        _ => unimplemented!(
+            "Unsupported type for scalar format: {}: {:?}",
+            shape.type_identifier,
+            shape.ty
+        ),
     };
 
     Ok(format)
@@ -1564,11 +1611,12 @@ fn extract_namespace_from_shape(shape: &Shape) -> Result<NamespaceAction, Error>
 
 fn extract_namespace_from_field_attributes(field: &Field) -> Result<NamespaceAction, Error> {
     for attr in field.attributes {
-        let FieldAttribute::Arbitrary(attr_str) = attr;
-        match extract_namespace(attr_str) {
-            Ok(None) => (),
-            Ok(Some(namespace)) => return Ok(namespace),
-            Err(e) => return Err(e),
+        if let FieldAttribute::Arbitrary(attr_str) = attr {
+            match extract_namespace(attr_str) {
+                Ok(None) => (),
+                Ok(Some(namespace)) => return Ok(namespace),
+                Err(e) => return Err(e),
+            }
         }
     }
     Ok(NamespaceAction::Inherit)
@@ -1606,14 +1654,14 @@ fn extract_namespace(attribute: &str) -> Result<Option<NamespaceAction>, Error> 
     )))
 }
 
-fn is_transparent_struct(shape: &Shape) -> bool {
+fn is_transparent_shape(shape: &Shape) -> bool {
     shape
         .attributes
         .iter()
         .any(|attr| matches!(attr, ShapeAttribute::Transparent))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum UpdateMode {
     /// Unconditionally update the container format
     Force,
@@ -1627,15 +1675,122 @@ fn should_process_nested_type(shape: &Shape) -> bool {
     !matches!(shape.def, Def::Scalar) && shape.type_identifier != "()"
 }
 
+fn bytes_attribute_format(field: &Field) -> Option<Format> {
+    let mut shape = field.shape();
+    let is_bytes_attr = |field: &Field| {
+        field.attributes.iter().any(|attr| {
+            matches!(attr ,
+                FieldAttribute::Arbitrary(attr_str) if *attr_str == "bytes",
+            )
+        })
+    };
+    let mut is_transparent_bytes = || {
+        if is_transparent_shape(shape) {
+            match shape.ty {
+                Type::User(ty) => match ty {
+                    UserType::Struct(ty) => match ty.kind {
+                        StructKind::TupleStruct => {
+                            if ty.fields.len() == 1 {
+                                let field = ty.fields[0];
+                                shape = field.shape();
+                                is_bytes_attr(&field)
+                            } else {
+                                false
+                            }
+                        }
+                        _ => false,
+                    },
+                    UserType::Enum(_) => todo!(),
+                    UserType::Union(_) => todo!(),
+                    UserType::Opaque => false,
+                },
+                _ => false,
+            }
+        } else {
+            false
+        }
+    };
+    if !is_bytes_attr(field) && !is_transparent_bytes() {
+        return None;
+    }
+
+    let (is_option, field_shape) = {
+        let base_shape = shape;
+        if let Def::Option(opt) = base_shape.def {
+            (true, opt.t)
+        } else {
+            (false, base_shape)
+        }
+    };
+
+    let format = || {
+        if is_option {
+            Format::Option(Box::new(Format::Bytes))
+        } else {
+            Format::Bytes
+        }
+    };
+
+    // Handle bytes attribute for Vec<u8>
+    if field_shape.type_identifier == "Vec" {
+        // Check if it's actually Vec<u8> by examining the definition
+        if let Def::List(list_def) = field_shape.def {
+            let inner_shape = list_def.t();
+            if inner_shape.type_identifier == "u8" {
+                return Some(format());
+            }
+        }
+    }
+
+    if field_shape.type_identifier == "Bytes" {
+        return Some(format());
+    }
+
+    // Handle fixed byte arrays
+    if let Def::Array(ArrayDef { t, .. }) = field_shape.def
+        && t.type_identifier == "u8"
+    {
+        return Some(format());
+    }
+
+    // Handle bytes attribute for &[u8] slices
+    if field_shape.type_identifier == "&" {
+        // Check if it's a smart pointer to a slice of u8
+        if let Def::Pointer(PointerDef {
+            pointee: Some(target_shape_fn),
+            ..
+        }) = field_shape.def
+        {
+            let target_shape = target_shape_fn;
+            if let Def::Slice(slice_def) = target_shape.def {
+                let element_shape = slice_def.t();
+                if element_shape.type_identifier == "u8" {
+                    return Some(format());
+                }
+            }
+        }
+    }
+    eprintln!(
+        "{} is not a valid bytes attribute",
+        field_shape.type_identifier
+    );
+    None
+}
+
 fn get_inner_format(shape: &Shape) -> Result<Format, Error> {
     get_inner_format_with_context(shape, None)
 }
 
 #[allow(clippy::too_many_lines)]
 fn get_inner_format_with_context(
-    shape: &Shape,
+    mut shape: &Shape,
     namespace_context: Option<&Namespace>,
 ) -> Result<Format, Error> {
+    if is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        shape = inner;
+    }
     let format = match shape.def {
         Def::Scalar => match type_to_format(shape)? {
             Some(format) => format,
@@ -1711,7 +1866,7 @@ fn get_inner_format_with_context(
                 &shape.ty
             {
                 // For pointer types like &'static str, get the format of the target type
-                let target_shape = (pt.target)();
+                let target_shape = pt.target;
                 get_inner_format_with_context(target_shape, namespace_context)?
             } else {
                 // For user-defined types, use TypeName with namespace context if available
@@ -1748,7 +1903,7 @@ fn get_inner_format_with_context(
         Def::Pointer(pointer_def) => {
             // Handle Pointer (Box, Arc, etc.) by recursively processing the inner type
             if let Some(inner_shape) = pointer_def.pointee {
-                get_inner_format_with_context(inner_shape(), namespace_context)?
+                get_inner_format_with_context(inner_shape, namespace_context)?
             } else {
                 // Fallback for pointers without a known pointee
                 Format::Unit
