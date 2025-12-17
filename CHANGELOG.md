@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.13.0] - 2025-12-17
+
+#### -  `#[facet(transparent)]` being ignored on multiple cases
+
+Transparent NewTypes over scalar values would generate some named type without a definition. In typescript it would generate `MyType: any`. Now something like
+
+```rust
+#[facet(transparent)]
+struct Wrapper(String);
+```
+
+will correctly be considered a `String` in generation
+
+#### - More support for byte types 
+
+- `bytes::Bytes` (requires `#[facet(bytes)]`)
+- `Option<bytes::Bytes>` (requires `#[facet(bytes)]`)
+- `Option<Vec<u8>>`
+- `Option<&[u8]>`
+- `[u8; N]`
+
+#### - Support for `#[facet(bytes)]` and `#[facet(transparent)]` in enum variants
+
+#### - Fixed transparent newtypes with `#[facet(bytes)]` not triggering the bytes generation
+
+#### - Bumped `facet`
+
+Many thanks to [Jeremy](https://github.com/o0Ignition0o) and [Felix](https://github.com/ManevilleF) for this contribution.
+
 ## [0.12.1] - 2025-11-16
 
 Support for `#[facet(opaque)]` on struct fields. This attribute can be used to indicate that a field should be treated as opaque, meaning that it should not be reflected or serialized. You can use this when a struct field references another type that does not implement the `Facet` trait.
