@@ -9,7 +9,8 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, indent::IndentWrite, module::Module,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
+        module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -30,26 +31,42 @@ impl Emitter<Kotlin> for Module {
             module_name,
             encoding,
             features,
+            external_packages,
             ..
         } = self.config();
 
         writeln!(w, "package {module_name}")?;
         writeln!(w)?;
 
+        // For bincode encoding, we use imports that are compatible with Kotlin Multiplatform.
+        // The serde types (Serializer, Deserializer, etc.) use the package from the
+        // external_packages configuration for the "serde" namespace.
         let mut imports = match encoding {
             Encoding::Json => vec![
-                "import kotlinx.serialization.Serializable",
-                "import kotlinx.serialization.SerialName",
+                "import kotlinx.serialization.Serializable".to_string(),
+                "import kotlinx.serialization.SerialName".to_string(),
             ],
-            Encoding::Bincode => vec![
-                "import com.novi.bincode.BincodeDeserializer",
-                "import com.novi.bincode.BincodeSerializer",
-                "import com.novi.serde.Bytes",
-                "import com.novi.serde.DeserializationError",
-                "import com.novi.serde.Deserializer",
-                "import com.novi.serde.Serializer",
-                "import com.novi.serde.Unsigned",
-            ],
+            Encoding::Bincode => {
+                // Get the serde package from external_packages configuration
+                let serde_package = external_packages
+                    .get("serde")
+                    .and_then(|pkg| {
+                        if let PackageLocation::Path(path) = &pkg.location {
+                            Some(path.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or_else(|| "serde".to_string());
+
+                vec![
+                    format!("import {serde_package}.BincodeDeserializer"),
+                    format!("import {serde_package}.BincodeSerializer"),
+                    format!("import {serde_package}.DeserializationError"),
+                    format!("import {serde_package}.Deserializer"),
+                    format!("import {serde_package}.Serializer"),
+                ]
+            }
             _ => vec![],
         };
 
@@ -57,25 +74,38 @@ impl Emitter<Kotlin> for Module {
         for feature in features {
             match feature {
                 Feature::BigInt => {
-                    imports.push("import java.math.BigInteger");
+                    // Note: BigInteger is JVM-only. For KMP, you'd need a multiplatform BigInt library.
+                    // This is kept for backward compatibility with JVM-only projects.
+                    imports.push("import java.math.BigInteger".to_string());
                     match encoding {
                         Encoding::Json => {
-                            imports.extend_from_slice(&[
-                                "import kotlinx.serialization.KSerializer",
-                                "import kotlinx.serialization.descriptors.PrimitiveKind",
-                                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor",
-                                "import kotlinx.serialization.encoding.Decoder",
-                                "import kotlinx.serialization.encoding.Encoder",
-                                "import kotlinx.serialization.json.JsonDecoder",
-                                "import kotlinx.serialization.json.JsonEncoder",
-                                "import kotlinx.serialization.json.JsonUnquotedLiteral",
-                                "import kotlinx.serialization.json.jsonPrimitive",
+                            imports.extend([
+                                "import kotlinx.serialization.KSerializer".to_string(),
+                                "import kotlinx.serialization.descriptors.PrimitiveKind".to_string(),
+                                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor".to_string(),
+                                "import kotlinx.serialization.encoding.Decoder".to_string(),
+                                "import kotlinx.serialization.encoding.Encoder".to_string(),
+                                "import kotlinx.serialization.json.JsonDecoder".to_string(),
+                                "import kotlinx.serialization.json.JsonEncoder".to_string(),
+                                "import kotlinx.serialization.json.JsonUnquotedLiteral".to_string(),
+                                "import kotlinx.serialization.json.jsonPrimitive".to_string(),
                             ]);
                             features_out.write_all(FEATURE_BIGINT)?;
                             writeln!(features_out)?;
                         }
                         Encoding::Bincode => {
-                            imports.push("import com.novi.serde.Int128");
+                            // Get the serde package from external_packages configuration
+                            let serde_package = external_packages
+                                .get("serde")
+                                .and_then(|pkg| {
+                                    if let PackageLocation::Path(path) = &pkg.location {
+                                        Some(path.clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap_or_else(|| "serde".to_string());
+                            imports.push(format!("import {serde_package}.Int128"));
                         }
                         Encoding::None | Encoding::Bcs => (),
                     }
@@ -799,32 +829,20 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128(@Int128 {field_name})"),
-        Format::U8 => writeln!(
-            w,
-            "serializer.serialize_u8(@Unsigned {field_name}.toByte())"
-        ),
-        Format::U16 => writeln!(
-            w,
-            "serializer.serialize_u16(@Unsigned {field_name}.toShort())"
-        ),
-        Format::U32 => writeln!(
-            w,
-            "serializer.serialize_u32(@Unsigned {field_name}.toInt())"
-        ),
-        Format::U64 => writeln!(
-            w,
-            "serializer.serialize_u64(@Unsigned {field_name}.toLong())"
-        ),
-        Format::U128 => writeln!(
-            w,
-            "serializer.serialize_u128(@Unsigned @Int128 {field_name})"
-        ),
+        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
+        // For unsigned types, use Kotlin's native unsigned types directly.
+        // No @Unsigned annotations needed - Kotlin has first-class UByte, UShort, UInt, ULong.
+        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
+        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
+        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
+        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
+        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes(Bytes.valueOf({field_name}))"),
+        // Use direct byte array - no Bytes wrapper needed for KMP compatibility
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
 
         // Container types - these generate method calls with lambdas
         Format::Option(inner_format) => {
@@ -845,8 +863,40 @@ fn write_serialize<W: IndentWrite>(
             Ok(())
         }
 
-        Format::TypeName(..) | Format::Tuple(..) | Format::TupleArray { .. } => {
+        Format::TypeName(..) | Format::TupleArray { .. } => {
             writeln!(w, "{field_name}.serialize(serializer)")
+        }
+
+        Format::Tuple(formats) => {
+            // Kotlin's Pair/Triple don't have serialize methods, so we need to serialize inline
+            let len = formats.len();
+            match len {
+                0 => writeln!(w, "serializer.serialize_unit({field_name})"),
+                1 => write_serialize(w, field_name, &formats[0], level),
+                2 => {
+                    // Pair<A, B> - serialize first and second
+                    write_serialize(w, &format!("{field_name}.first"), &formats[0], level)?;
+                    write_serialize(w, &format!("{field_name}.second"), &formats[1], level)
+                }
+                3 => {
+                    // Triple<A, B, C> - serialize first, second, third
+                    write_serialize(w, &format!("{field_name}.first"), &formats[0], level)?;
+                    write_serialize(w, &format!("{field_name}.second"), &formats[1], level)?;
+                    write_serialize(w, &format!("{field_name}.third"), &formats[2], level)
+                }
+                _ => {
+                    // NTupleN - use component accessors
+                    for (i, format) in formats.iter().enumerate() {
+                        write_serialize(
+                            w,
+                            &format!("{field_name}.component{}()", i + 1),
+                            format,
+                            level,
+                        )?;
+                    }
+                    Ok(())
+                }
+            }
         }
         Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
     }
@@ -874,23 +924,16 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     w.start_block_no_newline()?;
     writeln!(w, " key, value ->")?;
 
-    if key_format.is_leaf() {
-        write_serialize(w, "key", key_format, level + 1)?;
-    } else {
-        write!(w, "key.serialize(serializer) ")?;
-        write_serialize_lambda(w, key_format, level + 1)?;
-    }
+    // For key, just call write_serialize directly - it handles all format types
+    write_serialize(w, "key", key_format, level + 1)?;
 
-    if value_format.is_leaf() {
-        write_serialize(w, "value", value_format, level + 1)?;
-    } else {
-        write!(w, "value.serialize(serializer) ")?;
-        write_serialize_lambda(w, value_format, level + 1)?;
-    }
+    // For value, just call write_serialize directly - it handles all format types
+    write_serialize(w, "value", value_format, level + 1)?;
 
     w.end_block()
 }
 
+#[allow(clippy::too_many_lines)]
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
@@ -923,16 +966,18 @@ fn write_deserialize<W: IndentWrite>(
         Format::I32 => write!(w, "deserializer.deserialize_i32()"),
         Format::I64 => write!(w, "deserializer.deserialize_i64()"),
         Format::I128 => write!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => write!(w, "deserializer.deserialize_u8().toUByte()"),
-        Format::U16 => write!(w, "deserializer.deserialize_u16().toUShort()"),
-        Format::U32 => write!(w, "deserializer.deserialize_u32().toUInt()"),
-        Format::U64 => write!(w, "deserializer.deserialize_u64().toULong()"),
+        // KMP serde returns native unsigned types directly - no conversion needed
+        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
         Format::U128 => write!(w, "deserializer.deserialize_u128()"),
         Format::F32 => write!(w, "deserializer.deserialize_f32()"),
         Format::F64 => write!(w, "deserializer.deserialize_f64()"),
         Format::Char => write!(w, "deserializer.deserialize_char()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => write!(w, "deserializer.deserialize_bytes().content()"),
+        // Return byte array directly - no Bytes wrapper for KMP compatibility
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             write_deserialize_lambda(w, format)
@@ -951,26 +996,65 @@ fn write_deserialize<W: IndentWrite>(
         }
         Format::Tuple(formats) => {
             let len = formats.len();
-            let typename = match len {
-                0 => return Ok(()),
+            match len {
+                0 => {
+                    write!(w, "deserializer.deserialize_unit()")?;
+                    return Ok(());
+                }
                 1 => {
                     push_deserializer(w)?;
                     write_deserialize(w, Some("value"), &formats[0], true)?;
                     pop_deserializer(w)?;
                     return Ok(());
                 }
-                2 => "Pair".to_string(),
-                3 => "Triple".to_string(),
-                _ => format!("NTuple{len}"),
-            };
-            write!(w, "{typename}<")?;
-            for (i, format) in formats.iter().enumerate() {
-                if i > 0 {
-                    write!(w, ", ")?;
+                2 => {
+                    // Pair<A, B> - deserialize inline and construct Pair
+                    writeln!(w, "run {{")?;
+                    w.indent();
+                    write!(w, "val first = ")?;
+                    write_deserialize(w, None, &formats[0], true)?;
+                    write!(w, "val second = ")?;
+                    write_deserialize(w, None, &formats[1], true)?;
+                    writeln!(w, "Pair(first, second)")?;
+                    w.unindent();
+                    write!(w, "}}")?;
                 }
-                format.write(w)?;
+                3 => {
+                    // Triple<A, B, C> - deserialize inline and construct Triple
+                    writeln!(w, "run {{")?;
+                    w.indent();
+                    write!(w, "val first = ")?;
+                    write_deserialize(w, None, &formats[0], true)?;
+                    write!(w, "val second = ")?;
+                    write_deserialize(w, None, &formats[1], true)?;
+                    write!(w, "val third = ")?;
+                    write_deserialize(w, None, &formats[2], true)?;
+                    writeln!(w, "Triple(first, second, third)")?;
+                    w.unindent();
+                    write!(w, "}}")?;
+                }
+                _ => {
+                    // NTupleN - deserialize and construct
+                    let typename = format!("NTuple{len}");
+                    writeln!(w, "run {{")?;
+                    w.indent();
+                    for (i, format) in formats.iter().enumerate() {
+                        write!(w, "val v{i} = ")?;
+                        write_deserialize(w, None, format, true)?;
+                    }
+                    write!(w, "{typename}(")?;
+                    for i in 0..len {
+                        if i > 0 {
+                            write!(w, ", ")?;
+                        }
+                        write!(w, "v{i}")?;
+                    }
+                    writeln!(w, ")")?;
+                    w.unindent();
+                    write!(w, "}}")?;
+                }
             }
-            writeln!(w, ">.deserialize(deserializer)")
+            Ok(())
         }
         Format::TupleArray { content, size } => {
             write!(w, "buildList({size}) {{ repeat({size}) {{ add(")?;

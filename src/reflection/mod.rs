@@ -972,6 +972,14 @@ impl RegistryBuilder {
 
         // Process all fields with their names
         for field in variant.data.fields {
+            // Check for #[facet(skip)] attribute on the field
+            let skip = field.attributes.iter().any(|attr| {
+                matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip")
+            });
+            if skip {
+                continue;
+            }
+
             let field_shape = field.shape();
 
             // Check for field-level attributes first
@@ -990,6 +998,32 @@ impl RegistryBuilder {
             let field_namespace = extract_namespace_from_field_attributes(field)?;
 
             self.push_namespace(field_namespace.clone());
+
+            // Handle Option types specially (like handle_struct_field does)
+            if field_shape.type_identifier == "Option" {
+                if let Def::Option(option_def) = field_shape.def {
+                    let inner_shape = option_def.t();
+                    let inner_format =
+                        get_inner_format_with_context(inner_shape, self.current_namespace())?;
+                    let option_format = Format::Option(Box::new(inner_format));
+
+                    // Process any user-defined types in the nested structure
+                    if !matches!(inner_shape.def, Def::Scalar) {
+                        self.format(inner_shape)?;
+                    }
+
+                    self.pop_namespace();
+
+                    if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+                        named_formats.push(Named {
+                            name: field.name.to_string(),
+                            doc: field.into(),
+                            value: option_format,
+                        });
+                    }
+                    continue;
+                }
+            }
 
             // Determine the proper format with the field-level context in place
             let Some(value) = self.get_user_type_format(field_shape)? else {
@@ -1058,6 +1092,14 @@ impl RegistryBuilder {
 
         // Process all fields
         for field in variant.data.fields {
+            // Check for #[facet(skip)] attribute on the field
+            let skip = field.attributes.iter().any(|attr| {
+                matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip")
+            });
+            if skip {
+                continue;
+            }
+
             if let Some(value) = bytes_attribute_format(field) {
                 if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.get_mut() {
                     formats.push(value);
