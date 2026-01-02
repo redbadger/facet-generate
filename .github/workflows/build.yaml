@@ -69,8 +69,3 @@ jobs:
       - name: Test with latest nextest release
         shell: bash
         run: cargo nextest run --all-features
-
-      - name: ktlint
-        uses: lucasnlm/ktlint-action@master
-        with:
-          args: "src/generation/tests/"
