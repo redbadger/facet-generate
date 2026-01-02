@@ -1,7 +1,7 @@
 package com.example
 
 data class Child(
-    val external: com.example.other.OtherParent,
+    val external: com.example2.other.other.OtherParent,
 )
 
 sealed interface Parent {

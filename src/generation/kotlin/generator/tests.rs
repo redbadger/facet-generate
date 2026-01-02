@@ -749,6 +749,87 @@ fn test_update_qualified_names_fallback_to_external_definitions() {
 }
 
 #[test]
+fn test_deserialization_uses_fully_qualified_names() {
+    // Test that deserialization code uses fully qualified type names
+    use crate::{
+        generation::{
+            CodeGeneratorConfig, Encoding,
+            config::{ExternalPackage, PackageLocation},
+            kotlin::CodeGenerator,
+        },
+        reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
+    };
+    use std::collections::BTreeMap;
+
+    // Set up external packages
+    let mut external_packages = BTreeMap::new();
+    external_packages.insert(
+        "Other".to_string(),
+        ExternalPackage {
+            for_namespace: "Other".to_string(),
+            location: PackageLocation::Path("com.external.other".to_string()),
+            module_name: None,
+            version: None,
+        },
+    );
+
+    let mut config =
+        CodeGeneratorConfig::new("com.example.main".to_string()).with_encoding(Encoding::Bincode);
+    config.external_packages = external_packages;
+
+    // Create a registry with types that reference external types
+    let mut registry = Registry::new();
+
+    // Create an external type reference
+    let external_type = Format::TypeName(QualifiedTypeName::namespaced(
+        "Other".to_string(),
+        "ExternalType".to_string(),
+    ));
+
+    // Create a local type reference
+    let local_type = Format::TypeName(QualifiedTypeName::namespaced(
+        "App".to_string(),
+        "LocalType".to_string(),
+    ));
+
+    // Create a struct that uses both
+    let external_field = Named {
+        name: "external_field".to_string(),
+        doc: Doc::new(),
+        value: external_type,
+    };
+
+    let local_field = Named {
+        name: "local_field".to_string(),
+        doc: Doc::new(),
+        value: local_type,
+    };
+
+    let struct_container = ContainerFormat::Struct(vec![external_field, local_field], Doc::new());
+
+    let struct_qualified_name =
+        QualifiedTypeName::namespaced("App".to_string(), "TestStruct".to_string());
+    registry.insert(struct_qualified_name, struct_container);
+
+    // Generate the Kotlin code
+    let code_generator = CodeGenerator::new(&config);
+    let mut output = Vec::new();
+    code_generator.output(&mut output, &registry).unwrap();
+    let generated_code = String::from_utf8(output).unwrap();
+
+    // Verify the deserialization code uses fully qualified names
+    assert!(
+        generated_code.contains("com.external.other.Other.ExternalType.deserialize(deserializer)"),
+        "Generated code should use fully qualified name for external type in deserialization: {generated_code}"
+    );
+
+    assert!(
+        generated_code.contains("com.example.main.App.LocalType.deserialize(deserializer)"),
+        "Generated code should use fully qualified name for local type in deserialization: {generated_code}"
+    );
+}
+
+#[test]
 fn test_update_qualified_names_mixed_external_and_local() {
     // Test a mix of external package types, external definition types, and local types
     let mut external_definitions = BTreeMap::new();

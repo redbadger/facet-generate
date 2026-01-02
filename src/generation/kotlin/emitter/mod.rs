@@ -913,8 +913,8 @@ fn write_deserialize<W: IndentWrite>(
     }
     match format {
         Format::TypeName(qualified_name) => {
-            let name = &qualified_name.name;
-            write!(w, "{name}.deserialize(deserializer)")
+            let fully_qualified_name = qualified_name.format(ToString::to_string, ".");
+            write!(w, "{fully_qualified_name}.deserialize(deserializer)")
         }
         Format::Unit => write!(w, "deserializer.deserialize_unit()"),
         Format::Bool => write!(w, "deserializer.deserialize_bool()"),

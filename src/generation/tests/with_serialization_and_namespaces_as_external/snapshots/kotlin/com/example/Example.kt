@@ -9,7 +9,7 @@ import com.novi.serde.Serializer
 import com.novi.serde.Unsigned
 
 data class Child(
-    val external: com.example.other.OtherParent,
+    val external: com.example2.other.other.OtherParent,
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
@@ -26,7 +26,7 @@ data class Child(
     companion object {
         fun deserialize(deserializer: Deserializer): Child {
             deserializer.increase_container_depth()
-            val external = OtherParent.deserialize(deserializer)
+            val external = com.example2.other.other.OtherParent.deserialize(deserializer)
             deserializer.decrease_container_depth()
             return Child(external)
         }
@@ -68,7 +68,7 @@ sealed interface Parent {
         companion object {
             fun deserialize(deserializer: Deserializer): Child {
                 deserializer.increase_container_depth()
-                val value = Child.deserialize(deserializer)
+                val value = com.example.Child.deserialize(deserializer)
                 deserializer.decrease_container_depth()
                 return Child(value)
             }

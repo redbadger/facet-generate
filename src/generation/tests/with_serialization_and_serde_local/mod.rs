@@ -16,6 +16,7 @@ use crate::{
 };
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test() {
     #[derive(Facet)]
     struct Child {

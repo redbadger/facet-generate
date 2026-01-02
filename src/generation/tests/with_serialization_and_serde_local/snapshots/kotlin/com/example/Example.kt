@@ -68,7 +68,7 @@ sealed interface Parent {
         companion object {
             fun deserialize(deserializer: Deserializer): Child {
                 deserializer.increase_container_depth()
-                val value = Child.deserialize(deserializer)
+                val value = com.example.Child.deserialize(deserializer)
                 deserializer.decrease_container_depth()
                 return Child(value)
             }
