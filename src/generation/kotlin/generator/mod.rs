@@ -4,6 +4,7 @@ use crate::{
     Registry,
     generation::{
         CodeGen, CodeGeneratorConfig, Emitter,
+        config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
     },
@@ -72,28 +73,58 @@ impl<'a> CodeGenerator<'a> {
                 if let Format::TypeName(qualified_name) = format {
                     match &qualified_name.namespace {
                         Namespace::Named(namespace) => {
-                            // Check if this type's namespace matches the current module's namespace
-                            let current_leaf_namespace = config
-                                .module_name()
-                                .rsplit_once('.')
-                                .map_or(config.module_name(), |(_, leaf)| leaf);
-
-                            if config.external_definitions.contains_key(namespace)
-                                && namespace != current_leaf_namespace
+                            let namespace = namespace.clone();
+                            // First check if this namespace has an external package configuration with a Path
+                            let external_package_handled = if let Some(external_package) =
+                                config.external_packages.get(&namespace)
                             {
-                                // For external types, build full path: current_module.namespace
-                                let full_namespace =
-                                    format!("{}.{}", config.module_name(), namespace);
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    full_namespace,
-                                    qualified_name.name.clone(),
-                                );
+                                if let PackageLocation::Path(path) = &external_package.location {
+                                    let full_namespace = format!("{path}.{namespace}");
+                                    *qualified_name = QualifiedTypeName::namespaced(
+                                        full_namespace,
+                                        qualified_name.name.clone(),
+                                    );
+                                    true
+                                } else {
+                                    // PackageLocation::Url is ignored for Kotlin generation - fall through
+                                    false
+                                }
                             } else {
-                                // For same-module types, use current module name
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    config.module_name().to_string(),
-                                    qualified_name.name.clone(),
-                                );
+                                false
+                            };
+
+                            if !external_package_handled {
+                                // Check if this type's namespace matches the current module's namespace
+                                let current_leaf_namespace = config
+                                    .module_name()
+                                    .rsplit_once('.')
+                                    .map_or(config.module_name(), |(_, leaf)| leaf);
+
+                                if config.external_definitions.contains_key(&namespace)
+                                    && namespace != current_leaf_namespace
+                                {
+                                    // For external types, build full path: current_module.namespace
+                                    let full_namespace =
+                                        format!("{}.{namespace}", config.module_name());
+                                    *qualified_name = QualifiedTypeName::namespaced(
+                                        full_namespace,
+                                        qualified_name.name.clone(),
+                                    );
+                                } else if namespace == current_leaf_namespace {
+                                    // For same-module types, use current module name only
+                                    *qualified_name = QualifiedTypeName::namespaced(
+                                        config.module_name().to_string(),
+                                        qualified_name.name.clone(),
+                                    );
+                                } else {
+                                    // For other local types with named namespace, preserve the namespace
+                                    let full_namespace =
+                                        format!("{}.{namespace}", config.module_name());
+                                    *qualified_name = QualifiedTypeName::namespaced(
+                                        full_namespace,
+                                        qualified_name.name.clone(),
+                                    );
+                                }
                             }
                         }
                         Namespace::Root => {
