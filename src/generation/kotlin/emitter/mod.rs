@@ -760,7 +760,7 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
         fun bincodeSerialize(): ByteArray {{
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer.get_bytes()
+            return serializer._bytes
         }}
         "
     )
@@ -777,7 +777,7 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
             }}
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {{
+            if (deserializer._buffer_offset < input.size) {{
                 throw DeserializationError("Some input bytes were not read")
             }}
             return value

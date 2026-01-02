@@ -99,7 +99,7 @@ data class Child(
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     companion object {
@@ -117,7 +117,7 @@ data class Child(
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -159,7 +159,7 @@ data class MyStruct(
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     companion object {
@@ -200,7 +200,7 @@ data class MyStruct(
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -214,7 +214,7 @@ sealed interface Parent {
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     data class Child(
@@ -254,7 +254,7 @@ sealed interface Parent {
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
