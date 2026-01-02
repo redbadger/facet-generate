@@ -242,5 +242,4 @@ fn copy_dir_contents(src: &std::path::Path, dst: &std::path::Path) -> std::io::R
 }
 
 #[cfg(test)]
-#[path = "installer_tests.rs"]
-mod installer_tests;
+mod tests;
