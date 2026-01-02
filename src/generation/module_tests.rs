@@ -28,7 +28,7 @@ fn single_namespace() {
     }
 
     let registries = split("Root", &reflect!(Parent).unwrap());
-    insta::assert_yaml_snapshot!(registries, @r"
+    insta::assert_yaml_snapshot!(registries, @"
     ? module_name: Root
       encoding: None
       external_definitions: {}
@@ -105,7 +105,7 @@ fn root_namespace_with_two_child_namespaces() {
     }
 
     let registries = split("Root", &reflect!(Parent).unwrap());
-    insta::assert_yaml_snapshot!(registries, @r"
+    insta::assert_yaml_snapshot!(registries, @"
     ? module_name: Root
       encoding: None
       external_definitions:
@@ -227,7 +227,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
         "App module should reference GrandChild from api"
     );
 
-    insta::assert_yaml_snapshot!(registries, @r"
+    insta::assert_yaml_snapshot!(registries, @"
     ? module_name: App
       encoding: None
       external_definitions:

@@ -129,7 +129,7 @@ data class MyStruct(
     val stringToInt: Map<String, Int>,
     val mapToList: Map<String, List<Int>>,
     val optionOfVecOfSet: List<Set<String>>? = null,
-    val parent: Parent,
+    val parent: com.example.Parent,
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
@@ -218,7 +218,7 @@ sealed interface Parent {
     }
 
     data class Child(
-        val value: Child,
+        val value: com.example.Child,
     ) : Parent {
         override fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()

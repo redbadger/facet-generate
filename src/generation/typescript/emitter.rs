@@ -768,7 +768,7 @@ mod test {
             "unit".to_string(),
         ]);
         let actual = format_type_aliases(&input);
-        insta::assert_snapshot!(&actual, @r"
+        insta::assert_snapshot!(&actual, @"
         type bool = boolean;
         type bytes = Uint8Array;
         type char = string;

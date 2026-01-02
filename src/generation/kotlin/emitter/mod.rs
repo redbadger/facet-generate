@@ -9,8 +9,7 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
-        module::Module,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, indent::IndentWrite, module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -117,17 +116,8 @@ impl Emitter<Kotlin> for Module {
             .map(ToString::to_string)
             .collect::<Vec<String>>();
 
-        for (ns, names) in &self.config().external_definitions {
-            if let Some(external_package) = self.config().external_packages.get(ns) {
-                if let PackageLocation::Path(ns) = &external_package.location {
-                    for name in names {
-                        imports.push(format!("import {ns}.{name}"));
-                    }
-                }
-            }
-        }
-
         imports.sort_unstable();
+        imports.dedup();
         if !imports.is_empty() {
             for import in imports {
                 writeln!(w, "{import}")?;
@@ -358,7 +348,11 @@ impl Emitter<Kotlin> for Format {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
-                write!(w, "{ty}", ty = qualified_type_name.name)
+                write!(
+                    w,
+                    "{ty}",
+                    ty = qualified_type_name.format(ToString::to_string, ".")
+                )
             }
             Format::Unit => write!(w, "Unit"),
             Format::Bool => write!(w, "Boolean"),
