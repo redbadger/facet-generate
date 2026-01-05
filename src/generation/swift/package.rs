@@ -47,10 +47,10 @@ mod tests {
         };
 
         insta::assert_snapshot!(dependency.to_swift(3), @r#"
-            .package(
-                url: "https://github.com/stephencelis/SQLite.swift.git",
-                from: "0.12.2"
-            )
+        .package(
+            url: "https://github.com/stephencelis/SQLite.swift.git",
+            from: "0.12.2"
+        )
         "#);
     }
 
@@ -64,9 +64,9 @@ mod tests {
         };
 
         insta::assert_snapshot!(dependency.to_swift(3), @r#"
-            .package(
-                path: "path/to/SQLite.swift"
-            )
+        .package(
+            path: "path/to/SQLite.swift"
+        )
         "#);
     }
 }

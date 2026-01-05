@@ -9,5 +9,5 @@ data class Person(
     val age: UByte,
     val info: String? = null,
     val emails: List<String>,
-    val location: Location,
+    val location: com.example.Location,
 )

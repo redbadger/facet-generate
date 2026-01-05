@@ -99,7 +99,7 @@ data class Child(
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     companion object {
@@ -117,7 +117,7 @@ data class Child(
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -129,7 +129,7 @@ data class MyStruct(
     val stringToInt: Map<String, Int>,
     val mapToList: Map<String, List<Int>>,
     val optionOfVecOfSet: List<Set<String>>? = null,
-    val parent: Parent,
+    val parent: com.example.Parent,
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
@@ -159,7 +159,7 @@ data class MyStruct(
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     companion object {
@@ -188,7 +188,7 @@ data class MyStruct(
                         }
                     }
                 }
-            val parent = Parent.deserialize(deserializer)
+            val parent = com.example.Parent.deserialize(deserializer)
             deserializer.decrease_container_depth()
             return MyStruct(stringToInt, mapToList, optionOfVecOfSet, parent)
         }
@@ -200,7 +200,7 @@ data class MyStruct(
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -214,11 +214,11 @@ sealed interface Parent {
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer.get_bytes()
+        return serializer._bytes
     }
 
     data class Child(
-        val value: Child,
+        val value: com.example.Child,
     ) : Parent {
         override fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -230,7 +230,7 @@ sealed interface Parent {
         companion object {
             fun deserialize(deserializer: Deserializer): Child {
                 deserializer.increase_container_depth()
-                val value = Child.deserialize(deserializer)
+                val value = com.example.Child.deserialize(deserializer)
                 deserializer.decrease_container_depth()
                 return Child(value)
             }
@@ -254,7 +254,7 @@ sealed interface Parent {
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {
+            if (deserializer._buffer_offset < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value

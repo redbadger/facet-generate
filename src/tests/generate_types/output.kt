@@ -34,5 +34,5 @@ data class Types(
     val fixedLengthArray: List<String>,
     val dictionary: Map<String, Int>,
     val optionalDictionary: Map<String, Int>? = null,
-    val customType: CustomType,
+    val customType: com.example.CustomType,
 )

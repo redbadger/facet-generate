@@ -6,8 +6,8 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, Language, PackageLocation, SourceInstaller as _, java, module,
-        swift,
+        Encoding, ExternalPackage, Language, PackageLocation, SourceInstaller as _, java, kotlin,
+        module, swift,
         tests::{check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
@@ -53,7 +53,7 @@ fn test() {
 
     for target in [
         Language::Java,
-        // Language::Kotlin,
+        Language::Kotlin,
         Language::Swift,
         Language::TypeScript,
     ] {
@@ -85,7 +85,27 @@ fn test() {
                     installer.install_module(&config, registry).unwrap();
                 }
             }
-            Language::Kotlin => {}
+            Language::Kotlin => {
+                let package_name = "com.example";
+                let mut installer = kotlin::Installer::new(
+                    package_name,
+                    tmp_path,
+                    &[ExternalPackage {
+                        for_namespace: "other".to_string(),
+                        location: PackageLocation::Path("com.example2.other".to_string()),
+                        module_name: None,
+                        version: None,
+                    }],
+                );
+                for (module, registry) in &module::split(package_name, &registry) {
+                    let config = module
+                        .config()
+                        .clone()
+                        .with_parent(package_name)
+                        .with_encoding(Encoding::Bincode);
+                    installer.install_module(&config, registry).unwrap();
+                }
+            }
             Language::Swift => {
                 let package_name = "Example";
                 let mut installer = swift::Installer::new(

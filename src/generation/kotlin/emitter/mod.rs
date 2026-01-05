@@ -9,8 +9,7 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
-        module::Module,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, indent::IndentWrite, module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -117,17 +116,8 @@ impl Emitter<Kotlin> for Module {
             .map(ToString::to_string)
             .collect::<Vec<String>>();
 
-        for (ns, names) in &self.config().external_definitions {
-            if let Some(external_package) = self.config().external_packages.get(ns) {
-                if let PackageLocation::Path(ns) = &external_package.location {
-                    for name in names {
-                        imports.push(format!("import {ns}.{name}"));
-                    }
-                }
-            }
-        }
-
         imports.sort_unstable();
+        imports.dedup();
         if !imports.is_empty() {
             for import in imports {
                 writeln!(w, "{import}")?;
@@ -358,7 +348,11 @@ impl Emitter<Kotlin> for Format {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
-                write!(w, "{ty}", ty = qualified_type_name.name)
+                write!(
+                    w,
+                    "{ty}",
+                    ty = qualified_type_name.format(ToString::to_string, ".")
+                )
             }
             Format::Unit => write!(w, "Unit"),
             Format::Bool => write!(w, "Boolean"),
@@ -766,7 +760,7 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
         fun bincodeSerialize(): ByteArray {{
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer.get_bytes()
+            return serializer._bytes
         }}
         "
     )
@@ -783,7 +777,7 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
             }}
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {{
+            if (deserializer._buffer_offset < input.size) {{
                 throw DeserializationError("Some input bytes were not read")
             }}
             return value
@@ -919,8 +913,8 @@ fn write_deserialize<W: IndentWrite>(
     }
     match format {
         Format::TypeName(qualified_name) => {
-            let name = &qualified_name.name;
-            write!(w, "{name}.deserialize(deserializer)")
+            let fully_qualified_name = qualified_name.format(ToString::to_string, ".");
+            write!(w, "{fully_qualified_name}.deserialize(deserializer)")
         }
         Format::Unit => write!(w, "deserializer.deserialize_unit()"),
         Format::Bool => write!(w, "deserializer.deserialize_bool()"),

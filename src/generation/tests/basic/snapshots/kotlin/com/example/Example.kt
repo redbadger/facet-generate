@@ -6,6 +6,6 @@ data class Child(
 
 sealed interface Parent {
     data class Child(
-        val value: Child,
+        val value: com.example.Child,
     ) : Parent
 }

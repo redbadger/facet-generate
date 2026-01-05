@@ -61,7 +61,7 @@ impl Installer {
 
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
-        // TODO: this should come from somehwere
+        // TODO: this should come from somewhere
         const VERSION: &str = "1.0.0";
 
         let mut dependencies = Vec::new();
@@ -242,5 +242,4 @@ fn copy_dir_contents(src: &std::path::Path, dst: &std::path::Path) -> std::io::R
 }
 
 #[cfg(test)]
-#[path = "installer_tests.rs"]
-mod installer_tests;
+mod tests;

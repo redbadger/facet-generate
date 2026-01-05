@@ -42,7 +42,7 @@ fn nested_namespaced_structs() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -130,7 +130,7 @@ fn nested_namespaced_enums() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : ENUM:
@@ -221,7 +221,7 @@ fn nested_namespaced_renamed_structs() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -292,7 +292,7 @@ fn namespaced_collections() {
     }
 
     let registry = reflect!(Response).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Response
     : STRUCT:
@@ -377,7 +377,7 @@ fn namespaced_maps() {
     }
 
     let registry = reflect!(Database).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Database
     : STRUCT:
@@ -458,7 +458,7 @@ fn complex_namespaced_enums() {
     }
 
     let registry = reflect!(EventLog).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: EventLog
     : STRUCT:
@@ -551,7 +551,7 @@ fn namespaced_transparent_structs() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Container
     : STRUCT:
@@ -605,7 +605,7 @@ fn cross_namespace_references() {
     }
 
     let registry = reflect!(System).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: System
     : STRUCT:
@@ -681,7 +681,7 @@ fn namespace_with_byte_attributes() {
     }
 
     let registry = reflect!(Document).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Document
     : STRUCT:
@@ -746,7 +746,7 @@ fn transparent_struct_explicit_namespace() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Container
     : STRUCT:
@@ -836,7 +836,7 @@ fn explicit_namespace_declarations() {
     }
 
     let registry = reflect!(RootContainer).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: ApiContainer
     : STRUCT:
@@ -981,7 +981,7 @@ fn collections_with_explicit_namespace() {
     }
 
     let registry = reflect!(UserManager).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: system
       name: UnnamedRole
@@ -1083,7 +1083,7 @@ fn enums_with_explicit_namespace() {
     }
 
     let registry = reflect!(Response).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: api
       name: ErrorData
@@ -1203,7 +1203,7 @@ fn nested_structs_with_explicit_namespace() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: nested
       name: Container
@@ -1298,7 +1298,7 @@ fn transparent_struct_chains() {
     }
 
     let registry = reflect!(IdContainer).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: IdContainer
     : STRUCT:
@@ -1342,7 +1342,7 @@ fn mixed_containers_with_explicit_namespace() {
     }
 
     let registry = reflect!(MixedContainer).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: storage
       name: Item
@@ -1463,7 +1463,7 @@ fn struct_field_points_to_type_in_a_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -1500,7 +1500,7 @@ fn enum_variant_field_points_to_type_in_a_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : ENUM:
@@ -1542,7 +1542,7 @@ fn enum_struct_variant_field_points_to_type_in_a_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : ENUM:
@@ -1594,7 +1594,7 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : ENUM:
@@ -1657,7 +1657,7 @@ fn struct_field_recursively_points_to_type_in_a_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -1709,7 +1709,7 @@ fn struct_field_with_pointer_inherits_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -1761,7 +1761,7 @@ fn struct_field_with_collection_inherits_namespace() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -1840,7 +1840,7 @@ fn namespace_named_none_as_string() {
     }
 
     let registry = reflect!(Wrapper).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: None
       name: ExplicitNoneNamespace
@@ -1912,7 +1912,7 @@ fn enum_with_explicit_none_namespace() {
     }
 
     let registry = reflect!(Wrapper).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: ExplicitRootEnum
     : ENUM:
@@ -1978,7 +1978,7 @@ fn deeply_nested_explicit_none() {
     }
 
     let registry = reflect!(OuterType).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: MiddleType
     : STRUCT:
@@ -2132,7 +2132,7 @@ fn fixed_namespace_pollution_with_explicit_annotations() {
     );
 
     // Verify the registry structure shows SharedType is only in the "shared" namespace
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: RootContainer
     : STRUCT:
@@ -2204,7 +2204,7 @@ fn mixed_field_and_type_level_explicit_override() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace:
         NAMED: child
       name: Child
@@ -2243,7 +2243,7 @@ fn field_level_none_vs_type_level_named() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Parent
     : STRUCT:
@@ -2282,7 +2282,7 @@ fn field_level_named_vs_type_level_none() {
     }
 
     let registry = reflect!(Parent).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Child
     : STRUCT:
@@ -2355,7 +2355,7 @@ fn collection_inner_types_inherit_field_level_namespace() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Container
     : STRUCT:
@@ -2409,7 +2409,7 @@ fn enum_tuple_variant_collection_inheritance() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Container
     : ENUM:
@@ -2479,7 +2479,7 @@ fn enum_struct_variant_collection_inheritance() {
     }
 
     let registry = reflect!(Container).unwrap();
-    insta::assert_yaml_snapshot!(registry, @r"
+    insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: Container
     : ENUM:

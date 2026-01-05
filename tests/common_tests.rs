@@ -22,7 +22,7 @@ fn test_get_sample_values() {
 #[test]
 fn test_get_simple_registry() {
     let registry = get_simple_registry();
-    insta::assert_yaml_snapshot!(&registry, @r"
+    insta::assert_yaml_snapshot!(&registry, @"
     ? namespace: ROOT
       name: Choice
     : ENUM:
@@ -66,7 +66,7 @@ fn test_get_simple_registry() {
 #[allow(clippy::too_many_lines)]
 fn test_get_registry() {
     let registry = get_registry();
-    insta::assert_yaml_snapshot!(&registry, @r"
+    insta::assert_yaml_snapshot!(&registry, @"
     ? namespace: ROOT
       name: CStyleEnum
     : ENUM:

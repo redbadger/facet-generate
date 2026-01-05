@@ -18,6 +18,7 @@ fn unit_struct_1() {
 
     let actual = emit_java!(UnitStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class UnitStruct {
         public UnitStruct() {
         }
@@ -84,6 +85,7 @@ fn unit_struct_2() {
 
     let actual = emit_java!(UnitStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class UnitStruct {
         public UnitStruct() {
         }
@@ -150,6 +152,7 @@ fn newtype_struct() {
 
     let actual = emit_java!(NewType as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class NewType {
         public final String value;
 
@@ -227,6 +230,7 @@ fn tuple_struct() {
 
     let actual = emit_java!(TupleStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class TupleStruct {
         public final String field0;
         public final Integer field1;
@@ -332,6 +336,7 @@ fn struct_with_fields_of_primitive_types() {
 
     let actual = emit_java!(StructWithFields as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class StructWithFields {
         public final com.novi.serde.Unit unit;
         public final Boolean bool;
@@ -557,6 +562,7 @@ fn struct_with_fields_of_user_types() {
 
     let actual = emit_java!(Outer as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class Inner1 {
         public final String field1;
 
@@ -859,6 +865,7 @@ fn struct_with_field_that_is_a_2_tuple() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final com.novi.serde.Tuple2<String, Integer> one;
 
@@ -936,6 +943,7 @@ fn struct_with_field_that_is_a_3_tuple() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final com.novi.serde.Tuple3<String, Integer, @com.novi.serde.Unsigned Short> one;
 
@@ -1016,6 +1024,7 @@ fn struct_with_field_that_is_a_4_tuple() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final com.novi.serde.Tuple4<String, Integer, @com.novi.serde.Unsigned Short, Float> one;
 
@@ -1102,6 +1111,7 @@ fn enum_with_unit_variants() {
 
     let actual = emit_java!(EnumWithUnitVariants as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class EnumWithUnitVariants {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1262,6 +1272,7 @@ fn enum_with_unit_struct_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1344,6 +1355,7 @@ fn enum_with_1_tuple_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1438,6 +1450,7 @@ fn enum_with_newtype_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1582,6 +1595,7 @@ fn enum_with_tuple_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1752,6 +1766,7 @@ fn enum_with_struct_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -1857,6 +1872,7 @@ fn enum_with_mixed_variants() {
 
     let actual = emit_java!(MyEnum as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public abstract class MyEnum {
 
         abstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;
@@ -2098,6 +2114,7 @@ fn struct_with_vec_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.List<String> items;
         public final java.util.List<Integer> numbers;
@@ -2196,6 +2213,7 @@ fn struct_with_option_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.Optional<String> optional_string;
         public final java.util.Optional<Integer> optional_number;
@@ -2292,6 +2310,7 @@ fn struct_with_hashmap_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.Map<String, Integer> string_to_int;
         public final java.util.Map<Integer, Boolean> int_to_bool;
@@ -2382,6 +2401,7 @@ fn struct_with_nested_generics() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.Optional<java.util.List<String>> optional_list;
         public final java.util.List<java.util.Optional<Integer>> list_of_optionals;
@@ -2498,6 +2518,7 @@ fn struct_with_array_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.@com.novi.serde.ArrayLen(length=5) List<Integer> fixed_array;
         public final java.util.@com.novi.serde.ArrayLen(length=32) List<@com.novi.serde.Unsigned Byte> byte_array;
@@ -2594,6 +2615,7 @@ fn struct_with_btreemap_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.Map<String, Integer> string_to_int;
         public final java.util.Map<Integer, Boolean> int_to_bool;
@@ -2683,6 +2705,7 @@ fn struct_with_hashset_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.List<String> string_set;
         public final java.util.List<Integer> int_set;
@@ -2772,6 +2795,7 @@ fn struct_with_btreeset_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.List<String> string_set;
         public final java.util.List<Integer> int_set;
@@ -2860,6 +2884,7 @@ fn struct_with_box_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final String boxed_string;
         public final Integer boxed_int;
@@ -2947,6 +2972,7 @@ fn struct_with_rc_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final String rc_string;
         public final Integer rc_int;
@@ -3034,6 +3060,7 @@ fn struct_with_arc_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final String arc_string;
         public final Integer arc_int;
@@ -3125,6 +3152,7 @@ fn struct_with_mixed_collections_and_pointers() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final java.util.List<java.util.List<String>> vec_of_sets;
         public final java.util.Optional<java.util.Map<String, Integer>> optional_btree;
@@ -3242,6 +3270,7 @@ fn struct_with_bytes_field() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final com.novi.serde.Bytes data;
         public final String name;
@@ -3342,6 +3371,7 @@ fn struct_with_bytes_field_and_slice() {
 
     let actual = emit_java!(MyStruct as Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     public final class MyStruct {
         public final com.novi.serde.Bytes data;
         public final String name;
