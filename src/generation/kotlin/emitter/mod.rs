@@ -1009,20 +1009,19 @@ fn write_deserialize<W: IndentWrite>(
                 }
                 2 => {
                     // Pair<A, B> - deserialize inline and construct Pair
-                    writeln!(w, "run {{")?;
-                    w.indent();
+                    write!(w, "run ")?;
+                    w.start_block()?;
                     write!(w, "val first = ")?;
                     write_deserialize(w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
                     write_deserialize(w, None, &formats[1], true)?;
                     writeln!(w, "Pair(first, second)")?;
-                    w.unindent();
-                    write!(w, "}}")?;
+                    w.end_block()?;
                 }
                 3 => {
                     // Triple<A, B, C> - deserialize inline and construct Triple
-                    writeln!(w, "run {{")?;
-                    w.indent();
+                    write!(w, "run ")?;
+                    w.start_block()?;
                     write!(w, "val first = ")?;
                     write_deserialize(w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
@@ -1030,14 +1029,13 @@ fn write_deserialize<W: IndentWrite>(
                     write!(w, "val third = ")?;
                     write_deserialize(w, None, &formats[2], true)?;
                     writeln!(w, "Triple(first, second, third)")?;
-                    w.unindent();
-                    write!(w, "}}")?;
+                    w.end_block()?;
                 }
                 _ => {
                     // NTupleN - deserialize and construct
                     let typename = format!("NTuple{len}");
-                    writeln!(w, "run {{")?;
-                    w.indent();
+                    write!(w, "run ")?;
+                    w.start_block()?;
                     for (i, format) in formats.iter().enumerate() {
                         write!(w, "val v{i} = ")?;
                         write_deserialize(w, None, format, true)?;
@@ -1050,8 +1048,7 @@ fn write_deserialize<W: IndentWrite>(
                         write!(w, "v{i}")?;
                     }
                     writeln!(w, ")")?;
-                    w.unindent();
-                    write!(w, "}}")?;
+                    w.end_block()?;
                 }
             }
             Ok(())

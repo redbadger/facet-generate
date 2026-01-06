@@ -973,9 +973,9 @@ impl RegistryBuilder {
         // Process all fields with their names
         for field in variant.data.fields {
             // Check for #[facet(skip)] attribute on the field
-            let skip = field.attributes.iter().any(|attr| {
-                matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip")
-            });
+            let skip = field.attributes.iter().any(
+                |attr| matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip"),
+            );
             if skip {
                 continue;
             }
@@ -1093,9 +1093,9 @@ impl RegistryBuilder {
         // Process all fields
         for field in variant.data.fields {
             // Check for #[facet(skip)] attribute on the field
-            let skip = field.attributes.iter().any(|attr| {
-                matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip")
-            });
+            let skip = field.attributes.iter().any(
+                |attr| matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip"),
+            );
             if skip {
                 continue;
             }

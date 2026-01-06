@@ -1,12 +1,10 @@
 package com.example
 
-import com.novi.bincode.BincodeDeserializer
-import com.novi.bincode.BincodeSerializer
-import com.novi.serde.Bytes
-import com.novi.serde.DeserializationError
-import com.novi.serde.Deserializer
-import com.novi.serde.Serializer
-import com.novi.serde.Unsigned
+import serde.BincodeDeserializer
+import serde.BincodeSerializer
+import serde.DeserializationError
+import serde.Deserializer
+import serde.Serializer
 
 data class Child(
     val external: com.example2.other.other.OtherParent,
