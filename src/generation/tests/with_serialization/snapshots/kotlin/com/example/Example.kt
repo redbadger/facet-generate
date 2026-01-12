@@ -2,9 +2,11 @@ package com.example
 
 import serde.BincodeDeserializer
 import serde.BincodeSerializer
+import serde.Bytes
 import serde.DeserializationError
 import serde.Deserializer
 import serde.Serializer
+import serde.Unsigned
 
 fun <T> List<T>.serialize(
     serializer: Serializer,
