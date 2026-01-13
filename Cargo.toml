@@ -1,7 +1,7 @@
 [package]
 name = "facet_generate"
 description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
-version = "0.13.0"
+version = "0.13.1"
 authors = ["Red Badger Consulting Limited"]
 repository = "https://github.com/redbadger/facet-generate"
 license = "Apache-2.0"
@@ -32,11 +32,11 @@ difficient = "0.1.0"
 expect-test = "1.5.1"
 facet = { version = "=0.31", features = ["chrono", "url", "bytes"] }
 ignore = "0.4"
-insta = { version = "1.45.1", features = ["yaml", "json"] }
+insta = { version = "1.46.0", features = ["yaml", "json"] }
 maplit = "1.0.2"
 strum = { version = "0.27.2", features = ["derive"] }
 tempfile = "3.24.0"
-url = "2.5.7"
+url = "2.5.8"
 bytes = "1.11"
 
 [features]
