@@ -1449,7 +1449,10 @@ impl RegistryBuilder {
         new_has_explicit_namespace: bool,
     ) -> Result<(), Error> {
         for (existing_name, existing_has_explicit_namespace) in &self.type_namespace_sources {
-            if existing_name.name == new_name.name && existing_name.namespace != new_name.namespace
+            if existing_name.name == new_name.name
+                && existing_name.namespace != new_name.namespace
+                && (!matches!(existing_name.namespace, Namespace::Root)
+                    && !matches!(new_name.namespace, Namespace::Root))
             {
                 let at_least_one_namespace_inherited =
                     !new_has_explicit_namespace || !*existing_has_explicit_namespace;
