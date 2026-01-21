@@ -10,7 +10,15 @@ use std::{
 
 use facet::Facet;
 
-use crate::{emit_swift, generation::Encoding};
+use crate::{
+    Registry, emit_swift,
+    generation::{
+        Encoding,
+        module::{self, Module},
+        swift::CodeGenerator,
+    },
+    reflect,
+};
 
 #[test]
 fn unit_struct_1() {
@@ -832,4 +840,79 @@ fn namespaced_child() {
         }
     }
     ");
+}
+
+#[test]
+fn type_in_root_and_named_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    mod other {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(namespace = "other")]
+        pub struct Child {
+            value: i32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        child: Child,
+        other_child: other::Child,
+    }
+
+    let registry = reflect!(Parent).unwrap();
+    let mut modules: Vec<_> = module::split("root", &registry).into_iter().collect();
+    modules.sort_by(|a, b| a.0.config().module_name.cmp(&b.0.config().module_name));
+
+    let modules: [(Module, Registry); 2] = modules.try_into().expect("Two modules expected");
+    let [(other_module, other_registry), (root_module, root_registry)] = modules;
+
+    let actual = emit_swift(&other_module, &other_registry);
+    insta::assert_snapshot!(actual, @"
+    import Serde
+
+    public struct Child: Hashable {
+        @Indirect public var value: Int32
+
+        public init(value: Int32) {
+            self.value = value
+        }
+    }
+    ");
+
+    let actual = emit_swift(&root_module, &root_registry);
+    insta::assert_snapshot!(actual, @"
+    import Other
+    import Serde
+
+    public struct Child: Hashable {
+        @Indirect public var value: String
+
+        public init(value: String) {
+            self.value = value
+        }
+    }
+
+    public struct Parent: Hashable {
+        @Indirect public var child: Child
+        @Indirect public var otherChild: Other.Child
+
+        public init(child: Child, otherChild: Other.Child) {
+            self.child = child
+            self.otherChild = otherChild
+        }
+    }
+    ");
+}
+
+fn emit_swift(module: &Module, registry: &Registry) -> String {
+    let mut out = Vec::new();
+    let generator = CodeGenerator::new(module.config());
+    generator.output(&mut out, registry).unwrap();
+    String::from_utf8(out).unwrap()
 }
