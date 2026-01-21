@@ -8,7 +8,7 @@ use std::{
 use facet::Facet;
 
 use super::*;
-use crate::emit;
+use crate::{emit, emit_two_modules, generation::kotlin::CodeGenerator};
 
 #[test]
 fn unit_struct_1() {
@@ -662,6 +662,52 @@ fn struct_with_bytes_field_and_slice() {
         val name: String,
         val header: ByteArray,
         val optionalBytes: List<UByte>? = null,
+    )
+    ");
+}
+
+#[test]
+fn type_in_root_and_named_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    mod other {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(namespace = "other")]
+        pub struct Child {
+            value: i32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        child: Child,
+        other_child: other::Child,
+    }
+
+    let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
+    insta::assert_snapshot!(other, @"
+    package other
+
+    data class Child(
+        val value: Int,
+    )
+    ");
+
+    insta::assert_snapshot!(root, @"
+    package root
+
+    data class Child(
+        val value: String,
+    )
+
+    data class Parent(
+        val child: root.Child,
+        val otherChild: root.other.Child,
     )
     ");
 }

@@ -103,3 +103,31 @@ macro_rules! reflect {
         }()
     };
 }
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! emit_two_modules {
+    ($generator:ty, $facet:ident, $root:expr) => {{
+        use $crate::generation::CodeGen;
+        use $crate::generation::module::{self, Module};
+        use $crate::{Registry, reflect};
+
+        let registry = reflect!($facet).unwrap();
+        let mut modules: Vec<_> = module::split($root, &registry).into_iter().collect();
+        modules.sort_by(|a, b| a.0.config().module_name.cmp(&b.0.config().module_name));
+
+        let modules: [(Module, Registry); 2] = modules.try_into().expect("Two modules expected");
+        let [(other_module, other_registry), (root_module, root_registry)] = modules;
+
+        fn emit_module<'a, G: CodeGen<'a>>(module: &'a Module, registry: &Registry) -> String {
+            let mut out = Vec::new();
+            let mut generator = G::new(module.config());
+            generator.write_output(&mut out, registry).unwrap();
+            String::from_utf8(out).unwrap()
+        }
+
+        let module_1 = emit_module::<$generator>(&other_module, &other_registry);
+        let module_2 = emit_module::<$generator>(&root_module, &root_registry);
+        (module_1, module_2)
+    }};
+}

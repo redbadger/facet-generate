@@ -11,13 +11,8 @@ use std::{
 use facet::Facet;
 
 use crate::{
-    Registry, emit_swift,
-    generation::{
-        Encoding,
-        module::{self, Module},
-        swift::CodeGenerator,
-    },
-    reflect,
+    emit_swift, emit_two_modules,
+    generation::{Encoding, swift::CodeGenerator},
 };
 
 #[test]
@@ -865,15 +860,8 @@ fn type_in_root_and_named_namespace() {
         other_child: other::Child,
     }
 
-    let registry = reflect!(Parent).unwrap();
-    let mut modules: Vec<_> = module::split("root", &registry).into_iter().collect();
-    modules.sort_by(|a, b| a.0.config().module_name.cmp(&b.0.config().module_name));
-
-    let modules: [(Module, Registry); 2] = modules.try_into().expect("Two modules expected");
-    let [(other_module, other_registry), (root_module, root_registry)] = modules;
-
-    let actual = emit_swift(&other_module, &other_registry);
-    insta::assert_snapshot!(actual, @"
+    let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
+    insta::assert_snapshot!(other, @"
     import Serde
 
     public struct Child: Hashable {
@@ -885,8 +873,7 @@ fn type_in_root_and_named_namespace() {
     }
     ");
 
-    let actual = emit_swift(&root_module, &root_registry);
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(root, @"
     import Other
     import Serde
 
@@ -908,11 +895,4 @@ fn type_in_root_and_named_namespace() {
         }
     }
     ");
-}
-
-fn emit_swift(module: &Module, registry: &Registry) -> String {
-    let mut out = Vec::new();
-    let generator = CodeGenerator::new(module.config());
-    generator.output(&mut out, registry).unwrap();
-    String::from_utf8(out).unwrap()
 }
