@@ -21,14 +21,13 @@ abstract class BinarySerializer(maxContainerDepth: Long) : Serializer {
 
     @Throws(SerializationError::class)
     override fun serialize_str(value: String) {
-        serialize_bytes(Bytes.valueOf(value.encodeToByteArray()))
+        serialize_bytes(value.encodeToByteArray())
     }
 
     @Throws(SerializationError::class)
-    override fun serialize_bytes(value: Bytes) {
-        val content = value.content()
-        serialize_len(content.size.toLong())
-        output.writeBytes(content, 0, content.size)
+    override fun serialize_bytes(value: ByteArray) {
+        serialize_len(value.size.toLong())
+        output.writeBytes(value, 0, value.size)
     }
 
     @Throws(SerializationError::class)
