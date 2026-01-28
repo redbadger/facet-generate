@@ -62,11 +62,9 @@ impl Emitter<Kotlin> for Module {
                 vec![
                     format!("import {serde_package}.BincodeDeserializer"),
                     format!("import {serde_package}.BincodeSerializer"),
-                    format!("import {serde_package}.Bytes"),
                     format!("import {serde_package}.DeserializationError"),
                     format!("import {serde_package}.Deserializer"),
                     format!("import {serde_package}.Serializer"),
-                    format!("import {serde_package}.Unsigned"),
                 ]
             }
             _ => vec![],
@@ -831,32 +829,20 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128(@Int128 {field_name})"),
-        Format::U8 => writeln!(
-            w,
-            "serializer.serialize_u8(@Unsigned {field_name}.toByte())"
-        ),
-        Format::U16 => writeln!(
-            w,
-            "serializer.serialize_u16(@Unsigned {field_name}.toShort())"
-        ),
-        Format::U32 => writeln!(
-            w,
-            "serializer.serialize_u32(@Unsigned {field_name}.toInt())"
-        ),
-        Format::U64 => writeln!(
-            w,
-            "serializer.serialize_u64(@Unsigned {field_name}.toLong())"
-        ),
-        Format::U128 => writeln!(
-            w,
-            "serializer.serialize_u128(@Unsigned @Int128 {field_name})"
-        ),
+        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
+        // For unsigned types, use Kotlin's native unsigned types directly.
+        // No @Unsigned annotations needed - Kotlin has first-class UByte, UShort, UInt, ULong.
+        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
+        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
+        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
+        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
+        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes(Bytes.valueOf({field_name}))"),
+        // Use direct byte array - no Bytes wrapper needed for KMP compatibility
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
 
         // Container types - these generate method calls with lambdas
         Format::Option(inner_format) => {
@@ -980,16 +966,18 @@ fn write_deserialize<W: IndentWrite>(
         Format::I32 => write!(w, "deserializer.deserialize_i32()"),
         Format::I64 => write!(w, "deserializer.deserialize_i64()"),
         Format::I128 => write!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => write!(w, "deserializer.deserialize_u8().toUByte()"),
-        Format::U16 => write!(w, "deserializer.deserialize_u16().toUShort()"),
-        Format::U32 => write!(w, "deserializer.deserialize_u32().toUInt()"),
-        Format::U64 => write!(w, "deserializer.deserialize_u64().toULong()"),
+        // KMP serde returns native unsigned types directly - no conversion needed
+        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
         Format::U128 => write!(w, "deserializer.deserialize_u128()"),
         Format::F32 => write!(w, "deserializer.deserialize_f32()"),
         Format::F64 => write!(w, "deserializer.deserialize_f64()"),
         Format::Char => write!(w, "deserializer.deserialize_char()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => write!(w, "deserializer.deserialize_bytes().content()"),
+        // Return byte array directly - no Bytes wrapper for KMP compatibility
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             write_deserialize_lambda(w, format)

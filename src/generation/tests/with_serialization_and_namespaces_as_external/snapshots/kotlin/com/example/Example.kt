@@ -2,11 +2,9 @@ package com.example
 
 import serde.BincodeDeserializer
 import serde.BincodeSerializer
-import serde.Bytes
 import serde.DeserializationError
 import serde.Deserializer
 import serde.Serializer
-import serde.Unsigned
 
 data class Child(
     val external: com.example2.other.other.OtherParent,
