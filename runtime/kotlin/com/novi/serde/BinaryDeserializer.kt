@@ -37,12 +37,12 @@ abstract class BinaryDeserializer(
     }
 
     @Throws(DeserializationError::class)
-    override fun deserialize_bytes(): ByteArray {
+    override fun deserialize_bytes(): Bytes {
         val len = deserialize_len()
         if (len < 0 || len > Int.MAX_VALUE.toLong()) {
             throw DeserializationError("Incorrect length value for Kotlin array")
         }
-        return readBytes(len.toInt())
+        return Bytes(readBytes(len.toInt()))
     }
 
     @Throws(DeserializationError::class)

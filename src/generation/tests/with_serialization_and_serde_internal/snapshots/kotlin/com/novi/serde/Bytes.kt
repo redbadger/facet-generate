@@ -4,37 +4,36 @@
 package com.novi.serde
 
 /**
- * Immutable wrapper class around ByteArray.
+ * Inline value class wrapper around ByteArray.
  *
- * Enforces value-semantice for `equals` and `hashCode`.
+ * Provides proper value semantics for `equals` and `hashCode` using
+ * structural equality (contentEquals/contentHashCode) instead of
+ * referential equality.
+ *
+ * As a value class, this wrapper has zero runtime overhead - it's
+ * inlined at compile time and compiles down to ByteArray at runtime.
  */
-class Bytes private constructor(private val content: ByteArray) {
-    fun content(): ByteArray {
-        return content.copyOf()
-    }
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is Bytes) return false
-        return content.contentEquals(other.content)
-    }
-
-    override fun hashCode(): Int {
-        return content.contentHashCode()
-    }
+@JvmInline
+value class Bytes(val content: ByteArray) {
+    override fun toString(): String = content.contentToString()
 
     companion object {
-        private val EMPTY = Bytes(ByteArray(0))
+        fun empty(): Bytes = Bytes(ByteArray(0))
 
-        fun empty(): Bytes {
-            return EMPTY
-        }
-
-        fun valueOf(content: ByteArray): Bytes {
-            if (content.isEmpty()) {
-                return EMPTY
-            }
-            return Bytes(content.copyOf())
-        }
+        fun valueOf(content: ByteArray): Bytes = Bytes(content)
     }
 }
+
+/**
+ * Extension function for structural equality comparison.
+ * Required because value classes don't support overriding equals.
+ */
+fun Bytes.contentEquals(other: Bytes): Boolean =
+    this.content.contentEquals(other.content)
+
+/**
+ * Extension function for structural hash code.
+ * Required because value classes don't support overriding hashCode.
+ */
+fun Bytes.contentHashCode(): Int =
+    content.contentHashCode()

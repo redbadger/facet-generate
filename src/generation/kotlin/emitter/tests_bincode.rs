@@ -2388,9 +2388,9 @@ fn struct_with_bytes_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -2448,9 +2448,9 @@ fn struct_with_bytes_field_and_slice() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
         val optionalBytes: List<UByte>? = null,
     ) {
         fun serialize(serializer: Serializer) {

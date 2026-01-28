@@ -724,9 +724,9 @@ fn struct_with_bytes_field() {
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
     )
     "#);
 }
@@ -748,9 +748,9 @@ fn struct_with_bytes_field_and_slice() {
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
         val optionalBytes: List<UByte>? = null,
     )
     "#);

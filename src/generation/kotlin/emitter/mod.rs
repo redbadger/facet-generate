@@ -76,6 +76,7 @@ impl Emitter<Kotlin> for Module {
                 vec![
                     format!("import {bincode_package}.BincodeDeserializer"),
                     format!("import {bincode_package}.BincodeSerializer"),
+                    format!("import {serde_package}.Bytes"),
                     format!("import {serde_package}.DeserializationError"),
                     format!("import {serde_package}.Deserializer"),
                     format!("import {serde_package}.Serializer"),
@@ -401,7 +402,7 @@ impl Emitter<Kotlin> for Format {
             Format::F32 => write!(w, "Float"),
             Format::F64 => write!(w, "Double"),
             Format::Char | Format::Str => write!(w, "String"),
-            Format::Bytes => write!(w, "ByteArray"),
+            Format::Bytes => write!(w, "Bytes"),
 
             Format::Option(format) => {
                 format.write(w)?;

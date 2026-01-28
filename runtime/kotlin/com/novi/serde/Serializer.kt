@@ -8,7 +8,7 @@ interface Serializer {
     fun serialize_str(value: String)
 
     @Throws(SerializationError::class)
-    fun serialize_bytes(value: ByteArray)
+    fun serialize_bytes(value: Bytes)
 
     @Throws(SerializationError::class)
     fun serialize_bool(value: Boolean)

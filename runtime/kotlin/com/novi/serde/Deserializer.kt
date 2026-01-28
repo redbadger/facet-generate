@@ -8,7 +8,7 @@ interface Deserializer {
     fun deserialize_str(): String
 
     @Throws(DeserializationError::class)
-    fun deserialize_bytes(): ByteArray
+    fun deserialize_bytes(): Bytes
 
     @Throws(DeserializationError::class)
     fun deserialize_bool(): Boolean
