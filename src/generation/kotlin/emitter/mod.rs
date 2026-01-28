@@ -24,6 +24,30 @@ const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 
 pub struct Kotlin;
 
+impl Module {
+    fn get_package_name(&self, namespace: &str) -> String {
+        let external_packages = &self.config().external_packages;
+        external_packages
+            .get(namespace)
+            .and_then(|pkg| {
+                if let PackageLocation::Path(path) = &pkg.location {
+                    Some(path.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| format!("com.novi.{namespace}"))
+    }
+
+    fn bincode_package(&self) -> String {
+        self.get_package_name("bincode")
+    }
+
+    fn serde_package(&self) -> String {
+        self.get_package_name("serde")
+    }
+}
+
 impl Emitter<Kotlin> for Module {
     #[allow(clippy::too_many_lines)]
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
@@ -31,7 +55,6 @@ impl Emitter<Kotlin> for Module {
             module_name,
             encoding,
             features,
-            external_packages,
             ..
         } = self.config();
 
@@ -47,21 +70,12 @@ impl Emitter<Kotlin> for Module {
                 "import kotlinx.serialization.SerialName".to_string(),
             ],
             Encoding::Bincode => {
-                // Get the serde package from external_packages configuration
-                let serde_package = external_packages
-                    .get("serde")
-                    .and_then(|pkg| {
-                        if let PackageLocation::Path(path) = &pkg.location {
-                            Some(path.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| "serde".to_string());
+                let bincode_package = self.bincode_package();
+                let serde_package = self.serde_package();
 
                 vec![
-                    format!("import {serde_package}.BincodeDeserializer"),
-                    format!("import {serde_package}.BincodeSerializer"),
+                    format!("import {bincode_package}.BincodeDeserializer"),
+                    format!("import {bincode_package}.BincodeSerializer"),
                     format!("import {serde_package}.DeserializationError"),
                     format!("import {serde_package}.Deserializer"),
                     format!("import {serde_package}.Serializer"),
@@ -93,21 +107,10 @@ impl Emitter<Kotlin> for Module {
                             features_out.write_all(FEATURE_BIGINT)?;
                             writeln!(features_out)?;
                         }
-                        Encoding::Bincode => {
-                            // Get the serde package from external_packages configuration
-                            let serde_package = external_packages
-                                .get("serde")
-                                .and_then(|pkg| {
-                                    if let PackageLocation::Path(path) = &pkg.location {
-                                        Some(path.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or_else(|| "serde".to_string());
-                            imports.push(format!("import {serde_package}.Int128"));
+                        Encoding::Bincode | Encoding::Bcs => {
+                            imports.push(format!("import {}.Int128", self.serde_package()));
                         }
-                        Encoding::None | Encoding::Bcs => (),
+                        Encoding::None => (),
                     }
                 }
                 Feature::ListOfT => {
@@ -790,7 +793,7 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
         fun bincodeSerialize(): ByteArray {{
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }}
         "
     )
@@ -807,7 +810,7 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
             }}
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {{
+            if (deserializer.get_buffer_offset() < input.size) {{
                 throw DeserializationError("Some input bytes were not read")
             }}
             return value
