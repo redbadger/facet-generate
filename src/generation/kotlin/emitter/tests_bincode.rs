@@ -511,7 +511,8 @@ fn struct_with_field_that_is_a_2_tuple() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            one.serialize(serializer)
+            serializer.serialize_str(one.first)
+            serializer.serialize_i32(one.second)
             serializer.decrease_container_depth()
         }
 
@@ -524,7 +525,11 @@ fn struct_with_field_that_is_a_2_tuple() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val one = Pair<String, Int>.deserialize(deserializer)
+                val one = run {
+                    val first = deserializer.deserialize_str()
+                    val second = deserializer.deserialize_i32()
+                    Pair(first, second)
+                }
                 deserializer.decrease_container_depth()
                 return MyStruct(one)
             }
@@ -560,7 +565,9 @@ fn struct_with_field_that_is_a_3_tuple() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            one.serialize(serializer)
+            serializer.serialize_str(one.first)
+            serializer.serialize_i32(one.second)
+            serializer.serialize_u16(@Unsigned one.third.toShort())
             serializer.decrease_container_depth()
         }
 
@@ -573,7 +580,12 @@ fn struct_with_field_that_is_a_3_tuple() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val one = Triple<String, Int, UShort>.deserialize(deserializer)
+                val one = run {
+                    val first = deserializer.deserialize_str()
+                    val second = deserializer.deserialize_i32()
+                    val third = deserializer.deserialize_u16().toUShort()
+                    Triple(first, second, third)
+                }
                 deserializer.decrease_container_depth()
                 return MyStruct(one)
             }
@@ -612,7 +624,10 @@ fn struct_with_field_that_is_a_4_tuple() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            one.serialize(serializer)
+            serializer.serialize_str(one.component1())
+            serializer.serialize_i32(one.component2())
+            serializer.serialize_u16(@Unsigned one.component3().toShort())
+            serializer.serialize_f32(one.component4())
             serializer.decrease_container_depth()
         }
 
@@ -625,7 +640,13 @@ fn struct_with_field_that_is_a_4_tuple() {
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val one = NTuple4<String, Int, UShort, Float>.deserialize(deserializer)
+                val one = run {
+                    val v0 = deserializer.deserialize_str()
+                    val v1 = deserializer.deserialize_i32()
+                    val v2 = deserializer.deserialize_u16().toUShort()
+                    val v3 = deserializer.deserialize_f32()
+                    NTuple4(v0, v1, v2, v3)
+                }
                 deserializer.decrease_container_depth()
                 return MyStruct(one)
             }
@@ -1599,10 +1620,8 @@ fn struct_with_nested_generics() {
             }
             mapToList.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
-                value.serialize(serializer) { level2 ->
-                    level2.serialize(serializer) {
-                        serializer.serialize_bool(it)
-                    }
+                value.serialize(serializer) {
+                    serializer.serialize_bool(it)
                 }
             }
             optionalMap.serializeOptionOf(serializer) { level1 ->
@@ -1615,10 +1634,8 @@ fn struct_with_nested_generics() {
                 level1.serializeOptionOf(serializer) { level2 ->
                     level2.serialize(serializer) { key, value ->
                         serializer.serialize_str(key)
-                        value.serialize(serializer) { level4 ->
-                            level4.serialize(serializer) {
-                                serializer.serialize_bool(it)
-                            }
+                        value.serialize(serializer) {
+                            serializer.serialize_bool(it)
                         }
                     }
                 }
@@ -1843,10 +1860,8 @@ fn struct_with_nested_map_field() {
             serializer.increase_container_depth()
             mapToList.serialize(serializer) { key, value ->
                 serializer.serialize_str(key)
-                value.serialize(serializer) { level2 ->
-                    level2.serialize(serializer) {
-                        serializer.serialize_i32(it)
-                    }
+                value.serialize(serializer) {
+                    serializer.serialize_i32(it)
                 }
             }
             listToMap.serialize(serializer) { level1 ->

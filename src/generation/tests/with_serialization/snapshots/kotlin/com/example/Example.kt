@@ -1,12 +1,12 @@
 package com.example
 
-import com.novi.bincode.BincodeDeserializer
-import com.novi.bincode.BincodeSerializer
-import com.novi.serde.Bytes
-import com.novi.serde.DeserializationError
-import com.novi.serde.Deserializer
-import com.novi.serde.Serializer
-import com.novi.serde.Unsigned
+import serde.BincodeDeserializer
+import serde.BincodeSerializer
+import serde.Bytes
+import serde.DeserializationError
+import serde.Deserializer
+import serde.Serializer
+import serde.Unsigned
 
 fun <T> List<T>.serialize(
     serializer: Serializer,
@@ -139,10 +139,8 @@ data class MyStruct(
         }
         mapToList.serialize(serializer) { key, value ->
             serializer.serialize_str(key)
-            value.serialize(serializer) { level2 ->
-                level2.serialize(serializer) {
-                    serializer.serialize_i32(it)
-                }
+            value.serialize(serializer) {
+                serializer.serialize_i32(it)
             }
         }
         optionOfVecOfSet.serializeOptionOf(serializer) { level1 ->
