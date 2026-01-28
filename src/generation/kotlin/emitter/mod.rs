@@ -9,8 +9,8 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        indent::IndentWrite, module::Module, CodeGeneratorConfig, Emitter, Encoding, Feature,
-        PackageLocation,
+        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
+        module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
