@@ -134,7 +134,7 @@ where
             return typename.clone();
         }
 
-        qualified_name.name.to_string()
+        qualified_name.name.clone()
     }
 
     fn quote_type(&mut self, format: &Format) -> String {
