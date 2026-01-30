@@ -5,9 +5,12 @@
 
 pub mod common;
 
+use crate::common::{SerdeData, Tree};
+use facet::Facet;
 use facet_generate::{
     Registry,
     generation::{CodeGeneratorConfig, Encoding, swift::CodeGenerator},
+    reflect,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs::File, io::Write, process::Command};
@@ -137,7 +140,14 @@ fn test_that_swift_code_compiles_with_comments() {
 
 #[test]
 fn test_swift_code_with_external_definitions() {
-    let registry = common::get_registry();
+    #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+    #[repr(C)]
+    pub enum TestData {
+        Tree(#[facet(namespace = "foo")] Tree<Box<SerdeData>>),
+        SerdeData(SerdeData),
+    }
+
+    let registry = reflect!(TestData).unwrap();
     let dir = tempdir().unwrap();
     let source_path = dir.path().join("Testing.swift");
     let mut source = File::create(&source_path).unwrap();

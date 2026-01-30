@@ -1795,6 +1795,65 @@ fn struct_field_with_collection_inherits_namespace() {
     ");
 }
 
+#[test]
+/// Same type appearing in ROOT and a named namespace
+fn type_in_root_and_named_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    mod other {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(namespace = "other")]
+        pub struct Child {
+            value: i32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        child: Child,
+        other_child: other::Child,
+    }
+
+    let registry = reflect!(Parent).unwrap();
+    insta::assert_yaml_snapshot!(registry, @"
+    ? namespace: ROOT
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - child:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Child
+              - []
+          - other_child:
+              - TYPENAME:
+                  namespace:
+                    NAMED: other
+                  name: Child
+              - []
+        - []
+    ? namespace:
+        NAMED: other
+      name: Child
+    : STRUCT:
+        - - value:
+              - I32
+              - []
+        - []
+    ");
+}
+
 /// Same type appearing in ROOT (via type-level `#[facet(namespace = None)]`) vs inherited namespace
 #[test]
 fn explicit_none_namespace() {
@@ -1816,12 +1875,49 @@ fn explicit_none_namespace() {
         simple_direct: SimpleType,
     }
 
-    let err = reflect!(WrapperType).unwrap_err();
-
-    insta::assert_snapshot!(
-        err.root_cause(),
-        @r#"failed to add type WrapperType: ambiguous namespace inheritance: "SimpleType" in both "ROOT" and "wrapper""#
-    );
+    let registry = reflect!(WrapperType).unwrap();
+    insta::assert_yaml_snapshot!(registry, @"
+    ? namespace: ROOT
+      name: ExplicitRootType
+    : STRUCT:
+        - - simple:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SimpleType
+              - []
+        - []
+    ? namespace: ROOT
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: wrapper
+      name: WrapperType
+    : STRUCT:
+        - - explicit_root:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: ExplicitRootType
+              - []
+          - simple_direct:
+              - TYPENAME:
+                  namespace:
+                    NAMED: wrapper
+                  name: SimpleType
+              - []
+        - []
+    ");
 }
 
 // Tests the difference between `namespace = None` (clears context) and `namespace = "None"` (creates "None" namespace)
@@ -1879,12 +1975,40 @@ fn field_level_explicit_none_namespace() {
         normal_field: SimpleType,
     }
 
-    let err = reflect!(Container).unwrap_err();
-
-    insta::assert_snapshot!(
-        err.root_cause(),
-        @r#"failed to add type Container: ambiguous namespace inheritance: "SimpleType" in both "ROOT" and "container""#
-    );
+    let registry = reflect!(Container).unwrap();
+    insta::assert_yaml_snapshot!(registry, @"
+    ? namespace: ROOT
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace:
+        NAMED: container
+      name: Container
+    : STRUCT:
+        - - field:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: SimpleType
+              - []
+          - normal_field:
+              - TYPENAME:
+                  namespace:
+                    NAMED: container
+                  name: SimpleType
+              - []
+        - []
+    ? namespace:
+        NAMED: container
+      name: SimpleType
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ");
 }
 
 #[test]

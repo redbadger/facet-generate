@@ -11,7 +11,8 @@ use crate::{
         Encoding, PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, QualifiedTypeName,
+        VariantFormat,
     },
 };
 
@@ -118,12 +119,22 @@ where
         Ok(())
     }
 
-    fn quote_typename(&self, name: &str) -> String {
-        self.generator
-            .external_qualified_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string())
+    fn quote_typename(&self, qualified_name: &QualifiedTypeName) -> String {
+        if let Namespace::Named(namespace) = &qualified_name.namespace
+            && self
+                .generator
+                .config
+                .external_definitions
+                .contains_key(namespace)
+            && let Some(typename) = self
+                .generator
+                .external_qualified_names
+                .get(&qualified_name.name)
+        {
+            return typename.clone();
+        }
+
+        qualified_name.name.clone()
     }
 
     fn quote_type(&mut self, format: &Format) -> String {
@@ -132,7 +143,7 @@ where
                 if !self.namespaces_used.contains(&type_.namespace) {
                     self.namespaces_used.insert(type_.namespace.clone());
                 }
-                (self.quote_typename(&type_.name), "")
+                (self.quote_typename(type_), "")
             }
             Format::Unit => ("unit".into(), "unit"),
             Format::Bool => ("bool".into(), "bool"),
@@ -260,7 +271,7 @@ where
         match format {
             Format::TypeName(qualified_name) => format!(
                 "{}.deserialize(deserializer)",
-                self.quote_typename(&qualified_name.name)
+                self.quote_typename(qualified_name)
             ),
             Format::Unit => "deserializer.deserializeUnit()".to_string(),
             Format::Bool => "deserializer.deserializeBool()".to_string(),
@@ -741,6 +752,8 @@ fn format_type_aliases(input: &BTreeSet<String>) -> String {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::emit_two_modules;
+    use facet::Facet;
 
     #[test]
     fn test_format_type_aliases() {
@@ -791,5 +804,57 @@ mod test {
         type uint8 = number;
         type unit = null;
         ");
+    }
+
+    #[test]
+    fn type_in_root_and_named_namespace() {
+        #[derive(Facet)]
+        struct Child {
+            value: String,
+        }
+
+        mod other {
+            use facet::Facet;
+
+            #[derive(Facet)]
+            #[facet(namespace = "other")]
+            pub struct Child {
+                value: i32,
+            }
+        }
+
+        #[derive(Facet)]
+        struct Parent {
+            child: Child,
+            other_child: other::Child,
+        }
+
+        let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
+        insta::assert_snapshot!(other, @"
+        type int32 = number;
+        export class Child {
+
+          constructor (public value: int32) {
+          }
+
+        }
+        ");
+
+        insta::assert_snapshot!(root, @r#"
+        import * as Other from "../other";
+        type str = string;
+        export class Child {
+
+          constructor (public value: str) {
+          }
+
+        }
+        export class Parent {
+
+          constructor (public child: Child, public other_child: Other.Child) {
+          }
+
+        }
+        "#);
     }
 }

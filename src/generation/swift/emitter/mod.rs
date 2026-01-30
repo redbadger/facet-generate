@@ -6,7 +6,10 @@ use heck::{AsUpperCamelCase, ToLowerCamelCase as _, ToUpperCamelCase};
 use crate::{
     Registry,
     generation::{common, indent::IndentWrite, swift::generator::CodeGenerator},
-    reflection::format::{ContainerFormat, Doc, Format, FormatHolder as _, Named, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, QualifiedTypeName,
+        VariantFormat,
+    },
 };
 
 /// Shared state for the code generation of a Swift source file.
@@ -60,17 +63,27 @@ where
         Ok(())
     }
 
-    fn quote_typename(&self, name: &str) -> String {
-        self.generator
-            .external_qualified_names
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| name.to_string())
+    fn quote_typename(&self, qualified_name: &QualifiedTypeName) -> String {
+        if let Namespace::Named(namespace) = &qualified_name.namespace
+            && self
+                .generator
+                .config
+                .external_definitions
+                .contains_key(namespace)
+            && let Some(typename) = self
+                .generator
+                .external_qualified_names
+                .get(&qualified_name.name)
+        {
+            return typename.clone();
+        }
+
+        qualified_name.name.clone()
     }
 
     fn quote_type(&self, format: &Format) -> String {
         match format {
-            Format::TypeName(type_) => self.quote_typename(&type_.name),
+            Format::TypeName(type_) => self.quote_typename(type_),
             Format::Unit => "Unit".into(),
             Format::Bool => "Bool".into(),
             Format::I8 => "Int8".into(),
