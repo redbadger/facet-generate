@@ -7,6 +7,7 @@ use expect_test::ExpectFile;
 use ignore::WalkBuilder;
 
 mod basic;
+mod with_bytes;
 mod with_namespaces_as_external;
 mod with_namespaces_as_internal;
 mod with_serialization;

@@ -1,12 +1,10 @@
 package com.example
 
-import com.novi.serde.BincodeDeserializer
-import com.novi.serde.BincodeSerializer
-import com.novi.serde.Bytes
+import com.novi.bincode.BincodeDeserializer
+import com.novi.bincode.BincodeSerializer
 import com.novi.serde.DeserializationError
 import com.novi.serde.Deserializer
 import com.novi.serde.Serializer
-import com.novi.serde.Unsigned
 
 data class Child(
     val name: String,
@@ -20,7 +18,7 @@ data class Child(
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer._bytes
+        return serializer.get_bytes()
     }
 
     companion object {
@@ -38,7 +36,7 @@ data class Child(
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {
+            if (deserializer.get_buffer_offset() < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -52,7 +50,7 @@ sealed interface Parent {
     fun bincodeSerialize(): ByteArray {
         val serializer = BincodeSerializer()
         serialize(serializer)
-        return serializer._bytes
+        return serializer.get_bytes()
     }
 
     data class Child(
@@ -92,7 +90,7 @@ sealed interface Parent {
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {
+            if (deserializer.get_buffer_offset() < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value

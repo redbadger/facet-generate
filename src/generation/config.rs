@@ -41,6 +41,7 @@ pub enum Encoding {
 pub enum Feature {
     BigInt,
     BuildList,
+    Bytes,
     ListOfT,
     MapOfT,
     OptionOfT,
@@ -201,6 +202,9 @@ impl CodeGeneratorConfig {
                     match f {
                         Format::I128 | Format::U128 => {
                             self.features.insert(Feature::BigInt);
+                        }
+                        Format::Bytes => {
+                            self.features.insert(Feature::Bytes);
                         }
                         Format::Seq(..) => {
                             self.features.insert(Feature::ListOfT);

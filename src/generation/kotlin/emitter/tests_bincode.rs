@@ -27,7 +27,7 @@ fn unit_struct_1() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         fun deserialize(deserializer: Deserializer): UnitStruct {
@@ -41,7 +41,7 @@ fn unit_struct_1() {
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {
+            if (deserializer.get_buffer_offset() < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -67,7 +67,7 @@ fn unit_struct_2() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         fun deserialize(deserializer: Deserializer): UnitStruct {
@@ -81,7 +81,7 @@ fn unit_struct_2() {
             }
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {
+            if (deserializer.get_buffer_offset() < input.size) {
                 throw DeserializationError("Some input bytes were not read")
             }
             return value
@@ -113,7 +113,7 @@ fn newtype_struct() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -131,7 +131,7 @@ fn newtype_struct() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -166,7 +166,7 @@ fn tuple_struct() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -185,7 +185,7 @@ fn tuple_struct() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -253,12 +253,12 @@ fn struct_with_fields_of_primitive_types() {
             serializer.serialize_i16(i16)
             serializer.serialize_i32(i32)
             serializer.serialize_i64(i64)
-            serializer.serialize_i128(@Int128 i128)
-            serializer.serialize_u8(@Unsigned u8.toByte())
-            serializer.serialize_u16(@Unsigned u16.toShort())
-            serializer.serialize_u32(@Unsigned u32.toInt())
-            serializer.serialize_u64(@Unsigned u64.toLong())
-            serializer.serialize_u128(@Unsigned @Int128 u128)
+            serializer.serialize_i128(i128)
+            serializer.serialize_u8(u8)
+            serializer.serialize_u16(u16)
+            serializer.serialize_u32(u32)
+            serializer.serialize_u64(u64)
+            serializer.serialize_u128(u128)
             serializer.serialize_f32(f32)
             serializer.serialize_f64(f64)
             serializer.serialize_char(char)
@@ -269,7 +269,7 @@ fn struct_with_fields_of_primitive_types() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -282,10 +282,10 @@ fn struct_with_fields_of_primitive_types() {
                 val i32 = deserializer.deserialize_i32()
                 val i64 = deserializer.deserialize_i64()
                 val i128 = deserializer.deserialize_i128()
-                val u8 = deserializer.deserialize_u8().toUByte()
-                val u16 = deserializer.deserialize_u16().toUShort()
-                val u32 = deserializer.deserialize_u32().toUInt()
-                val u64 = deserializer.deserialize_u64().toULong()
+                val u8 = deserializer.deserialize_u8()
+                val u16 = deserializer.deserialize_u16()
+                val u32 = deserializer.deserialize_u32()
+                val u64 = deserializer.deserialize_u64()
                 val u128 = deserializer.deserialize_u128()
                 val f32 = deserializer.deserialize_f32()
                 val f64 = deserializer.deserialize_f64()
@@ -302,7 +302,7 @@ fn struct_with_fields_of_primitive_types() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -346,7 +346,7 @@ fn struct_with_fields_of_user_types() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -364,7 +364,7 @@ fn struct_with_fields_of_user_types() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -384,7 +384,7 @@ fn struct_with_fields_of_user_types() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -402,7 +402,7 @@ fn struct_with_fields_of_user_types() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -424,7 +424,7 @@ fn struct_with_fields_of_user_types() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -443,7 +443,7 @@ fn struct_with_fields_of_user_types() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -467,7 +467,7 @@ fn struct_with_fields_of_user_types() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -487,7 +487,7 @@ fn struct_with_fields_of_user_types() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -519,7 +519,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -541,7 +541,7 @@ fn struct_with_field_that_is_a_2_tuple() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -567,14 +567,14 @@ fn struct_with_field_that_is_a_3_tuple() {
             serializer.increase_container_depth()
             serializer.serialize_str(one.first)
             serializer.serialize_i32(one.second)
-            serializer.serialize_u16(@Unsigned one.third.toShort())
+            serializer.serialize_u16(one.third)
             serializer.decrease_container_depth()
         }
 
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -583,7 +583,7 @@ fn struct_with_field_that_is_a_3_tuple() {
                 val one = run {
                     val first = deserializer.deserialize_str()
                     val second = deserializer.deserialize_i32()
-                    val third = deserializer.deserialize_u16().toUShort()
+                    val third = deserializer.deserialize_u16()
                     Triple(first, second, third)
                 }
                 deserializer.decrease_container_depth()
@@ -597,7 +597,7 @@ fn struct_with_field_that_is_a_3_tuple() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -626,7 +626,7 @@ fn struct_with_field_that_is_a_4_tuple() {
             serializer.increase_container_depth()
             serializer.serialize_str(one.component1())
             serializer.serialize_i32(one.component2())
-            serializer.serialize_u16(@Unsigned one.component3().toShort())
+            serializer.serialize_u16(one.component3())
             serializer.serialize_f32(one.component4())
             serializer.decrease_container_depth()
         }
@@ -634,7 +634,7 @@ fn struct_with_field_that_is_a_4_tuple() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -643,7 +643,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                 val one = run {
                     val v0 = deserializer.deserialize_str()
                     val v1 = deserializer.deserialize_i32()
-                    val v2 = deserializer.deserialize_u16().toUShort()
+                    val v2 = deserializer.deserialize_u16()
                     val v3 = deserializer.deserialize_f32()
                     NTuple4(v0, v1, v2, v3)
                 }
@@ -658,7 +658,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -705,7 +705,7 @@ fn enum_with_unit_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -729,7 +729,7 @@ fn enum_with_unit_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -762,7 +762,7 @@ fn enum_with_unit_struct_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -784,7 +784,7 @@ fn enum_with_unit_struct_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -811,7 +811,7 @@ fn enum_with_1_tuple_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         data class Variant1(
@@ -851,7 +851,7 @@ fn enum_with_1_tuple_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -879,7 +879,7 @@ fn enum_with_newtype_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         data class Variant1(
@@ -940,7 +940,7 @@ fn enum_with_newtype_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -968,7 +968,7 @@ fn enum_with_tuple_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         data class Variant1(
@@ -1004,7 +1004,7 @@ fn enum_with_tuple_variants() {
                 serializer.serialize_variant_index(1)
                 serializer.serialize_bool(field0)
                 serializer.serialize_f64(field1)
-                serializer.serialize_u8(@Unsigned field2.toByte())
+                serializer.serialize_u8(field2)
                 serializer.decrease_container_depth()
             }
 
@@ -1013,7 +1013,7 @@ fn enum_with_tuple_variants() {
                     deserializer.increase_container_depth()
                     val field0 = deserializer.deserialize_bool()
                     val field1 = deserializer.deserialize_f64()
-                    val field2 = deserializer.deserialize_u8().toUByte()
+                    val field2 = deserializer.deserialize_u8()
                     deserializer.decrease_container_depth()
                     return Variant2(field0, field1, field2)
                 }
@@ -1038,7 +1038,7 @@ fn enum_with_tuple_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1065,7 +1065,7 @@ fn enum_with_struct_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         data class Variant1(
@@ -1108,7 +1108,7 @@ fn enum_with_struct_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1138,7 +1138,7 @@ fn enum_with_mixed_variants() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         data object Unit: MyEnum {
@@ -1236,7 +1236,7 @@ fn enum_with_mixed_variants() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1281,7 +1281,7 @@ fn struct_with_vec_field_1() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1312,7 +1312,7 @@ fn struct_with_vec_field_1() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1348,7 +1348,7 @@ fn struct_with_vec_field_2() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1366,7 +1366,7 @@ fn struct_with_vec_field_2() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1390,7 +1390,7 @@ fn struct_with_vec_field_2() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1413,7 +1413,7 @@ fn struct_with_vec_field_2() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1468,7 +1468,7 @@ fn struct_with_option_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1507,7 +1507,7 @@ fn struct_with_option_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1547,7 +1547,7 @@ fn struct_with_hashmap_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1576,7 +1576,7 @@ fn struct_with_hashmap_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1646,7 +1646,7 @@ fn struct_with_nested_generics() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1705,7 +1705,7 @@ fn struct_with_nested_generics() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1743,14 +1743,14 @@ fn struct_with_array_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
                 val fixedArray = buildList(5) { repeat(5) { add(deserializer.deserialize_i32()) } }
-                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8().toUByte()) } }
+                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8()) } }
                 val stringArray = buildList(3) { repeat(3) { add(deserializer.deserialize_str()) } }
                 deserializer.decrease_container_depth()
                 return MyStruct(fixedArray, byteArray, stringArray)
@@ -1763,7 +1763,7 @@ fn struct_with_array_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1803,7 +1803,7 @@ fn struct_with_btreemap_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1832,7 +1832,7 @@ fn struct_with_btreemap_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1876,7 +1876,7 @@ fn struct_with_nested_map_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1910,7 +1910,7 @@ fn struct_with_nested_map_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -1950,7 +1950,7 @@ fn struct_with_hashset_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -1975,7 +1975,7 @@ fn struct_with_hashset_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2015,7 +2015,7 @@ fn struct_with_btreeset_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2040,7 +2040,7 @@ fn struct_with_btreeset_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2080,7 +2080,7 @@ fn struct_with_nested_set_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2107,7 +2107,7 @@ fn struct_with_nested_set_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2142,7 +2142,7 @@ fn struct_with_box_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2161,7 +2161,7 @@ fn struct_with_box_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2195,7 +2195,7 @@ fn struct_with_rc_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2214,7 +2214,7 @@ fn struct_with_rc_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2248,7 +2248,7 @@ fn struct_with_arc_field() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2267,7 +2267,7 @@ fn struct_with_arc_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2324,7 +2324,7 @@ fn struct_with_mixed_collections_and_pointers() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
@@ -2364,7 +2364,7 @@ fn struct_with_mixed_collections_and_pointers() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2388,30 +2388,30 @@ fn struct_with_bytes_field() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_bytes(Bytes.valueOf(data))
+            serializer.serialize_bytes(data)
             serializer.serialize_str(name)
-            serializer.serialize_bytes(Bytes.valueOf(header))
+            serializer.serialize_bytes(header)
             serializer.decrease_container_depth()
         }
 
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val data = deserializer.deserialize_bytes().content()
+                val data = deserializer.deserialize_bytes()
                 val name = deserializer.deserialize_str()
-                val header = deserializer.deserialize_bytes().content()
+                val header = deserializer.deserialize_bytes()
                 deserializer.decrease_container_depth()
                 return MyStruct(data, name, header)
             }
@@ -2423,7 +2423,7 @@ fn struct_with_bytes_field() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value
@@ -2448,19 +2448,19 @@ fn struct_with_bytes_field_and_slice() {
     let actual = emit!(MyStruct as Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
         val optionalBytes: List<UByte>? = null,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            serializer.serialize_bytes(Bytes.valueOf(data))
+            serializer.serialize_bytes(data)
             serializer.serialize_str(name)
-            serializer.serialize_bytes(Bytes.valueOf(header))
+            serializer.serialize_bytes(header)
             optionalBytes.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) {
-                    serializer.serialize_u8(@Unsigned it.toByte())
+                    serializer.serialize_u8(it)
                 }
             }
             serializer.decrease_container_depth()
@@ -2469,19 +2469,19 @@ fn struct_with_bytes_field_and_slice() {
         fun bincodeSerialize(): ByteArray {
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }
 
         companion object {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
-                val data = deserializer.deserialize_bytes().content()
+                val data = deserializer.deserialize_bytes()
                 val name = deserializer.deserialize_str()
-                val header = deserializer.deserialize_bytes().content()
+                val header = deserializer.deserialize_bytes()
                 val optionalBytes =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeListOf {
-                            deserializer.deserialize_u8().toUByte()
+                            deserializer.deserialize_u8()
                         }
                     }
                 deserializer.decrease_container_depth()
@@ -2495,7 +2495,7 @@ fn struct_with_bytes_field_and_slice() {
                 }
                 val deserializer = BincodeDeserializer(input)
                 val value = deserialize(deserializer)
-                if (deserializer._buffer_offset < input.size) {
+                if (deserializer.get_buffer_offset() < input.size) {
                     throw DeserializationError("Some input bytes were not read")
                 }
                 return value

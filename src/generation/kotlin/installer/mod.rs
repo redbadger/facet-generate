@@ -188,7 +188,7 @@ impl SourceInstaller for Installer {
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
         // Install the common serde runtime files needed for bincode
         let runtime_dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/java/com/novi/serde");
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/kotlin/com/novi/serde");
 
         if runtime_dir.exists() {
             self.install_runtime(runtime_dir.to_str().unwrap(), "com/novi/serde")?;
@@ -199,8 +199,8 @@ impl SourceInstaller for Installer {
 
     fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {
         // Install the bincode-specific runtime files
-        let runtime_dir =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/java/com/novi/bincode");
+        let runtime_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("runtime/kotlin/com/novi/bincode");
 
         if runtime_dir.exists() {
             self.install_runtime(runtime_dir.to_str().unwrap(), "com/novi/bincode")?;

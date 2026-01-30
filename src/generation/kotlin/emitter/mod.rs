@@ -24,6 +24,30 @@ const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 
 pub struct Kotlin;
 
+impl Module {
+    fn get_package_name(&self, namespace: &str) -> String {
+        let external_packages = &self.config().external_packages;
+        external_packages
+            .get(namespace)
+            .and_then(|pkg| {
+                if let PackageLocation::Path(path) = &pkg.location {
+                    Some(path.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| format!("com.novi.{namespace}"))
+    }
+
+    fn bincode_package(&self) -> String {
+        self.get_package_name("bincode")
+    }
+
+    fn serde_package(&self) -> String {
+        self.get_package_name("serde")
+    }
+}
+
 impl Emitter<Kotlin> for Module {
     #[allow(clippy::too_many_lines)]
     fn write<W: Write>(&self, w: &mut W) -> Result<()> {
@@ -31,7 +55,6 @@ impl Emitter<Kotlin> for Module {
             module_name,
             encoding,
             features,
-            external_packages,
             ..
         } = self.config();
 
@@ -47,26 +70,15 @@ impl Emitter<Kotlin> for Module {
                 "import kotlinx.serialization.SerialName".to_string(),
             ],
             Encoding::Bincode => {
-                // Get the serde package from external_packages configuration
-                let serde_package = external_packages
-                    .get("serde")
-                    .and_then(|pkg| {
-                        if let PackageLocation::Path(path) = &pkg.location {
-                            Some(path.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or_else(|| "serde".to_string());
+                let bincode_package = self.bincode_package();
+                let serde_package = self.serde_package();
 
                 vec![
-                    format!("import {serde_package}.BincodeDeserializer"),
-                    format!("import {serde_package}.BincodeSerializer"),
-                    format!("import {serde_package}.Bytes"),
+                    format!("import {bincode_package}.BincodeDeserializer"),
+                    format!("import {bincode_package}.BincodeSerializer"),
                     format!("import {serde_package}.DeserializationError"),
                     format!("import {serde_package}.Deserializer"),
                     format!("import {serde_package}.Serializer"),
-                    format!("import {serde_package}.Unsigned"),
                 ]
             }
             _ => vec![],
@@ -75,6 +87,11 @@ impl Emitter<Kotlin> for Module {
         let mut features_out = vec![];
         for feature in features {
             match feature {
+                Feature::Bytes => {
+                    if encoding == &Encoding::Bincode {
+                        imports.push(format!("import {}.Bytes", self.serde_package()));
+                    }
+                }
                 Feature::BigInt => {
                     // Note: BigInteger is JVM-only. For KMP, you'd need a multiplatform BigInt library.
                     // This is kept for backward compatibility with JVM-only projects.
@@ -95,21 +112,10 @@ impl Emitter<Kotlin> for Module {
                             features_out.write_all(FEATURE_BIGINT)?;
                             writeln!(features_out)?;
                         }
-                        Encoding::Bincode => {
-                            // Get the serde package from external_packages configuration
-                            let serde_package = external_packages
-                                .get("serde")
-                                .and_then(|pkg| {
-                                    if let PackageLocation::Path(path) = &pkg.location {
-                                        Some(path.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .unwrap_or_else(|| "serde".to_string());
-                            imports.push(format!("import {serde_package}.Int128"));
+                        Encoding::Bincode | Encoding::Bcs => {
+                            imports.push(format!("import {}.Int128", self.serde_package()));
                         }
-                        Encoding::None | Encoding::Bcs => (),
+                        Encoding::None => (),
                     }
                 }
                 Feature::ListOfT => {
@@ -400,7 +406,7 @@ impl Emitter<Kotlin> for Format {
             Format::F32 => write!(w, "Float"),
             Format::F64 => write!(w, "Double"),
             Format::Char | Format::Str => write!(w, "String"),
-            Format::Bytes => write!(w, "ByteArray"),
+            Format::Bytes => write!(w, "Bytes"),
 
             Format::Option(format) => {
                 format.write(w)?;
@@ -792,7 +798,7 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
         fun bincodeSerialize(): ByteArray {{
             val serializer = BincodeSerializer()
             serialize(serializer)
-            return serializer._bytes
+            return serializer.get_bytes()
         }}
         "
     )
@@ -809,7 +815,7 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
             }}
             val deserializer = BincodeDeserializer(input)
             val value = deserialize(deserializer)
-            if (deserializer._buffer_offset < input.size) {{
+            if (deserializer.get_buffer_offset() < input.size) {{
                 throw DeserializationError("Some input bytes were not read")
             }}
             return value
@@ -831,32 +837,20 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128(@Int128 {field_name})"),
-        Format::U8 => writeln!(
-            w,
-            "serializer.serialize_u8(@Unsigned {field_name}.toByte())"
-        ),
-        Format::U16 => writeln!(
-            w,
-            "serializer.serialize_u16(@Unsigned {field_name}.toShort())"
-        ),
-        Format::U32 => writeln!(
-            w,
-            "serializer.serialize_u32(@Unsigned {field_name}.toInt())"
-        ),
-        Format::U64 => writeln!(
-            w,
-            "serializer.serialize_u64(@Unsigned {field_name}.toLong())"
-        ),
-        Format::U128 => writeln!(
-            w,
-            "serializer.serialize_u128(@Unsigned @Int128 {field_name})"
-        ),
+        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
+        // For unsigned types, use Kotlin's native unsigned types directly.
+        // No @Unsigned annotations needed - Kotlin has first-class UByte, UShort, UInt, ULong.
+        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
+        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
+        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
+        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
+        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes(Bytes.valueOf({field_name}))"),
+        // Use direct byte array - no Bytes wrapper needed for KMP compatibility
+        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
 
         // Container types - these generate method calls with lambdas
         Format::Option(inner_format) => {
@@ -980,16 +974,18 @@ fn write_deserialize<W: IndentWrite>(
         Format::I32 => write!(w, "deserializer.deserialize_i32()"),
         Format::I64 => write!(w, "deserializer.deserialize_i64()"),
         Format::I128 => write!(w, "deserializer.deserialize_i128()"),
-        Format::U8 => write!(w, "deserializer.deserialize_u8().toUByte()"),
-        Format::U16 => write!(w, "deserializer.deserialize_u16().toUShort()"),
-        Format::U32 => write!(w, "deserializer.deserialize_u32().toUInt()"),
-        Format::U64 => write!(w, "deserializer.deserialize_u64().toULong()"),
+        // KMP serde returns native unsigned types directly - no conversion needed
+        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
+        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
+        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
+        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
         Format::U128 => write!(w, "deserializer.deserialize_u128()"),
         Format::F32 => write!(w, "deserializer.deserialize_f32()"),
         Format::F64 => write!(w, "deserializer.deserialize_f64()"),
         Format::Char => write!(w, "deserializer.deserialize_char()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
-        Format::Bytes => write!(w, "deserializer.deserialize_bytes().content()"),
+        // Return byte array directly - no Bytes wrapper for KMP compatibility
+        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             write_deserialize_lambda(w, format)

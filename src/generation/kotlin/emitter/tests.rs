@@ -636,9 +636,9 @@ fn struct_with_bytes_field() {
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
     )
     ");
 }
@@ -658,9 +658,9 @@ fn struct_with_bytes_field_and_slice() {
     let actual = emit!(MyStruct as Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
     data class MyStruct(
-        val data: ByteArray,
+        val data: Bytes,
         val name: String,
-        val header: ByteArray,
+        val header: Bytes,
         val optionalBytes: List<UByte>? = null,
     )
     ");
