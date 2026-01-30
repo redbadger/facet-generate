@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.13.2] - 2026-01-30
+
+### 🚀 Features
+
+- feat: Allow type with same name in ROOT and other namespace
+- Add runtime for Kotlin native (note it is not yet used in Kotlin codegen, which will be fixed in the next release v0.14)
+
+### 🐛 Bug Fixes
+
+- fix(swift): Fix external type always used regardless of namespace
+- fix(typescript): Fix external type always used regardless of namespace
+- fix(kotlin): resolve Kotlin generation issues
+- fix(kotlin): fmt, tweaks and tests
+- fix(kotlin): revert native type changes for serde compatibility
+
+## [0.13.1] - 2026-01-17
+
+### 🐛 Bug Fixes
+
+- fix(kotlin): fully qualify type references
+- fix(kotlin): respect external packages
+- fix(kotlin): fully qualify types when calling deserialize
+- fix(kotlin): use property accessor instead of get method
+
 ## [0.13.0] - 2025-12-17
 
 #### -  `#[facet(transparent)]` being ignored on multiple cases
