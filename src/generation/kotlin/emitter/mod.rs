@@ -76,7 +76,6 @@ impl Emitter<Kotlin> for Module {
                 vec![
                     format!("import {bincode_package}.BincodeDeserializer"),
                     format!("import {bincode_package}.BincodeSerializer"),
-                    format!("import {serde_package}.Bytes"),
                     format!("import {serde_package}.DeserializationError"),
                     format!("import {serde_package}.Deserializer"),
                     format!("import {serde_package}.Serializer"),
@@ -88,6 +87,11 @@ impl Emitter<Kotlin> for Module {
         let mut features_out = vec![];
         for feature in features {
             match feature {
+                Feature::Bytes => {
+                    if encoding == &Encoding::Bincode {
+                        imports.push(format!("import {}.Bytes", self.serde_package()));
+                    }
+                }
                 Feature::BigInt => {
                     // Note: BigInteger is JVM-only. For KMP, you'd need a multiplatform BigInt library.
                     // This is kept for backward compatibility with JVM-only projects.
