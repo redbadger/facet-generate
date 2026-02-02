@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.14.0] - 2026-02-02
+
+### 🚀 Features
+
+- feat(kotlin): Kotlin codegen now uses the native runtime that was added in v0.13.2
+- feat(kotlin): Use ByteArray instead of Bytes for better native type support
+- feat(kotlin): Add value class Bytes to implement equals and hashCode
+- feat(kotlin): Only emit import for Bytes if needed
+
+### 🐛 Bug Fixes
+
+- fix(ci): Remove if condition
+
 ## [0.13.2] - 2026-01-30
 
 ### 🚀 Features
