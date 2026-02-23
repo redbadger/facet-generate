@@ -1,11 +1,34 @@
+# default target for local development
+default: dev
+
+# builds all crates
 build:
+    @echo '{{ style("command") }}build:{{ NORMAL }}'
     cargo build --all-features
 
+# runs tests
 test:
+    @echo '{{ style("command") }}test:{{ NORMAL }}'
+    cargo nextest run --all-features
+
+# runs tests with snapshot review (interactive, for local dev)
+test-review:
+    @echo '{{ style("command") }}test-review:{{ NORMAL }}'
     cargo insta test --review --test-runner nextest --all-features
 
-lint:
-    cargo fmt --all --check
+# auto-fix formatting issues
+fix:
+    @echo '{{ style("command") }}fix:{{ NORMAL }}'
+    cargo fmt --all
+
+# validate formatting and lint (strict, no auto-fix)
+check:
+    @echo '{{ style("command") }}check:{{ NORMAL }}'
+    cargo fmt --all -- --check
     cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
 
-ci: lint test
+# local development: fix, check, build, test with snapshot review
+dev: fix check build test-review
+
+# CI pipeline: check, build, test (matches .github/workflows/build.yaml)
+ci: check build test

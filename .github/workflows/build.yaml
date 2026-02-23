@@ -32,23 +32,20 @@ jobs:
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
 
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Check (fmt + clippy)
+        run: just check
+
+      - name: Build
+        run: just build
+
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: "21"
           cache: "gradle"
-
-      - name: Format check
-        shell: bash
-        run: cargo fmt --all --check
-
-      - name: Clippy (pedantic)
-        shell: bash
-        run: cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
-
-      - name: Build
-        shell: bash
-        run: cargo build --all-features
 
       - name: Setup Additional Languages for codegen tests (deno)
         uses: denoland/setup-deno@v2
@@ -58,9 +55,8 @@ jobs:
       - name: Setup Additional Languages for codegen tests (swift)
         uses: SwiftyLab/setup-swift@latest
 
-      - name: Install latest nextest release
+      - name: Install nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Test with latest nextest release
-        shell: bash
-        run: cargo nextest run --all-features
+      - name: Test
+        run: just test
