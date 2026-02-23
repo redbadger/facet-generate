@@ -3,7 +3,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter, WithEncoding,
+        CodeGen, CodeGeneratorConfig, Container, LanguageEmitter, WithEncoding,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
         kotlin::emitter::Kotlin,
@@ -52,7 +52,7 @@ impl<'a> CodeGenerator<'a> {
         let updated_registry = Self::update_qualified_names(&config, registry);
 
         let module = Module::new(&config);
-        module.write(w)?;
+        Kotlin::write_module(&module, w)?;
 
         for (i, (name, format)) in updated_registry.iter().enumerate() {
             if i > 0 {
@@ -62,7 +62,7 @@ impl<'a> CodeGenerator<'a> {
                 encoding: config.encoding,
                 value: Container { name, format },
             };
-            <WithEncoding<Container> as Emitter<Kotlin>>::write(&container, w)?;
+            Kotlin::write_container(&container, w)?;
         }
         Ok(())
     }

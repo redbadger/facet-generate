@@ -36,7 +36,7 @@ use indent::IndentWrite;
 
 use crate::{
     Registry,
-    reflection::format::{ContainerFormat, QualifiedTypeName},
+    reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName},
 };
 
 pub trait CodeGen<'a> {
@@ -77,12 +77,13 @@ pub struct Container<'a> {
     pub format: &'a ContainerFormat,
 }
 
-pub trait Emitter<Language> {
-    /// Write the code to the provided `IndentWrite`.
-    ///
-    /// # Errors
-    /// This function may fail if the writer encounters an error while writing the generated code.
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()>;
+pub trait LanguageEmitter {
+    /// Write a container (struct/enum) to the provided `IndentWrite`.
+    fn write_container<W: IndentWrite>(container: &WithEncoding<Container<'_>>, w: &mut W) -> Result<()>;
+    /// Write a format (type) to the provided `IndentWrite`.
+    fn write_format<W: IndentWrite>(format: &Format, w: &mut W) -> Result<()>;
+    /// Write documentation comments to the provided `IndentWrite`.
+    fn write_doc<W: IndentWrite>(doc: &Doc, w: &mut W) -> Result<()>;
 }
 
 #[cfg(all(test, feature = "generate"))]
