@@ -1,5 +1,5 @@
 //! these tests will be updated once the Swift emitter is converted
-//! to use the new LanguageEmitter trait
+//! to use the new `LanguageEmitter` trait
 #![allow(clippy::too_many_lines)]
 
 use std::{

@@ -79,13 +79,22 @@ pub struct Container<'a> {
 
 pub trait LanguageEmitter {
     /// Write a container (struct/enum) to the provided `IndentWrite`.
+    ///
+    /// # Errors
+    /// Returns an error if writing to the output fails.
     fn write_container<W: IndentWrite>(
         container: &WithEncoding<Container<'_>>,
         w: &mut W,
     ) -> Result<()>;
     /// Write a format (type) to the provided `IndentWrite`.
+    ///
+    /// # Errors
+    /// Returns an error if writing to the output fails.
     fn write_format<W: IndentWrite>(format: &Format, w: &mut W) -> Result<()>;
     /// Write documentation comments to the provided `IndentWrite`.
+    ///
+    /// # Errors
+    /// Returns an error if writing to the output fails.
     fn write_doc<W: IndentWrite>(doc: &Doc, w: &mut W) -> Result<()>;
 }
 

@@ -3,3 +3,5 @@
 build/
 .gradle
 .kotlin
+
+.bacon-locations
