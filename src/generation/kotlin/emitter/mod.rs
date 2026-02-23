@@ -170,7 +170,10 @@ impl Kotlin {
 }
 
 impl LanguageEmitter for Kotlin {
-    fn write_container<W: IndentWrite>(container: &WithEncoding<Container<'_>>, w: &mut W) -> Result<()> {
+    fn write_container<W: IndentWrite>(
+        container: &WithEncoding<Container<'_>>,
+        w: &mut W,
+    ) -> Result<()> {
         let WithEncoding {
             encoding,
             value:
@@ -353,12 +356,11 @@ fn write_variant<W: IndentWrite>(
 ) -> Result<()> {
     let WithEncoding {
         encoding,
-        value:
-            Named {
-                name,
-                doc,
-                value: format,
-            },
+        value: Named {
+            name,
+            doc,
+            value: format,
+        },
     } = variant;
 
     match (&format, context) {
@@ -377,10 +379,7 @@ fn write_variant<W: IndentWrite>(
                 write!(w, "{name_upper}")?;
             }
         }
-        (
-            VariantFormat::NewType(inner),
-            VariantContext::SealedInterface(interface_name, index),
-        ) => {
+        (VariantFormat::NewType(inner), VariantContext::SealedInterface(interface_name, index)) => {
             data_class(
                 w,
                 name,
@@ -394,10 +393,7 @@ fn write_variant<W: IndentWrite>(
         (VariantFormat::NewType(_format), VariantContext::EnumClass) => {
             unreachable!("NewType variants are not supported in enum classes")
         }
-        (
-            VariantFormat::Tuple(formats),
-            VariantContext::SealedInterface(interface_name, index),
-        ) => {
+        (VariantFormat::Tuple(formats), VariantContext::SealedInterface(interface_name, index)) => {
             data_class(
                 w,
                 name,
@@ -411,10 +407,7 @@ fn write_variant<W: IndentWrite>(
         (VariantFormat::Tuple(_formats), VariantContext::EnumClass) => {
             unreachable!("Tuple variants are not supported in enum classes")
         }
-        (
-            VariantFormat::Struct(fields),
-            VariantContext::SealedInterface(interface_name, index),
-        ) => {
+        (VariantFormat::Struct(fields), VariantContext::SealedInterface(interface_name, index)) => {
             data_class(
                 w,
                 name,
