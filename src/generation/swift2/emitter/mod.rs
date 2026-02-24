@@ -156,195 +156,94 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 write!(w, "{name}: {name}")
             }
             Usage::Assignment => writeln!(w, "self.{name} = {name}"),
-            Usage::Serialize { receiver } => {
-                if lang.encoding.is_bincode() && is_complex_format(value) {
+            Usage::Serialize { receiver } => match value {
+                Format::Variable(_) => {
+                    unreachable!("placeholders should not get this far")
+                }
+                Format::TypeName(_) => {
+                    writeln!(w, "try {receiver}.{name}.serialize(serializer: serializer)")
+                }
+                Format::Tuple(formats) if !lang.encoding.is_bincode() => {
+                    push_serializer(w)?;
+                    let formats = named(formats, "");
+                    for format in formats {
+                        (
+                            &format,
+                            Usage::Serialize {
+                                receiver: name.clone(),
+                            },
+                        )
+                            .write(w, lang)?;
+                    }
+                    pop_serializer(w)
+                }
+                Format::Option(_)
+                | Format::Seq(_)
+                | Format::Set(_)
+                | Format::Map { .. }
+                | Format::Tuple(_)
+                | Format::TupleArray { .. } => {
                     let suffix = format_suffix(value);
-                    return writeln!(
+                    writeln!(
                         w,
                         "try serialize_{suffix}(value: {receiver}.{name}, serializer: serializer)"
-                    );
+                    )
                 }
-                match value {
-                    Format::Variable(_) => {
-                        unreachable!("placeholders should not get this far")
-                    }
-                    Format::TypeName(_) => {
-                        writeln!(w, "try {receiver}.{name}.serialize(serializer: serializer)")
-                    }
-                    Format::Unit => {
-                        writeln!(w, "try serializer.serialize_unit(value: {receiver}.{name})")
-                    }
-                    Format::Bool => {
-                        writeln!(w, "try serializer.serialize_bool(value: {receiver}.{name})")
-                    }
-                    Format::I8 => {
-                        writeln!(w, "try serializer.serialize_i8(value: {receiver}.{name})")
-                    }
-                    Format::I16 => {
-                        writeln!(w, "try serializer.serialize_i16(value: {receiver}.{name})")
-                    }
-                    Format::I32 => {
-                        writeln!(w, "try serializer.serialize_i32(value: {receiver}.{name})")
-                    }
-                    Format::I64 => {
-                        writeln!(w, "try serializer.serialize_i64(value: {receiver}.{name})")
-                    }
-                    Format::I128 => {
-                        writeln!(w, "try serializer.serialize_i128(value: {receiver}.{name})")
-                    }
-                    Format::U8 => {
-                        writeln!(w, "try serializer.serialize_u8(value: {receiver}.{name})")
-                    }
-                    Format::U16 => {
-                        writeln!(w, "try serializer.serialize_u16(value: {receiver}.{name})")
-                    }
-                    Format::U32 => {
-                        writeln!(w, "try serializer.serialize_u32(value: {receiver}.{name})")
-                    }
-                    Format::U64 => {
-                        writeln!(w, "try serializer.serialize_u64(value: {receiver}.{name})")
-                    }
-                    Format::U128 => {
-                        writeln!(w, "try serializer.serialize_u128(value: {receiver}.{name})")
-                    }
-                    Format::F32 => {
-                        writeln!(w, "try serializer.serialize_f32(value: {receiver}.{name})")
-                    }
-                    Format::F64 => {
-                        writeln!(w, "try serializer.serialize_f64(value: {receiver}.{name})")
-                    }
-                    Format::Char => {
-                        writeln!(w, "try serializer.serialize_char(value: {receiver}.{name})")
-                    }
-                    Format::Str => {
-                        writeln!(w, "try serializer.serialize_str(value: {receiver}.{name})")
-                    }
-                    Format::Bytes => writeln!(
+                primitive => {
+                    let t = format!("{primitive:?}").to_lowercase();
+                    writeln!(w, "try serializer.serialize_{t}(value: {receiver}.{name})")
+                }
+            },
+            Usage::Deserialize { receiver: _ } => match value {
+                Format::Variable(_) => {
+                    unreachable!("placeholders should not get this far")
+                }
+                Format::TypeName(qualified_type_name) => {
+                    let type_name = &qualified_type_name.name;
+                    writeln!(
                         w,
-                        "try serializer.serialize_bytes(value: {receiver}.{name})"
-                    ),
-                    Format::Option(_) | Format::Seq(_) | Format::Set(_) | Format::Map { .. } => {
-                        unreachable!("complex formats handled above for bincode")
-                    }
-                    Format::Tuple(formats) => {
-                        if lang.encoding.is_bincode() {
-                            unreachable!("tuples handled above for bincode");
-                        }
-                        push_serializer(w)?;
-                        let formats = named(formats, "");
-                        for format in formats {
-                            (
-                                &format,
-                                Usage::Serialize {
-                                    receiver: name.clone(),
-                                },
-                            )
-                                .write(w, lang)?;
-                        }
-                        pop_serializer(w)
-                    }
-                    Format::TupleArray { .. } => {
-                        unreachable!("tuple arrays handled above for bincode")
-                    }
+                        "let {name} = try {type_name}.deserialize(deserializer: deserializer)"
+                    )
                 }
-            }
-            Usage::Deserialize { receiver: _ } => {
-                if lang.encoding.is_bincode() && is_complex_format(value) {
+                Format::Tuple(formats) if !lang.encoding.is_bincode() => {
+                    push_deserializer(w)?;
+                    let formats = named(formats, name);
+                    for (i, format) in formats.iter().enumerate() {
+                        (
+                            format,
+                            Usage::Deserialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(w, lang)?;
+                    }
+                    write!(w, "let {name} = (")?;
+                    for (i, format) in formats.iter().enumerate() {
+                        if i > 0 {
+                            write!(w, ", ")?;
+                        }
+                        write!(w, "{}", format.name)?;
+                    }
+                    writeln!(w, ")")?;
+                    pop_deserializer(w)
+                }
+                Format::Option(_)
+                | Format::Seq(_)
+                | Format::Set(_)
+                | Format::Map { .. }
+                | Format::Tuple(_)
+                | Format::TupleArray { .. } => {
                     let suffix = format_suffix(value);
-                    return writeln!(
+                    writeln!(
                         w,
                         "let {name} = try deserialize_{suffix}(deserializer: deserializer)"
-                    );
+                    )
                 }
-                match value {
-                    Format::Variable(_) => {
-                        unreachable!("placeholders should not get this far")
-                    }
-                    Format::TypeName(qualified_type_name) => {
-                        let type_name = &qualified_type_name.name;
-                        writeln!(
-                            w,
-                            "let {name} = try {type_name}.deserialize(deserializer: deserializer)"
-                        )
-                    }
-                    Format::Unit => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_unit()")
-                    }
-                    Format::Bool => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_bool()")
-                    }
-                    Format::I8 => writeln!(w, "let {name} = try deserializer.deserialize_i8()"),
-                    Format::I16 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_i16()")
-                    }
-                    Format::I32 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_i32()")
-                    }
-                    Format::I64 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_i64()")
-                    }
-                    Format::I128 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_i128()")
-                    }
-                    Format::U8 => writeln!(w, "let {name} = try deserializer.deserialize_u8()"),
-                    Format::U16 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_u16()")
-                    }
-                    Format::U32 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_u32()")
-                    }
-                    Format::U64 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_u64()")
-                    }
-                    Format::U128 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_u128()")
-                    }
-                    Format::F32 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_f32()")
-                    }
-                    Format::F64 => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_f64()")
-                    }
-                    Format::Char => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_char()")
-                    }
-                    Format::Str => writeln!(w, "let {name} = try deserializer.deserialize_str()"),
-                    Format::Bytes => {
-                        writeln!(w, "let {name} = try deserializer.deserialize_bytes()")
-                    }
-                    Format::Option(_) | Format::Seq(_) | Format::Set(_) | Format::Map { .. } => {
-                        unreachable!("complex formats handled above for bincode")
-                    }
-                    Format::Tuple(formats) => {
-                        if lang.encoding.is_bincode() {
-                            unreachable!("tuples handled above for bincode");
-                        }
-                        push_deserializer(w)?;
-                        let formats = named(formats, name);
-                        for (i, format) in formats.iter().enumerate() {
-                            (
-                                format,
-                                Usage::Deserialize {
-                                    receiver: i.to_string(),
-                                },
-                            )
-                                .write(w, lang)?;
-                        }
-                        write!(w, "let {name} = (")?;
-                        for (i, format) in formats.iter().enumerate() {
-                            if i > 0 {
-                                write!(w, ", ")?;
-                            }
-                            write!(w, "{}", format.name)?;
-                        }
-                        writeln!(w, ")")?;
-                        pop_deserializer(w)
-                    }
-                    Format::TupleArray { .. } => {
-                        unreachable!("tuple arrays handled above for bincode")
-                    }
+                primitive => {
+                    let t = format!("{primitive:?}").to_lowercase();
+                    writeln!(w, "let {name} = try deserializer.deserialize_{t}()")
                 }
-            }
+            },
         }
     }
 }
@@ -870,54 +769,31 @@ fn write_json_deserialize<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
 }
 
 fn write_format_serialize<W: Write>(w: &mut W, format: &Format, value_expr: &str) -> Result<()> {
-    if is_complex_format(format) {
-        let suffix = format_suffix(format);
-        return writeln!(
-            w,
-            "try serialize_{suffix}(value: {value_expr}, serializer: serializer)"
-        );
-    }
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(_) => {
             writeln!(w, "try {value_expr}.serialize(serializer: serializer)")
         }
-        Format::Unit => writeln!(w, "try serializer.serialize_unit(value: {value_expr})"),
-        Format::Bool => writeln!(w, "try serializer.serialize_bool(value: {value_expr})"),
-        Format::I8 => writeln!(w, "try serializer.serialize_i8(value: {value_expr})"),
-        Format::I16 => writeln!(w, "try serializer.serialize_i16(value: {value_expr})"),
-        Format::I32 => writeln!(w, "try serializer.serialize_i32(value: {value_expr})"),
-        Format::I64 => writeln!(w, "try serializer.serialize_i64(value: {value_expr})"),
-        Format::I128 => writeln!(w, "try serializer.serialize_i128(value: {value_expr})"),
-        Format::U8 => writeln!(w, "try serializer.serialize_u8(value: {value_expr})"),
-        Format::U16 => writeln!(w, "try serializer.serialize_u16(value: {value_expr})"),
-        Format::U32 => writeln!(w, "try serializer.serialize_u32(value: {value_expr})"),
-        Format::U64 => writeln!(w, "try serializer.serialize_u64(value: {value_expr})"),
-        Format::U128 => writeln!(w, "try serializer.serialize_u128(value: {value_expr})"),
-        Format::F32 => writeln!(w, "try serializer.serialize_f32(value: {value_expr})"),
-        Format::F64 => writeln!(w, "try serializer.serialize_f64(value: {value_expr})"),
-        Format::Char => writeln!(w, "try serializer.serialize_char(value: {value_expr})"),
-        Format::Str => writeln!(w, "try serializer.serialize_str(value: {value_expr})"),
-        Format::Bytes => writeln!(w, "try serializer.serialize_bytes(value: {value_expr})"),
         Format::Option(_)
         | Format::Seq(_)
         | Format::Set(_)
         | Format::Map { .. }
         | Format::Tuple(_)
         | Format::TupleArray { .. } => {
-            unreachable!("complex formats handled above")
+            let suffix = format_suffix(format);
+            writeln!(
+                w,
+                "try serialize_{suffix}(value: {value_expr}, serializer: serializer)"
+            )
+        }
+        primitive => {
+            let t = format!("{primitive:?}").to_lowercase();
+            writeln!(w, "try serializer.serialize_{t}(value: {value_expr})")
         }
     }
 }
 
 fn write_format_deserialize<W: Write>(w: &mut W, format: &Format, var: &str) -> Result<()> {
-    if is_complex_format(format) {
-        let suffix = format_suffix(format);
-        return writeln!(
-            w,
-            "let {var} = try deserialize_{suffix}(deserializer: deserializer)"
-        );
-    }
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(qtn) => {
@@ -927,74 +803,32 @@ fn write_format_deserialize<W: Write>(w: &mut W, format: &Format, var: &str) -> 
                 "let {var} = try {type_name}.deserialize(deserializer: deserializer)"
             )
         }
-        Format::Unit => writeln!(w, "let {var} = try deserializer.deserialize_unit()"),
-        Format::Bool => writeln!(w, "let {var} = try deserializer.deserialize_bool()"),
-        Format::I8 => writeln!(w, "let {var} = try deserializer.deserialize_i8()"),
-        Format::I16 => writeln!(w, "let {var} = try deserializer.deserialize_i16()"),
-        Format::I32 => writeln!(w, "let {var} = try deserializer.deserialize_i32()"),
-        Format::I64 => writeln!(w, "let {var} = try deserializer.deserialize_i64()"),
-        Format::I128 => writeln!(w, "let {var} = try deserializer.deserialize_i128()"),
-        Format::U8 => writeln!(w, "let {var} = try deserializer.deserialize_u8()"),
-        Format::U16 => writeln!(w, "let {var} = try deserializer.deserialize_u16()"),
-        Format::U32 => writeln!(w, "let {var} = try deserializer.deserialize_u32()"),
-        Format::U64 => writeln!(w, "let {var} = try deserializer.deserialize_u64()"),
-        Format::U128 => writeln!(w, "let {var} = try deserializer.deserialize_u128()"),
-        Format::F32 => writeln!(w, "let {var} = try deserializer.deserialize_f32()"),
-        Format::F64 => writeln!(w, "let {var} = try deserializer.deserialize_f64()"),
-        Format::Char => writeln!(w, "let {var} = try deserializer.deserialize_char()"),
-        Format::Str => writeln!(w, "let {var} = try deserializer.deserialize_str()"),
-        Format::Bytes => writeln!(w, "let {var} = try deserializer.deserialize_bytes()"),
         Format::Option(_)
         | Format::Seq(_)
         | Format::Set(_)
         | Format::Map { .. }
         | Format::Tuple(_)
         | Format::TupleArray { .. } => {
-            unreachable!("complex formats handled above")
+            let suffix = format_suffix(format);
+            writeln!(
+                w,
+                "let {var} = try deserialize_{suffix}(deserializer: deserializer)"
+            )
+        }
+        primitive => {
+            let t = format!("{primitive:?}").to_lowercase();
+            writeln!(w, "let {var} = try deserializer.deserialize_{t}()")
         }
     }
-}
-
-fn is_complex_format(format: &Format) -> bool {
-    matches!(
-        format,
-        Format::Option(_)
-            | Format::Seq(_)
-            | Format::Set(_)
-            | Format::Map { .. }
-            | Format::Tuple(_)
-            | Format::TupleArray { .. }
-    )
 }
 
 fn format_suffix(format: &Format) -> String {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => {
-            let mut parts = Vec::new();
-            if let Namespace::Named(ns) = &qtn.namespace {
-                parts.push(ns.clone());
-            }
-            parts.push(qtn.name.clone());
-            parts.join("_")
-        }
-        Format::Unit => "unit".to_string(),
-        Format::Bool => "bool".to_string(),
-        Format::I8 => "i8".to_string(),
-        Format::I16 => "i16".to_string(),
-        Format::I32 => "i32".to_string(),
-        Format::I64 => "i64".to_string(),
-        Format::I128 => "i128".to_string(),
-        Format::U8 => "u8".to_string(),
-        Format::U16 => "u16".to_string(),
-        Format::U32 => "u32".to_string(),
-        Format::U64 => "u64".to_string(),
-        Format::U128 => "u128".to_string(),
-        Format::F32 => "f32".to_string(),
-        Format::F64 => "f64".to_string(),
-        Format::Char => "char".to_string(),
-        Format::Str => "str".to_string(),
-        Format::Bytes => "bytes".to_string(),
+        Format::TypeName(qtn) => match &qtn.namespace {
+            Namespace::Named(ns) => format!("{ns}_{}", qtn.name),
+            Namespace::Root => qtn.name.clone(),
+        },
         Format::Option(inner) => format!("option_{}", format_suffix(inner)),
         Format::Seq(inner) => format!("vector_{}", format_suffix(inner)),
         Format::Set(inner) => format!("set_{}", format_suffix(inner)),
@@ -1002,13 +836,15 @@ fn format_suffix(format: &Format) -> String {
             format!("map_{}_to_{}", format_suffix(key), format_suffix(value))
         }
         Format::Tuple(formats) => {
-            let len = formats.len();
             let parts: Vec<String> = formats.iter().map(format_suffix).collect();
-            format!("tuple{}_{}", len, parts.join("_"))
+            format!("tuple{}_{}", formats.len(), parts.join("_"))
         }
         Format::TupleArray { content, size } => {
             format!("array{}_{}_array", size, format_suffix(content))
         }
+        // Primitive types: the Debug name lowercased matches the suffix
+        // e.g. Bool -> "bool", I32 -> "i32", Str -> "str", etc.
+        primitive => format!("{primitive:?}").to_lowercase(),
     }
 }
 
