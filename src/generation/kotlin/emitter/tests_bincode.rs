@@ -19,6 +19,7 @@ fn unit_struct_1() {
 
     let actual = emit!(UnitStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     data object UnitStruct {
@@ -59,6 +60,7 @@ fn unit_struct_2() {
 
     let actual = emit!(UnitStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     data object UnitStruct {
@@ -99,6 +101,7 @@ fn newtype_struct() {
 
     let actual = emit!(NewType as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     data class NewType(
@@ -150,6 +153,7 @@ fn tuple_struct() {
 
     let actual = emit!(TupleStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     data class TupleStruct(
@@ -223,6 +227,7 @@ fn struct_with_fields_of_primitive_types() {
 
     let actual = emit!(StructWithFields as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     data class StructWithFields(
@@ -334,6 +339,7 @@ fn struct_with_fields_of_user_types() {
 
     let actual = emit!(Outer as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class Inner1(
         val field1: String,
     ) {
@@ -506,6 +512,7 @@ fn struct_with_field_that_is_a_2_tuple() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val one: Pair<String, Int>,
     ) {
@@ -560,6 +567,7 @@ fn struct_with_field_that_is_a_3_tuple() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val one: Triple<String, Int, UShort>,
     ) {
@@ -619,6 +627,7 @@ fn struct_with_field_that_is_a_4_tuple() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val one: NTuple4<String, Int, UShort, Float>,
     ) {
@@ -686,6 +695,7 @@ fn enum_with_unit_variants() {
 
     let actual = emit!(EnumWithUnitVariants as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line one
     /// line two
     enum class EnumWithUnitVariants {
@@ -750,6 +760,7 @@ fn enum_with_unit_struct_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     enum class MyEnum {
         VARIANT1;
 
@@ -805,6 +816,7 @@ fn enum_with_1_tuple_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     sealed interface MyEnum {
         fun serialize(serializer: Serializer)
 
@@ -873,6 +885,7 @@ fn enum_with_newtype_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     sealed interface MyEnum {
         fun serialize(serializer: Serializer)
 
@@ -962,6 +975,7 @@ fn enum_with_tuple_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     sealed interface MyEnum {
         fun serialize(serializer: Serializer)
 
@@ -1059,6 +1073,7 @@ fn enum_with_struct_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     sealed interface MyEnum {
         fun serialize(serializer: Serializer)
 
@@ -1132,6 +1147,7 @@ fn enum_with_mixed_variants() {
 
     let actual = emit!(MyEnum as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     sealed interface MyEnum {
         fun serialize(serializer: Serializer)
 
@@ -1257,6 +1273,7 @@ fn struct_with_vec_field_1() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val items: List<String>,
         val numbers: List<Int>,
@@ -1336,6 +1353,7 @@ fn struct_with_vec_field_2() {
 
     let actual = emit!(Parent as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class Child(
         val name: String,
     ) {
@@ -1436,6 +1454,7 @@ fn struct_with_option_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val simple: String? = null,
         val nested: Int?? = null,
@@ -1527,6 +1546,7 @@ fn struct_with_hashmap_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val stringToInt: Map<String, Int>,
         val intToBool: Map<Int, Boolean>,
@@ -1599,6 +1619,7 @@ fn struct_with_nested_generics() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val optionalList: List<String>? = null,
         val listOfOptionals: List<Int?>,
@@ -1727,6 +1748,7 @@ fn struct_with_array_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val fixedArray: List<Int>,
         val byteArray: List<UByte>,
@@ -1783,6 +1805,7 @@ fn struct_with_btreemap_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val stringToInt: Map<String, Int>,
         val intToBool: Map<Int, Boolean>,
@@ -1852,6 +1875,7 @@ fn struct_with_nested_map_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val mapToList: Map<String, List<Int>>,
         val listToMap: List<Map<Int, String>>,
@@ -1932,6 +1956,7 @@ fn struct_with_hashset_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val stringSet: Set<String>,
         val intSet: Set<Int>,
@@ -1997,6 +2022,7 @@ fn struct_with_btreeset_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val stringSet: Set<String>,
         val intSet: Set<Int>,
@@ -2060,6 +2086,7 @@ fn struct_with_nested_set_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val vecOfSets: List<Set<String>>,
         val setOfInts: Set<Int>,
@@ -2128,6 +2155,7 @@ fn struct_with_box_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val boxedString: String,
         val boxedInt: Int,
@@ -2181,6 +2209,7 @@ fn struct_with_rc_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val rcString: String,
         val rcInt: Int,
@@ -2234,6 +2263,7 @@ fn struct_with_arc_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val arcString: String,
         val arcInt: Int,
@@ -2291,6 +2321,7 @@ fn struct_with_mixed_collections_and_pointers() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val vecOfSets: List<Set<String>>,
         val optionalBtree: Map<String, Int>? = null,
@@ -2387,6 +2418,7 @@ fn struct_with_bytes_field() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val data: Bytes,
         val name: String,
@@ -2447,6 +2479,7 @@ fn struct_with_bytes_field_and_slice() {
 
     let actual = emit!(MyStruct as Kotlin with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     data class MyStruct(
         val data: Bytes,
         val name: String,

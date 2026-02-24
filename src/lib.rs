@@ -25,10 +25,8 @@ macro_rules! emit {
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*)?;
-            for (i, container) in registry.iter().map(Container::from).enumerate() {
-                if i > 0 {
-                    writeln!(&mut w)?;
-                }
+            for container in registry.iter().map(Container::from) {
+                writeln!(&mut w)?;
                 let lang = $language::new($encoding);
                 container.write(&mut w, lang)?;
             }
