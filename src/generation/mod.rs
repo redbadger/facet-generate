@@ -67,14 +67,18 @@ impl Display for Language {
     }
 }
 
-pub struct WithEncoding<T> {
-    pub encoding: Encoding,
-    pub value: T,
-}
-
 pub struct Container<'a> {
     pub name: &'a QualifiedTypeName,
     pub format: &'a ContainerFormat,
+}
+
+impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
+    fn from(value: (&'a QualifiedTypeName, &'a ContainerFormat)) -> Self {
+        Container {
+            name: value.0,
+            format: value.1,
+        }
+    }
 }
 
 pub trait Emitter<Language> {

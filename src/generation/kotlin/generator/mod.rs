@@ -3,7 +3,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter, WithEncoding,
+        CodeGen, CodeGeneratorConfig, Container, Emitter,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
         kotlin::emitter::Kotlin,
@@ -48,21 +48,19 @@ impl<'a> CodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        // Update qualified type names to use fully qualified paths
-        let updated_registry = Self::update_qualified_names(&config, registry);
+        let lang = Kotlin::new(config.encoding);
 
-        let module = Module::new(&config);
-        module.write(w, Kotlin)?;
+        Module::new(&config).write(w, lang)?;
 
-        for (i, (name, format)) in updated_registry.iter().enumerate() {
+        for (i, container) in Self::update_qualified_names(&config, registry)
+            .iter()
+            .map(Container::from)
+            .enumerate()
+        {
             if i > 0 {
                 writeln!(w)?;
             }
-            let container = WithEncoding {
-                encoding: config.encoding,
-                value: Container { name, format },
-            };
-            container.write(w, Kotlin)?;
+            container.write(w, lang)?;
         }
         Ok(())
     }
