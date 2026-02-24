@@ -24,7 +24,7 @@ enum Usage {
 }
 
 impl Emitter<Swift> for WithEncoding<Container<'_>> {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Swift) -> Result<()> {
         let WithEncoding {
             encoding,
             value:
@@ -55,8 +55,7 @@ impl Emitter<Swift> for WithEncoding<Container<'_>> {
 }
 
 impl Emitter<Swift> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let write = <Format as Emitter<Swift>>::write::<W>;
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Swift) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -81,7 +80,7 @@ impl Emitter<Swift> for Format {
             Format::Bytes => write!(w, "Array<UInt8>"),
 
             Format::Option(format) => {
-                write(format, w)?;
+                format.write(w, Swift)?;
                 write!(w, "?")
             }
             Format::Seq(format)
@@ -90,26 +89,26 @@ impl Emitter<Swift> for Format {
                 size: _,
             } => {
                 write!(w, "Array<")?;
-                write(format, w)?;
+                format.write(w, Swift)?;
                 write!(w, ">")
             }
             Format::Set(format) => {
                 write!(w, "Set<")?;
-                write(format, w)?;
+                format.write(w, Swift)?;
                 write!(w, ">")
             }
             Format::Map { key, value } => {
                 write!(w, "Dictionary<")?;
-                write(key, w)?;
+                key.write(w, Swift)?;
                 write!(w, ", ")?;
-                write(value, w)?;
+                value.write(w, Swift)?;
                 write!(w, ">")
             }
             Format::Tuple(formats) => {
                 let len = formats.len();
                 if len == 1 {
                     // A single-element tuple is just the element itself
-                    write(&formats[0], w)
+                    formats[0].write(w, Swift)
                 } else {
                     // Other tuples (including unit)
                     write!(w, "(")?;
@@ -117,7 +116,7 @@ impl Emitter<Swift> for Format {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        write(format, w)?;
+                        format.write(w, Swift)?;
                     }
                     write!(w, ")")
                 }
@@ -127,20 +126,20 @@ impl Emitter<Swift> for Format {
 }
 
 impl Emitter<Swift> for (&Named<Format>, Usage) {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Swift) -> Result<()> {
         let (Named { name, doc, value }, usage) = self;
         let name = &name.to_lower_camel_case();
 
         match usage {
             Usage::Field => {
-                <Doc as Emitter<Swift>>::write(doc, w)?;
+                doc.write(w, Swift)?;
                 write!(w, "public var {name}: ")?;
-                <Format as Emitter<Swift>>::write(value, w)?;
+                value.write(w, Swift)?;
                 writeln!(w)
             }
             Usage::Parameter => {
                 write!(w, "{name}: ")?;
-                <Format as Emitter<Swift>>::write(value, w)
+                value.write(w, Swift)
             }
             Usage::Argument => {
                 write!(w, "{name}: {name}")
@@ -207,15 +206,13 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     push_serializer(w)?;
                     let formats = named(formats, "");
                     for format in formats {
-                        <(&Named<Format>, Usage) as Emitter<Swift>>::write(
-                            &(
-                                &format,
-                                Usage::Serialize {
-                                    receiver: name.clone(),
-                                },
-                            ),
-                            w,
-                        )?;
+                        (
+                            &format,
+                            Usage::Serialize {
+                                receiver: name.clone(),
+                            },
+                        )
+                            .write(w, Swift)?;
                     }
                     pop_serializer(w)
                 }
@@ -258,15 +255,13 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     push_deserializer(w)?;
                     let formats = named(formats, name);
                     for (i, format) in formats.iter().enumerate() {
-                        <(&Named<Format>, Usage) as Emitter<Swift>>::write(
-                            &(
-                                format,
-                                Usage::Deserialize {
-                                    receiver: i.to_string(),
-                                },
-                            ),
-                            w,
-                        )?;
+                        (
+                            format,
+                            Usage::Deserialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(w, Swift)?;
                     }
                     write!(w, "let {name} = (")?;
                     for (i, format) in formats.iter().enumerate() {
@@ -288,7 +283,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
 }
 
 impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Swift) -> Result<()> {
         let (
             Named {
                 name,
@@ -299,7 +294,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
         ) = self;
         let name = name.to_lower_camel_case();
 
-        <Doc as Emitter<Swift>>::write(doc, w)?;
+        doc.write(w, Swift)?;
 
         match usage {
             Usage::Field => match format {
@@ -311,7 +306,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                 }
                 VariantFormat::NewType(format) => {
                     write!(w, "case {name}(")?;
-                    <Format as Emitter<Swift>>::write(format, w)?;
+                    format.write(w, Swift)?;
                     writeln!(w, ")")
                 }
                 VariantFormat::Tuple(formats) => {
@@ -320,7 +315,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        <Format as Emitter<Swift>>::write(format, w)?;
+                        format.write(w, Swift)?;
                     }
                     writeln!(w, ")")
                 }
@@ -330,10 +325,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        <(&Named<Format>, Usage) as Emitter<Swift>>::write(
-                            &(format, Usage::Parameter),
-                            w,
-                        )?;
+                        (format, Usage::Parameter).write(w, Swift)?;
                     }
                     writeln!(w, ")")
                 }
@@ -359,7 +351,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
 }
 
 impl Emitter<Swift> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Swift) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -375,13 +367,13 @@ fn struct_<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    <Doc as Emitter<Swift>>::write(doc, w)?;
+    doc.write(w, Swift)?;
 
     write!(w, "public struct {name}: Hashable ")?;
 
     w.start_block()?;
     for field in fields {
-        <(&Named<Format>, Usage) as Emitter<Swift>>::write(&(field, Usage::Field), w)?;
+        (*field, Usage::Field).write(w, Swift)?;
     }
 
     if !fields.is_empty() {
@@ -393,12 +385,12 @@ fn struct_<W: IndentWrite>(
         if i > 0 {
             write!(w, ", ")?;
         }
-        <(&Named<Format>, Usage) as Emitter<Swift>>::write(&(field, Usage::Parameter), w)?;
+        (*field, Usage::Parameter).write(w, Swift)?;
     }
     write!(w, ") ")?;
     w.start_block()?;
     for field in fields {
-        <(&Named<Format>, Usage) as Emitter<Swift>>::write(&(field, Usage::Assignment), w)?;
+        (*field, Usage::Assignment).write(w, Swift)?;
     }
     w.end_block()?;
 
@@ -413,15 +405,13 @@ fn struct_<W: IndentWrite>(
             w.start_block()?;
             push_serializer(w)?;
             for field in fields {
-                <(&Named<Format>, Usage) as Emitter<Swift>>::write(
-                    &(
-                        field,
-                        Usage::Serialize {
-                            receiver: "self".to_string(),
-                        },
-                    ),
-                    w,
-                )?;
+                (
+                    *field,
+                    Usage::Serialize {
+                        receiver: "self".to_string(),
+                    },
+                )
+                    .write(w, Swift)?;
             }
             pop_serializer(w)?;
             w.end_block()?;
@@ -434,15 +424,13 @@ fn struct_<W: IndentWrite>(
             w.start_block()?;
             push_deserializer(w)?;
             for field in fields {
-                <(&Named<Format>, Usage) as Emitter<Swift>>::write(
-                    &(
-                        field,
-                        Usage::Deserialize {
-                            receiver: "self".to_string(),
-                        },
-                    ),
-                    w,
-                )?;
+                (
+                    *field,
+                    Usage::Deserialize {
+                        receiver: "self".to_string(),
+                    },
+                )
+                    .write(w, Swift)?;
             }
             pop_deserializer(w)?;
             write!(w, "return {name}(")?;
@@ -450,7 +438,7 @@ fn struct_<W: IndentWrite>(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                <(&Named<Format>, Usage) as Emitter<Swift>>::write(&(field, Usage::Argument), w)?;
+                (*field, Usage::Argument).write(w, Swift)?;
             }
             writeln!(w, ")")?;
             w.end_block()?;
@@ -472,7 +460,7 @@ fn enum_<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    <Doc as Emitter<Swift>>::write(doc, w)?;
+    doc.write(w, Swift)?;
 
     write!(w, "public enum {name}: Hashable ")?;
 
@@ -481,7 +469,7 @@ fn enum_<W: IndentWrite>(
     let variants = variants.values().collect::<Vec<_>>();
 
     for format in &variants {
-        <(&Named<VariantFormat>, Usage) as Emitter<Swift>>::write(&(format, Usage::Field), w)?;
+        (*format, Usage::Field).write(w, Swift)?;
     }
 
     match encoding {
@@ -498,15 +486,13 @@ fn enum_<W: IndentWrite>(
             w.start_block()?;
             w.unindent(); // in Swift, `case` is not indented
             for (i, variant) in variants.iter().enumerate() {
-                <(&Named<VariantFormat>, Usage) as Emitter<Swift>>::write(
-                    &(
-                        &variant.without_docs(),
-                        Usage::Serialize {
-                            receiver: i.to_string(),
-                        },
-                    ),
-                    w,
-                )?;
+                (
+                    &variant.without_docs(),
+                    Usage::Serialize {
+                        receiver: i.to_string(),
+                    },
+                )
+                    .write(w, Swift)?;
             }
             w.indent();
             w.end_block()?;
@@ -529,15 +515,13 @@ fn enum_<W: IndentWrite>(
             w.start_block()?;
             w.unindent(); // in Swift, `case` is not indented
             for (i, variant) in variants.iter().enumerate() {
-                <(&Named<VariantFormat>, Usage) as Emitter<Swift>>::write(
-                    &(
-                        &variant.without_docs(),
-                        Usage::Deserialize {
-                            receiver: i.to_string(),
-                        },
-                    ),
-                    w,
-                )?;
+                (
+                    &variant.without_docs(),
+                    Usage::Deserialize {
+                        receiver: i.to_string(),
+                    },
+                )
+                    .write(w, Swift)?;
             }
             writeln!(
                 w,

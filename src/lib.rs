@@ -33,7 +33,7 @@ macro_rules! emit {
                     encoding: $encoding,
                     value: Container { name, format },
                 };
-                <WithEncoding<Container> as Emitter<$language>>::write(&container, &mut w)?;
+                container.write(&mut w, $language)?;
             }
             let out = String::from_utf8(out)?;
 

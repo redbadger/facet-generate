@@ -80,9 +80,12 @@ pub struct Container<'a> {
 pub trait Emitter<Language> {
     /// Write the code to the provided `IndentWrite`.
     ///
+    /// Note that the `lang` parameter allows the compiler to disambiguate this method
+    /// among multiple implementations of this trait
+    ///
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()>;
+    fn write<W: IndentWrite>(&self, writer: &mut W, lang: Language) -> Result<()>;
 }
 
 #[cfg(all(test, feature = "generate"))]

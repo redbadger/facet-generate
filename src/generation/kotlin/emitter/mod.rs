@@ -50,7 +50,7 @@ impl Module {
 
 impl Emitter<Kotlin> for Module {
     #[allow(clippy::too_many_lines)]
-    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+    fn write<W: Write>(&self, w: &mut W, _: Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
             encoding,
@@ -170,7 +170,7 @@ impl Emitter<Kotlin> for Module {
 }
 
 impl Emitter<Kotlin> for WithEncoding<Container<'_>> {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Kotlin) -> Result<()> {
         let WithEncoding {
             encoding,
             value:
@@ -224,13 +224,13 @@ impl Emitter<Kotlin> for WithEncoding<Container<'_>> {
 }
 
 impl Emitter<Kotlin> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        <Doc as Emitter<Kotlin>>::write(&self.doc, w)?;
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Kotlin) -> Result<()> {
+        self.doc.write(w, Kotlin)?;
 
         let name = &self.name.to_lower_camel_case();
         write!(w, "val {name}: ")?;
 
-        <Format as Emitter<Kotlin>>::write(&self.value, w)?;
+        self.value.write(w, Kotlin)?;
 
         // Add = null default only for top-level Option types
         if matches!(self.value, Format::Option(_)) {
@@ -242,7 +242,7 @@ impl Emitter<Kotlin> for Named<Format> {
 }
 
 impl Emitter<Kotlin> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Kotlin) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -259,7 +259,7 @@ pub enum VariantContext {
 
 impl Emitter<Kotlin> for (&WithEncoding<&Named<VariantFormat>>, &VariantContext) {
     #[allow(clippy::too_many_lines)]
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Kotlin) -> Result<()> {
         let (
             WithEncoding {
                 encoding,
@@ -281,7 +281,7 @@ impl Emitter<Kotlin> for (&WithEncoding<&Named<VariantFormat>>, &VariantContext)
                 data_object(w, name, Some(interface_name), doc, *encoding, Some(*index))?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
-                <Doc as Emitter<Kotlin>>::write(doc, w)?;
+                doc.write(w, Kotlin)?;
                 let name_upper = name.to_uppercase();
                 if encoding.is_json() {
                     write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
@@ -383,8 +383,7 @@ impl Format {
 }
 
 impl Emitter<Kotlin> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let write = <Format as Emitter<Kotlin>>::write::<W>;
+    fn write<W: IndentWrite>(&self, w: &mut W, _: Kotlin) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -411,24 +410,24 @@ impl Emitter<Kotlin> for Format {
             Format::Bytes => write!(w, "Bytes"),
 
             Format::Option(format) => {
-                write(format, w)?;
+                format.write(w, Kotlin)?;
                 write!(w, "?")
             }
             Format::Seq(format) => {
                 write!(w, "List<")?;
-                write(format, w)?;
+                format.write(w, Kotlin)?;
                 write!(w, ">")
             }
             Format::Set(format) => {
                 write!(w, "Set<")?;
-                write(format, w)?;
+                format.write(w, Kotlin)?;
                 write!(w, ">")
             }
             Format::Map { key, value } => {
                 write!(w, "Map<")?;
-                write(key, w)?;
+                key.write(w, Kotlin)?;
                 write!(w, ", ")?;
-                write(value, w)?;
+                value.write(w, Kotlin)?;
                 write!(w, ">")
             }
             Format::Tuple(formats) => {
@@ -437,22 +436,22 @@ impl Emitter<Kotlin> for Format {
                     0 => write!(w, "Unit"),
                     1 => {
                         // A single-element tuple is just the element itself
-                        write(&formats[0], w)
+                        formats[0].write(w, Kotlin)
                     }
                     2 => {
                         write!(w, "Pair<")?;
-                        write(&formats[0], w)?;
+                        formats[0].write(w, Kotlin)?;
                         write!(w, ", ")?;
-                        write(&formats[1], w)?;
+                        formats[1].write(w, Kotlin)?;
                         write!(w, ">")
                     }
                     3 => {
                         write!(w, "Triple<")?;
-                        write(&formats[0], w)?;
+                        formats[0].write(w, Kotlin)?;
                         write!(w, ", ")?;
-                        write(&formats[1], w)?;
+                        formats[1].write(w, Kotlin)?;
                         write!(w, ", ")?;
-                        write(&formats[2], w)?;
+                        formats[2].write(w, Kotlin)?;
                         write!(w, ">")
                     }
                     _ => {
@@ -462,7 +461,7 @@ impl Emitter<Kotlin> for Format {
                             if i > 0 {
                                 write!(w, ", ")?;
                             }
-                            write(format, w)?;
+                            format.write(w, Kotlin)?;
                         }
                         write!(w, ">")
                     }
@@ -470,7 +469,7 @@ impl Emitter<Kotlin> for Format {
             }
             Format::TupleArray { content, size: _ } => {
                 write!(w, "List<")?;
-                write(content, w)?;
+                content.write(w, Kotlin)?;
                 write!(w, ">")
             }
         }
@@ -485,7 +484,7 @@ fn data_object<W: IndentWrite>(
     encoding: Encoding,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    <Doc as Emitter<Kotlin>>::write(doc, w)?;
+    doc.write(w, Kotlin)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -545,7 +544,7 @@ fn data_class<W: IndentWrite>(
     encoding: Encoding,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    <Doc as Emitter<Kotlin>>::write(doc, w)?;
+    doc.write(w, Kotlin)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -556,7 +555,7 @@ fn data_class<W: IndentWrite>(
 
     w.indent();
     for field in fields {
-        <Named<Format> as Emitter<Kotlin>>::write(field, w)?;
+        field.write(w, Kotlin)?;
     }
     w.unindent();
 
@@ -640,7 +639,7 @@ fn enum_class<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    <Doc as Emitter<Kotlin>>::write(doc, w)?;
+    doc.write(w, Kotlin)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -660,10 +659,7 @@ fn enum_class<W: IndentWrite>(
             encoding,
             value: format,
         };
-        <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
-            &(&variant, &VariantContext::EnumClass),
-            w,
-        )?;
+        (&variant, &VariantContext::EnumClass).write(w, Kotlin)?;
     }
     writeln!(w, ";")?;
 
@@ -706,10 +702,7 @@ fn enum_class<W: IndentWrite>(
                 write!(w, "{i} -> ")?;
                 let value = &format.without_docs();
                 let variant = WithEncoding { encoding, value };
-                <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
-                    &(&variant, &VariantContext::EnumClass),
-                    w,
-                )?;
+                (&variant, &VariantContext::EnumClass).write(w, Kotlin)?;
                 writeln!(w)?;
             }
             writeln!(
@@ -736,7 +729,7 @@ fn sealed_interface<W: IndentWrite>(
     doc: &Doc,
     encoding: Encoding,
 ) -> Result<()> {
-    <Doc as Emitter<Kotlin>>::write(doc, w)?;
+    doc.write(w, Kotlin)?;
 
     if encoding.is_json() {
         writeln!(w, "@Serializable")?;
@@ -761,10 +754,7 @@ fn sealed_interface<W: IndentWrite>(
             encoding,
             value: format,
         };
-        <(&WithEncoding<&Named<VariantFormat>>, &VariantContext) as Emitter<Kotlin>>::write(
-            &(&variant, &ctx),
-            w,
-        )?;
+        (&variant, &ctx).write(w, Kotlin)?;
     }
 
     if encoding.is_bincode() {
