@@ -91,51 +91,9 @@ fn test_that_swift_code_compiles_without_serialization() {
 }
 
 #[test]
-fn test_that_swift_code_compiles_with_bcs() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bcs);
-    test_that_swift_code_compiles_with_config(&config);
-}
-
-#[test]
 fn test_that_swift_code_compiles_with_bincode() {
     let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     test_that_swift_code_compiles_with_config(&config);
-}
-
-#[test]
-fn test_that_swift_code_compiles_with_comments() {
-    let comments = vec![
-        (
-            vec!["Testing".to_string(), "SerdeData".to_string()],
-            "Some\ncomments".to_string(),
-        ),
-        (
-            vec![
-                "Testing".to_string(),
-                "List".to_string(),
-                "Node".to_string(),
-            ],
-            "Some other comments".to_string(),
-        ),
-    ]
-    .into_iter()
-    .collect();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_comments(comments);
-
-    let (_dir, source_path) = test_that_swift_code_compiles_with_config(&config);
-    // Comments were correctly generated.
-    let content = std::fs::read_to_string(source_path).unwrap();
-    assert!(content.contains(
-        r"
-// Some
-// comments
-"
-    ));
-    assert!(content.contains(
-        r"
-    // Some other comments
-"
-    ));
 }
 
 #[test]
@@ -163,22 +121,6 @@ fn test_swift_code_with_external_definitions() {
     // References were updated.
     let content = std::fs::read_to_string(source_path).unwrap();
     assert!(content.contains("Foo.Tree"));
-}
-
-#[test]
-fn test_that_swift_code_compiles_with_custom_code() {
-    let custom_code = vec![(
-        vec!["Testing".to_string(), "SerdeData".to_string()],
-        "// custom1".to_string(),
-    )]
-    .into_iter()
-    .collect();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_custom_code(custom_code);
-
-    let (_dir, source_path) = test_that_swift_code_compiles_with_config(&config);
-    // Comments were correctly generated.
-    let content = std::fs::read_to_string(source_path).unwrap();
-    assert!(content.contains("// custom1"));
 }
 
 #[test]

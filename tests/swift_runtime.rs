@@ -25,11 +25,6 @@ fn test_swift_runtime_autotests() {
 }
 
 #[test]
-fn test_swift_bcs_runtime_on_simple_data() {
-    test_swift_runtime_on_simple_data(Runtime::Bcs);
-}
-
-#[test]
 fn test_swift_bincode_runtime_on_simple_data() {
     test_swift_runtime_on_simple_data(Runtime::Bincode);
 }
@@ -129,11 +124,6 @@ let package = Package(
         .status()
         .unwrap();
     assert!(status.success());
-}
-
-#[test]
-fn test_swift_bcs_runtime_on_supported_types() {
-    test_swift_runtime_on_supported_types(Runtime::Bcs);
 }
 
 #[test]

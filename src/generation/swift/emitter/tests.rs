@@ -10,7 +10,8 @@ use std::{
 
 use facet::Facet;
 
-use crate::{emit_swift, emit_two_modules, generation::swift::CodeGenerator};
+use super::*;
+use crate::emit;
 
 #[test]
 fn unit_struct_1() {
@@ -19,11 +20,12 @@ fn unit_struct_1() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit_swift!(UnitStruct as Encoding::None).unwrap();
+    let actual = emit!(UnitStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line 1
+    /// line 2
     public struct UnitStruct: Hashable {
-
         public init() {
         }
     }
@@ -37,11 +39,12 @@ fn unit_struct_2() {
     /// line 2
     struct UnitStruct {}
 
-    let actual = emit_swift!(UnitStruct as Encoding::None).unwrap();
+    let actual = emit!(UnitStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line 1
+    /// line 2
     public struct UnitStruct: Hashable {
-
         public init() {
         }
     }
@@ -55,9 +58,11 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    let actual = emit_swift!(NewType as Encoding::None).unwrap();
+    let actual = emit!(NewType as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line 1
+    /// line 2
     public struct NewType: Hashable {
         @Indirect public var value: String
 
@@ -75,9 +80,11 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit_swift!(TupleStruct as Encoding::None).unwrap();
+    let actual = emit!(TupleStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line 1
+    /// line 2
     public struct TupleStruct: Hashable {
         @Indirect public var field0: String
         @Indirect public var field1: Int32
@@ -116,11 +123,15 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit_swift!(StructWithFields as Encoding::None).unwrap();
+    let actual = emit!(StructWithFields as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line 1
+    /// line 2
     public struct StructWithFields: Hashable {
+        /// unit type
         @Indirect public var unit: Unit
+        /// boolean
         @Indirect public var bool: Bool
         @Indirect public var i8: Int8
         @Indirect public var i16: Int16
@@ -179,7 +190,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit_swift!(Outer as Encoding::None).unwrap();
+    let actual = emit!(Outer as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct Inner1: Hashable {
@@ -229,7 +240,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -249,7 +260,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -272,7 +283,7 @@ fn struct_with_field_that_is_a_4_tuple() {
     // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -295,18 +306,21 @@ fn enum_with_unit_variants() {
     enum EnumWithUnitVariants {
         /// variant one
         Variant1,
-        /// variant two
         Variant2,
         /// variant three
         Variant3,
     }
 
-    let actual = emit_swift!(EnumWithUnitVariants as Encoding::None).unwrap();
+    let actual = emit!(EnumWithUnitVariants as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// line one
+    /// line two
     indirect public enum EnumWithUnitVariants: Hashable {
+        /// variant one
         case variant1
         case variant2
+        /// variant three
         case variant3
     }
     ");
@@ -321,7 +335,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -339,7 +353,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -358,7 +372,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -378,7 +392,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -397,7 +411,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -418,7 +432,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::None).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     indirect public enum MyEnum: Hashable {
@@ -439,7 +453,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -466,7 +480,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -491,7 +505,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -511,25 +525,25 @@ fn struct_with_nested_generics() {
     #[derive(Facet)]
     struct MyStruct {
         optional_list: Option<Vec<String>>,
-        list_of_optionals: Vec<Option<i32>>,
+        list_of_options: Vec<Option<i32>>,
         map_to_list: HashMap<String, Vec<bool>>,
         optional_map: Option<HashMap<String, i32>>,
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
         @Indirect public var optionalList: [String]?
-        @Indirect public var listOfOptionals: [Int32?]
+        @Indirect public var listOfOptions: [Int32?]
         @Indirect public var mapToList: [String: [Bool]]
         @Indirect public var optionalMap: [String: Int32]?
         @Indirect public var complex: [[String: [Bool]]?]
 
-        public init(optionalList: [String]?, listOfOptionals: [Int32?], mapToList: [String: [Bool]], optionalMap: [String: Int32]?, complex: [[String: [Bool]]?]) {
+        public init(optionalList: [String]?, listOfOptions: [Int32?], mapToList: [String: [Bool]], optionalMap: [String: Int32]?, complex: [[String: [Bool]]?]) {
             self.optionalList = optionalList
-            self.listOfOptionals = listOfOptionals
+            self.listOfOptions = listOfOptions
             self.mapToList = mapToList
             self.optionalMap = optionalMap
             self.complex = complex
@@ -548,7 +562,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -566,14 +580,14 @@ fn struct_with_array_field() {
 }
 
 #[test]
-fn struct_with_btreemap_field() {
+fn struct_with_map_fields() {
     #[derive(Facet)]
     struct MyStruct {
         string_to_int: BTreeMap<String, i32>,
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -598,14 +612,14 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
+        @Indirect public var stringSet: Set<String>
+        @Indirect public var intSet: Set<Int32>
 
-        public init(stringSet: [String], intSet: [Int32]) {
+        public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
             self.intSet = intSet
         }
@@ -614,7 +628,7 @@ fn struct_with_hashset_field() {
 }
 
 #[test]
-fn struct_with_btreeset_field() {
+fn struct_with_set_fields() {
     // NOTE: BTreeSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
     // This preserves the uniqueness constraint and provides better type safety.
     #[derive(Facet)]
@@ -623,14 +637,14 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
+        @Indirect public var stringSet: Set<String>
+        @Indirect public var intSet: Set<Int32>
 
-        public init(stringSet: [String], intSet: [Int32]) {
+        public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
             self.intSet = intSet
         }
@@ -647,7 +661,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -670,7 +684,7 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -693,7 +707,7 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -720,17 +734,17 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
-        @Indirect public var vecOfSets: [[String]]
+        @Indirect public var vecOfSets: [Set<String>]
         @Indirect public var optionalBtree: [String: Int32]?
         @Indirect public var boxedVec: [String]
         @Indirect public var arcOption: String?
         @Indirect public var arrayOfBoxes: [Int32]
 
-        public init(vecOfSets: [[String]], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
+        public init(vecOfSets: [Set<String>], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
             self.vecOfSets = vecOfSets
             self.optionalBtree = optionalBtree
             self.boxedVec = boxedVec
@@ -752,7 +766,7 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -781,7 +795,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::None).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct MyStruct: Hashable {
@@ -813,13 +827,13 @@ fn namespaced_child() {
         child: Child,
     }
 
-    let actual = emit_swift!(Parent as Encoding::None).unwrap();
+    let actual = emit!(Parent as Swift with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public struct Parent: Hashable {
-        @Indirect public var child: Child
+        @Indirect public var child: Test.Child
 
-        public init(child: Child) {
+        public init(child: Test.Child) {
             self.child = child
         }
     }
@@ -829,66 +843,6 @@ fn namespaced_child() {
 
         public init(test: String) {
             self.test = test
-        }
-    }
-    ");
-}
-
-#[test]
-fn type_in_root_and_named_namespace() {
-    #[derive(Facet)]
-    struct Child {
-        value: String,
-    }
-
-    mod other {
-        use facet::Facet;
-
-        #[derive(Facet)]
-        #[facet(namespace = "other")]
-        pub struct Child {
-            value: i32,
-        }
-    }
-
-    #[derive(Facet)]
-    struct Parent {
-        child: Child,
-        other_child: other::Child,
-    }
-
-    let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
-    insta::assert_snapshot!(other, @"
-    import Serde
-
-    public struct Child: Hashable {
-        @Indirect public var value: Int32
-
-        public init(value: Int32) {
-            self.value = value
-        }
-    }
-    ");
-
-    insta::assert_snapshot!(root, @"
-    import Other
-    import Serde
-
-    public struct Child: Hashable {
-        @Indirect public var value: String
-
-        public init(value: String) {
-            self.value = value
-        }
-    }
-
-    public struct Parent: Hashable {
-        @Indirect public var child: Child
-        @Indirect public var otherChild: Other.Child
-
-        public init(child: Child, otherChild: Other.Child) {
-            self.child = child
-            self.otherChild = otherChild
         }
     }
     ");

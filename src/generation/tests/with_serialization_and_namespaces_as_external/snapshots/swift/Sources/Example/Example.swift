@@ -1,6 +1,5 @@
 import Other
 import Serde
-
 public struct Child: Hashable {
     @Indirect public var external: Other.OtherParent
 
@@ -22,7 +21,7 @@ public struct Child: Hashable {
 
     public static func deserialize<D: Deserializer>(deserializer: D) throws -> Child {
         try deserializer.increase_container_depth()
-        let external = try Other.OtherParent.deserialize(deserializer: deserializer)
+        let external = try OtherParent.deserialize(deserializer: deserializer)
         try deserializer.decrease_container_depth()
         return Child.init(external: external)
     }

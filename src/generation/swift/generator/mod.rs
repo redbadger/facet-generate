@@ -10,9 +10,9 @@ use crate::{
     generation::{
         CodeGen, CodeGeneratorConfig, Container, Emitter, common,
         indent::{IndentConfig, IndentWrite, IndentedWriter},
-        swift2::emitter::Swift,
+        swift::emitter::Swift,
     },
-    reflection::format::{Format, FormatHolder},
+    reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
 /// Main configuration object for code-generation in Swift.
@@ -55,12 +55,12 @@ impl<'a> CodeGenerator<'a> {
 
         let lang = Swift::new(config.encoding);
 
-        // Write preamble (imports) — only when encoding is set
-        if config.has_encoding() {
-            Self::write_preamble(w, &config)?;
-        }
+        // Write preamble (imports) — always needed because generated code
+        // uses types from Serde (Unit, Tuple{N}, @Indirect)
+        Self::write_preamble(w, &config)?;
 
-        for (i, container) in registry.iter().map(Container::from).enumerate() {
+        let updated_registry = Self::update_qualified_names(&config, registry);
+        for (i, container) in updated_registry.iter().map(Container::from).enumerate() {
             if i > 0 {
                 writeln!(w)?;
             }
@@ -88,6 +88,30 @@ impl<'a> CodeGenerator<'a> {
         }
 
         Ok(())
+    }
+
+    /// Updates `QualifiedTypeName` instances so external types include their namespace prefix.
+    /// For example, a type `Tree` in namespace `foo` becomes `Foo.Tree` in the output.
+    fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
+        let mut updated_registry = registry.clone();
+
+        for container_format in updated_registry.values_mut() {
+            let _ = container_format.visit_mut(&mut |format| {
+                if let Format::TypeName(qualified_name) = format {
+                    if let Namespace::Named(namespace) = &qualified_name.namespace {
+                        if config.external_definitions.contains_key(namespace) {
+                            *qualified_name = QualifiedTypeName::namespaced(
+                                namespace.clone(),
+                                qualified_name.name.clone(),
+                            );
+                        }
+                    }
+                }
+                Ok(())
+            });
+        }
+
+        updated_registry
     }
 
     fn needs_helper(format: &Format) -> bool {

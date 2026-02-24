@@ -12,11 +12,11 @@ let package = Package(
     targets: [
         .target(
             name: "Example",
-            dependencies: ["Other"]
+            dependencies: ["Other", "Serde"]
         ),
         .target(
             name: "Other",
-            dependencies: []
+            dependencies: ["Serde"]
         ),
     ]
 )

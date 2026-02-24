@@ -1,5 +1,4 @@
 import Serde
-
 public struct Child: Hashable {
     @Indirect public var name: String
 
@@ -39,10 +38,10 @@ public struct Child: Hashable {
 public struct MyStruct: Hashable {
     @Indirect public var stringToInt: [String: Int32]
     @Indirect public var mapToList: [String: [Int32]]
-    @Indirect public var optionOfVecOfSet: [[String]]?
+    @Indirect public var optionOfVecOfSet: [Set<String>]?
     @Indirect public var parent: Parent
 
-    public init(stringToInt: [String: Int32], mapToList: [String: [Int32]], optionOfVecOfSet: [[String]]?, parent: Parent) {
+    public init(stringToInt: [String: Int32], mapToList: [String: [Int32]], optionOfVecOfSet: [Set<String>]?, parent: Parent) {
         self.stringToInt = stringToInt
         self.mapToList = mapToList
         self.optionOfVecOfSet = optionOfVecOfSet
@@ -183,7 +182,7 @@ func deserialize_map_str_to_vector_i32<D: Deserializer>(deserializer: D) throws 
     return obj
 }
 
-func serialize_option_vector_set_str<S: Serializer>(value: [[String]]?, serializer: S) throws {
+func serialize_option_vector_set_str<S: Serializer>(value: [Set<String>]?, serializer: S) throws {
     if let value = value {
         try serializer.serialize_option_tag(value: true)
         try serialize_vector_set_str(value: value, serializer: serializer)
@@ -192,7 +191,7 @@ func serialize_option_vector_set_str<S: Serializer>(value: [[String]]?, serializ
     }
 }
 
-func deserialize_option_vector_set_str<D: Deserializer>(deserializer: D) throws -> [[String]]? {
+func deserialize_option_vector_set_str<D: Deserializer>(deserializer: D) throws -> [Set<String>]? {
     let tag = try deserializer.deserialize_option_tag()
     if tag {
         return try deserialize_vector_set_str(deserializer: deserializer)
@@ -201,14 +200,14 @@ func deserialize_option_vector_set_str<D: Deserializer>(deserializer: D) throws 
     }
 }
 
-func serialize_set_str<S: Serializer>(value: [String], serializer: S) throws {
+func serialize_set_str<S: Serializer>(value: Set<String>, serializer: S) throws {
     try serializer.serialize_len(value: value.count)
     for item in value {
         try serializer.serialize_str(value: item)
     }
 }
 
-func deserialize_set_str<D: Deserializer>(deserializer: D) throws -> [String] {
+func deserialize_set_str<D: Deserializer>(deserializer: D) throws -> Set<String> {
     let length = try deserializer.deserialize_len()
     var obj : [String] = []
     for _ in 0..<length {
@@ -233,16 +232,16 @@ func deserialize_vector_i32<D: Deserializer>(deserializer: D) throws -> [Int32] 
     return obj
 }
 
-func serialize_vector_set_str<S: Serializer>(value: [[String]], serializer: S) throws {
+func serialize_vector_set_str<S: Serializer>(value: [Set<String>], serializer: S) throws {
     try serializer.serialize_len(value: value.count)
     for item in value {
         try serialize_set_str(value: item, serializer: serializer)
     }
 }
 
-func deserialize_vector_set_str<D: Deserializer>(deserializer: D) throws -> [[String]] {
+func deserialize_vector_set_str<D: Deserializer>(deserializer: D) throws -> [Set<String>] {
     let length = try deserializer.deserialize_len()
-    var obj : [[String]] = []
+    var obj : [Set<String>] = []
     for _ in 0..<length {
         obj.append(try deserialize_set_str(deserializer: deserializer))
     }

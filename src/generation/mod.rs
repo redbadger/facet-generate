@@ -13,9 +13,6 @@ pub mod kotlin;
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
-/// Support for code-generation in Swift
-#[cfg(feature = "swift")]
-pub mod swift2;
 /// Support for code-generation in TypeScript
 #[cfg(feature = "typescript")]
 pub mod typescript;

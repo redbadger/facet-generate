@@ -12,7 +12,7 @@ use indoc::formatdoc;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, ExternalPackage, ExternalPackages, SourceInstaller,
+        CodeGeneratorConfig, ExternalPackage, ExternalPackages, SourceInstaller,
         swift::generator::CodeGenerator,
     },
 };
@@ -209,9 +209,8 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
-        if matches!(config.encoding, Encoding::Bincode | Encoding::Bcs) {
-            targets.insert("Serde".to_string());
-        }
+        // Always depend on Serde — generated code uses Unit, Tuple{N}, and @Indirect
+        targets.insert("Serde".to_string());
 
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;
@@ -263,5 +262,5 @@ impl SourceInstaller for Installer {
 }
 
 #[cfg(test)]
-#[path = "installer_tests.rs"]
-mod installer_tests;
+#[path = "tests.rs"]
+mod tests;

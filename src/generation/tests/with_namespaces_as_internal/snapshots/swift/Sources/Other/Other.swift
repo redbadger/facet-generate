@@ -1,5 +1,5 @@
+import Other
 import Serde
-
 public struct OtherChild: Hashable {
     @Indirect public var name: String
 
@@ -9,5 +9,5 @@ public struct OtherChild: Hashable {
 }
 
 indirect public enum OtherParent: Hashable {
-    case child(OtherChild)
+    case child(Other.OtherChild)
 }
