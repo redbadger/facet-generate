@@ -7,12 +7,21 @@ use std::{
 use heck::ToLowerCamelCase as _;
 use indoc::writedoc;
 
+use heck::ToUpperCamelCase as _;
+
 use crate::{
-    generation::{Container, Emitter, Encoding, indent::IndentWrite},
-    reflection::format::{
-        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+    generation::{
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, indent::IndentWrite,
+        module::Module,
     },
+    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
+
+const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.swift");
+const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.swift");
+const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.swift");
+const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.swift");
+const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 
 #[derive(Debug, Clone, Copy)]
 pub struct Swift {
@@ -32,6 +41,57 @@ enum Usage {
     Assignment,
     Serialize { receiver: String },
     Deserialize { receiver: String },
+}
+
+impl Emitter<Swift> for Module {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: Swift) -> Result<()> {
+        let CodeGeneratorConfig {
+            encoding, features, ..
+        } = self.config();
+
+        let mut imports = vec!["Serde".to_string()];
+        for ns in self.config().external_definitions.keys() {
+            imports.push(ns.to_upper_camel_case());
+        }
+        imports.sort();
+        imports.dedup();
+
+        for import in &imports {
+            writeln!(w, "import {import}")?;
+        }
+
+        if encoding.is_none() {
+            return Ok(());
+        }
+
+        for feature in features {
+            match feature {
+                Feature::OptionOfT => {
+                    writeln!(w)?;
+                    w.write_all(FEATURE_OPTION_OF_T)?;
+                }
+                Feature::ListOfT => {
+                    writeln!(w)?;
+                    w.write_all(FEATURE_LIST_OF_T)?;
+                }
+                Feature::SetOfT => {
+                    writeln!(w)?;
+                    w.write_all(FEATURE_SET_OF_T)?;
+                }
+                Feature::MapOfT => {
+                    writeln!(w)?;
+                    w.write_all(FEATURE_MAP_OF_T)?;
+                }
+                Feature::TupleArray => {
+                    writeln!(w)?;
+                    w.write_all(FEATURE_TUPLE_ARRAY)?;
+                }
+                Feature::BigInt | Feature::Bytes => {}
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Emitter<Swift> for Container<'_> {
@@ -162,9 +222,6 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 Format::Variable(_) => {
                     unreachable!("placeholders should not get this far")
                 }
-                Format::TypeName(_) => {
-                    writeln!(w, "try {receiver}.{name}.serialize(serializer: serializer)")
-                }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_serializer(w)?;
                     let formats = named(formats, "");
@@ -179,33 +236,11 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     }
                     pop_serializer(w)
                 }
-                Format::Option(_)
-                | Format::Seq(_)
-                | Format::Set(_)
-                | Format::Map { .. }
-                | Format::Tuple(_)
-                | Format::TupleArray { .. } => {
-                    let suffix = format_suffix(value);
-                    writeln!(
-                        w,
-                        "try serialize_{suffix}(value: {receiver}.{name}, serializer: serializer)"
-                    )
-                }
-                primitive => {
-                    let t = format!("{primitive:?}").to_lowercase();
-                    writeln!(w, "try serializer.serialize_{t}(value: {receiver}.{name})")
-                }
+                _ => write_format_serialize(w, value, &format!("{receiver}.{name}")),
             },
             Usage::Deserialize { receiver: _ } => match value {
                 Format::Variable(_) => {
                     unreachable!("placeholders should not get this far")
-                }
-                Format::TypeName(qualified_type_name) => {
-                    let type_name = &qualified_type_name.name;
-                    writeln!(
-                        w,
-                        "let {name} = try {type_name}.deserialize(deserializer: deserializer)"
-                    )
                 }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_deserializer(w)?;
@@ -229,22 +264,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     writeln!(w, ")")?;
                     pop_deserializer(w)
                 }
-                Format::Option(_)
-                | Format::Seq(_)
-                | Format::Set(_)
-                | Format::Map { .. }
-                | Format::Tuple(_)
-                | Format::TupleArray { .. } => {
-                    let suffix = format_suffix(value);
-                    writeln!(
-                        w,
-                        "let {name} = try deserialize_{suffix}(deserializer: deserializer)"
-                    )
-                }
-                primitive => {
-                    let t = format!("{primitive:?}").to_lowercase();
-                    writeln!(w, "let {name} = try deserializer.deserialize_{t}()")
-                }
+                _ => write_format_deserialize(w, value, name),
             },
         }
     }
@@ -431,10 +451,10 @@ fn struct_<W: IndentWrite>(
     doc.write(w, lang)?;
 
     write!(w, "public struct {name}: Hashable ")?;
+    let mut w = w.blockln()?;
 
-    w.start_block()?;
     for field in fields {
-        (*field, Usage::Field).write(w, lang)?;
+        (*field, Usage::Field).write(&mut w, lang)?;
     }
 
     if !fields.is_empty() || lang.encoding.is_bincode() {
@@ -446,14 +466,15 @@ fn struct_<W: IndentWrite>(
         if i > 0 {
             write!(w, ", ")?;
         }
-        (*field, Usage::Parameter).write(w, lang)?;
+        (*field, Usage::Parameter).write(&mut w, lang)?;
     }
     write!(w, ") ")?;
-    w.start_block()?;
-    for field in fields {
-        (*field, Usage::Assignment).write(w, lang)?;
+    {
+        let mut w = w.blockln()?;
+        for field in fields {
+            (*field, Usage::Assignment).write(&mut w, lang)?;
+        }
     }
-    w.end_block()?;
 
     match lang.encoding {
         Encoding::None => {}
@@ -463,47 +484,49 @@ fn struct_<W: IndentWrite>(
                 w,
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
-            w.start_block()?;
-            push_serializer(w)?;
-            for field in fields {
-                (
-                    *field,
-                    Usage::Serialize {
-                        receiver: "self".to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                push_serializer(&mut w)?;
+                for field in fields {
+                    (
+                        *field,
+                        Usage::Serialize {
+                            receiver: "self".to_string(),
+                        },
+                    )
+                        .write(&mut w, lang)?;
+                }
+                pop_serializer(&mut w)?;
             }
-            pop_serializer(w)?;
-            w.end_block()?;
-            write_json_serialize(w)?;
+            write_json_serialize(&mut w)?;
             writeln!(w)?;
             write!(
                 w,
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
-            w.start_block()?;
-            push_deserializer(w)?;
-            for field in fields {
-                (
-                    *field,
-                    Usage::Deserialize {
-                        receiver: "self".to_string(),
-                    },
-                )
-                    .write(w, lang)?;
-            }
-            pop_deserializer(w)?;
-            write!(w, "return {name}(")?;
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    write!(w, ", ")?;
+            {
+                let mut w = w.blockln()?;
+                push_deserializer(&mut w)?;
+                for field in fields {
+                    (
+                        *field,
+                        Usage::Deserialize {
+                            receiver: "self".to_string(),
+                        },
+                    )
+                        .write(&mut w, lang)?;
                 }
-                (*field, Usage::Argument).write(w, lang)?;
+                pop_deserializer(&mut w)?;
+                write!(w, "return {name}(")?;
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(w, ", ")?;
+                    }
+                    (*field, Usage::Argument).write(&mut w, lang)?;
+                }
+                writeln!(w, ")")?;
             }
-            writeln!(w, ")")?;
-            w.end_block()?;
-            write_json_deserialize(w, name)?;
+            write_json_deserialize(&mut w, name)?;
         }
         Encoding::Bincode => {
             writeln!(w)?;
@@ -511,52 +534,52 @@ fn struct_<W: IndentWrite>(
                 w,
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
-            w.start_block()?;
-            push_serializer(w)?;
-            for field in fields {
-                (
-                    *field,
-                    Usage::Serialize {
-                        receiver: "self".to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                push_serializer(&mut w)?;
+                for field in fields {
+                    (
+                        *field,
+                        Usage::Serialize {
+                            receiver: "self".to_string(),
+                        },
+                    )
+                        .write(&mut w, lang)?;
+                }
+                pop_serializer(&mut w)?;
             }
-            pop_serializer(w)?;
-            w.end_block()?;
-            write_bincode_serialize(w)?;
+            write_bincode_serialize(&mut w)?;
             writeln!(w)?;
             write!(
                 w,
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
-            w.start_block()?;
-            push_deserializer(w)?;
-            for field in fields {
-                (
-                    *field,
-                    Usage::Deserialize {
-                        receiver: "self".to_string(),
-                    },
-                )
-                    .write(w, lang)?;
-            }
-            pop_deserializer(w)?;
-            write!(w, "return {name}.init(")?;
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    write!(w, ", ")?;
+            {
+                let mut w = w.blockln()?;
+                push_deserializer(&mut w)?;
+                for field in fields {
+                    (
+                        *field,
+                        Usage::Deserialize {
+                            receiver: "self".to_string(),
+                        },
+                    )
+                        .write(&mut w, lang)?;
                 }
-                (*field, Usage::Argument).write(w, lang)?;
+                pop_deserializer(&mut w)?;
+                write!(w, "return {name}.init(")?;
+                for (i, field) in fields.iter().enumerate() {
+                    if i > 0 {
+                        write!(w, ", ")?;
+                    }
+                    (*field, Usage::Argument).write(&mut w, lang)?;
+                }
+                writeln!(w, ")")?;
             }
-            writeln!(w, ")")?;
-            w.end_block()?;
-            write_bincode_deserialize(w, name)?;
+            write_bincode_deserialize(&mut w, name)?;
         }
         Encoding::Bcs => todo!(),
     }
-
-    w.end_block()?;
 
     Ok(())
 }
@@ -571,13 +594,12 @@ fn enum_<W: IndentWrite>(
     doc.write(w, lang)?;
 
     write!(w, "indirect public enum {name}: Hashable ")?;
-
-    w.start_block()?;
+    let mut w = w.blockln()?;
 
     let variants = variants.values().collect::<Vec<_>>();
 
     for format in &variants {
-        (*format, Usage::Field).write(w, lang)?;
+        (*format, Usage::Field).write(&mut w, lang)?;
     }
 
     match lang.encoding {
@@ -588,57 +610,61 @@ fn enum_<W: IndentWrite>(
                 w,
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
-            w.start_block()?;
-            push_serializer(w)?;
-            write!(w, "switch self ")?;
-            w.start_block()?;
-            w.unindent(); // in Swift, `case` is not indented
-            for (i, variant) in variants.iter().enumerate() {
-                (
-                    &variant.without_docs(),
-                    Usage::Serialize {
-                        receiver: i.to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                push_serializer(&mut w)?;
+                write!(w, "switch self ")?;
+                {
+                    let mut w = w.blockln()?;
+                    w.unindent();
+                    for (i, variant) in variants.iter().enumerate() {
+                        (
+                            &variant.without_docs(),
+                            Usage::Serialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(&mut w, lang)?;
+                    }
+                    w.indent();
+                }
+                pop_serializer(&mut w)?;
             }
-            w.indent();
-            w.end_block()?;
-            pop_serializer(w)?;
-            w.end_block()?;
-            write_json_serialize(w)?;
+            write_json_serialize(&mut w)?;
 
             writeln!(w)?;
             write!(
                 w,
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
-            w.start_block()?;
-            writeln!(
-                w,
-                "let index = try deserializer.deserialize_variant_index()"
-            )?;
-            push_deserializer(w)?;
-            write!(w, "switch index ")?;
-            w.start_block()?;
-            w.unindent(); // in Swift, `case` is not indented
-            for (i, variant) in variants.iter().enumerate() {
-                (
-                    &variant.without_docs(),
-                    Usage::Deserialize {
-                        receiver: i.to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                writeln!(
+                    w,
+                    "let index = try deserializer.deserialize_variant_index()"
+                )?;
+                push_deserializer(&mut w)?;
+                write!(w, "switch index ")?;
+                {
+                    let mut w = w.blockln()?;
+                    w.unindent();
+                    for (i, variant) in variants.iter().enumerate() {
+                        (
+                            &variant.without_docs(),
+                            Usage::Deserialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(&mut w, lang)?;
+                    }
+                    writeln!(
+                        w,
+                        r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
+                    )?;
+                    w.indent();
+                }
             }
-            writeln!(
-                w,
-                r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
-            )?;
-            w.indent();
-            w.end_block()?;
-            w.end_block()?;
-            write_json_deserialize(w, name)?;
+            write_json_deserialize(&mut w, name)?;
         }
         Encoding::Bincode => {
             writeln!(w)?;
@@ -646,62 +672,66 @@ fn enum_<W: IndentWrite>(
                 w,
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
-            w.start_block()?;
-            push_serializer(w)?;
-            write!(w, "switch self ")?;
-            w.start_block()?;
-            w.unindent(); // in Swift, `case` is not indented
-            for (i, variant) in variants.iter().enumerate() {
-                (
-                    &variant.without_docs(),
-                    Usage::Serialize {
-                        receiver: i.to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                push_serializer(&mut w)?;
+                write!(w, "switch self ")?;
+                {
+                    let mut w = w.blockln()?;
+                    w.unindent();
+                    for (i, variant) in variants.iter().enumerate() {
+                        (
+                            &variant.without_docs(),
+                            Usage::Serialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(&mut w, lang)?;
+                    }
+                    w.indent();
+                }
+                pop_serializer(&mut w)?;
             }
-            w.indent();
-            w.end_block()?;
-            pop_serializer(w)?;
-            w.end_block()?;
-            write_bincode_serialize(w)?;
+            write_bincode_serialize(&mut w)?;
 
             writeln!(w)?;
             write!(
                 w,
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
-            w.start_block()?;
-            writeln!(
-                w,
-                "let index = try deserializer.deserialize_variant_index()"
-            )?;
-            push_deserializer(w)?;
-            write!(w, "switch index ")?;
-            w.start_block()?;
-            w.unindent(); // in Swift, `case` is not indented
-            for (i, variant) in variants.iter().enumerate() {
-                (
-                    &variant.without_docs(),
-                    Usage::Deserialize {
-                        receiver: i.to_string(),
-                    },
-                )
-                    .write(w, lang)?;
+            {
+                let mut w = w.blockln()?;
+                writeln!(
+                    w,
+                    "let index = try deserializer.deserialize_variant_index()"
+                )?;
+                push_deserializer(&mut w)?;
+                write!(w, "switch index ")?;
+                {
+                    let mut w = w.blockln()?;
+                    w.unindent();
+                    for (i, variant) in variants.iter().enumerate() {
+                        (
+                            &variant.without_docs(),
+                            Usage::Deserialize {
+                                receiver: i.to_string(),
+                            },
+                        )
+                            .write(&mut w, lang)?;
+                    }
+                    writeln!(
+                        w,
+                        r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
+                    )?;
+                    w.indent();
+                }
             }
-            writeln!(
-                w,
-                r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
-            )?;
-            w.indent();
-            w.end_block()?;
-            w.end_block()?;
-            write_bincode_deserialize(w, name)?;
+            write_bincode_deserialize(&mut w, name)?;
         }
         Encoding::Bcs => todo!(),
     }
 
-    w.end_block()
+    Ok(())
 }
 
 fn write_bincode_serialize<W: IndentWrite>(w: &mut W) -> Result<()> {
@@ -766,23 +796,77 @@ fn write_json_deserialize<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
     )
 }
 
-fn write_format_serialize<W: Write>(w: &mut W, format: &Format, value_expr: &str) -> Result<()> {
+fn write_format_serialize<W: IndentWrite>(
+    w: &mut W,
+    format: &Format,
+    value_expr: &str,
+) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(_) => {
             writeln!(w, "try {value_expr}.serialize(serializer: serializer)")
         }
-        Format::Option(_)
-        | Format::Seq(_)
-        | Format::Set(_)
-        | Format::Map { .. }
-        | Format::Tuple(_)
-        | Format::TupleArray { .. } => {
-            let suffix = format_suffix(format);
-            writeln!(
+        Format::Option(inner) => {
+            write!(
                 w,
-                "try serialize_{suffix}(value: {value_expr}, serializer: serializer)"
-            )
+                "try serializeOption(value: {value_expr}, serializer: serializer) "
+            )?;
+            {
+                let mut w = w.block()?;
+                writeln!(w, " value, serializer in")?;
+                write_format_serialize(&mut w, inner, "value")
+            }
+        }
+        Format::Seq(inner) => {
+            write!(
+                w,
+                "try serializeArray(value: {value_expr}, serializer: serializer) "
+            )?;
+            {
+                let mut w = w.block()?;
+                writeln!(w, " item, serializer in")?;
+                write_format_serialize(&mut w, inner, "item")
+            }
+        }
+        Format::Set(inner) => {
+            write!(
+                w,
+                "try serializeSet(value: {value_expr}, serializer: serializer) "
+            )?;
+            {
+                let mut w = w.block()?;
+                writeln!(w, " item, serializer in")?;
+                write_format_serialize(&mut w, inner, "item")
+            }
+        }
+        Format::Map { key, value } => {
+            write!(
+                w,
+                "try serializeMap(value: {value_expr}, serializer: serializer) "
+            )?;
+            {
+                let mut w = w.block()?;
+                writeln!(w, " key, value, serializer in")?;
+                write_format_serialize(&mut w, key, "key")?;
+                write_format_serialize(&mut w, value, "value")
+            }
+        }
+        Format::Tuple(formats) => {
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_serialize(w, fmt, &format!("{value_expr}.field{i}"))?;
+            }
+            Ok(())
+        }
+        Format::TupleArray { content, .. } => {
+            write!(
+                w,
+                "try serializeTupleArray(value: {value_expr}, serializer: serializer) "
+            )?;
+            {
+                let mut w = w.block()?;
+                writeln!(w, " item, serializer in")?;
+                write_format_serialize(&mut w, content, "item")
+            }
         }
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
@@ -791,58 +875,114 @@ fn write_format_serialize<W: Write>(w: &mut W, format: &Format, value_expr: &str
     }
 }
 
-fn write_format_deserialize<W: Write>(w: &mut W, format: &Format, var: &str) -> Result<()> {
+fn write_format_deserialize<W: IndentWrite>(w: &mut W, format: &Format, var: &str) -> Result<()> {
     match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => {
-            let type_name = &qtn.name;
-            writeln!(
-                w,
-                "let {var} = try {type_name}.deserialize(deserializer: deserializer)"
-            )
+        Format::Tuple(formats) if formats.len() > 1 => {
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
+            }
+            write!(w, "let {var} = Tuple{}.init(", formats.len())?;
+            for i in 0..formats.len() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write!(w, "{var}Field{i}")?;
+            }
+            writeln!(w, ")")
         }
-        Format::Option(_)
-        | Format::Seq(_)
-        | Format::Set(_)
-        | Format::Map { .. }
-        | Format::Tuple(_)
-        | Format::TupleArray { .. } => {
-            let suffix = format_suffix(format);
-            writeln!(
-                w,
-                "let {var} = try deserialize_{suffix}(deserializer: deserializer)"
-            )
-        }
-        primitive => {
-            let t = format!("{primitive:?}").to_lowercase();
-            writeln!(w, "let {var} = try deserializer.deserialize_{t}()")
+        _ => {
+            write!(w, "let {var} = ")?;
+            write_deserialize_expr(w, format)?;
+            writeln!(w)
         }
     }
 }
 
-fn format_suffix(format: &Format) -> String {
+/// Writes a deserialization expression (no `let` prefix, no trailing newline).
+fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => match &qtn.namespace {
-            Namespace::Named(ns) => format!("{ns}_{}", qtn.name),
-            Namespace::Root => qtn.name.clone(),
-        },
-        Format::Option(inner) => format!("option_{}", format_suffix(inner)),
-        Format::Seq(inner) => format!("vector_{}", format_suffix(inner)),
-        Format::Set(inner) => format!("set_{}", format_suffix(inner)),
-        Format::Map { key, value } => {
-            format!("map_{}_to_{}", format_suffix(key), format_suffix(value))
+        Format::TypeName(qtn) => {
+            let type_name = &qtn.name;
+            write!(w, "try {type_name}.deserialize(deserializer: deserializer)")
         }
+        Format::Option(inner) => {
+            writeln!(
+                w,
+                "try deserializeOption(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Seq(inner) => {
+            writeln!(
+                w,
+                "try deserializeArray(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Set(inner) => {
+            writeln!(
+                w,
+                "try deserializeSet(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Map { key, value } => {
+            writeln!(
+                w,
+                "try deserializeMap(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_format_deserialize(w, key, "key")?;
+            write_format_deserialize(w, value, "value")?;
+            writeln!(w, "return (key, value)")?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Tuple(formats) if formats.len() == 1 => write_deserialize_expr(w, &formats[0]),
         Format::Tuple(formats) => {
-            let parts: Vec<String> = formats.iter().map(format_suffix).collect();
-            format!("tuple{}_{}", formats.len(), parts.join("_"))
+            // Multi-element tuple: use Tuple{N}.init with temporaries
+            // We write a multi-statement block, but since this is expression position,
+            // the caller must handle the context (e.g. inside a closure body).
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_deserialize(w, fmt, &format!("field{i}"))?;
+            }
+            write!(w, "Tuple{}.init(", formats.len())?;
+            for i in 0..formats.len() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write!(w, "field{i}")?;
+            }
+            write!(w, ")")
         }
         Format::TupleArray { content, size } => {
-            format!("array{}_{}_array", size, format_suffix(content))
+            writeln!(
+                w,
+                "try deserializeTupleArray(deserializer: deserializer, size: {size}) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, content)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
         }
-        // Primitive types: the Debug name lowercased matches the suffix
-        // e.g. Bool -> "bool", I32 -> "i32", Str -> "str", etc.
-        primitive => format!("{primitive:?}").to_lowercase(),
+        primitive => {
+            let t = format!("{primitive:?}").to_lowercase();
+            write!(w, "try deserializer.deserialize_{t}()")
+        }
     }
 }
 

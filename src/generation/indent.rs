@@ -1,6 +1,3 @@
-// Copyright (c) Facebook, Inc. and its affiliates
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
 use std::io::{Result, Write};
 
 #[derive(Clone, Copy)]
@@ -13,37 +10,71 @@ pub trait IndentWrite: Write {
     fn indent(&mut self) {}
     fn unindent(&mut self) {}
 
-    /// Start a new block.
+    /// Start a new block with RAII-style automatic closing.
+    ///
+    /// Writes `{\n`, indents, and returns a [`Block`] guard that implements
+    /// [`IndentWrite`]. When the guard is dropped it unindents and writes `}\n`.
+    ///
     /// # Errors
     /// Returns an error if writing to the underlying writer fails.
-    fn start_block(&mut self) -> Result<()> {
+    fn blockln(&mut self) -> Result<Block<'_>>
+    where
+        Self: Sized,
+    {
         writeln!(self, "{{")?;
         self.indent();
-        Ok(())
+        Ok(Block { writer: self })
     }
 
-    /// Start a new block for continuation on the same line.
+    /// Start a new block with RAII-style automatic closing.
+    ///
+    /// Indents, and returns a [`Block`] guard that implements
+    /// [`IndentWrite`]. When the guard is dropped it unindents and writes `}\n`.
+    ///
     /// # Errors
     /// Returns an error if writing to the underlying writer fails.
-    fn start_block_no_newline(&mut self) -> Result<()> {
+    fn block(&mut self) -> Result<Block<'_>>
+    where
+        Self: Sized,
+    {
         write!(self, "{{")?;
         self.indent();
-        Ok(())
+        Ok(Block { writer: self })
+    }
+}
+
+/// RAII guard returned by [`IndentWrite::block`].
+///
+/// Implements [`Write`] and [`IndentWrite`] by delegating to the wrapped
+/// writer. On [`Drop`], it unindents and writes the closing `}\n`.
+pub struct Block<'a> {
+    writer: &'a mut dyn IndentWrite,
+}
+
+impl Write for Block<'_> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        self.writer.write(buf)
     }
 
-    /// End a block.
-    /// # Errors
-    /// Returns an error if writing to the underlying writer fails.
-    fn end_block(&mut self) -> Result<()> {
-        self.unindent();
-        writeln!(self, "}}")
+    fn flush(&mut self) -> Result<()> {
+        self.writer.flush()
+    }
+}
+
+impl IndentWrite for Block<'_> {
+    fn indent(&mut self) {
+        self.writer.indent();
     }
 
-    /// Start and end a block.
-    /// # Errors
-    /// Returns an error if writing to the underlying writer fails.
-    fn empty_block(&mut self) -> Result<()> {
-        writeln!(self, "{{}}")
+    fn unindent(&mut self) {
+        self.writer.unindent();
+    }
+}
+
+impl Drop for Block<'_> {
+    fn drop(&mut self) {
+        self.writer.unindent();
+        let _ = writeln!(self.writer, "}}");
     }
 }
 
@@ -150,17 +181,54 @@ mod test {
         out.unindent();
         writeln!(out, "foo")?;
 
-        let expect: &[u8] = b"\
-foo
-  bar
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @"
+        foo
+          bar
 
-  bar
-    foobar
+          bar
+            foobar
 
-    foobar
-foo
-";
-        assert_eq!(buffer, expect);
+            foobar
+        foo
+        ");
+
+        Ok(())
+    }
+
+    #[test]
+    fn block() -> Result<()> {
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let mut w = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
+
+        write!(w, "fn foo() ")?;
+        {
+            let mut w = w.blockln()?;
+            writeln!(w, r#"let _ = "hello";"#)?;
+        }
+
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @r#"
+        fn foo() {
+          let _ = "hello";
+        }
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn block_no_newline() -> Result<()> {
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let mut w = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
+
+        write!(w, "fn foo() ")?;
+        {
+            let mut w = w.block()?;
+            write!(w, r#"let _ = "hello";"#)?;
+        }
+
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @r#"fn foo() {let _ = "hello";}"#);
 
         Ok(())
     }

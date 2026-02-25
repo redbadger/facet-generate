@@ -105,12 +105,12 @@ fn test_trait_helpers_emitted_for_complex_types() {
     let output = generate(&config, &registry);
 
     assert!(
-        output.contains("func serialize_vector_str"),
-        "Should emit serialization helper for Vec<String>: {output}"
+        output.contains("func serializeArray<T, S: Serializer>"),
+        "Should emit generic array serialization helper: {output}"
     );
     assert!(
-        output.contains("func deserialize_vector_str"),
-        "Should emit deserialization helper for Vec<String>: {output}"
+        output.contains("func deserializeArray<T, D: Deserializer>"),
+        "Should emit generic array deserialization helper: {output}"
     );
 }
 
@@ -132,11 +132,11 @@ fn test_no_trait_helpers_without_encoding() {
     let output = generate(&config, &registry);
 
     assert!(
-        !output.contains("func serialize_"),
+        !output.contains("func serializeArray"),
         "No encoding means no trait helpers: {output}"
     );
     assert!(
-        !output.contains("func deserialize_"),
+        !output.contains("func deserializeArray"),
         "No encoding means no trait helpers: {output}"
     );
 }
