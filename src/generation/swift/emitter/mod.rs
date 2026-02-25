@@ -797,45 +797,45 @@ fn write_format_serialize<W: IndentWrite>(
             writeln!(w, "try {value_expr}.serialize(serializer: serializer)")
         }
         Format::Option(inner) => {
-            writeln!(
+            write!(
                 w,
-                "try serializeOption(value: {value_expr}, serializer: serializer) {{ value, serializer in"
+                "try serializeOption(value: {value_expr}, serializer: serializer) "
             )?;
-            w.indent();
+            w.start_block_no_newline()?;
+            writeln!(w, " value, serializer in")?;
             write_format_serialize(w, inner, "value")?;
-            w.unindent();
-            writeln!(w, "}}")
+            w.end_block()
         }
         Format::Seq(inner) => {
-            writeln!(
+            write!(
                 w,
-                "try serializeArray(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+                "try serializeArray(value: {value_expr}, serializer: serializer) "
             )?;
-            w.indent();
+            w.start_block_no_newline()?;
+            writeln!(w, " item, serializer in")?;
             write_format_serialize(w, inner, "item")?;
-            w.unindent();
-            writeln!(w, "}}")
+            w.end_block()
         }
         Format::Set(inner) => {
-            writeln!(
+            write!(
                 w,
-                "try serializeSet(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+                "try serializeSet(value: {value_expr}, serializer: serializer) "
             )?;
-            w.indent();
+            w.start_block_no_newline()?;
+            writeln!(w, " item, serializer in")?;
             write_format_serialize(w, inner, "item")?;
-            w.unindent();
-            writeln!(w, "}}")
+            w.end_block()
         }
         Format::Map { key, value } => {
-            writeln!(
+            write!(
                 w,
-                "try serializeMap(value: {value_expr}, serializer: serializer) {{ key, value, serializer in"
+                "try serializeMap(value: {value_expr}, serializer: serializer) "
             )?;
-            w.indent();
+            w.start_block_no_newline()?;
+            writeln!(w, " key, value, serializer in")?;
             write_format_serialize(w, key, "key")?;
             write_format_serialize(w, value, "value")?;
-            w.unindent();
-            writeln!(w, "}}")
+            w.end_block()
         }
         Format::Tuple(formats) => {
             for (i, fmt) in formats.iter().enumerate() {
@@ -844,14 +844,14 @@ fn write_format_serialize<W: IndentWrite>(
             Ok(())
         }
         Format::TupleArray { content, .. } => {
-            writeln!(
+            write!(
                 w,
-                "try serializeTupleArray(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+                "try serializeTupleArray(value: {value_expr}, serializer: serializer) "
             )?;
-            w.indent();
+            w.start_block_no_newline()?;
+            writeln!(w, " item, serializer in")?;
             write_format_serialize(w, content, "item")?;
-            w.unindent();
-            writeln!(w, "}}")
+            w.end_block()
         }
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
