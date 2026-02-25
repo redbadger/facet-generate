@@ -230,8 +230,10 @@ impl CodeGeneratorConfig {
 
         for name in registry.keys() {
             if let Namespace::Named(ns) = &name.namespace {
-                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
-                entry.push(name.name.clone());
+                if ns != &self.module_name {
+                    let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                    entry.push(name.name.clone());
+                }
             }
         }
     }

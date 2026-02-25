@@ -94,6 +94,7 @@ func deserializeSet<T: Hashable, D: Deserializer>(
     }
     return obj
 }
+
 public struct Child: Hashable {
     @Indirect public var name: String
 

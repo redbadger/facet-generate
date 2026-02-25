@@ -1,5 +1,6 @@
 import Other
 import Serde
+
 public struct Child: Hashable {
     @Indirect public var external: Other.OtherParent
 
