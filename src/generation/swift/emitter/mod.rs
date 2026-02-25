@@ -17,6 +17,12 @@ use crate::{
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
+const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.swift");
+const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.swift");
+const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.swift");
+const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.swift");
+const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
+
 #[derive(Debug, Clone, Copy)]
 pub struct Swift {
     encoding: Encoding,
@@ -62,23 +68,23 @@ impl Emitter<Swift> for Module {
             match feature {
                 Feature::OptionOfT => {
                     writeln!(w)?;
-                    write_feature_option(w)?;
+                    w.write_all(FEATURE_OPTION_OF_T)?;
                 }
                 Feature::ListOfT => {
                     writeln!(w)?;
-                    write_feature_array(w)?;
+                    w.write_all(FEATURE_LIST_OF_T)?;
                 }
                 Feature::SetOfT => {
                     writeln!(w)?;
-                    write_feature_set(w)?;
+                    w.write_all(FEATURE_SET_OF_T)?;
                 }
                 Feature::MapOfT => {
                     writeln!(w)?;
-                    write_feature_map(w)?;
+                    w.write_all(FEATURE_MAP_OF_T)?;
                 }
-                Feature::BuildList => {
+                Feature::TupleArray => {
                     writeln!(w)?;
-                    write_feature_tuple_array(w)?;
+                    w.write_all(FEATURE_TUPLE_ARRAY)?;
                 }
                 Feature::BigInt | Feature::Bytes => {}
             }
@@ -86,158 +92,6 @@ impl Emitter<Swift> for Module {
 
         Ok(())
     }
-}
-
-fn write_feature_option<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        func serializeOption<T, S: Serializer>(
-            value: T?,
-            serializer: S,
-            serializeElement: (T, S) throws -> Void
-        ) throws {{
-            if let value = value {{
-                try serializer.serialize_option_tag(value: true)
-                try serializeElement(value, serializer)
-            }} else {{
-                try serializer.serialize_option_tag(value: false)
-            }}
-        }}
-
-        func deserializeOption<T, D: Deserializer>(
-            deserializer: D,
-            deserializeElement: (D) throws -> T
-        ) throws -> T? {{
-            let tag = try deserializer.deserialize_option_tag()
-            if tag {{
-                return try deserializeElement(deserializer)
-            }} else {{
-                return nil
-            }}
-        }}
-        "
-    )
-}
-
-fn write_feature_array<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        func serializeArray<T, S: Serializer>(
-            value: [T],
-            serializer: S,
-            serializeElement: (T, S) throws -> Void
-        ) throws {{
-            try serializer.serialize_len(value: value.count)
-            for item in value {{
-                try serializeElement(item, serializer)
-            }}
-        }}
-
-        func deserializeArray<T, D: Deserializer>(
-            deserializer: D,
-            deserializeElement: (D) throws -> T
-        ) throws -> [T] {{
-            let length = try deserializer.deserialize_len()
-            var obj: [T] = []
-            for _ in 0..<length {{
-                obj.append(try deserializeElement(deserializer))
-            }}
-            return obj
-        }}
-        "
-    )
-}
-
-fn write_feature_set<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        func serializeSet<T: Hashable, S: Serializer>(
-            value: Set<T>,
-            serializer: S,
-            serializeElement: (T, S) throws -> Void
-        ) throws {{
-            try serializer.serialize_len(value: value.count)
-            for item in value {{
-                try serializeElement(item, serializer)
-            }}
-        }}
-
-        func deserializeSet<T: Hashable, D: Deserializer>(
-            deserializer: D,
-            deserializeElement: (D) throws -> T
-        ) throws -> Set<T> {{
-            let length = try deserializer.deserialize_len()
-            var obj: Set<T> = []
-            for _ in 0..<length {{
-                obj.insert(try deserializeElement(deserializer))
-            }}
-            return obj
-        }}
-        "
-    )
-}
-
-fn write_feature_map<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        func serializeMap<K, V, S: Serializer>(
-            value: [K: V],
-            serializer: S,
-            serializeEntry: (K, V, S) throws -> Void
-        ) throws {{
-            try serializer.serialize_len(value: value.count)
-            for (key, value) in value {{
-                try serializeEntry(key, value, serializer)
-            }}
-        }}
-
-        func deserializeMap<K: Hashable, V, D: Deserializer>(
-            deserializer: D,
-            deserializeEntry: (D) throws -> (K, V)
-        ) throws -> [K: V] {{
-            let length = try deserializer.deserialize_len()
-            var obj: [K: V] = [:]
-            for _ in 0..<length {{
-                let (key, value) = try deserializeEntry(deserializer)
-                obj[key] = value
-            }}
-            return obj
-        }}
-        "
-    )
-}
-
-fn write_feature_tuple_array<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        func serializeTupleArray<T, S: Serializer>(
-            value: [T],
-            serializer: S,
-            serializeElement: (T, S) throws -> Void
-        ) throws {{
-            for item in value {{
-                try serializeElement(item, serializer)
-            }}
-        }}
-
-        func deserializeTupleArray<T, D: Deserializer>(
-            deserializer: D,
-            size: Int,
-            deserializeElement: (D) throws -> T
-        ) throws -> [T] {{
-            var obj: [T] = []
-            for _ in 0..<size {{
-                obj.append(try deserializeElement(deserializer))
-            }}
-            return obj
-        }}
-        "
-    )
 }
 
 impl Emitter<Swift> for Container<'_> {

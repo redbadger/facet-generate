@@ -40,12 +40,12 @@ pub enum Encoding {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
-    BuildList,
     Bytes,
     ListOfT,
     MapOfT,
     OptionOfT,
     SetOfT,
+    TupleArray,
 }
 
 impl Encoding {
@@ -219,7 +219,7 @@ impl CodeGeneratorConfig {
                             self.features.insert(Feature::MapOfT);
                         }
                         Format::TupleArray { .. } => {
-                            self.features.insert(Feature::BuildList);
+                            self.features.insert(Feature::TupleArray);
                         }
                         _ => (),
                     }

@@ -16,11 +16,11 @@ use crate::{
 };
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
-const FEATURE_BUILD_LIST: &[u8] = include_bytes!("features/BuildList.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
 const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
 const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
+const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 
 #[derive(Debug, Clone, Copy)]
 pub struct Kotlin {
@@ -151,8 +151,8 @@ impl Emitter<Kotlin> for Module {
                         writeln!(features_out)?;
                     }
                 }
-                Feature::BuildList => {
-                    features_out.write_all(FEATURE_BUILD_LIST)?;
+                Feature::TupleArray => {
+                    features_out.write_all(FEATURE_TUPLE_ARRAY)?;
                     writeln!(features_out)?;
                 }
             }
