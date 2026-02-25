@@ -10,10 +10,11 @@ use indoc::writedoc;
 use heck::ToUpperCamelCase as _;
 
 use crate::{
-    generation::{Container, Emitter, Encoding, indent::IndentWrite, module::Module},
-    reflection::format::{
-        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+    generation::{
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, indent::IndentWrite,
+        module::Module,
     },
+    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -38,21 +39,205 @@ enum Usage {
 
 impl Emitter<Swift> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: Swift) -> Result<()> {
-        let config = self.config();
+        let CodeGeneratorConfig {
+            encoding, features, ..
+        } = self.config();
 
         let mut imports = vec!["Serde".to_string()];
-        for ns in config.external_definitions.keys() {
+        for ns in self.config().external_definitions.keys() {
             imports.push(ns.to_upper_camel_case());
         }
         imports.sort();
         imports.dedup();
 
-        for import in imports {
+        for import in &imports {
             writeln!(w, "import {import}")?;
+        }
+
+        if encoding.is_none() {
+            return Ok(());
+        }
+
+        for feature in features {
+            match feature {
+                Feature::OptionOfT => {
+                    writeln!(w)?;
+                    write_feature_option(w)?;
+                }
+                Feature::ListOfT => {
+                    writeln!(w)?;
+                    write_feature_array(w)?;
+                }
+                Feature::SetOfT => {
+                    writeln!(w)?;
+                    write_feature_set(w)?;
+                }
+                Feature::MapOfT => {
+                    writeln!(w)?;
+                    write_feature_map(w)?;
+                }
+                Feature::BuildList => {
+                    writeln!(w)?;
+                    write_feature_tuple_array(w)?;
+                }
+                Feature::BigInt | Feature::Bytes => {}
+            }
         }
 
         Ok(())
     }
+}
+
+fn write_feature_option<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        func serializeOption<T, S: Serializer>(
+            value: T?,
+            serializer: S,
+            serializeElement: (T, S) throws -> Void
+        ) throws {{
+            if let value = value {{
+                try serializer.serialize_option_tag(value: true)
+                try serializeElement(value, serializer)
+            }} else {{
+                try serializer.serialize_option_tag(value: false)
+            }}
+        }}
+
+        func deserializeOption<T, D: Deserializer>(
+            deserializer: D,
+            deserializeElement: (D) throws -> T
+        ) throws -> T? {{
+            let tag = try deserializer.deserialize_option_tag()
+            if tag {{
+                return try deserializeElement(deserializer)
+            }} else {{
+                return nil
+            }}
+        }}
+        "
+    )
+}
+
+fn write_feature_array<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        func serializeArray<T, S: Serializer>(
+            value: [T],
+            serializer: S,
+            serializeElement: (T, S) throws -> Void
+        ) throws {{
+            try serializer.serialize_len(value: value.count)
+            for item in value {{
+                try serializeElement(item, serializer)
+            }}
+        }}
+
+        func deserializeArray<T, D: Deserializer>(
+            deserializer: D,
+            deserializeElement: (D) throws -> T
+        ) throws -> [T] {{
+            let length = try deserializer.deserialize_len()
+            var obj: [T] = []
+            for _ in 0..<length {{
+                obj.append(try deserializeElement(deserializer))
+            }}
+            return obj
+        }}
+        "
+    )
+}
+
+fn write_feature_set<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        func serializeSet<T: Hashable, S: Serializer>(
+            value: Set<T>,
+            serializer: S,
+            serializeElement: (T, S) throws -> Void
+        ) throws {{
+            try serializer.serialize_len(value: value.count)
+            for item in value {{
+                try serializeElement(item, serializer)
+            }}
+        }}
+
+        func deserializeSet<T: Hashable, D: Deserializer>(
+            deserializer: D,
+            deserializeElement: (D) throws -> T
+        ) throws -> Set<T> {{
+            let length = try deserializer.deserialize_len()
+            var obj: Set<T> = []
+            for _ in 0..<length {{
+                obj.insert(try deserializeElement(deserializer))
+            }}
+            return obj
+        }}
+        "
+    )
+}
+
+fn write_feature_map<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        func serializeMap<K, V, S: Serializer>(
+            value: [K: V],
+            serializer: S,
+            serializeEntry: (K, V, S) throws -> Void
+        ) throws {{
+            try serializer.serialize_len(value: value.count)
+            for (key, value) in value {{
+                try serializeEntry(key, value, serializer)
+            }}
+        }}
+
+        func deserializeMap<K: Hashable, V, D: Deserializer>(
+            deserializer: D,
+            deserializeEntry: (D) throws -> (K, V)
+        ) throws -> [K: V] {{
+            let length = try deserializer.deserialize_len()
+            var obj: [K: V] = [:]
+            for _ in 0..<length {{
+                let (key, value) = try deserializeEntry(deserializer)
+                obj[key] = value
+            }}
+            return obj
+        }}
+        "
+    )
+}
+
+fn write_feature_tuple_array<W: Write>(w: &mut W) -> Result<()> {
+    writedoc!(
+        w,
+        r"
+        func serializeTupleArray<T, S: Serializer>(
+            value: [T],
+            serializer: S,
+            serializeElement: (T, S) throws -> Void
+        ) throws {{
+            for item in value {{
+                try serializeElement(item, serializer)
+            }}
+        }}
+
+        func deserializeTupleArray<T, D: Deserializer>(
+            deserializer: D,
+            size: Int,
+            deserializeElement: (D) throws -> T
+        ) throws -> [T] {{
+            var obj: [T] = []
+            for _ in 0..<size {{
+                obj.append(try deserializeElement(deserializer))
+            }}
+            return obj
+        }}
+        "
+    )
 }
 
 impl Emitter<Swift> for Container<'_> {
@@ -183,9 +368,6 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 Format::Variable(_) => {
                     unreachable!("placeholders should not get this far")
                 }
-                Format::TypeName(_) => {
-                    writeln!(w, "try {receiver}.{name}.serialize(serializer: serializer)")
-                }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_serializer(w)?;
                     let formats = named(formats, "");
@@ -200,33 +382,11 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     }
                     pop_serializer(w)
                 }
-                Format::Option(_)
-                | Format::Seq(_)
-                | Format::Set(_)
-                | Format::Map { .. }
-                | Format::Tuple(_)
-                | Format::TupleArray { .. } => {
-                    let suffix = format_suffix(value);
-                    writeln!(
-                        w,
-                        "try serialize_{suffix}(value: {receiver}.{name}, serializer: serializer)"
-                    )
-                }
-                primitive => {
-                    let t = format!("{primitive:?}").to_lowercase();
-                    writeln!(w, "try serializer.serialize_{t}(value: {receiver}.{name})")
-                }
+                _ => write_format_serialize(w, value, &format!("{receiver}.{name}")),
             },
             Usage::Deserialize { receiver: _ } => match value {
                 Format::Variable(_) => {
                     unreachable!("placeholders should not get this far")
-                }
-                Format::TypeName(qualified_type_name) => {
-                    let type_name = &qualified_type_name.name;
-                    writeln!(
-                        w,
-                        "let {name} = try {type_name}.deserialize(deserializer: deserializer)"
-                    )
                 }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_deserializer(w)?;
@@ -250,22 +410,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                     writeln!(w, ")")?;
                     pop_deserializer(w)
                 }
-                Format::Option(_)
-                | Format::Seq(_)
-                | Format::Set(_)
-                | Format::Map { .. }
-                | Format::Tuple(_)
-                | Format::TupleArray { .. } => {
-                    let suffix = format_suffix(value);
-                    writeln!(
-                        w,
-                        "let {name} = try deserialize_{suffix}(deserializer: deserializer)"
-                    )
-                }
-                primitive => {
-                    let t = format!("{primitive:?}").to_lowercase();
-                    writeln!(w, "let {name} = try deserializer.deserialize_{t}()")
-                }
+                _ => write_format_deserialize(w, value, name),
             },
         }
     }
@@ -787,23 +932,72 @@ fn write_json_deserialize<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
     )
 }
 
-fn write_format_serialize<W: Write>(w: &mut W, format: &Format, value_expr: &str) -> Result<()> {
+fn write_format_serialize<W: IndentWrite>(
+    w: &mut W,
+    format: &Format,
+    value_expr: &str,
+) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(_) => {
             writeln!(w, "try {value_expr}.serialize(serializer: serializer)")
         }
-        Format::Option(_)
-        | Format::Seq(_)
-        | Format::Set(_)
-        | Format::Map { .. }
-        | Format::Tuple(_)
-        | Format::TupleArray { .. } => {
-            let suffix = format_suffix(format);
+        Format::Option(inner) => {
             writeln!(
                 w,
-                "try serialize_{suffix}(value: {value_expr}, serializer: serializer)"
-            )
+                "try serializeOption(value: {value_expr}, serializer: serializer) {{ value, serializer in"
+            )?;
+            w.indent();
+            write_format_serialize(w, inner, "value")?;
+            w.unindent();
+            writeln!(w, "}}")
+        }
+        Format::Seq(inner) => {
+            writeln!(
+                w,
+                "try serializeArray(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+            )?;
+            w.indent();
+            write_format_serialize(w, inner, "item")?;
+            w.unindent();
+            writeln!(w, "}}")
+        }
+        Format::Set(inner) => {
+            writeln!(
+                w,
+                "try serializeSet(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+            )?;
+            w.indent();
+            write_format_serialize(w, inner, "item")?;
+            w.unindent();
+            writeln!(w, "}}")
+        }
+        Format::Map { key, value } => {
+            writeln!(
+                w,
+                "try serializeMap(value: {value_expr}, serializer: serializer) {{ key, value, serializer in"
+            )?;
+            w.indent();
+            write_format_serialize(w, key, "key")?;
+            write_format_serialize(w, value, "value")?;
+            w.unindent();
+            writeln!(w, "}}")
+        }
+        Format::Tuple(formats) => {
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_serialize(w, fmt, &format!("{value_expr}.field{i}"))?;
+            }
+            Ok(())
+        }
+        Format::TupleArray { content, .. } => {
+            writeln!(
+                w,
+                "try serializeTupleArray(value: {value_expr}, serializer: serializer) {{ item, serializer in"
+            )?;
+            w.indent();
+            write_format_serialize(w, content, "item")?;
+            w.unindent();
+            writeln!(w, "}}")
         }
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
@@ -812,58 +1006,114 @@ fn write_format_serialize<W: Write>(w: &mut W, format: &Format, value_expr: &str
     }
 }
 
-fn write_format_deserialize<W: Write>(w: &mut W, format: &Format, var: &str) -> Result<()> {
+fn write_format_deserialize<W: IndentWrite>(w: &mut W, format: &Format, var: &str) -> Result<()> {
     match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => {
-            let type_name = &qtn.name;
-            writeln!(
-                w,
-                "let {var} = try {type_name}.deserialize(deserializer: deserializer)"
-            )
+        Format::Tuple(formats) if formats.len() > 1 => {
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
+            }
+            write!(w, "let {var} = Tuple{}.init(", formats.len())?;
+            for i in 0..formats.len() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write!(w, "{var}Field{i}")?;
+            }
+            writeln!(w, ")")
         }
-        Format::Option(_)
-        | Format::Seq(_)
-        | Format::Set(_)
-        | Format::Map { .. }
-        | Format::Tuple(_)
-        | Format::TupleArray { .. } => {
-            let suffix = format_suffix(format);
-            writeln!(
-                w,
-                "let {var} = try deserialize_{suffix}(deserializer: deserializer)"
-            )
-        }
-        primitive => {
-            let t = format!("{primitive:?}").to_lowercase();
-            writeln!(w, "let {var} = try deserializer.deserialize_{t}()")
+        _ => {
+            write!(w, "let {var} = ")?;
+            write_deserialize_expr(w, format)?;
+            writeln!(w)
         }
     }
 }
 
-fn format_suffix(format: &Format) -> String {
+/// Writes a deserialization expression (no `let` prefix, no trailing newline).
+fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => match &qtn.namespace {
-            Namespace::Named(ns) => format!("{ns}_{}", qtn.name),
-            Namespace::Root => qtn.name.clone(),
-        },
-        Format::Option(inner) => format!("option_{}", format_suffix(inner)),
-        Format::Seq(inner) => format!("vector_{}", format_suffix(inner)),
-        Format::Set(inner) => format!("set_{}", format_suffix(inner)),
-        Format::Map { key, value } => {
-            format!("map_{}_to_{}", format_suffix(key), format_suffix(value))
+        Format::TypeName(qtn) => {
+            let type_name = &qtn.name;
+            write!(w, "try {type_name}.deserialize(deserializer: deserializer)")
         }
+        Format::Option(inner) => {
+            writeln!(
+                w,
+                "try deserializeOption(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Seq(inner) => {
+            writeln!(
+                w,
+                "try deserializeArray(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Set(inner) => {
+            writeln!(
+                w,
+                "try deserializeSet(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, inner)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Map { key, value } => {
+            writeln!(
+                w,
+                "try deserializeMap(deserializer: deserializer) {{ deserializer in"
+            )?;
+            w.indent();
+            write_format_deserialize(w, key, "key")?;
+            write_format_deserialize(w, value, "value")?;
+            writeln!(w, "return (key, value)")?;
+            w.unindent();
+            write!(w, "}}")
+        }
+        Format::Tuple(formats) if formats.len() == 1 => write_deserialize_expr(w, &formats[0]),
         Format::Tuple(formats) => {
-            let parts: Vec<String> = formats.iter().map(format_suffix).collect();
-            format!("tuple{}_{}", formats.len(), parts.join("_"))
+            // Multi-element tuple: use Tuple{N}.init with temporaries
+            // We write a multi-statement block, but since this is expression position,
+            // the caller must handle the context (e.g. inside a closure body).
+            for (i, fmt) in formats.iter().enumerate() {
+                write_format_deserialize(w, fmt, &format!("field{i}"))?;
+            }
+            write!(w, "Tuple{}.init(", formats.len())?;
+            for i in 0..formats.len() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write!(w, "field{i}")?;
+            }
+            write!(w, ")")
         }
         Format::TupleArray { content, size } => {
-            format!("array{}_{}_array", size, format_suffix(content))
+            writeln!(
+                w,
+                "try deserializeTupleArray(deserializer: deserializer, size: {size}) {{ deserializer in"
+            )?;
+            w.indent();
+            write_deserialize_expr(w, content)?;
+            writeln!(w)?;
+            w.unindent();
+            write!(w, "}}")
         }
-        // Primitive types: the Debug name lowercased matches the suffix
-        // e.g. Bool -> "bool", I32 -> "i32", Str -> "str", etc.
-        primitive => format!("{primitive:?}").to_lowercase(),
+        primitive => {
+            let t = format!("{primitive:?}").to_lowercase();
+            write!(w, "try deserializer.deserialize_{t}()")
+        }
     }
 }
 
