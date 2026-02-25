@@ -7,8 +7,10 @@ use std::{
 use heck::ToLowerCamelCase as _;
 use indoc::writedoc;
 
+use heck::ToUpperCamelCase as _;
+
 use crate::{
-    generation::{Container, Emitter, Encoding, indent::IndentWrite},
+    generation::{Container, Emitter, Encoding, indent::IndentWrite, module::Module},
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
     },
@@ -32,6 +34,25 @@ enum Usage {
     Assignment,
     Serialize { receiver: String },
     Deserialize { receiver: String },
+}
+
+impl Emitter<Swift> for Module {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: Swift) -> Result<()> {
+        let config = self.config();
+
+        let mut imports = vec!["Serde".to_string()];
+        for ns in config.external_definitions.keys() {
+            imports.push(ns.to_upper_camel_case());
+        }
+        imports.sort();
+        imports.dedup();
+
+        for import in imports {
+            writeln!(w, "import {import}")?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Emitter<Swift> for Container<'_> {
