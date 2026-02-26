@@ -24,7 +24,7 @@ public struct Child: Hashable {
         try deserializer.increase_container_depth()
         let external = try OtherParent.deserialize(deserializer: deserializer)
         try deserializer.decrease_container_depth()
-        return Child.init(external: external)
+        return Child(external: external)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> Child {

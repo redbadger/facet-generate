@@ -118,7 +118,7 @@ public struct Child: Hashable {
         try deserializer.increase_container_depth()
         let name = try deserializer.deserialize_str()
         try deserializer.decrease_container_depth()
-        return Child.init(name: name)
+        return Child(name: name)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
@@ -196,7 +196,7 @@ public struct MyStruct: Hashable {
         }
         let parent = try Parent.deserialize(deserializer: deserializer)
         try deserializer.decrease_container_depth()
-        return MyStruct.init(stringToInt: stringToInt, mapToList: mapToList, optionOfVecOfSet: optionOfVecOfSet, parent: parent)
+        return MyStruct(stringToInt: stringToInt, mapToList: mapToList, optionOfVecOfSet: optionOfVecOfSet, parent: parent)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {

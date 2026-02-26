@@ -567,7 +567,7 @@ fn struct_<W: IndentWrite>(
                         .write(&mut w, lang)?;
                 }
                 pop_deserializer(&mut w)?;
-                write!(w, "return {name}.init(")?;
+                write!(w, "return {name}(")?;
                 for (i, field) in fields.iter().enumerate() {
                     if i > 0 {
                         write!(w, ", ")?;
@@ -881,7 +881,7 @@ fn write_format_deserialize<W: IndentWrite>(w: &mut W, format: &Format, var: &st
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
             }
-            write!(w, "let {var} = Tuple{}.init(", formats.len())?;
+            write!(w, "let {var} = Tuple{}(", formats.len())?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -953,13 +953,13 @@ fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<
         }
         Format::Tuple(formats) if formats.len() == 1 => write_deserialize_expr(w, &formats[0]),
         Format::Tuple(formats) => {
-            // Multi-element tuple: use Tuple{N}.init with temporaries
+            // Multi-element tuple: use Tuple{N} with temporaries
             // We write a multi-statement block, but since this is expression position,
             // the caller must handle the context (e.g. inside a closure body).
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("field{i}"))?;
             }
-            write!(w, "Tuple{}.init(", formats.len())?;
+            write!(w, "Tuple{}(", formats.len())?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;

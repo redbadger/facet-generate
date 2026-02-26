@@ -23,7 +23,7 @@ public struct Child: Hashable {
         try deserializer.increase_container_depth()
         let name = try deserializer.deserialize_str()
         try deserializer.decrease_container_depth()
-        return Child.init(name: name)
+        return Child(name: name)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> Child {

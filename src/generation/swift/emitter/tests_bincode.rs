@@ -42,7 +42,7 @@ fn unit_struct_1() {
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
             try deserializer.increase_container_depth()
             try deserializer.decrease_container_depth()
-            return UnitStruct.init()
+            return UnitStruct()
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> UnitStruct {
@@ -86,7 +86,7 @@ fn unit_struct_2() {
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
             try deserializer.increase_container_depth()
             try deserializer.decrease_container_depth()
-            return UnitStruct.init()
+            return UnitStruct()
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> UnitStruct {
@@ -134,7 +134,7 @@ fn newtype_struct() {
             try deserializer.increase_container_depth()
             let value = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return NewType.init(value: value)
+            return NewType(value: value)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> NewType {
@@ -186,7 +186,7 @@ fn tuple_struct() {
             let field0 = try deserializer.deserialize_str()
             let field1 = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return TupleStruct.init(field0: field0, field1: field1)
+            return TupleStruct(field0: field0, field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> TupleStruct {
@@ -313,7 +313,7 @@ fn struct_with_fields_of_primitive_types() {
             let char = try deserializer.deserialize_char()
             let string = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return StructWithFields.init(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
+            return StructWithFields(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> StructWithFields {
@@ -374,7 +374,7 @@ fn struct_with_fields_of_user_types() {
             try deserializer.increase_container_depth()
             let field1 = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Inner1.init(field1: field1)
+            return Inner1(field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner1 {
@@ -410,7 +410,7 @@ fn struct_with_fields_of_user_types() {
             try deserializer.increase_container_depth()
             let value = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Inner2.init(value: value)
+            return Inner2(value: value)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner2 {
@@ -450,7 +450,7 @@ fn struct_with_fields_of_user_types() {
             let field0 = try deserializer.deserialize_str()
             let field1 = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return Inner3.init(field0: field0, field1: field1)
+            return Inner3(field0: field0, field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner3 {
@@ -494,7 +494,7 @@ fn struct_with_fields_of_user_types() {
             let two = try Inner2.deserialize(deserializer: deserializer)
             let three = try Inner3.deserialize(deserializer: deserializer)
             try deserializer.decrease_container_depth()
-            return Outer.init(one: one, two: two, three: three)
+            return Outer(one: one, two: two, three: three)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Outer {
@@ -543,9 +543,9 @@ fn struct_with_field_that_is_a_2_tuple() {
             try deserializer.increase_container_depth()
             let oneField0 = try deserializer.deserialize_str()
             let oneField1 = try deserializer.deserialize_i32()
-            let one = Tuple2.init(oneField0, oneField1)
+            let one = Tuple2(oneField0, oneField1)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -596,9 +596,9 @@ fn struct_with_field_that_is_a_3_tuple() {
             let oneField0 = try deserializer.deserialize_str()
             let oneField1 = try deserializer.deserialize_i32()
             let oneField2 = try deserializer.deserialize_u16()
-            let one = Tuple3.init(oneField0, oneField1, oneField2)
+            let one = Tuple3(oneField0, oneField1, oneField2)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -654,9 +654,9 @@ fn struct_with_field_that_is_a_4_tuple() {
             let oneField1 = try deserializer.deserialize_i32()
             let oneField2 = try deserializer.deserialize_u16()
             let oneField3 = try deserializer.deserialize_f32()
-            let one = Tuple4.init(oneField0, oneField1, oneField2, oneField3)
+            let one = Tuple4(oneField0, oneField1, oneField2, oneField3)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1183,7 +1183,7 @@ fn struct_with_vec_field() {
                 }
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(items: items, numbers: numbers, nestedItems: nestedItems)
+            return MyStruct(items: items, numbers: numbers, nestedItems: nestedItems)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1254,7 +1254,7 @@ fn struct_with_option_field() {
                 try deserializer.deserialize_bool()
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
+            return MyStruct(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1321,7 +1321,7 @@ fn struct_with_hashmap_field() {
                 return (key, value)
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
+            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1446,7 +1446,7 @@ fn struct_with_nested_generics() {
                 }
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
+            return MyStruct(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1517,7 +1517,7 @@ fn struct_with_array_field() {
                 try deserializer.deserialize_str()
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
+            return MyStruct(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1584,7 +1584,7 @@ fn struct_with_btreemap_field() {
                 return (key, value)
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
+            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1647,7 +1647,7 @@ fn struct_with_hashset_field() {
                 try deserializer.deserialize_i32()
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringSet: stringSet, intSet: intSet)
+            return MyStruct(stringSet: stringSet, intSet: intSet)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1710,7 +1710,7 @@ fn struct_with_btreeset_field() {
                 try deserializer.deserialize_i32()
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringSet: stringSet, intSet: intSet)
+            return MyStruct(stringSet: stringSet, intSet: intSet)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1764,7 +1764,7 @@ fn struct_with_box_field() {
             let boxedString = try deserializer.deserialize_str()
             let boxedInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(boxedString: boxedString, boxedInt: boxedInt)
+            return MyStruct(boxedString: boxedString, boxedInt: boxedInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1817,7 +1817,7 @@ fn struct_with_rc_field() {
             let rcString = try deserializer.deserialize_str()
             let rcInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(rcString: rcString, rcInt: rcInt)
+            return MyStruct(rcString: rcString, rcInt: rcInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1870,7 +1870,7 @@ fn struct_with_arc_field() {
             let arcString = try deserializer.deserialize_str()
             let arcInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(arcString: arcString, arcInt: arcInt)
+            return MyStruct(arcString: arcString, arcInt: arcInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1970,7 +1970,7 @@ fn struct_with_mixed_collections_and_pointers() {
                 try deserializer.deserialize_i32()
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
+            return MyStruct(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -2030,7 +2030,7 @@ fn struct_with_bytes_field() {
             let name = try deserializer.deserialize_str()
             let header = try deserializer.deserialize_bytes()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(data: data, name: name, header: header)
+            return MyStruct(data: data, name: name, header: header)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -2103,7 +2103,7 @@ fn struct_with_bytes_field_and_slice() {
                 }
             }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(data: data, name: name, header: header, optionalBytes: optionalBytes)
+            return MyStruct(data: data, name: name, header: header, optionalBytes: optionalBytes)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -2161,7 +2161,7 @@ fn namespaced_child() {
                 try Child.deserialize(deserializer: deserializer)
             }
             try deserializer.decrease_container_depth()
-            return Parent.init(child: child)
+            return Parent(child: child)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Parent {
@@ -2197,7 +2197,7 @@ fn namespaced_child() {
             try deserializer.increase_container_depth()
             let test = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Child.init(test: test)
+            return Child(test: test)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
