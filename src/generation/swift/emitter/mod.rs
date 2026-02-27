@@ -903,7 +903,7 @@ fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(qtn) => {
-            let type_name = &qtn.name;
+            let type_name = &qtn.format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".");
             write!(w, "try {type_name}.deserialize(deserializer: deserializer)")
         }
         Format::Option(inner) => {

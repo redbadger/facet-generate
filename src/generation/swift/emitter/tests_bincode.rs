@@ -2158,7 +2158,7 @@ fn namespaced_child() {
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
             try deserializer.increase_container_depth()
             let child = try deserializeArray(deserializer: deserializer) { deserializer in
-                try Child.deserialize(deserializer: deserializer)
+                try Test.Child.deserialize(deserializer: deserializer)
             }
             try deserializer.decrease_container_depth()
             return Parent(child: child)
