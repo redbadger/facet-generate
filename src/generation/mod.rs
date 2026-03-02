@@ -13,15 +13,12 @@ pub mod kotlin;
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
-/// Support for code-generation in Swift
-#[cfg(feature = "swift")]
-pub mod swift2;
 /// Support for code-generation in TypeScript
 #[cfg(feature = "typescript")]
 pub mod typescript;
 
 /// Common logic for codegen.
-#[cfg(any(feature = "java", feature = "swift", feature = "typescript"))]
+#[cfg(any(feature = "java", feature = "typescript"))]
 pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;

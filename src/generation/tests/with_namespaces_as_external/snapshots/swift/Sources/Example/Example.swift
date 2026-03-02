@@ -1,14 +1,13 @@
 import Other
-import Serde
 
-public struct Child: Hashable {
-    @Indirect public var external: Other.OtherParent
+public struct Child {
+    public var external: Other.OtherParent
 
     public init(external: Other.OtherParent) {
         self.external = external
     }
 }
 
-indirect public enum Parent: Hashable {
+indirect public enum Parent {
     case child(Child)
 }

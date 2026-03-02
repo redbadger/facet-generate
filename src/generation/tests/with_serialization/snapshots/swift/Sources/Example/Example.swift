@@ -1,5 +1,100 @@
 import Serde
 
+func serializeArray<T, S: Serializer>(
+    value: [T],
+    serializer: S,
+    serializeElement: (T, S) throws -> Void
+) throws {
+    try serializer.serialize_len(value: value.count)
+    for item in value {
+        try serializeElement(item, serializer)
+    }
+}
+
+func deserializeArray<T, D: Deserializer>(
+    deserializer: D,
+    deserializeElement: (D) throws -> T
+) throws -> [T] {
+    let length = try deserializer.deserialize_len()
+    var obj: [T] = []
+    for _ in 0..<length {
+        obj.append(try deserializeElement(deserializer))
+    }
+    return obj
+}
+
+func serializeMap<K, V, S: Serializer>(
+    value: [K: V],
+    serializer: S,
+    serializeEntry: (K, V, S) throws -> Void
+) throws {
+    try serializer.serialize_len(value: value.count)
+    for (key, value) in value {
+        try serializeEntry(key, value, serializer)
+    }
+}
+
+func deserializeMap<K: Hashable, V, D: Deserializer>(
+    deserializer: D,
+    deserializeEntry: (D) throws -> (K, V)
+) throws -> [K: V] {
+    let length = try deserializer.deserialize_len()
+    var obj: [K: V] = [:]
+    for _ in 0..<length {
+        let (key, value) = try deserializeEntry(deserializer)
+        obj[key] = value
+    }
+    return obj
+}
+
+func serializeOption<T, S: Serializer>(
+    value: T?,
+    serializer: S,
+    serializeElement: (T, S) throws -> Void
+) throws {
+    if let value = value {
+        try serializer.serialize_option_tag(value: true)
+        try serializeElement(value, serializer)
+    } else {
+        try serializer.serialize_option_tag(value: false)
+    }
+}
+
+func deserializeOption<T, D: Deserializer>(
+    deserializer: D,
+    deserializeElement: (D) throws -> T
+) throws -> T? {
+    let tag = try deserializer.deserialize_option_tag()
+    if tag {
+        return try deserializeElement(deserializer)
+    } else {
+        return nil
+    }
+}
+
+func serializeSet<T: Hashable, S: Serializer>(
+    value: Set<T>,
+    serializer: S,
+    serializeElement: (T, S) throws -> Void
+) throws {
+    try serializer.serialize_len(value: value.count)
+    for item in value {
+        try serializeElement(item, serializer)
+    }
+}
+
+func deserializeSet<T: Hashable, D: Deserializer>(
+    deserializer: D,
+    deserializeElement: (D) throws -> T
+) throws -> Set<T> {
+    let length = try deserializer.deserialize_len()
+    var obj: Set<T> = []
+    for _ in 0..<length {
+        obj.insert(try deserializeElement(deserializer))
+    }
+    return obj
+}
+
 public struct Child: Hashable {
     @Indirect public var name: String
 
@@ -23,7 +118,7 @@ public struct Child: Hashable {
         try deserializer.increase_container_depth()
         let name = try deserializer.deserialize_str()
         try deserializer.decrease_container_depth()
-        return Child.init(name: name)
+        return Child(name: name)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
@@ -39,10 +134,10 @@ public struct Child: Hashable {
 public struct MyStruct: Hashable {
     @Indirect public var stringToInt: [String: Int32]
     @Indirect public var mapToList: [String: [Int32]]
-    @Indirect public var optionOfVecOfSet: [[String]]?
+    @Indirect public var optionOfVecOfSet: [Set<String>]?
     @Indirect public var parent: Parent
 
-    public init(stringToInt: [String: Int32], mapToList: [String: [Int32]], optionOfVecOfSet: [[String]]?, parent: Parent) {
+    public init(stringToInt: [String: Int32], mapToList: [String: [Int32]], optionOfVecOfSet: [Set<String>]?, parent: Parent) {
         self.stringToInt = stringToInt
         self.mapToList = mapToList
         self.optionOfVecOfSet = optionOfVecOfSet
@@ -51,9 +146,23 @@ public struct MyStruct: Hashable {
 
     public func serialize<S: Serializer>(serializer: S) throws {
         try serializer.increase_container_depth()
-        try serialize_map_str_to_i32(value: self.stringToInt, serializer: serializer)
-        try serialize_map_str_to_vector_i32(value: self.mapToList, serializer: serializer)
-        try serialize_option_vector_set_str(value: self.optionOfVecOfSet, serializer: serializer)
+        try serializeMap(value: self.stringToInt, serializer: serializer) { key, value, serializer in
+            try serializer.serialize_str(value: key)
+            try serializer.serialize_i32(value: value)
+        }
+        try serializeMap(value: self.mapToList, serializer: serializer) { key, value, serializer in
+            try serializer.serialize_str(value: key)
+            try serializeArray(value: value, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
+        }
+        try serializeOption(value: self.optionOfVecOfSet, serializer: serializer) { value, serializer in
+            try serializeArray(value: value, serializer: serializer) { item, serializer in
+                try serializeSet(value: item, serializer: serializer) { item, serializer in
+                    try serializer.serialize_str(value: item)
+                }
+            }
+        }
         try self.parent.serialize(serializer: serializer)
         try serializer.decrease_container_depth()
     }
@@ -66,12 +175,28 @@ public struct MyStruct: Hashable {
 
     public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
         try deserializer.increase_container_depth()
-        let stringToInt = try deserialize_map_str_to_i32(deserializer: deserializer)
-        let mapToList = try deserialize_map_str_to_vector_i32(deserializer: deserializer)
-        let optionOfVecOfSet = try deserialize_option_vector_set_str(deserializer: deserializer)
+        let stringToInt = try deserializeMap(deserializer: deserializer) { deserializer in
+            let key = try deserializer.deserialize_str()
+            let value = try deserializer.deserialize_i32()
+            return (key, value)
+        }
+        let mapToList = try deserializeMap(deserializer: deserializer) { deserializer in
+            let key = try deserializer.deserialize_str()
+            let value = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_i32()
+            }
+            return (key, value)
+        }
+        let optionOfVecOfSet = try deserializeOption(deserializer: deserializer) { deserializer in
+            try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializeSet(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_str()
+                }
+            }
+        }
         let parent = try Parent.deserialize(deserializer: deserializer)
         try deserializer.decrease_container_depth()
-        return MyStruct.init(stringToInt: stringToInt, mapToList: mapToList, optionOfVecOfSet: optionOfVecOfSet, parent: parent)
+        return MyStruct(stringToInt: stringToInt, mapToList: mapToList, optionOfVecOfSet: optionOfVecOfSet, parent: parent)
     }
 
     public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -124,128 +249,3 @@ indirect public enum Parent: Hashable {
         return obj
     }
 }
-
-func serialize_map_str_to_i32<S: Serializer>(value: [String: Int32], serializer: S) throws {
-    try serializer.serialize_len(value: value.count)
-    var offsets : [Int]  = []
-    for (key, value) in value {
-        offsets.append(serializer.get_buffer_offset())
-        try serializer.serialize_str(value: key)
-        try serializer.serialize_i32(value: value)
-    }
-    serializer.sort_map_entries(offsets: offsets)
-}
-
-func deserialize_map_str_to_i32<D: Deserializer>(deserializer: D) throws -> [String: Int32] {
-    let length = try deserializer.deserialize_len()
-    var obj : [String: Int32] = [:]
-    var previous_slice = Slice(start: 0, end: 0)
-    for i in 0..<length {
-        var slice = Slice(start: 0, end: 0)
-        slice.start = deserializer.get_buffer_offset()
-        let key = try deserializer.deserialize_str()
-        slice.end = deserializer.get_buffer_offset()
-        if i > 0 {
-            try deserializer.check_that_key_slices_are_increasing(key1: previous_slice, key2: slice)
-        }
-        previous_slice = slice
-        obj[key] = try deserializer.deserialize_i32()
-    }
-    return obj
-}
-
-func serialize_map_str_to_vector_i32<S: Serializer>(value: [String: [Int32]], serializer: S) throws {
-    try serializer.serialize_len(value: value.count)
-    var offsets : [Int]  = []
-    for (key, value) in value {
-        offsets.append(serializer.get_buffer_offset())
-        try serializer.serialize_str(value: key)
-        try serialize_vector_i32(value: value, serializer: serializer)
-    }
-    serializer.sort_map_entries(offsets: offsets)
-}
-
-func deserialize_map_str_to_vector_i32<D: Deserializer>(deserializer: D) throws -> [String: [Int32]] {
-    let length = try deserializer.deserialize_len()
-    var obj : [String: [Int32]] = [:]
-    var previous_slice = Slice(start: 0, end: 0)
-    for i in 0..<length {
-        var slice = Slice(start: 0, end: 0)
-        slice.start = deserializer.get_buffer_offset()
-        let key = try deserializer.deserialize_str()
-        slice.end = deserializer.get_buffer_offset()
-        if i > 0 {
-            try deserializer.check_that_key_slices_are_increasing(key1: previous_slice, key2: slice)
-        }
-        previous_slice = slice
-        obj[key] = try deserialize_vector_i32(deserializer: deserializer)
-    }
-    return obj
-}
-
-func serialize_option_vector_set_str<S: Serializer>(value: [[String]]?, serializer: S) throws {
-    if let value = value {
-        try serializer.serialize_option_tag(value: true)
-        try serialize_vector_set_str(value: value, serializer: serializer)
-    } else {
-        try serializer.serialize_option_tag(value: false)
-    }
-}
-
-func deserialize_option_vector_set_str<D: Deserializer>(deserializer: D) throws -> [[String]]? {
-    let tag = try deserializer.deserialize_option_tag()
-    if tag {
-        return try deserialize_vector_set_str(deserializer: deserializer)
-    } else {
-        return nil
-    }
-}
-
-func serialize_set_str<S: Serializer>(value: [String], serializer: S) throws {
-    try serializer.serialize_len(value: value.count)
-    for item in value {
-        try serializer.serialize_str(value: item)
-    }
-}
-
-func deserialize_set_str<D: Deserializer>(deserializer: D) throws -> [String] {
-    let length = try deserializer.deserialize_len()
-    var obj : [String] = []
-    for _ in 0..<length {
-        obj.append(try deserializer.deserialize_str())
-    }
-    return obj
-}
-
-func serialize_vector_i32<S: Serializer>(value: [Int32], serializer: S) throws {
-    try serializer.serialize_len(value: value.count)
-    for item in value {
-        try serializer.serialize_i32(value: item)
-    }
-}
-
-func deserialize_vector_i32<D: Deserializer>(deserializer: D) throws -> [Int32] {
-    let length = try deserializer.deserialize_len()
-    var obj : [Int32] = []
-    for _ in 0..<length {
-        obj.append(try deserializer.deserialize_i32())
-    }
-    return obj
-}
-
-func serialize_vector_set_str<S: Serializer>(value: [[String]], serializer: S) throws {
-    try serializer.serialize_len(value: value.count)
-    for item in value {
-        try serialize_set_str(value: item, serializer: serializer)
-    }
-}
-
-func deserialize_vector_set_str<D: Deserializer>(deserializer: D) throws -> [[String]] {
-    let length = try deserializer.deserialize_len()
-    var obj : [[String]] = []
-    for _ in 0..<length {
-        obj.append(try deserialize_set_str(deserializer: deserializer))
-    }
-    return obj
-}
-

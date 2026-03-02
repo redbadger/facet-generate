@@ -12,7 +12,7 @@ use indoc::formatdoc;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, ExternalPackage, ExternalPackages, SourceInstaller,
+        CodeGeneratorConfig, ExternalPackage, ExternalPackages, SourceInstaller,
         swift::generator::CodeGenerator,
     },
 };
@@ -209,7 +209,7 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
-        if matches!(config.encoding, Encoding::Bincode | Encoding::Bcs) {
+        if config.has_encoding() {
             targets.insert("Serde".to_string());
         }
 
@@ -263,5 +263,5 @@ impl SourceInstaller for Installer {
 }
 
 #[cfg(test)]
-#[path = "installer_tests.rs"]
-mod installer_tests;
+#[path = "tests.rs"]
+mod tests;

@@ -10,7 +10,8 @@ use std::{
 
 use facet::Facet;
 
-use crate::emit_swift;
+use super::*;
+use crate::{emit, generation::Encoding};
 
 #[test]
 fn unit_struct_1() {
@@ -19,7 +20,7 @@ fn unit_struct_1() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit_swift!(UnitStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(UnitStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct UnitStruct: Hashable {
@@ -41,7 +42,7 @@ fn unit_struct_1() {
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
             try deserializer.increase_container_depth()
             try deserializer.decrease_container_depth()
-            return UnitStruct.init()
+            return UnitStruct()
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> UnitStruct {
@@ -63,7 +64,7 @@ fn unit_struct_2() {
     /// line 2
     struct UnitStruct {}
 
-    let actual = emit_swift!(UnitStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(UnitStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct UnitStruct: Hashable {
@@ -85,7 +86,7 @@ fn unit_struct_2() {
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
             try deserializer.increase_container_depth()
             try deserializer.decrease_container_depth()
-            return UnitStruct.init()
+            return UnitStruct()
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> UnitStruct {
@@ -107,7 +108,7 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    let actual = emit_swift!(NewType as Encoding::Bincode).unwrap();
+    let actual = emit!(NewType as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct NewType: Hashable {
@@ -133,7 +134,7 @@ fn newtype_struct() {
             try deserializer.increase_container_depth()
             let value = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return NewType.init(value: value)
+            return NewType(value: value)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> NewType {
@@ -155,7 +156,7 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit_swift!(TupleStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(TupleStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct TupleStruct: Hashable {
@@ -185,7 +186,7 @@ fn tuple_struct() {
             let field0 = try deserializer.deserialize_str()
             let field1 = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return TupleStruct.init(field0: field0, field1: field1)
+            return TupleStruct(field0: field0, field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> TupleStruct {
@@ -226,7 +227,7 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit_swift!(StructWithFields as Encoding::Bincode).unwrap();
+    let actual = emit!(StructWithFields as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct StructWithFields: Hashable {
@@ -312,7 +313,7 @@ fn struct_with_fields_of_primitive_types() {
             let char = try deserializer.deserialize_char()
             let string = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return StructWithFields.init(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
+            return StructWithFields(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> StructWithFields {
@@ -347,7 +348,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit_swift!(Outer as Encoding::Bincode).unwrap();
+    let actual = emit!(Outer as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct Inner1: Hashable {
@@ -373,7 +374,7 @@ fn struct_with_fields_of_user_types() {
             try deserializer.increase_container_depth()
             let field1 = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Inner1.init(field1: field1)
+            return Inner1(field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner1 {
@@ -409,7 +410,7 @@ fn struct_with_fields_of_user_types() {
             try deserializer.increase_container_depth()
             let value = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Inner2.init(value: value)
+            return Inner2(value: value)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner2 {
@@ -449,7 +450,7 @@ fn struct_with_fields_of_user_types() {
             let field0 = try deserializer.deserialize_str()
             let field1 = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return Inner3.init(field0: field0, field1: field1)
+            return Inner3(field0: field0, field1: field1)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Inner3 {
@@ -493,7 +494,7 @@ fn struct_with_fields_of_user_types() {
             let two = try Inner2.deserialize(deserializer: deserializer)
             let three = try Inner3.deserialize(deserializer: deserializer)
             try deserializer.decrease_container_depth()
-            return Outer.init(one: one, two: two, three: three)
+            return Outer(one: one, two: two, three: three)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Outer {
@@ -515,7 +516,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -527,7 +528,8 @@ fn struct_with_field_that_is_a_2_tuple() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_tuple2_str_i32(value: self.one, serializer: serializer)
+            try serializer.serialize_str(value: self.one.field0)
+            try serializer.serialize_i32(value: self.one.field1)
             try serializer.decrease_container_depth()
         }
 
@@ -539,9 +541,11 @@ fn struct_with_field_that_is_a_2_tuple() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let one = try deserialize_tuple2_str_i32(deserializer: deserializer)
+            let oneField0 = try deserializer.deserialize_str()
+            let oneField1 = try deserializer.deserialize_i32()
+            let one = Tuple2(oneField0, oneField1)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -563,7 +567,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -575,7 +579,9 @@ fn struct_with_field_that_is_a_3_tuple() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_tuple3_str_i32_u16(value: self.one, serializer: serializer)
+            try serializer.serialize_str(value: self.one.field0)
+            try serializer.serialize_i32(value: self.one.field1)
+            try serializer.serialize_u16(value: self.one.field2)
             try serializer.decrease_container_depth()
         }
 
@@ -587,9 +593,12 @@ fn struct_with_field_that_is_a_3_tuple() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let one = try deserialize_tuple3_str_i32_u16(deserializer: deserializer)
+            let oneField0 = try deserializer.deserialize_str()
+            let oneField1 = try deserializer.deserialize_i32()
+            let oneField2 = try deserializer.deserialize_u16()
+            let one = Tuple3(oneField0, oneField1, oneField2)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -614,7 +623,7 @@ fn struct_with_field_that_is_a_4_tuple() {
     // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -626,7 +635,10 @@ fn struct_with_field_that_is_a_4_tuple() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_tuple4_str_i32_u16_f32(value: self.one, serializer: serializer)
+            try serializer.serialize_str(value: self.one.field0)
+            try serializer.serialize_i32(value: self.one.field1)
+            try serializer.serialize_u16(value: self.one.field2)
+            try serializer.serialize_f32(value: self.one.field3)
             try serializer.decrease_container_depth()
         }
 
@@ -638,9 +650,13 @@ fn struct_with_field_that_is_a_4_tuple() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let one = try deserialize_tuple4_str_i32_u16_f32(deserializer: deserializer)
+            let oneField0 = try deserializer.deserialize_str()
+            let oneField1 = try deserializer.deserialize_i32()
+            let oneField2 = try deserializer.deserialize_u16()
+            let oneField3 = try deserializer.deserialize_f32()
+            let one = Tuple4(oneField0, oneField1, oneField2, oneField3)
             try deserializer.decrease_container_depth()
-            return MyStruct.init(one: one)
+            return MyStruct(one: one)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -671,7 +687,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit_swift!(EnumWithUnitVariants as Encoding::Bincode).unwrap();
+    let actual = emit!(EnumWithUnitVariants as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum EnumWithUnitVariants: Hashable {
@@ -736,7 +752,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -789,7 +805,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -845,7 +861,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -909,7 +925,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -978,7 +994,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -1038,7 +1054,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit_swift!(MyEnum as Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     indirect public enum MyEnum: Hashable {
@@ -1117,7 +1133,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1133,9 +1149,17 @@ fn struct_with_vec_field() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_vector_str(value: self.items, serializer: serializer)
-            try serialize_vector_i32(value: self.numbers, serializer: serializer)
-            try serialize_vector_vector_str(value: self.nestedItems, serializer: serializer)
+            try serializeArray(value: self.items, serializer: serializer) { item, serializer in
+                try serializer.serialize_str(value: item)
+            }
+            try serializeArray(value: self.numbers, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
+            try serializeArray(value: self.nestedItems, serializer: serializer) { item, serializer in
+                try serializeArray(value: item, serializer: serializer) { item, serializer in
+                    try serializer.serialize_str(value: item)
+                }
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1147,11 +1171,19 @@ fn struct_with_vec_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let items = try deserialize_vector_str(deserializer: deserializer)
-            let numbers = try deserialize_vector_i32(deserializer: deserializer)
-            let nestedItems = try deserialize_vector_vector_str(deserializer: deserializer)
+            let items = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let numbers = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_i32()
+            }
+            let nestedItems = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializeArray(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_str()
+                }
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(items: items, numbers: numbers, nestedItems: nestedItems)
+            return MyStruct(items: items, numbers: numbers, nestedItems: nestedItems)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1176,7 +1208,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1192,9 +1224,15 @@ fn struct_with_option_field() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_option_str(value: self.optionalString, serializer: serializer)
-            try serialize_option_i32(value: self.optionalNumber, serializer: serializer)
-            try serialize_option_bool(value: self.optionalBool, serializer: serializer)
+            try serializeOption(value: self.optionalString, serializer: serializer) { value, serializer in
+                try serializer.serialize_str(value: value)
+            }
+            try serializeOption(value: self.optionalNumber, serializer: serializer) { value, serializer in
+                try serializer.serialize_i32(value: value)
+            }
+            try serializeOption(value: self.optionalBool, serializer: serializer) { value, serializer in
+                try serializer.serialize_bool(value: value)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1206,11 +1244,17 @@ fn struct_with_option_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let optionalString = try deserialize_option_str(deserializer: deserializer)
-            let optionalNumber = try deserialize_option_i32(deserializer: deserializer)
-            let optionalBool = try deserialize_option_bool(deserializer: deserializer)
+            let optionalString = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let optionalNumber = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_i32()
+            }
+            let optionalBool = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_bool()
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
+            return MyStruct(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1233,7 +1277,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1247,8 +1291,14 @@ fn struct_with_hashmap_field() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_map_str_to_i32(value: self.stringToInt, serializer: serializer)
-            try serialize_map_i32_to_bool(value: self.intToBool, serializer: serializer)
+            try serializeMap(value: self.stringToInt, serializer: serializer) { key, value, serializer in
+                try serializer.serialize_str(value: key)
+                try serializer.serialize_i32(value: value)
+            }
+            try serializeMap(value: self.intToBool, serializer: serializer) { key, value, serializer in
+                try serializer.serialize_i32(value: key)
+                try serializer.serialize_bool(value: value)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1260,10 +1310,18 @@ fn struct_with_hashmap_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let stringToInt = try deserialize_map_str_to_i32(deserializer: deserializer)
-            let intToBool = try deserialize_map_i32_to_bool(deserializer: deserializer)
+            let stringToInt = try deserializeMap(deserializer: deserializer) { deserializer in
+                let key = try deserializer.deserialize_str()
+                let value = try deserializer.deserialize_i32()
+                return (key, value)
+            }
+            let intToBool = try deserializeMap(deserializer: deserializer) { deserializer in
+                let key = try deserializer.deserialize_i32()
+                let value = try deserializer.deserialize_bool()
+                return (key, value)
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
+            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1289,7 +1347,7 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1309,11 +1367,38 @@ fn struct_with_nested_generics() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_option_vector_str(value: self.optionalList, serializer: serializer)
-            try serialize_vector_option_i32(value: self.listOfOptionals, serializer: serializer)
-            try serialize_map_str_to_vector_bool(value: self.mapToList, serializer: serializer)
-            try serialize_option_map_str_to_i32(value: self.optionalMap, serializer: serializer)
-            try serialize_vector_option_map_str_to_vector_bool(value: self.complex, serializer: serializer)
+            try serializeOption(value: self.optionalList, serializer: serializer) { value, serializer in
+                try serializeArray(value: value, serializer: serializer) { item, serializer in
+                    try serializer.serialize_str(value: item)
+                }
+            }
+            try serializeArray(value: self.listOfOptionals, serializer: serializer) { item, serializer in
+                try serializeOption(value: item, serializer: serializer) { value, serializer in
+                    try serializer.serialize_i32(value: value)
+                }
+            }
+            try serializeMap(value: self.mapToList, serializer: serializer) { key, value, serializer in
+                try serializer.serialize_str(value: key)
+                try serializeArray(value: value, serializer: serializer) { item, serializer in
+                    try serializer.serialize_bool(value: item)
+                }
+            }
+            try serializeOption(value: self.optionalMap, serializer: serializer) { value, serializer in
+                try serializeMap(value: value, serializer: serializer) { key, value, serializer in
+                    try serializer.serialize_str(value: key)
+                    try serializer.serialize_i32(value: value)
+                }
+            }
+            try serializeArray(value: self.complex, serializer: serializer) { item, serializer in
+                try serializeOption(value: item, serializer: serializer) { value, serializer in
+                    try serializeMap(value: value, serializer: serializer) { key, value, serializer in
+                        try serializer.serialize_str(value: key)
+                        try serializeArray(value: value, serializer: serializer) { item, serializer in
+                            try serializer.serialize_bool(value: item)
+                        }
+                    }
+                }
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1325,13 +1410,43 @@ fn struct_with_nested_generics() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let optionalList = try deserialize_option_vector_str(deserializer: deserializer)
-            let listOfOptionals = try deserialize_vector_option_i32(deserializer: deserializer)
-            let mapToList = try deserialize_map_str_to_vector_bool(deserializer: deserializer)
-            let optionalMap = try deserialize_option_map_str_to_i32(deserializer: deserializer)
-            let complex = try deserialize_vector_option_map_str_to_vector_bool(deserializer: deserializer)
+            let optionalList = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializeArray(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_str()
+                }
+            }
+            let listOfOptionals = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializeOption(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_i32()
+                }
+            }
+            let mapToList = try deserializeMap(deserializer: deserializer) { deserializer in
+                let key = try deserializer.deserialize_str()
+                let value = try deserializeArray(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_bool()
+                }
+                return (key, value)
+            }
+            let optionalMap = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializeMap(deserializer: deserializer) { deserializer in
+                    let key = try deserializer.deserialize_str()
+                    let value = try deserializer.deserialize_i32()
+                    return (key, value)
+                }
+            }
+            let complex = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializeOption(deserializer: deserializer) { deserializer in
+                    try deserializeMap(deserializer: deserializer) { deserializer in
+                        let key = try deserializer.deserialize_str()
+                        let value = try deserializeArray(deserializer: deserializer) { deserializer in
+                            try deserializer.deserialize_bool()
+                        }
+                        return (key, value)
+                    }
+                }
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
+            return MyStruct(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1356,7 +1471,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1372,9 +1487,15 @@ fn struct_with_array_field() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_array5_i32_array(value: self.fixedArray, serializer: serializer)
-            try serialize_array32_u8_array(value: self.byteArray, serializer: serializer)
-            try serialize_array3_str_array(value: self.stringArray, serializer: serializer)
+            try serializeTupleArray(value: self.fixedArray, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
+            try serializeTupleArray(value: self.byteArray, serializer: serializer) { item, serializer in
+                try serializer.serialize_u8(value: item)
+            }
+            try serializeTupleArray(value: self.stringArray, serializer: serializer) { item, serializer in
+                try serializer.serialize_str(value: item)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1386,11 +1507,17 @@ fn struct_with_array_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let fixedArray = try deserialize_array5_i32_array(deserializer: deserializer)
-            let byteArray = try deserialize_array32_u8_array(deserializer: deserializer)
-            let stringArray = try deserialize_array3_str_array(deserializer: deserializer)
+            let fixedArray = try deserializeTupleArray(deserializer: deserializer, size: 5) { deserializer in
+                try deserializer.deserialize_i32()
+            }
+            let byteArray = try deserializeTupleArray(deserializer: deserializer, size: 32) { deserializer in
+                try deserializer.deserialize_u8()
+            }
+            let stringArray = try deserializeTupleArray(deserializer: deserializer, size: 3) { deserializer in
+                try deserializer.deserialize_str()
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
+            return MyStruct(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1413,7 +1540,7 @@ fn struct_with_btreemap_field() {
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1427,8 +1554,14 @@ fn struct_with_btreemap_field() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_map_str_to_i32(value: self.stringToInt, serializer: serializer)
-            try serialize_map_i32_to_bool(value: self.intToBool, serializer: serializer)
+            try serializeMap(value: self.stringToInt, serializer: serializer) { key, value, serializer in
+                try serializer.serialize_str(value: key)
+                try serializer.serialize_i32(value: value)
+            }
+            try serializeMap(value: self.intToBool, serializer: serializer) { key, value, serializer in
+                try serializer.serialize_i32(value: key)
+                try serializer.serialize_bool(value: value)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1440,10 +1573,18 @@ fn struct_with_btreemap_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let stringToInt = try deserialize_map_str_to_i32(deserializer: deserializer)
-            let intToBool = try deserialize_map_i32_to_bool(deserializer: deserializer)
+            let stringToInt = try deserializeMap(deserializer: deserializer) { deserializer in
+                let key = try deserializer.deserialize_str()
+                let value = try deserializer.deserialize_i32()
+                return (key, value)
+            }
+            let intToBool = try deserializeMap(deserializer: deserializer) { deserializer in
+                let key = try deserializer.deserialize_i32()
+                let value = try deserializer.deserialize_bool()
+                return (key, value)
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringToInt: stringToInt, intToBool: intToBool)
+            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1468,22 +1609,26 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
+        @Indirect public var stringSet: Set<String>
+        @Indirect public var intSet: Set<Int32>
 
-        public init(stringSet: [String], intSet: [Int32]) {
+        public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
             self.intSet = intSet
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_set_str(value: self.stringSet, serializer: serializer)
-            try serialize_set_i32(value: self.intSet, serializer: serializer)
+            try serializeSet(value: self.stringSet, serializer: serializer) { item, serializer in
+                try serializer.serialize_str(value: item)
+            }
+            try serializeSet(value: self.intSet, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1495,10 +1640,14 @@ fn struct_with_hashset_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let stringSet = try deserialize_set_str(deserializer: deserializer)
-            let intSet = try deserialize_set_i32(deserializer: deserializer)
+            let stringSet = try deserializeSet(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let intSet = try deserializeSet(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_i32()
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringSet: stringSet, intSet: intSet)
+            return MyStruct(stringSet: stringSet, intSet: intSet)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1523,22 +1672,26 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: [String]
-        @Indirect public var intSet: [Int32]
+        @Indirect public var stringSet: Set<String>
+        @Indirect public var intSet: Set<Int32>
 
-        public init(stringSet: [String], intSet: [Int32]) {
+        public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
             self.intSet = intSet
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_set_str(value: self.stringSet, serializer: serializer)
-            try serialize_set_i32(value: self.intSet, serializer: serializer)
+            try serializeSet(value: self.stringSet, serializer: serializer) { item, serializer in
+                try serializer.serialize_str(value: item)
+            }
+            try serializeSet(value: self.intSet, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1550,10 +1703,14 @@ fn struct_with_btreeset_field() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let stringSet = try deserialize_set_str(deserializer: deserializer)
-            let intSet = try deserialize_set_i32(deserializer: deserializer)
+            let stringSet = try deserializeSet(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let intSet = try deserializeSet(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_i32()
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(stringSet: stringSet, intSet: intSet)
+            return MyStruct(stringSet: stringSet, intSet: intSet)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1577,7 +1734,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1607,7 +1764,7 @@ fn struct_with_box_field() {
             let boxedString = try deserializer.deserialize_str()
             let boxedInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(boxedString: boxedString, boxedInt: boxedInt)
+            return MyStruct(boxedString: boxedString, boxedInt: boxedInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1630,7 +1787,7 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1660,7 +1817,7 @@ fn struct_with_rc_field() {
             let rcString = try deserializer.deserialize_str()
             let rcInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(rcString: rcString, rcInt: rcInt)
+            return MyStruct(rcString: rcString, rcInt: rcInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1683,7 +1840,7 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1713,7 +1870,7 @@ fn struct_with_arc_field() {
             let arcString = try deserializer.deserialize_str()
             let arcInt = try deserializer.deserialize_i32()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(arcString: arcString, arcInt: arcInt)
+            return MyStruct(arcString: arcString, arcInt: arcInt)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1740,17 +1897,17 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var vecOfSets: [[String]]
+        @Indirect public var vecOfSets: [Set<String>]
         @Indirect public var optionalBtree: [String: Int32]?
         @Indirect public var boxedVec: [String]
         @Indirect public var arcOption: String?
         @Indirect public var arrayOfBoxes: [Int32]
 
-        public init(vecOfSets: [[String]], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
+        public init(vecOfSets: [Set<String>], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
             self.vecOfSets = vecOfSets
             self.optionalBtree = optionalBtree
             self.boxedVec = boxedVec
@@ -1760,11 +1917,26 @@ fn struct_with_mixed_collections_and_pointers() {
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_vector_set_str(value: self.vecOfSets, serializer: serializer)
-            try serialize_option_map_str_to_i32(value: self.optionalBtree, serializer: serializer)
-            try serialize_vector_str(value: self.boxedVec, serializer: serializer)
-            try serialize_option_str(value: self.arcOption, serializer: serializer)
-            try serialize_array3_i32_array(value: self.arrayOfBoxes, serializer: serializer)
+            try serializeArray(value: self.vecOfSets, serializer: serializer) { item, serializer in
+                try serializeSet(value: item, serializer: serializer) { item, serializer in
+                    try serializer.serialize_str(value: item)
+                }
+            }
+            try serializeOption(value: self.optionalBtree, serializer: serializer) { value, serializer in
+                try serializeMap(value: value, serializer: serializer) { key, value, serializer in
+                    try serializer.serialize_str(value: key)
+                    try serializer.serialize_i32(value: value)
+                }
+            }
+            try serializeArray(value: self.boxedVec, serializer: serializer) { item, serializer in
+                try serializer.serialize_str(value: item)
+            }
+            try serializeOption(value: self.arcOption, serializer: serializer) { value, serializer in
+                try serializer.serialize_str(value: value)
+            }
+            try serializeTupleArray(value: self.arrayOfBoxes, serializer: serializer) { item, serializer in
+                try serializer.serialize_i32(value: item)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1776,13 +1948,29 @@ fn struct_with_mixed_collections_and_pointers() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
             try deserializer.increase_container_depth()
-            let vecOfSets = try deserialize_vector_set_str(deserializer: deserializer)
-            let optionalBtree = try deserialize_option_map_str_to_i32(deserializer: deserializer)
-            let boxedVec = try deserialize_vector_str(deserializer: deserializer)
-            let arcOption = try deserialize_option_str(deserializer: deserializer)
-            let arrayOfBoxes = try deserialize_array3_i32_array(deserializer: deserializer)
+            let vecOfSets = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializeSet(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_str()
+                }
+            }
+            let optionalBtree = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializeMap(deserializer: deserializer) { deserializer in
+                    let key = try deserializer.deserialize_str()
+                    let value = try deserializer.deserialize_i32()
+                    return (key, value)
+                }
+            }
+            let boxedVec = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let arcOption = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let arrayOfBoxes = try deserializeTupleArray(deserializer: deserializer, size: 3) { deserializer in
+                try deserializer.deserialize_i32()
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
+            return MyStruct(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1808,7 +1996,7 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1842,7 +2030,7 @@ fn struct_with_bytes_field() {
             let name = try deserializer.deserialize_str()
             let header = try deserializer.deserialize_bytes()
             try deserializer.decrease_container_depth()
-            return MyStruct.init(data: data, name: name, header: header)
+            return MyStruct(data: data, name: name, header: header)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1869,7 +2057,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit_swift!(MyStruct as Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
@@ -1890,7 +2078,11 @@ fn struct_with_bytes_field_and_slice() {
             try serializer.serialize_bytes(value: self.data)
             try serializer.serialize_str(value: self.name)
             try serializer.serialize_bytes(value: self.header)
-            try serialize_option_vector_u8(value: self.optionalBytes, serializer: serializer)
+            try serializeOption(value: self.optionalBytes, serializer: serializer) { value, serializer in
+                try serializeArray(value: value, serializer: serializer) { item, serializer in
+                    try serializer.serialize_u8(value: item)
+                }
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1905,9 +2097,13 @@ fn struct_with_bytes_field_and_slice() {
             let data = try deserializer.deserialize_bytes()
             let name = try deserializer.deserialize_str()
             let header = try deserializer.deserialize_bytes()
-            let optionalBytes = try deserialize_option_vector_u8(deserializer: deserializer)
+            let optionalBytes = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializeArray(deserializer: deserializer) { deserializer in
+                    try deserializer.deserialize_u8()
+                }
+            }
             try deserializer.decrease_container_depth()
-            return MyStruct.init(data: data, name: name, header: header, optionalBytes: optionalBytes)
+            return MyStruct(data: data, name: name, header: header, optionalBytes: optionalBytes)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> MyStruct {
@@ -1935,19 +2131,21 @@ fn namespaced_child() {
         child: Vec<Child>,
     }
 
-    let actual = emit_swift!(Parent as Encoding::Bincode).unwrap();
+    let actual = emit!(Parent as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public struct Parent: Hashable {
-        @Indirect public var child: [Child]
+        @Indirect public var child: [Test.Child]
 
-        public init(child: [Child]) {
+        public init(child: [Test.Child]) {
             self.child = child
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serialize_vector_Test_Child(value: self.child, serializer: serializer)
+            try serializeArray(value: self.child, serializer: serializer) { item, serializer in
+                try item.serialize(serializer: serializer)
+            }
             try serializer.decrease_container_depth()
         }
 
@@ -1959,9 +2157,11 @@ fn namespaced_child() {
 
         public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
             try deserializer.increase_container_depth()
-            let child = try deserialize_vector_Test_Child(deserializer: deserializer)
+            let child = try deserializeArray(deserializer: deserializer) { deserializer in
+                try Test.Child.deserialize(deserializer: deserializer)
+            }
             try deserializer.decrease_container_depth()
-            return Parent.init(child: child)
+            return Parent(child: child)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Parent {
@@ -1997,7 +2197,7 @@ fn namespaced_child() {
             try deserializer.increase_container_depth()
             let test = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
-            return Child.init(test: test)
+            return Child(test: test)
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Child {

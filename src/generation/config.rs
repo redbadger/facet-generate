@@ -40,12 +40,12 @@ pub enum Encoding {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
-    BuildList,
     Bytes,
     ListOfT,
     MapOfT,
     OptionOfT,
     SetOfT,
+    TupleArray,
 }
 
 impl Encoding {
@@ -219,7 +219,7 @@ impl CodeGeneratorConfig {
                             self.features.insert(Feature::MapOfT);
                         }
                         Format::TupleArray { .. } => {
-                            self.features.insert(Feature::BuildList);
+                            self.features.insert(Feature::TupleArray);
                         }
                         _ => (),
                     }
@@ -230,8 +230,10 @@ impl CodeGeneratorConfig {
 
         for name in registry.keys() {
             if let Namespace::Named(ns) = &name.namespace {
-                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
-                entry.push(name.name.clone());
+                if ns != &self.module_name {
+                    let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                    entry.push(name.name.clone());
+                }
             }
         }
     }
