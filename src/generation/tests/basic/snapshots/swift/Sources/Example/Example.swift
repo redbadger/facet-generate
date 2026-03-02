@@ -1,13 +1,12 @@
-import Serde
 
-public struct Child: Hashable {
-    @Indirect public var name: String
+public struct Child {
+    public var name: String
 
     public init(name: String) {
         self.name = name
     }
 }
 
-indirect public enum Parent: Hashable {
+indirect public enum Parent {
     case child(Child)
 }

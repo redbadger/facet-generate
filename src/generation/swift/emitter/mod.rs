@@ -49,7 +49,10 @@ impl Emitter<Swift> for Module {
             encoding, features, ..
         } = self.config();
 
-        let mut imports = vec!["Serde".to_string()];
+        let mut imports = vec![];
+        if !encoding.is_none() {
+            imports.push("Serde".to_string());
+        }
         for ns in self.config().external_definitions.keys() {
             imports.push(ns.to_upper_camel_case());
         }
@@ -133,7 +136,13 @@ impl Emitter<Swift> for Format {
                         .format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".")
                 )
             }
-            Format::Unit => write!(w, "Unit"),
+            Format::Unit => {
+                if lang.encoding.is_none() {
+                    write!(w, "Void")
+                } else {
+                    write!(w, "Unit")
+                }
+            }
             Format::Bool => write!(w, "Bool"),
             Format::I8 => write!(w, "Int8"),
             Format::I16 => write!(w, "Int16"),
@@ -181,6 +190,16 @@ impl Emitter<Swift> for Format {
                 if len == 1 {
                     // A single-element tuple is just the element itself
                     formats[0].write(w, lang)
+                } else if lang.encoding.is_none() {
+                    // Use native Swift tuples when no serialization is needed
+                    write!(w, "(")?;
+                    for (i, format) in formats.iter().enumerate() {
+                        if i > 0 {
+                            write!(w, ", ")?;
+                        }
+                        format.write(w, lang)?;
+                    }
+                    write!(w, ")")
                 } else {
                     // Use TupleN<...> types from the Serde runtime because
                     // native Swift tuples don't conform to Hashable
@@ -206,7 +225,11 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
         match usage {
             Usage::Field => {
                 doc.write(w, lang)?;
-                write!(w, "@Indirect public var {name}: ")?;
+                if lang.encoding.is_none() {
+                    write!(w, "public var {name}: ")?;
+                } else {
+                    write!(w, "@Indirect public var {name}: ")?;
+                }
                 value.write(w, lang)?;
                 writeln!(w)
             }
@@ -450,7 +473,11 @@ fn struct_<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write!(w, "public struct {name}: Hashable ")?;
+    if lang.encoding.is_none() {
+        write!(w, "public struct {name} ")?;
+    } else {
+        write!(w, "public struct {name}: Hashable ")?;
+    }
     let mut w = w.blockln()?;
 
     for field in fields {
@@ -593,7 +620,11 @@ fn enum_<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write!(w, "indirect public enum {name}: Hashable ")?;
+    if lang.encoding.is_none() {
+        write!(w, "indirect public enum {name} ")?;
+    } else {
+        write!(w, "indirect public enum {name}: Hashable ")?;
+    }
     let mut w = w.blockln()?;
 
     let variants = variants.values().collect::<Vec<_>>();

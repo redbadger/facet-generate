@@ -209,8 +209,9 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
-        // Always depend on Serde — generated code uses Unit, Tuple{N}, and @Indirect
-        targets.insert("Serde".to_string());
+        if config.has_encoding() {
+            targets.insert("Serde".to_string());
+        }
 
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;

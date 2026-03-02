@@ -35,9 +35,11 @@ fn test_that_swift_code_compiles_with_config_and_registry(
     std::fs::create_dir_all(dir.path().join("Sources/Testing")).unwrap_or(());
     let serde_package_path = std::env::current_dir().unwrap().join("runtime/swift");
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
-    write!(
-        file,
-        r#"// swift-tools-version:5.3
+
+    if config.has_encoding() {
+        write!(
+            file,
+            r#"// swift-tools-version:5.3
 
 import PackageDescription
 
@@ -58,9 +60,33 @@ let package = Package(
     ]
 )
 "#,
-        serde_package_path.to_str().unwrap()
-    )
-    .unwrap();
+            serde_package_path.to_str().unwrap()
+        )
+        .unwrap();
+    } else {
+        write!(
+            file,
+            r#"// swift-tools-version:5.3
+
+import PackageDescription
+
+let package = Package(
+    name: "Testing",
+    products: [
+        .library(
+            name: "Testing",
+            targets: ["Testing"]),
+    ],
+    targets: [
+        .target(
+            name: "Testing",
+            dependencies: []),
+    ]
+)
+"#
+        )
+        .unwrap();
+    }
 
     let source_path = dir.path().join("Sources/Testing/Testing.swift");
     let mut source = File::create(&source_path).unwrap();
@@ -80,14 +106,32 @@ let package = Package(
 
 #[test]
 fn test_that_swift_code_compiles() {
-    let config = CodeGeneratorConfig::new("Testing".to_string());
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     test_that_swift_code_compiles_with_config(&config);
 }
 
 #[test]
 fn test_that_swift_code_compiles_without_serialization() {
+    #[derive(Facet)]
+    struct Child {
+        name: String,
+        age: u32,
+        tags: Vec<String>,
+        nickname: Option<String>,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Parent {
+        Single(Child),
+        Pair { left: Child, right: Child },
+        Empty,
+    }
+
+    let registry = reflect!(Parent).unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string());
-    test_that_swift_code_compiles_with_config(&config);
+    test_that_swift_code_compiles_with_config_and_registry(&config, &registry);
 }
 
 #[test]
@@ -125,7 +169,7 @@ fn test_swift_code_with_external_definitions() {
 
 #[test]
 fn test_that_swift_code_follow_case_convention() {
-    let config = CodeGeneratorConfig::new("Testing".to_string());
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
 
     let (_dir, source_path) = test_that_swift_code_compiles_with_config(&config);
     // Case convention were correctly followed.

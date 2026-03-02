@@ -15,7 +15,7 @@ fn generate(config: &CodeGeneratorConfig, registry: &Registry) -> String {
 }
 
 #[test]
-fn test_no_encoding_still_imports_serde() {
+fn test_no_encoding_does_not_import_serde() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string()).with_encoding(Encoding::None);
 
     let mut registry = Registry::new();
@@ -32,8 +32,8 @@ fn test_no_encoding_still_imports_serde() {
     let output = generate(&config, &registry);
 
     assert!(
-        output.contains("import Serde"),
-        "Should always import Serde (for Unit, Tuple, @Indirect): {output}"
+        !output.contains("import Serde"),
+        "Should not import Serde when encoding is None: {output}"
     );
 }
 
