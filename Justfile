@@ -1,3 +1,6 @@
+# Use powershell on Windows to avoid Git Bash's `link.exe` shadowing MSVC's linker
+set windows-shell := ["pwsh", "-c"]
+
 # default target for local development
 default: dev
 
