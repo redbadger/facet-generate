@@ -10,14 +10,8 @@ use tempfile::tempdir;
 
 pub mod common;
 
-/// On Windows, `Command::new("gradle")` doesn't find `gradle.cmd` shims,
-/// so we need to use `gradle.cmd` explicitly.
 fn gradle_command() -> Command {
-    if cfg!(windows) {
-        Command::new("gradle.cmd")
-    } else {
-        Command::new("gradle")
-    }
+    Command::new("gradle")
 }
 
 #[test]
