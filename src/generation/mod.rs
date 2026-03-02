@@ -1,7 +1,3 @@
-// Copyright (c) Facebook, Inc. and its affiliates
-// Copyright (c) Zefchain Labs, Inc.
-// SPDX-License-Identifier: MIT OR Apache-2.0
-
 /// Utility function to generate indented text
 pub mod indent;
 
@@ -22,7 +18,7 @@ pub mod swift;
 pub mod typescript;
 
 /// Common logic for codegen.
-#[cfg(any(feature = "java", feature = "swift", feature = "typescript"))]
+#[cfg(any(feature = "java", feature = "typescript"))]
 pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
@@ -35,7 +31,10 @@ use std::{
 pub use config::*;
 use indent::IndentWrite;
 
-use crate::Registry;
+use crate::{
+    Registry,
+    reflection::format::{ContainerFormat, QualifiedTypeName},
+};
 
 pub trait CodeGen<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
@@ -65,13 +64,30 @@ impl Display for Language {
     }
 }
 
-#[cfg(all(test, feature = "generate"))]
-mod tests;
+pub struct Container<'a> {
+    pub name: &'a QualifiedTypeName,
+    pub format: &'a ContainerFormat,
+}
+
+impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
+    fn from(value: (&'a QualifiedTypeName, &'a ContainerFormat)) -> Self {
+        Container {
+            name: value.0,
+            format: value.1,
+        }
+    }
+}
 
 pub trait Emitter<Language> {
     /// Write the code to the provided `IndentWrite`.
     ///
+    /// Note that the `lang` parameter allows the compiler to disambiguate this method
+    /// among multiple implementations of this trait
+    ///
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
-    fn write<W: IndentWrite>(&self, writer: &mut W) -> Result<()>;
+    fn write<W: IndentWrite>(&self, writer: &mut W, lang: Language) -> Result<()>;
 }
+
+#[cfg(all(test, feature = "generate"))]
+mod tests;

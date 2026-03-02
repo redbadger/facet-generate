@@ -17,8 +17,9 @@ fn unit_struct_1() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit!(UnitStruct as Encoding::Json).unwrap();
+    let actual = emit!(UnitStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     @Serializable
@@ -34,8 +35,9 @@ fn unit_struct_2() {
     /// line 2
     struct UnitStruct {}
 
-    let actual = emit!(UnitStruct as Encoding::Json).unwrap();
+    let actual = emit!(UnitStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     @Serializable
@@ -51,8 +53,9 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    let actual = emit!(NewType as Encoding::Json).unwrap();
+    let actual = emit!(NewType as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     @Serializable
@@ -70,8 +73,9 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit!(TupleStruct as Encoding::Json).unwrap();
+    let actual = emit!(TupleStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     @Serializable
@@ -109,8 +113,9 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit!(StructWithFields as Encoding::Json).unwrap();
+    let actual = emit!(StructWithFields as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line 1
     /// line 2
     @Serializable
@@ -158,8 +163,9 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit!(Outer as Encoding::Json).unwrap();
+    let actual = emit!(Outer as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("Inner1")
     data class Inner1(
@@ -196,8 +202,9 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -213,8 +220,9 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -233,8 +241,9 @@ fn struct_with_field_that_is_a_4_tuple() {
     // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -259,8 +268,9 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit!(EnumWithUnitVariants as Encoding::Json).unwrap();
+    let actual = emit!(EnumWithUnitVariants as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line one
     /// line two
     @Serializable
@@ -288,8 +298,9 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     enum class MyEnum {
@@ -310,8 +321,9 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     sealed interface MyEnum {
@@ -334,8 +346,9 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     sealed interface MyEnum {
@@ -364,8 +377,9 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     sealed interface MyEnum {
@@ -396,8 +410,9 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     sealed interface MyEnum {
@@ -423,8 +438,9 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit!(MyEnum as Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyEnum")
     sealed interface MyEnum {
@@ -463,8 +479,9 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -485,8 +502,9 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -505,8 +523,9 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -527,8 +546,9 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -551,8 +571,9 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -571,8 +592,9 @@ fn struct_with_btreemap_field() {
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -592,8 +614,9 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -613,8 +636,9 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -633,8 +657,9 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -652,8 +677,9 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -671,8 +697,9 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -694,8 +721,9 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -719,8 +747,9 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
@@ -743,8 +772,9 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit!(MyStruct as Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as Kotlin with Encoding::Json).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(

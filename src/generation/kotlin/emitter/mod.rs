@@ -9,20 +9,29 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Emitter, Encoding, Feature, PackageLocation, indent::IndentWrite,
-        module::Module,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
+        indent::IndentWrite, module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
-const FEATURE_BUILD_LIST: &[u8] = include_bytes!("features/BuildList.kt");
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
 const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
 const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
+const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 
-pub struct Kotlin;
+#[derive(Debug, Clone, Copy)]
+pub struct Kotlin {
+    pub encoding: Encoding,
+}
+
+impl Kotlin {
+    pub fn new(encoding: Encoding) -> Self {
+        Self { encoding }
+    }
+}
 
 impl Module {
     fn get_package_name(&self, namespace: &str) -> String {
@@ -50,7 +59,7 @@ impl Module {
 
 impl Emitter<Kotlin> for Module {
     #[allow(clippy::too_many_lines)]
-    fn write<W: Write>(&self, w: &mut W) -> Result<()> {
+    fn write<W: Write>(&self, w: &mut W, _lang: Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
             encoding,
@@ -142,8 +151,8 @@ impl Emitter<Kotlin> for Module {
                         writeln!(features_out)?;
                     }
                 }
-                Feature::BuildList => {
-                    features_out.write_all(FEATURE_BUILD_LIST)?;
+                Feature::TupleArray => {
+                    features_out.write_all(FEATURE_TUPLE_ARRAY)?;
                     writeln!(features_out)?;
                 }
             }
@@ -169,36 +178,35 @@ impl Emitter<Kotlin> for Module {
     }
 }
 
-impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (encoding, (name, format)) = self;
+impl Emitter<Kotlin> for Container<'_> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+        let Container {
+            name: QualifiedTypeName { namespace: _, name },
+            format,
+        } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                data_object(w, &name.name, None, doc, *encoding, None)?;
+                data_object(w, name, None, doc, lang, None)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 data_class(
                     w,
-                    &name.name,
+                    name,
                     None,
-                    &[Named {
-                        name: "value".to_string(),
-                        doc: Doc::new(),
-                        value: Format::clone(format),
-                    }],
+                    &[Named::new(format, "value".to_string())],
                     doc,
-                    *encoding,
+                    lang,
                     None,
                 )?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
-                data_class(w, &name.name, None, &named(formats), doc, *encoding, None)?;
+                data_class(w, name, None, &named(formats), doc, lang, None)?;
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    data_object(w, &name.name, None, doc, *encoding, None)?;
+                    data_object(w, name, None, doc, lang, None)?;
                 } else {
-                    data_class(w, &name.name, None, fields, doc, *encoding, None)?;
+                    data_class(w, name, None, fields, doc, lang, None)?;
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -209,9 +217,9 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));
 
                 if all_unit_variants {
-                    enum_class(w, &name.name, variants, doc, *encoding)?;
+                    enum_class(w, name, variants, doc, lang)?;
                 } else {
-                    sealed_interface(w, &name.name, &variant_list, doc, *encoding)?;
+                    sealed_interface(w, name, &variant_list, doc, lang)?;
                 }
             }
         }
@@ -221,13 +229,13 @@ impl Emitter<Kotlin> for (Encoding, (&QualifiedTypeName, &ContainerFormat)) {
 }
 
 impl Emitter<Kotlin> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        self.doc.write(w)?;
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+        self.doc.write(w, lang)?;
 
         let name = &self.name.to_lower_camel_case();
         write!(w, "val {name}: ")?;
 
-        self.value.write(w)?;
+        self.value.write(w, lang)?;
 
         // Add = null default only for top-level Option types
         if matches!(self.value, Format::Option(_)) {
@@ -239,7 +247,7 @@ impl Emitter<Kotlin> for Named<Format> {
 }
 
 impl Emitter<Kotlin> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: Kotlin) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -254,51 +262,45 @@ pub enum VariantContext {
     EnumClass,
 }
 
-impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
+impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     #[allow(clippy::too_many_lines)]
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
-        let (variant, context, encoding) = *self;
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+        let (
+            Named {
+                name,
+                doc,
+                value: format,
+            },
+            context,
+        ) = self;
 
-        let name = &variant.name;
-        match (&variant.value, context) {
+        match (&format, context) {
             (VariantFormat::Variable(_), _) => {
                 unreachable!("placeholders should not get this far")
             }
             (VariantFormat::Unit, VariantContext::SealedInterface(interface_name, index)) => {
-                data_object(
-                    w,
-                    name,
-                    Some(interface_name),
-                    &variant.doc,
-                    encoding,
-                    Some(*index),
-                )?;
+                data_object(w, name, Some(interface_name), doc, lang, Some(*index))?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
-                variant.doc.write(w)?;
-                let name_upper = variant.name.to_uppercase();
-                if encoding.is_json() {
-                    let name = &variant.name;
+                doc.write(w, lang)?;
+                let name_upper = name.to_uppercase();
+                if lang.encoding.is_json() {
                     write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
                 } else {
                     write!(w, "{name_upper}")?;
                 }
             }
             (
-                VariantFormat::NewType(format),
+                VariantFormat::NewType(inner),
                 VariantContext::SealedInterface(interface_name, index),
             ) => {
                 data_class(
                     w,
                     name,
                     Some(interface_name),
-                    &[Named {
-                        name: "value".to_string(),
-                        doc: Doc::new(),
-                        value: Format::clone(format),
-                    }],
-                    &variant.doc,
-                    encoding,
+                    &[Named::new(inner, "value".to_string())],
+                    doc,
+                    lang,
                     Some(*index),
                 )?;
             }
@@ -314,8 +316,8 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     name,
                     Some(interface_name),
                     &named(formats),
-                    &variant.doc,
-                    encoding,
+                    doc,
+                    lang,
                     Some(*index),
                 )?;
             }
@@ -331,8 +333,8 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext, Encoding) {
                     name,
                     Some(interface_name),
                     fields,
-                    &variant.doc,
-                    encoding,
+                    doc,
+                    lang,
                     Some(*index),
                 )?;
             }
@@ -382,7 +384,7 @@ impl Format {
 }
 
 impl Emitter<Kotlin> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -409,24 +411,24 @@ impl Emitter<Kotlin> for Format {
             Format::Bytes => write!(w, "Bytes"),
 
             Format::Option(format) => {
-                format.write(w)?;
+                format.write(w, lang)?;
                 write!(w, "?")
             }
             Format::Seq(format) => {
                 write!(w, "List<")?;
-                format.write(w)?;
+                format.write(w, lang)?;
                 write!(w, ">")
             }
             Format::Set(format) => {
                 write!(w, "Set<")?;
-                format.write(w)?;
+                format.write(w, lang)?;
                 write!(w, ">")
             }
             Format::Map { key, value } => {
                 write!(w, "Map<")?;
-                key.write(w)?;
+                key.write(w, lang)?;
                 write!(w, ", ")?;
-                value.write(w)?;
+                value.write(w, lang)?;
                 write!(w, ">")
             }
             Format::Tuple(formats) => {
@@ -435,22 +437,22 @@ impl Emitter<Kotlin> for Format {
                     0 => write!(w, "Unit"),
                     1 => {
                         // A single-element tuple is just the element itself
-                        formats[0].write(w)
+                        formats[0].write(w, lang)
                     }
                     2 => {
                         write!(w, "Pair<")?;
-                        formats[0].write(w)?;
+                        formats[0].write(w, lang)?;
                         write!(w, ", ")?;
-                        formats[1].write(w)?;
+                        formats[1].write(w, lang)?;
                         write!(w, ">")
                     }
                     3 => {
                         write!(w, "Triple<")?;
-                        formats[0].write(w)?;
+                        formats[0].write(w, lang)?;
                         write!(w, ", ")?;
-                        formats[1].write(w)?;
+                        formats[1].write(w, lang)?;
                         write!(w, ", ")?;
-                        formats[2].write(w)?;
+                        formats[2].write(w, lang)?;
                         write!(w, ">")
                     }
                     _ => {
@@ -460,7 +462,7 @@ impl Emitter<Kotlin> for Format {
                             if i > 0 {
                                 write!(w, ", ")?;
                             }
-                            format.write(w)?;
+                            format.write(w, lang)?;
                         }
                         write!(w, ">")
                     }
@@ -468,7 +470,7 @@ impl Emitter<Kotlin> for Format {
             }
             Format::TupleArray { content, size: _ } => {
                 write!(w, "List<")?;
-                content.write(w)?;
+                content.write(w, lang)?;
                 write!(w, ">")
             }
         }
@@ -480,12 +482,12 @@ fn data_object<W: IndentWrite>(
     name: &str,
     interface: Option<&str>,
     doc: &Doc,
-    encoding: Encoding,
+    lang: Kotlin,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    doc.write(w)?;
+    doc.write(w, lang)?;
 
-    if encoding.is_json() {
+    if lang.encoding.is_json() {
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
@@ -496,37 +498,36 @@ fn data_object<W: IndentWrite>(
         write!(w, ": {interface}")?;
     }
 
-    if encoding.is_bincode() {
+    if lang.encoding.is_bincode() {
         write!(w, " ")?;
-        w.start_block()?;
+        let mut w = w.blockln()?;
         if variant_index.is_some() {
             write!(w, "override ")?;
         }
         write!(w, "fun serialize(serializer: Serializer) ")?;
         if let Some(index) = variant_index {
-            w.start_block()?;
-            push_serializer(w)?;
+            let mut w = w.blockln()?;
+            push_serializer(&mut w)?;
             writeln!(w, "serializer.serialize_variant_index({index})")?;
-            pop_serializer(w)?;
-            w.end_block()?;
+            pop_serializer(&mut w)?;
         } else {
-            w.empty_block()?;
+            let _ = w.block()?;
         }
         writeln!(w)?;
 
         if variant_index.is_none() {
-            write_bincode_serialize(w)?;
+            write_bincode_serialize(&mut w)?;
             writeln!(w)?;
         }
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-        w.start_block()?;
-        writeln!(w, "return {name}")?;
-        w.end_block()?;
+        {
+            let mut w = w.blockln()?;
+            writeln!(w, "return {name}")?;
+        }
         if variant_index.is_none() {
             writeln!(w)?;
-            write_bincode_deserialize(w, name)?;
+            write_bincode_deserialize(&mut w, name)?;
         }
-        w.end_block()?;
     } else {
         writeln!(w)?;
     }
@@ -540,12 +541,12 @@ fn data_class<W: IndentWrite>(
     interface: Option<&str>,
     fields: &[Named<Format>],
     doc: &Doc,
-    encoding: Encoding,
+    lang: Kotlin,
     variant_index: Option<usize>,
 ) -> Result<()> {
-    doc.write(w)?;
+    doc.write(w, lang)?;
 
-    if encoding.is_json() {
+    if lang.encoding.is_json() {
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
@@ -554,7 +555,7 @@ fn data_class<W: IndentWrite>(
 
     w.indent();
     for field in fields {
-        field.write(w)?;
+        field.write(w, lang)?;
     }
     w.unindent();
 
@@ -564,66 +565,67 @@ fn data_class<W: IndentWrite>(
         write!(w, " : {interface}")?;
     }
 
-    if encoding.is_bincode() {
+    if lang.encoding.is_bincode() {
         write!(w, " ")?;
-        w.start_block()?;
+
+        let mut w = w.blockln()?;
         if variant_index.is_some() {
             write!(w, "override ")?;
         }
         write!(w, "fun serialize(serializer: Serializer) ")?;
         if fields.is_empty() {
-            w.empty_block()?;
+            let _ = w.block()?;
         } else {
-            w.start_block()?;
-            push_serializer(w)?;
+            let mut w = w.blockln()?;
+            push_serializer(&mut w)?;
             if let Some(index) = variant_index {
                 writeln!(w, "serializer.serialize_variant_index({index})")?;
             }
             for field in fields {
-                write_serialize(w, &field.name.to_lower_camel_case(), &field.value, 0)?;
+                write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
             }
-            pop_serializer(w)?;
-            w.end_block()?;
+            pop_serializer(&mut w)?;
         }
         writeln!(w)?;
 
         if variant_index.is_none() {
-            write_bincode_serialize(w)?;
+            write_bincode_serialize(&mut w)?;
             writeln!(w)?;
         }
         write!(w, "companion object ")?;
-        w.start_block()?;
-        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-        w.start_block()?;
-        if fields.is_empty() {
-            writeln!(w, "return {name}()")?;
-        } else {
-            push_deserializer(w)?;
-            for field in fields {
-                write_deserialize(
-                    w,
-                    Some(&field.name.to_lower_camel_case()),
-                    &field.value,
-                    true,
-                )?;
-            }
-            pop_deserializer(w)?;
-            write!(w, "return {name}(")?;
-            for (i, field) in fields.iter().enumerate() {
-                if i > 0 {
-                    write!(w, ", ")?;
+        {
+            let mut w = w.blockln()?;
+            write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+            {
+                let mut w = w.blockln()?;
+                if fields.is_empty() {
+                    writeln!(w, "return {name}()")?;
+                } else {
+                    push_deserializer(&mut w)?;
+                    for field in fields {
+                        write_deserialize(
+                            &mut w,
+                            Some(&field.name.to_lower_camel_case()),
+                            &field.value,
+                            true,
+                        )?;
+                    }
+                    pop_deserializer(&mut w)?;
+                    write!(w, "return {name}(")?;
+                    for (i, field) in fields.iter().enumerate() {
+                        if i > 0 {
+                            write!(w, ", ")?;
+                        }
+                        write!(w, "{}", field.name.to_lower_camel_case())?;
+                    }
+                    writeln!(w, ")")?;
                 }
-                write!(w, "{}", field.name.to_lower_camel_case())?;
             }
-            writeln!(w, ")")?;
+            if variant_index.is_none() {
+                writeln!(w)?;
+                write_bincode_deserialize(&mut w, name)?;
+            }
         }
-        w.end_block()?;
-        if variant_index.is_none() {
-            writeln!(w)?;
-            write_bincode_deserialize(w, name)?;
-        }
-        w.end_block()?;
-        w.end_block()?;
     } else {
         writeln!(w)?;
     }
@@ -636,31 +638,30 @@ fn enum_class<W: IndentWrite>(
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
-    encoding: Encoding,
+    lang: Kotlin,
 ) -> Result<()> {
-    doc.write(w)?;
+    doc.write(w, lang)?;
 
-    if encoding.is_json() {
+    if lang.encoding.is_json() {
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
 
-    writeln!(w, "enum class {name} {{")?;
-
-    w.indent();
+    write!(w, "enum class {name} ")?;
+    let mut w = w.blockln()?;
 
     for (i, variant) in variants {
         if *i > 0 {
             writeln!(w, ",")?;
         }
 
-        (variant, &VariantContext::EnumClass, encoding).write(w)?;
+        (variant, &VariantContext::EnumClass).write(&mut w, lang)?;
     }
     writeln!(w, ";")?;
-    writeln!(w)?;
 
-    match encoding {
+    match lang.encoding {
         Encoding::Json => {
+            writeln!(w)?;
             writedoc!(
                 w,
                 "
@@ -670,55 +671,53 @@ fn enum_class<W: IndentWrite>(
             )?;
         }
         Encoding::Bincode => {
+            writeln!(w)?;
             write!(w, "fun serialize(serializer: Serializer) ")?;
-            w.start_block()?;
-            push_serializer(w)?;
-            writeln!(w, "serializer.serialize_variant_index(ordinal)")?;
-            pop_serializer(w)?;
-            w.end_block()?;
+            {
+                let mut w = w.blockln()?;
+                push_serializer(&mut w)?;
+                writeln!(w, "serializer.serialize_variant_index(ordinal)")?;
+                pop_serializer(&mut w)?;
+            }
             writeln!(w)?;
 
-            write_bincode_serialize(w)?;
+            write_bincode_serialize(&mut w)?;
             writeln!(w)?;
 
             write!(w, "companion object ")?;
-            w.start_block()?;
+            {
+                let mut w = w.blockln()?;
 
-            writeln!(w, "@Throws(DeserializationError::class)")?;
-            write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-            w.start_block()?;
-            push_deserializer(w)?;
-            writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
-            pop_deserializer(w)?;
-            write!(w, "return when (index) ")?;
-            w.start_block()?;
-            for (i, variant) in variants {
-                write!(w, "{i} -> ")?;
-                let variant = Named {
-                    name: variant.name.clone(),
-                    doc: Doc::new(), // remove comments for this printing
-                    value: variant.value.clone(),
-                };
-                (&variant, &VariantContext::EnumClass, encoding).write(w)?;
+                writeln!(w, "@Throws(DeserializationError::class)")?;
+                write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
+                {
+                    let mut w = w.blockln()?;
+                    push_deserializer(&mut w)?;
+                    writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
+                    pop_deserializer(&mut w)?;
+                    write!(w, "return when (index) ")?;
+                    {
+                        let mut w = w.blockln()?;
+                        for (i, variant) in variants {
+                            write!(w, "{i} -> ")?;
+                            (&variant.without_docs(), &VariantContext::EnumClass)
+                                .write(&mut w, lang)?;
+                            writeln!(w)?;
+                        }
+                        writeln!(
+                            w,
+                            r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
+                        )?;
+                    }
+                }
                 writeln!(w)?;
+                write_bincode_deserialize(&mut w, name)?;
             }
-            writeln!(
-                w,
-                r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
-            )?;
-            w.end_block()?;
-            w.end_block()?;
-            writeln!(w)?;
-
-            write_bincode_deserialize(w, name)?;
-            w.end_block()?;
         }
         _ => (),
     }
 
-    w.unindent();
-
-    writeln!(w, "}}")
+    Ok(())
 }
 
 fn sealed_interface<W: IndentWrite>(
@@ -726,21 +725,21 @@ fn sealed_interface<W: IndentWrite>(
     name: &str,
     variants: &[Named<VariantFormat>],
     doc: &Doc,
-    encoding: Encoding,
+    lang: Kotlin,
 ) -> Result<()> {
-    doc.write(w)?;
+    doc.write(w, lang)?;
 
-    if encoding.is_json() {
+    if lang.encoding.is_json() {
         writeln!(w, "@Serializable")?;
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
     write!(w, "sealed interface {name} ")?;
-    w.start_block()?;
+    let mut w = w.blockln()?;
 
-    if encoding.is_bincode() {
+    if lang.encoding.is_bincode() {
         writeln!(w, "fun serialize(serializer: Serializer)")?;
         writeln!(w)?;
-        write_bincode_serialize(w)?;
+        write_bincode_serialize(&mut w)?;
         writeln!(w)?;
     }
 
@@ -749,45 +748,44 @@ fn sealed_interface<W: IndentWrite>(
             writeln!(w)?;
         }
         let ctx = VariantContext::SealedInterface(name.to_string(), index);
-        (variant, &ctx, encoding).write(w)?;
+        (variant, &ctx).write(&mut w, lang)?;
     }
 
-    if encoding.is_bincode() {
+    if lang.encoding.is_bincode() {
         writeln!(w)?;
         write!(w, "companion object ")?;
-        w.start_block()?;
+        let mut w = w.blockln()?;
         writeln!(w, "@Throws(DeserializationError::class)")?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-        w.start_block()?;
-        writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
-        write!(w, "return when (index) ")?;
-        w.start_block()?;
-        for (i, variant) in variants.iter().enumerate() {
-            let name = &variant.name;
-            writeln!(w, "{i} -> {name}.deserialize(deserializer)")?;
+        {
+            let mut w = w.blockln()?;
+            writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
+            write!(w, "return when (index) ")?;
+            {
+                let mut w = w.blockln()?;
+                for (i, variant) in variants.iter().enumerate() {
+                    let name = &variant.name;
+                    writeln!(w, "{i} -> {name}.deserialize(deserializer)")?;
+                }
+                writeln!(
+                    w,
+                    r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
+                )?;
+            }
         }
-        writeln!(
-            w,
-            r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
-        )?;
-        w.end_block()?;
-        w.end_block()?;
+
         writeln!(w)?;
-        write_bincode_deserialize(w, name)?;
-        w.end_block()?;
+        write_bincode_deserialize(&mut w, name)?;
     }
-    w.end_block()
+
+    Ok(())
 }
 
 fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
     formats
         .iter()
         .enumerate()
-        .map(|(i, f)| Named {
-            name: format!("field{i}"),
-            doc: Doc::new(),
-            value: f.clone(),
-        })
+        .map(|(i, f)| Named::new(f, format!("field{i}")))
         .collect()
 }
 
@@ -912,15 +910,14 @@ fn write_serialize<W: IndentWrite>(
 
 fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usize) -> Result<()> {
     if format.is_leaf() {
-        w.start_block()?;
-        write_serialize(w, "it", format, level + 1)?;
+        let mut w = w.blockln()?;
+        write_serialize(&mut w, "it", format, level + 1)
     } else {
         let param_name = format!("level{}", level + 1);
-        w.start_block_no_newline()?;
+        let mut w = w.block()?;
         writeln!(w, " {param_name} ->")?;
-        write_serialize(w, &param_name, format, level + 1)?;
+        write_serialize(&mut w, &param_name, format, level + 1)
     }
-    w.end_block()
 }
 
 fn write_map_serialize_lambda<W: IndentWrite>(
@@ -929,16 +926,14 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     value_format: &Format,
     level: usize,
 ) -> Result<()> {
-    w.start_block_no_newline()?;
+    let mut w = w.block()?;
     writeln!(w, " key, value ->")?;
 
     // For key, just call write_serialize directly - it handles all format types
-    write_serialize(w, "key", key_format, level + 1)?;
+    write_serialize(&mut w, "key", key_format, level + 1)?;
 
     // For value, just call write_serialize directly - it handles all format types
-    write_serialize(w, "value", value_format, level + 1)?;
-
-    w.end_block()
+    write_serialize(&mut w, "value", value_format, level + 1)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1018,35 +1013,33 @@ fn write_deserialize<W: IndentWrite>(
                 2 => {
                     // Pair<A, B> - deserialize inline and construct Pair
                     write!(w, "run ")?;
-                    w.start_block()?;
+                    let mut w = w.blockln()?;
                     write!(w, "val first = ")?;
-                    write_deserialize(w, None, &formats[0], true)?;
+                    write_deserialize(&mut w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
-                    write_deserialize(w, None, &formats[1], true)?;
+                    write_deserialize(&mut w, None, &formats[1], true)?;
                     writeln!(w, "Pair(first, second)")?;
-                    w.end_block()?;
                 }
                 3 => {
                     // Triple<A, B, C> - deserialize inline and construct Triple
                     write!(w, "run ")?;
-                    w.start_block()?;
+                    let mut w = w.blockln()?;
                     write!(w, "val first = ")?;
-                    write_deserialize(w, None, &formats[0], true)?;
+                    write_deserialize(&mut w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
-                    write_deserialize(w, None, &formats[1], true)?;
+                    write_deserialize(&mut w, None, &formats[1], true)?;
                     write!(w, "val third = ")?;
-                    write_deserialize(w, None, &formats[2], true)?;
+                    write_deserialize(&mut w, None, &formats[2], true)?;
                     writeln!(w, "Triple(first, second, third)")?;
-                    w.end_block()?;
                 }
                 _ => {
                     // NTupleN - deserialize and construct
                     let typename = format!("NTuple{len}");
                     write!(w, "run ")?;
-                    w.start_block()?;
+                    let mut w = w.blockln()?;
                     for (i, format) in formats.iter().enumerate() {
                         write!(w, "val v{i} = ")?;
-                        write_deserialize(w, None, format, true)?;
+                        write_deserialize(&mut w, None, format, true)?;
                     }
                     write!(w, "{typename}(")?;
                     for i in 0..len {
@@ -1056,7 +1049,6 @@ fn write_deserialize<W: IndentWrite>(
                         write!(w, "v{i}")?;
                     }
                     writeln!(w, ")")?;
-                    w.end_block()?;
                 }
             }
             Ok(())
@@ -1090,9 +1082,8 @@ fn write_deserialize<W: IndentWrite>(
 }
 
 fn write_deserialize_lambda<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
-    w.start_block()?;
-    write_deserialize(w, None, format, true)?;
-    w.end_block()
+    let mut w = w.blockln()?;
+    write_deserialize(&mut w, None, format, true)
 }
 
 fn write_map_deserialize_lambda<W: IndentWrite>(
@@ -1100,29 +1091,28 @@ fn write_map_deserialize_lambda<W: IndentWrite>(
     key_format: &Format,
     value_format: &Format,
 ) -> Result<()> {
-    w.start_block()?;
+    let mut w = w.blockln()?;
     write!(w, "val key =")?;
     if key_format.is_leaf() {
         write!(w, " ")?;
-        write_deserialize(w, None, key_format, true)?;
+        write_deserialize(&mut w, None, key_format, true)?;
     } else {
         writeln!(w)?;
         w.indent();
-        write_deserialize(w, None, key_format, true)?;
+        write_deserialize(&mut w, None, key_format, true)?;
         w.unindent();
     }
     write!(w, "val value =")?;
     if value_format.is_leaf() {
         write!(w, " ")?;
-        write_deserialize(w, None, value_format, true)?;
+        write_deserialize(&mut w, None, value_format, true)?;
     } else {
         writeln!(w)?;
         w.indent();
-        write_deserialize(w, None, value_format, true)?;
+        write_deserialize(&mut w, None, value_format, true)?;
         w.unindent();
     }
-    writeln!(w, "Pair(key, value)")?;
-    w.end_block()
+    writeln!(w, "Pair(key, value)")
 }
 
 fn push_serializer<W: Write>(w: &mut W) -> Result<()> {

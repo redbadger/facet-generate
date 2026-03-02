@@ -3,9 +3,10 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Emitter,
+        CodeGen, CodeGeneratorConfig, Container, Emitter,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
+        kotlin::emitter::Kotlin,
         module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
@@ -41,25 +42,26 @@ impl<'a> CodeGenerator<'a> {
     /// Output type definitions for `registry`.
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
-    pub fn output(&self, out: &mut dyn Write, registry: &Registry) -> Result<()> {
+    pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
 
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        // Update qualified type names to use fully qualified paths
-        let updated_registry = Self::update_qualified_names(&config, registry);
+        let lang = Kotlin::new(config.encoding);
 
-        let module = Module::new(&config);
-        module.write(w)?;
+        Module::new(&config).write(w, lang)?;
 
-        for (i, container) in updated_registry.iter().enumerate() {
+        for (i, container) in Self::update_qualified_names(&config, registry)
+            .iter()
+            .map(Container::from)
+            .enumerate()
+        {
             if i > 0 {
                 writeln!(w)?;
             }
-            (config.encoding, container).write(w)?;
+            container.write(w, lang)?;
         }
-
         Ok(())
     }
 
