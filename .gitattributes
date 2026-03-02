@@ -1,0 +1,4 @@
+# Ensure consistent LF line endings across platforms.
+# Snapshot files and generated code must use LF so that expect_file!
+# comparisons don't break on Windows due to CRLF conversion.
+* text=auto eol=lf
