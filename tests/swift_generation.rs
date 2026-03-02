@@ -97,9 +97,12 @@ let package = Package(
     let generator = CodeGenerator::new(config);
     generator.output(&mut source, registry).unwrap();
 
+    // Disable the index store: it's not needed for compilation checks, and on
+    // Windows parallel builds race over index-store .pcm files because Windows
+    // enforces mandatory file locks.
     let status = Command::new("swift")
         .current_dir(dir.path())
-        .arg("build")
+        .args(["build", "--disable-index-store"])
         .status()
         .unwrap();
     assert!(status.success());
