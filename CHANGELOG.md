@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.15.0] - 2026-03-02
+
+This is a potential breaking change.
+
+Updates the Swift code generation, as a second implementation of the Emitter pattern that is used for Kotlin generation. The generated code is slightly different, but is more idiomatic Swift and should be a drop in replacement (except for code generated when serialization support is not needed, which is simpler and fully Swift native).
+
+### 🚀 Features
+
+- feat(swift): Complete rewrite of the Swift emitter, following the architecture pattern used for Kotlin (`Emitter<Language>` trait with phantom type parameter)
+- feat(swift): Introduce `Module` abstraction for writing preamble and organizing output
+- feat(swift): RAII block guards for cleaner code generation
+- feat(swift): Move encoding configuration to the `Language` struct
+- feat(swift): Improved Bincode support implementation in new Swift emitter
+- feat(swift): Use native Swift types when not serializing, removing unnecessary serde runtime dependency
+
+### 🐛 Bug Fixes
+
+- fix(swift): Don't qualify types that are in the same module
+- fix(swift): Correct namespacing in deserialize expressions
+- fix(swift): Don't call `.init()` explicitly
+- fix(swift): Fix self-imports and add newline after imports
+- fix(swift): Move serialization helpers to features in emitter
+- fix: Streamlined build processes
+
+### 🧪 Tests
+
+- test(swift): Enable 20 previously ignored Swift JSON tests
+- test(swift): All insta and expect_file snapshots updated to match new emitter output
+
+### ⚙️ Miscellaneous Tasks
+
+- chore: Update Rust dependencies
+
 ## [0.14.0] - 2026-02-02
 
 ### 🚀 Features
