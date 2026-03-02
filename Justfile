@@ -28,7 +28,7 @@ fix:
 check:
     @echo '{{ style("command") }}check:{{ NORMAL }}'
     cargo fmt --all -- --check
-    cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
+    cargo clippy --all-targets -- --no-deps '-Dclippy::pedantic' -Dwarnings
 
 # local development: fix, check, build, test with snapshot review
 dev: fix check build test-review
