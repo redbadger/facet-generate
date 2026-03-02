@@ -10,6 +10,16 @@ use tempfile::tempdir;
 
 pub mod common;
 
+/// On Windows, `Command::new("gradle")` doesn't find `gradle.cmd` shims,
+/// so we need to use `gradle.cmd` explicitly.
+fn gradle_command() -> Command {
+    if cfg!(windows) {
+        Command::new("gradle.cmd")
+    } else {
+        Command::new("gradle")
+    }
+}
+
 #[test]
 fn test_that_kotlin_code_compiles() {
     type Test = common::PrimitiveTypes;
@@ -28,7 +38,7 @@ fn test_that_kotlin_code_compiles() {
 
     let args = ["--configuration-cache"];
 
-    let status = Command::new("gradle")
+    let status = gradle_command()
         .args(args)
         .arg("--version")
         .current_dir(&dir)
@@ -36,7 +46,7 @@ fn test_that_kotlin_code_compiles() {
         .unwrap();
     assert!(status.success());
 
-    let status = Command::new("gradle")
+    let status = gradle_command()
         .args(args)
         .arg("build")
         .current_dir(&dir)

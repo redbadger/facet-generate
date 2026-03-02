@@ -9,7 +9,10 @@ use crate::common::{SerdeData, Tree};
 use facet::Facet;
 use facet_generate::{
     Registry,
-    generation::{CodeGeneratorConfig, Encoding, swift::CodeGenerator},
+    generation::{
+        CodeGeneratorConfig, Encoding,
+        swift::{CodeGenerator, normalize_path},
+    },
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -60,7 +63,7 @@ let package = Package(
     ]
 )
 "#,
-            serde_package_path.to_str().unwrap()
+            normalize_path(serde_package_path.to_str().unwrap())
         )
         .unwrap();
     } else {
