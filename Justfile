@@ -32,3 +32,9 @@ dev: fix check build test-review
 
 # CI pipeline: check, build, test (matches .github/workflows/build.yaml)
 ci: check build test
+
+update-rust-deps:
+    @echo '{{ style("command") }}update-rust-deps:{{ NORMAL }}'
+    cargo update
+    cargo upgrade --incompatible allow
+    cargo update
