@@ -8,5 +8,5 @@ public struct OtherChild {
 }
 
 indirect public enum OtherParent {
-    case child(Other.OtherChild)
+    case child(OtherChild)
 }
