@@ -209,12 +209,6 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        // BCS runtime would be installed similarly to bincode if implemented
-        // For now, BCS is not supported in Kotlin
-        Ok(())
-    }
-
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {
         let manifest = self.make_manifest(package_name);
 

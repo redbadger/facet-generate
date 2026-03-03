@@ -90,7 +90,7 @@ impl Emitter<Kotlin> for Module {
                     format!("import {serde_package}.Serializer"),
                 ]
             }
-            _ => vec![],
+            Encoding::None => vec![],
         };
 
         let mut features_out = vec![];
@@ -121,7 +121,7 @@ impl Emitter<Kotlin> for Module {
                             features_out.write_all(FEATURE_BIGINT)?;
                             writeln!(features_out)?;
                         }
-                        Encoding::Bincode | Encoding::Bcs => {
+                        Encoding::Bincode => {
                             imports.push(format!("import {}.Int128", self.serde_package()));
                         }
                         Encoding::None => (),
@@ -714,7 +714,7 @@ fn enum_class<W: IndentWrite>(
                 write_bincode_deserialize(&mut w, name)?;
             }
         }
-        _ => (),
+        Encoding::None => (),
     }
 
     Ok(())

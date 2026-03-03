@@ -8,7 +8,6 @@
         //   `swift test --generate-linuxmain`
         // to regenerate.
         static let __allTests__SerdeTests = [
-            ("testCheckThatKeySlicesAreIncreasing", testCheckThatKeySlicesAreIncreasing),
             ("testDeserializer", testDeserializer),
             ("testSerializeI128", testSerializeI128),
             ("testSerializeInt16", testSerializeInt16),
@@ -20,8 +19,6 @@
             ("testSerializeUint16", testSerializeUint16),
             ("testSerializeUint32", testSerializeUint32),
             ("testSerializeUint8", testSerializeUint8),
-            ("testSortMapEntries", testSortMapEntries),
-            ("testULEB128Encoding", testULEB128Encoding),
         ]
     }
 

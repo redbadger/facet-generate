@@ -1,6 +1,6 @@
 #![allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
 use facet::Facet;
-use facet_generate::{Registry, generation::Encoding, reflect};
+use facet_generate::{Registry, reflect};
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -67,7 +67,7 @@ pub struct PrimitiveTypes {
     f_i32: i32,
     f_i64: i64,
     f_i128: i128,
-    // The following types are not supported by our bincode and BCS runtimes, therefore
+    // The following types are not supported by our bincode runtime, therefore
     // we don't populate them for testing.
     f_f32: Option<f32>,
     f_f64: Option<f64>,
@@ -138,10 +138,8 @@ pub fn get_registry() -> Registry {
 }
 
 /// Manually generate sample values.
-/// Avoid maps with more than one element when `has_canonical_maps` is false so that
-/// we can test re-serialization.
 #[allow(clippy::too_many_lines)]
-pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<SerdeData> {
+pub fn get_sample_values() -> Vec<SerdeData> {
     let v0 = SerdeData::PrimitiveTypes(PrimitiveTypes {
         f_bool: false,
         f_u8: 6,
@@ -154,8 +152,8 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
         f_i32: -1,
         f_i64: -2,
         f_i128: -3,
-        f_f32: if has_floats { Some(0.4) } else { None },
-        f_f64: if has_floats { Some(35.21) } else { None },
+        f_f32: Some(0.4),
+        f_f64: Some(35.21),
         f_char: None,
     });
 
@@ -171,8 +169,8 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
         f_i32: i32::MIN,
         f_i64: i64::MIN,
         f_i128: i128::MIN,
-        f_f32: if has_floats { Some(-4111.0) } else { None },
-        f_f64: if has_floats { Some(-0.0021) } else { None },
+        f_f32: Some(-4111.0),
+        f_f64: Some(-0.0021),
         f_char: None,
     });
 
@@ -184,11 +182,7 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
         f_seq: vec![Struct { x: 1, y: 3 }],
         f_opt_seq: Some(vec![1]),
         f_tuple: (4, 5),
-        f_stringmap: if has_canonical_maps {
-            btreemap! {"foo".to_string() => 1, "bar".to_string() => 2}
-        } else {
-            btreemap! {"foo".to_string() => 1}
-        },
+        f_stringmap: btreemap! {"foo".to_string() => 1},
         #[allow(clippy::zero_sized_map_values)]
         f_intset: BTreeMap::new(),
         f_nested_seq: vec![
@@ -206,11 +200,7 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
         f_opt_seq: None,
         f_tuple: (4, 5),
         f_stringmap: BTreeMap::new(),
-        f_intset: if has_canonical_maps {
-            btreemap! {1 => (), 5 => (), 16 => (), 64 => (), 257 => (), 1024 => ()}
-        } else {
-            btreemap! {64 => ()}
-        },
+        f_intset: btreemap! {64 => ()},
         f_nested_seq: vec![],
     });
 
@@ -223,15 +213,8 @@ pub fn get_sample_values(has_canonical_maps: bool, has_floats: bool) -> Vec<Serd
         f_opt_seq: None,
         f_tuple: (4, 5),
         f_stringmap: BTreeMap::new(),
-        f_intset: if has_canonical_maps {
-            std::iter::repeat_n((), 10)
-                .enumerate()
-                .map(|(i, ())| (i as u64, ()))
-                .collect()
-        } else {
-            #[allow(clippy::zero_sized_map_values)]
-            BTreeMap::new()
-        },
+        #[allow(clippy::zero_sized_map_values)]
+        f_intset: BTreeMap::new(),
         f_nested_seq: vec![],
     });
 
@@ -343,270 +326,66 @@ pub fn get_sample_value_with_long_sequence(length: usize) -> SerdeData {
     SerdeData::UnitVector(vec![(); length])
 }
 
-/// Structure used to factorize code in runtime tests.
-#[derive(Copy, Clone)]
-pub enum Runtime {
-    Bcs,
-    Bincode,
+/// Serialize each sample value with bincode, returning the serialized bytes.
+pub fn get_positive_samples() -> Vec<Vec<u8>> {
+    get_sample_values()
+        .iter()
+        .map(|v| bincode::serialize(v).unwrap())
+        .collect()
 }
 
-impl std::convert::From<Runtime> for Encoding {
-    fn from(runtime: Runtime) -> Self {
-        match runtime {
-            Runtime::Bcs => Encoding::Bcs,
-            Runtime::Bincode => Encoding::Bincode,
-        }
+/// Construct serialized bytes for a list with the given container depth.
+/// Bytes are constructed directly to allow testing depths outside normal limits.
+pub fn get_sample_with_container_depth(depth: usize) -> Option<Vec<u8>> {
+    if depth < 2 {
+        return None;
     }
+    let mut e = bincode::serialize::<List<SerdeData>>(&List::Empty).unwrap();
+
+    let f0 = bincode::serialize(&List::Node(
+        Box::new(SerdeData::UnitVariant),
+        Box::new(List::Empty),
+    ))
+    .unwrap();
+    let f = f0[..f0.len() - e.len()].to_vec();
+
+    let h0 = bincode::serialize(&SerdeData::ListWithMutualRecursion(List::Empty)).unwrap();
+    let mut result = h0[..h0.len() - e.len()].to_vec();
+
+    for _ in 2..depth {
+        result.append(&mut f.clone());
+    }
+    result.append(&mut e);
+    Some(result)
 }
 
-impl Runtime {
-    pub fn name(self) -> &'static str {
-        <Self as std::convert::Into<Encoding>>::into(self).name()
+/// Construct serialized bytes for a `SimpleList` with the given container depth.
+/// Bytes are constructed directly to allow testing depths outside normal limits.
+pub fn get_alternate_sample_with_container_depth(depth: usize) -> Option<Vec<u8>> {
+    if depth < 2 {
+        return None;
     }
+    let mut e = bincode::serialize::<SimpleList>(&SimpleList(None)).unwrap();
 
-    pub fn rust_package(self) -> &'static str {
-        match self {
-            Self::Bcs => "bcs = \"0.1.1\"",
-            Self::Bincode => "bincode = \"1.3\"",
-        }
+    let f0 = bincode::serialize(&SimpleList(Some(Box::new(SimpleList(None))))).unwrap();
+    let f = f0[..f0.len() - e.len()].to_vec();
+
+    let h0 = bincode::serialize(&SerdeData::SimpleList(SimpleList(None))).unwrap();
+    let mut result = h0[..h0.len() - e.len()].to_vec();
+
+    for _ in 2..depth {
+        result.append(&mut f.clone());
     }
+    result.append(&mut e);
+    Some(result)
+}
 
-    pub fn serialize<T>(self, value: &T) -> Vec<u8>
-    where
-        T: serde::Serialize,
-    {
-        match self {
-            Self::Bcs => bcs::to_bytes(value).unwrap(),
-            Self::Bincode => bincode::serialize(value).unwrap(),
-        }
-    }
-
-    pub fn deserialize<T>(self, bytes: &[u8]) -> Option<T>
-    where
-        T: serde::de::DeserializeOwned,
-    {
-        match self {
-            Self::Bcs => bcs::from_bytes(bytes).ok(),
-            Self::Bincode => bincode::deserialize(bytes).ok(),
-        }
-    }
-
-    /// Serialize a value then add noise to the serialized bits repeatedly. Additionally return
-    /// `true` if the deserialization of each modified bitstring should succeed.
-    pub fn serialize_with_noise_and_deserialize<T>(self, value: &T) -> Vec<(Vec<u8>, bool)>
-    where
-        T: serde::Serialize + serde::de::DeserializeOwned,
-    {
-        let mut results = Vec::new();
-        let s = self.serialize(value);
-        results.push((s.clone(), true));
-
-        if let Runtime::Bincode = self {
-            // Unfortunately, the current Rust implementation of bincode does not take fuzzing of
-            // `Vec<()>` values well at all.
-            return results;
-        }
-
-        // For each byte position < 9 in the serialization of `value`:
-        for i in 0..std::cmp::min(s.len(), 9) {
-            // Flip the highest bit
-            {
-                let mut s2 = s.clone();
-                s2[i] ^= 0x80;
-                let is_valid = self.deserialize::<T>(&s2).is_some();
-                results.push((s2, is_valid));
-            }
-
-            // See if we can turn an (apparent) 4-byte UTF-8 codepoint into an invalid
-            // 5-byte codepoint.
-            if (i + 4 < s.len())
-                && (s[i] ^ 0xf0 < 0x08)
-                && (s[i + 1] ^ 0x80 < 0x40)
-                && (s[i + 2] ^ 0x80 < 0x40)
-                && (s[i + 3] ^ 0x80 < 0x40)
-                && (s[i + 4] < 0x40)
-            {
-                let mut s2 = s.clone();
-                s2[i] ^= 0x08;
-                s2[i + 4] ^= 0x80;
-                let is_valid = self.deserialize::<T>(&s2).is_some();
-                results.push((s2, is_valid));
-            }
-        }
-        results
-    }
-
-    pub fn quote_serialize(self) -> &'static str {
-        match self {
-            Self::Bcs => "bcs::to_bytes",
-            Self::Bincode => "bincode::serialize",
-        }
-    }
-
-    pub fn quote_deserialize(self) -> &'static str {
-        match self {
-            Self::Bcs => "bcs::from_bytes",
-            Self::Bincode => "bincode::deserialize",
-        }
-    }
-
-    /// Whether the encoding enforces ordering of map keys.
-    /// Note that both encodings are canonical on other data structures.
-    pub fn has_canonical_maps(self) -> bool {
-        match self {
-            Self::Bcs => true,
-            Self::Bincode => false,
-        }
-    }
-
-    /// Whether the encoding supports float32 and float64.
-    pub fn has_floats(self) -> bool {
-        match self {
-            Self::Bcs => false,
-            Self::Bincode => true,
-        }
-    }
-
-    pub fn maximum_length(self) -> Option<usize> {
-        match self {
-            Self::Bcs => Some(bcs::MAX_SEQUENCE_LENGTH),
-            Self::Bincode => None,
-        }
-    }
-
-    pub fn maximum_container_depth(self) -> Option<usize> {
-        match self {
-            Self::Bcs => Some(bcs::MAX_CONTAINER_DEPTH),
-            Self::Bincode => None,
-        }
-    }
-
-    pub fn get_positive_samples_quick(self) -> Vec<Vec<u8>> {
-        let values = get_sample_values(self.has_canonical_maps(), self.has_floats());
-        let mut positive_samples = Vec::new();
-        for value in values {
-            for (sample, result) in self.serialize_with_noise_and_deserialize(&value) {
-                if result {
-                    positive_samples.push(sample);
-                }
-            }
-        }
-        if let Some(depth) = self.maximum_container_depth() {
-            positive_samples.push(
-                self.get_sample_with_container_depth(depth)
-                    .expect("depth should be large enough"),
-            );
-            positive_samples.push(
-                self.get_alternate_sample_with_container_depth(depth)
-                    .expect("depth should be large enough"),
-            );
-        }
-        positive_samples
-    }
-
-    pub fn get_positive_samples(self) -> Vec<Vec<u8>> {
-        let mut positive_samples = self.get_positive_samples_quick();
-        if let Some(length) = self.maximum_length() {
-            positive_samples.push(self.get_sample_with_long_sequence(length));
-        }
-        positive_samples
-    }
-
-    pub fn get_negative_samples(self) -> Vec<Vec<u8>> {
-        let values = get_sample_values(self.has_canonical_maps(), self.has_floats());
-        let mut negative_samples = Vec::new();
-        for value in values {
-            for (sample, result) in self.serialize_with_noise_and_deserialize(&value) {
-                if !result {
-                    negative_samples.push(sample);
-                }
-            }
-        }
-        if let Some(length) = self.maximum_length() {
-            negative_samples.push(self.get_sample_with_long_sequence(length + 1));
-        }
-        if let Some(depth) = self.maximum_container_depth() {
-            negative_samples.push(self.get_sample_with_container_depth(depth + 1).unwrap());
-            negative_samples.push(
-                self.get_alternate_sample_with_container_depth(depth + 1)
-                    .unwrap(),
-            );
-        }
-        if let Self::Bcs = self {
-            negative_samples.push(vec![0x09, 0x00, 0x00]);
-            negative_samples.push(vec![0x09, 0x80, 0x00]);
-            negative_samples.push(vec![0x09, 0xff, 0xff, 0xff, 0xff, 0x10]);
-            negative_samples.push(vec![0x09, 0xff, 0xff, 0xff, 0xff, 0x08]);
-        }
-        negative_samples
-    }
-
-    // Used to test limits on "container depth".
-    // Here we construct the serialized bytes directly to allow examples outside the limit.
-    pub fn get_sample_with_container_depth(self, depth: usize) -> Option<Vec<u8>> {
-        if depth < 2 {
-            return None;
-        }
-        let mut e = self.serialize::<List<SerdeData>>(&List::Empty);
-
-        let f0 = self.serialize(&List::Node(
-            Box::new(SerdeData::UnitVariant),
-            Box::new(List::Empty),
-        ));
-        let f = f0[..f0.len() - e.len()].to_vec();
-
-        let h0 = self.serialize(&SerdeData::ListWithMutualRecursion(List::Empty));
-        let mut result = h0[..h0.len() - e.len()].to_vec();
-
-        for _ in 2..depth {
-            result.append(&mut f.clone());
-        }
-        result.append(&mut e);
-        Some(result)
-    }
-
-    // Used to test limits on "container depth".
-    // Here we construct the serialized bytes directly to allow examples outside the limit.
-    pub fn get_alternate_sample_with_container_depth(self, depth: usize) -> Option<Vec<u8>> {
-        if depth < 2 {
-            return None;
-        }
-        let mut e = self.serialize::<SimpleList>(&SimpleList(None));
-
-        let f0 = self.serialize(&SimpleList(Some(Box::new(SimpleList(None)))));
-        let f = f0[..f0.len() - e.len()].to_vec();
-
-        let h0 = self.serialize(&SerdeData::SimpleList(SimpleList(None)));
-        let mut result = h0[..h0.len() - e.len()].to_vec();
-
-        for _ in 2..depth {
-            result.append(&mut f.clone());
-        }
-        result.append(&mut e);
-        Some(result)
-    }
-
-    // Used to test limits on sequence lengths and container depth.
-    // Here we construct the serialized bytes directly to allow examples outside the limit.
-    pub fn get_sample_with_long_sequence(self, length: usize) -> Vec<u8> {
-        let e = self.serialize::<Vec<()>>(&Vec::new());
-        let f0 = self.serialize(&SerdeData::UnitVector(Vec::new()));
-        let mut result = f0[..f0.len() - e.len()].to_vec();
-        match self {
-            Runtime::Bincode => result.append(&mut self.serialize(&(length as u64))),
-            Runtime::Bcs => {
-                // ULEB-128 encoding of the length.
-                let mut value = length;
-                while value >= 0x80 {
-                    #[allow(clippy::cast_possible_truncation)]
-                    let byte = (value & 0x7f) as u8;
-                    result.push(byte | 0x80);
-                    value >>= 7;
-                }
-                #[allow(clippy::cast_possible_truncation)]
-                result.push(value as u8);
-            }
-        }
-        result
-    }
+/// Construct serialized bytes for a `UnitVector` with the given length.
+/// Bytes are constructed directly to allow testing lengths outside normal limits.
+pub fn get_sample_with_long_sequence(length: usize) -> Vec<u8> {
+    let e = bincode::serialize::<Vec<()>>(&Vec::new()).unwrap();
+    let f0 = bincode::serialize(&SerdeData::UnitVector(Vec::new())).unwrap();
+    let mut result = f0[..f0.len() - e.len()].to_vec();
+    result.append(&mut bincode::serialize(&(length as u64)).unwrap());
+    result
 }

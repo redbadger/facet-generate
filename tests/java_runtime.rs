@@ -3,37 +3,28 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub mod common;
 
-use common::{Choice, Runtime, Test};
-use facet_generate::generation::{CodeGeneratorConfig, java};
+use common::{Choice, Test};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, java};
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
 #[test]
-fn test_java_bcs_runtime_on_simple_data() {
-    test_java_runtime_on_simple_data(Runtime::Bcs);
-}
-
-#[test]
 fn test_java_bincode_runtime_on_simple_data() {
-    test_java_runtime_on_simple_data(Runtime::Bincode);
-}
-
-#[allow(clippy::cast_possible_wrap)]
-fn test_java_runtime_on_simple_data(runtime: Runtime) {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(runtime.into());
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
 
-    let reference = runtime.serialize(&Test {
+    let reference = bincode::serialize(&Test {
         a: vec![4, 6],
         b: (-3, 5),
         c: Choice::C { x: 7 },
-    });
+    })
+    .unwrap();
 
     let mut source = File::create(dir.path().join("Main.java")).unwrap();
     writeln!(
@@ -51,7 +42,7 @@ public class Main {{
     public static void main(String[] args) throws java.lang.Exception {{
         byte[] input = new byte[] {{{0}}};
 
-        Test value = Test.{1}Deserialize(input);
+        Test value = Test.bincodeDeserialize(input);
 
         List<@Unsigned Integer> a = Arrays.asList(4, 6);
         Tuple2<Long, @Unsigned Long> b = new Tuple2<>(Long.valueOf(-3), Long.valueOf(5));
@@ -60,13 +51,13 @@ public class Main {{
 
         assert value.equals(value2);
 
-        byte[] output = value2.{1}Serialize();
+        byte[] output = value2.bincodeSerialize();
 
         assert java.util.Arrays.equals(input, output);
 
         byte[] input2 = new byte[] {{{0}, 1}};
         try {{
-            Test.{1}Deserialize(input2);
+            Test.bincodeDeserialize(input2);
         }} catch (DeserializationError e) {{
             return;
         }}
@@ -76,16 +67,15 @@ public class Main {{
 ",
         reference
             .iter()
-            .map(|x| format!("{}", *x as i8))
+            .map(|x| format!("{}", (*x).cast_signed()))
             .collect::<Vec<_>>()
             .join(", "),
-        runtime.name(),
     )
     .unwrap();
 
     let paths = std::iter::empty()
         .chain(std::fs::read_dir("runtime/java/com/novi/serde").unwrap())
-        .chain(std::fs::read_dir("runtime/java/com/novi/".to_string() + runtime.name()).unwrap())
+        .chain(std::fs::read_dir("runtime/java/com/novi/bincode").unwrap())
         .chain(std::fs::read_dir(dir.path().join("testing")).unwrap())
         .map(|e| e.unwrap().path());
     let status = Command::new("javac")
@@ -119,45 +109,17 @@ public class Main {{
 }
 
 #[test]
-fn test_java_bcs_runtime_on_supported_types() {
-    test_java_runtime_on_supported_types(Runtime::Bcs);
-}
-
-#[test]
 fn test_java_bincode_runtime_on_supported_types() {
-    test_java_runtime_on_supported_types(Runtime::Bincode);
-}
-
-#[allow(clippy::cast_possible_wrap)]
-fn quote_bytes(bytes: &[u8]) -> String {
-    format!(
-        "{{{}}}",
-        bytes
-            .iter()
-            .map(|x| format!("{}", *x as i8))
-            .collect::<Vec<_>>()
-            .join(", ")
-    )
-}
-
-fn test_java_runtime_on_supported_types(runtime: Runtime) {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(runtime.into());
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
 
-    let positive_encodings: Vec<_> = runtime
-        .get_positive_samples_quick()
-        .iter()
-        .map(|bytes| quote_bytes(bytes))
-        .collect();
-
-    let negative_encodings: Vec<_> = runtime
-        .get_negative_samples()
+    let positive_encodings: Vec<_> = common::get_positive_samples()
         .iter()
         .map(|bytes| quote_bytes(bytes))
         .collect();
@@ -165,7 +127,7 @@ fn test_java_runtime_on_supported_types(runtime: Runtime) {
     let mut source = File::create(dir.path().join("Main.java")).unwrap();
     writeln!(
         source,
-        r#"
+        r"
 import java.util.List;
 import java.util.Arrays;
 import com.novi.serde.DeserializationError;
@@ -175,18 +137,17 @@ import testing.SerdeData;
 
 public class Main {{
     static final byte[][] positive_inputs = new byte[][] {{{0}}};
-    static final byte[][] negative_inputs = new byte[][] {{{1}}};
 
     public static void main(String[] args) throws java.lang.Exception {{
         for (byte[] input : positive_inputs) {{
-            SerdeData value = SerdeData.{2}Deserialize(input);
-            byte[] output = value.{2}Serialize();
+            SerdeData value = SerdeData.bincodeDeserialize(input);
+            byte[] output = value.bincodeSerialize();
 
             assert java.util.Arrays.equals(input, output);
 
             // Test self-equality for the Serde value.
             {{
-                SerdeData value2 = SerdeData.{2}Deserialize(input);
+                SerdeData value2 = SerdeData.bincodeDeserialize(input);
                 assert value.equals(value2);
             }}
 
@@ -195,7 +156,7 @@ public class Main {{
                 byte[] input2 = input.clone();
                 input2[i] ^= 0x80;
                 try {{
-                    SerdeData value2 = SerdeData.{2}Deserialize(input2);
+                    SerdeData value2 = SerdeData.bincodeDeserialize(input2);
                     assert !value2.equals(value);
                 }} catch (DeserializationError e) {{
                     // All good
@@ -203,29 +164,16 @@ public class Main {{
             }}
 
         }}
-
-        for (byte[] input : negative_inputs) {{
-            try {{
-                SerdeData value = SerdeData.{2}Deserialize(input);
-                Integer[] bytes = new Integer[input.length];
-                Arrays.setAll(bytes, n -> Math.floorMod(input[n], 256));
-                throw new Exception("Input should fail to deserialize: " + Arrays.asList(bytes));
-            }} catch (DeserializationError e) {{
-                    // All good
-            }}
-        }}
     }}
 }}
-"#,
+",
         positive_encodings.join(", "),
-        negative_encodings.join(", "),
-        runtime.name(),
     )
     .unwrap();
 
     let paths = std::iter::empty()
         .chain(std::fs::read_dir("runtime/java/com/novi/serde").unwrap())
-        .chain(std::fs::read_dir("runtime/java/com/novi/".to_string() + runtime.name()).unwrap())
+        .chain(std::fs::read_dir("runtime/java/com/novi/bincode").unwrap())
         .chain(std::fs::read_dir(dir.path().join("testing")).unwrap())
         .map(|e| e.unwrap().path());
     let status = Command::new("javac")
@@ -258,28 +206,14 @@ public class Main {{
     assert!(status.success());
 }
 
-#[test]
-fn test_java_bcs_runtime_autotest() {
-    let dir = tempdir().unwrap();
-    let paths = std::iter::empty()
-        .chain(std::fs::read_dir("runtime/java/com/novi/serde").unwrap())
-        .chain(std::fs::read_dir("runtime/java/com/novi/bcs").unwrap())
-        .map(|e| e.unwrap().path());
-    let status = Command::new("javac")
-        .arg("-Xlint")
-        .arg("-d")
-        .arg(dir.path())
-        .args(paths)
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = Command::new("java")
-        .arg("-enableassertions")
-        .arg("-cp")
-        .arg(dir.path())
-        .arg("com.novi.bcs.BcsTest")
-        .status()
-        .unwrap();
-    assert!(status.success());
+#[allow(clippy::cast_possible_wrap)]
+fn quote_bytes(bytes: &[u8]) -> String {
+    format!(
+        "{{{}}}",
+        bytes
+            .iter()
+            .map(|x| format!("{}", (*x).cast_signed()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }

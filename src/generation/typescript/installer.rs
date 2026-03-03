@@ -230,14 +230,6 @@ impl SourceInstaller for Installer {
         self.install_runtime(&dir, "bincode")
     }
 
-    fn install_bcs_runtime(&self) -> Result<(), Self::Error> {
-        let dir = match self.target {
-            InstallTarget::Node => include_dir!("runtime/typescript-node/bcs"),
-            InstallTarget::Deno => include_dir!("runtime/typescript-deno/bcs"),
-        };
-        self.install_runtime(&dir, "bcs")
-    }
-
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {
         let manifest = self.make_manifest(package_name);
         let manifest = serde_json::to_string_pretty(&manifest)?;
