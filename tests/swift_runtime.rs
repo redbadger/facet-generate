@@ -27,8 +27,7 @@ fn test_swift_runtime_autotests() {
 #[test]
 fn test_swift_bincode_runtime_on_simple_data() {
     let dir = tempfile::tempdir().unwrap();
-    let config =
-        CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_simple_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();
@@ -122,8 +121,7 @@ let package = Package(
 #[test]
 fn test_swift_bincode_runtime_on_supported_types() {
     let dir = tempfile::tempdir().unwrap();
-    let config =
-        CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();
@@ -145,7 +143,7 @@ fn test_swift_bincode_runtime_on_supported_types() {
 import Serde
 import Testing
 
-let positive_inputs : [[UInt8]] = [{0}]
+let positive_inputs : [[UInt8]] = [{positive_encodings}]
 
 for input in positive_inputs {{
     let value = try SerdeData.bincodeDeserialize(input: input)
@@ -168,7 +166,6 @@ for input in positive_inputs {{
 
 }}
 "#,
-        positive_encodings,
     )
     .unwrap();
 

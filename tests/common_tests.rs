@@ -6,7 +6,7 @@
 ))]
 
 use crate::common::{
-    get_alternate_sample_with_container_depth, get_alternate_sample_value_with_container_depth,
+    get_alternate_sample_value_with_container_depth, get_alternate_sample_with_container_depth,
     get_positive_samples, get_registry, get_sample_value_with_container_depth,
     get_sample_value_with_long_sequence, get_sample_values, get_sample_with_container_depth,
     get_sample_with_long_sequence, get_simple_registry,

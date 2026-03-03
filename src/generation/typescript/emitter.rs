@@ -7,9 +7,7 @@ use heck::ToUpperCamelCase;
 
 use crate::{
     Registry,
-    generation::{
-        PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
-    },
+    generation::{PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator},
     reflection::format::{
         ContainerFormat, Format, FormatHolder as _, Named, Namespace, QualifiedTypeName,
         VariantFormat,

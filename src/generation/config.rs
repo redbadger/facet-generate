@@ -62,7 +62,6 @@ impl Encoding {
     pub fn is_bincode(self) -> bool {
         self == Encoding::Bincode
     }
-
 }
 
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).

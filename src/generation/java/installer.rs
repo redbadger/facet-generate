@@ -91,5 +91,4 @@ impl SourceInstaller for Installer {
             "com/novi/bincode",
         )
     }
-
 }

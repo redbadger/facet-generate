@@ -90,7 +90,7 @@ impl Emitter<Kotlin> for Module {
                     format!("import {serde_package}.Serializer"),
                 ]
             }
-            _ => vec![],
+            Encoding::None => vec![],
         };
 
         let mut features_out = vec![];
@@ -714,7 +714,7 @@ fn enum_class<W: IndentWrite>(
                 write_bincode_deserialize(&mut w, name)?;
             }
         }
-        _ => (),
+        Encoding::None => (),
     }
 
     Ok(())

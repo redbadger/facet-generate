@@ -359,7 +359,7 @@ pub fn get_sample_with_container_depth(depth: usize) -> Option<Vec<u8>> {
     Some(result)
 }
 
-/// Construct serialized bytes for a SimpleList with the given container depth.
+/// Construct serialized bytes for a `SimpleList` with the given container depth.
 /// Bytes are constructed directly to allow testing depths outside normal limits.
 pub fn get_alternate_sample_with_container_depth(depth: usize) -> Option<Vec<u8>> {
     if depth < 2 {
@@ -380,7 +380,7 @@ pub fn get_alternate_sample_with_container_depth(depth: usize) -> Option<Vec<u8>
     Some(result)
 }
 
-/// Construct serialized bytes for a UnitVector with the given length.
+/// Construct serialized bytes for a `UnitVector` with the given length.
 /// Bytes are constructed directly to allow testing lengths outside normal limits.
 pub fn get_sample_with_long_sequence(length: usize) -> Vec<u8> {
     let e = bincode::serialize::<Vec<()>>(&Vec::new()).unwrap();

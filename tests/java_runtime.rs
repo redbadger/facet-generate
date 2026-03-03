@@ -13,8 +13,7 @@ fn test_java_bincode_runtime_on_simple_data() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
 
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
@@ -68,7 +67,7 @@ public class Main {{
 ",
         reference
             .iter()
-            .map(|x| format!("{}", *x as i8))
+            .map(|x| format!("{}", (*x).cast_signed()))
             .collect::<Vec<_>>()
             .join(", "),
     )
@@ -114,8 +113,7 @@ fn test_java_bincode_runtime_on_supported_types() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     let generator = java::CodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
@@ -129,7 +127,7 @@ fn test_java_bincode_runtime_on_supported_types() {
     let mut source = File::create(dir.path().join("Main.java")).unwrap();
     writeln!(
         source,
-        r#"
+        r"
 import java.util.List;
 import java.util.Arrays;
 import com.novi.serde.DeserializationError;
@@ -168,7 +166,7 @@ public class Main {{
         }}
     }}
 }}
-"#,
+",
         positive_encodings.join(", "),
     )
     .unwrap();
@@ -214,7 +212,7 @@ fn quote_bytes(bytes: &[u8]) -> String {
         "{{{}}}",
         bytes
             .iter()
-            .map(|x| format!("{}", *x as i8))
+            .map(|x| format!("{}", (*x).cast_signed()))
             .collect::<Vec<_>>()
             .join(", ")
     )

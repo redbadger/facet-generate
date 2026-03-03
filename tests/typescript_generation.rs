@@ -88,8 +88,7 @@ fn test_is_error_output() {
 #[test]
 fn test_typescript_code_compiles_with_bincode() {
     let dir = tempdir().unwrap();
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     test_typescript_code_compiles_with_config(dir.path(), &config);
 }
 
@@ -159,8 +158,7 @@ fn test_typescript_code_generation_without_extensions() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Node);
     installer.install_module(&config, &registry).unwrap();
@@ -198,8 +196,7 @@ fn test_typescript_code_generation_with_extensions() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
-    let config =
-        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
     installer.install_module(&config, &registry).unwrap();
