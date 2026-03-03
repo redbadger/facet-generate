@@ -2,13 +2,13 @@ use crate::generation::{ExternalPackage, PackageLocation, kotlin::Installer};
 
 #[test]
 fn test_new_installer() {
-    let _installer = Installer::new("test-package", "/tmp", &[]);
+    let _installer = Installer::new("test-package", "/tmp");
     // Basic smoke test - just ensure we can create an installer without panicking
 }
 
 #[test]
 fn test_make_manifest_basic() {
-    let installer = Installer::new("test-package", "/tmp", &[]);
+    let installer = Installer::new("test-package", "/tmp");
     let manifest = installer.make_manifest("test-package");
 
     // Check that the manifest contains expected Kotlin/Gradle content
@@ -26,7 +26,7 @@ fn test_make_manifest_with_external_packages() {
         version: Some("2.0.0".to_string()),
     }];
 
-    let installer = Installer::new("test-package", "/tmp", &external_packages);
+    let installer = Installer::new("test-package", "/tmp").external_packages(&external_packages);
     let manifest = installer.make_manifest("test-package");
 
     // Check that external dependencies are included
@@ -43,7 +43,7 @@ fn test_make_manifest_with_path_dependency() {
         version: None,
     }];
 
-    let installer = Installer::new("test-package", "/tmp", &external_packages);
+    let installer = Installer::new("test-package", "/tmp").external_packages(&external_packages);
     let manifest = installer.make_manifest("test-package");
 
     // Check that path dependencies are handled correctly

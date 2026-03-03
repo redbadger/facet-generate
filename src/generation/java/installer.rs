@@ -8,40 +8,92 @@ use include_dir::include_dir;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, ExternalPackage, ExternalPackages, SourceInstaller,
-        java::CodeGenerator,
+        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SourceInstaller,
+        java::CodeGenerator, module,
     },
 };
 
 /// Installer for generated source files in Java.
 pub struct Installer {
+    package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
+    encoding: Encoding,
 }
 
 impl Installer {
+    /// Create a new installer for the given package name and output directory.
+    ///
+    /// Use the builder methods [`encoding`](Self::encoding) and
+    /// [`external_packages`](Self::external_packages) to configure, then call
+    /// [`generate`](Self::generate) to produce the output.
     #[must_use]
-    pub fn new(
-        _package_name: &str,
-        install_dir: impl AsRef<Path>,
-        external_packages: &[ExternalPackage],
-    ) -> Self {
-        let external_packages = external_packages
-            .iter()
-            .map(|dependency| (dependency.for_namespace.clone(), dependency.clone()))
-            .collect();
-
+    pub fn new(package_name: &str, install_dir: impl AsRef<Path>) -> Self {
         Installer {
+            package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
-            external_packages,
+            external_packages: ExternalPackages::new(),
+            encoding: Encoding::default(),
         }
+    }
+
+    /// Set the encoding for serialization/deserialization.
+    ///
+    /// When set to anything other than [`Encoding::None`], the appropriate
+    /// runtimes (serde + encoding-specific) are installed automatically by
+    /// [`generate`](Self::generate).
+    #[must_use]
+    pub fn encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
+    }
+
+    /// Set external packages to reference.
+    #[must_use]
+    pub fn external_packages(mut self, packages: &[ExternalPackage]) -> Self {
+        self.external_packages = packages
+            .iter()
+            .map(|d| (d.for_namespace.clone(), d.clone()))
+            .collect();
+        self
+    }
+
+    /// Generate all code for the given registry.
+    ///
+    /// This method:
+    /// 1. Installs the appropriate runtimes based on the configured encoding
+    /// 2. Splits the registry by namespace and installs each module
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file operation or code generation step fails.
+    pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        // Install runtimes if an encoding is configured
+        if !self.encoding.is_none() {
+            self.install_serde_runtime()?;
+            if let Encoding::Bincode = self.encoding {
+                self.install_bincode_runtime()?;
+            }
+        }
+
+        // Split by namespace and install each module
+        for (m, module_registry) in module::split(&self.package_name, registry) {
+            let config = m
+                .config()
+                .clone()
+                .with_parent(&self.package_name)
+                .with_encoding(self.encoding);
+            self.install_module(&config, &module_registry)?;
+        }
+
+        Ok(())
     }
 
     fn install_runtime(
         &self,
         source_dir: &include_dir::Dir,
         path: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    ) -> std::result::Result<(), Error> {
         let dir_path = self.install_dir.join(path);
         std::fs::create_dir_all(&dir_path)?;
         for entry in source_dir.files() {
@@ -53,13 +105,11 @@ impl Installer {
 }
 
 impl SourceInstaller for Installer {
-    type Error = Box<dyn std::error::Error>;
-
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
-    ) -> std::result::Result<(), Self::Error> {
+    ) -> std::result::Result<(), Error> {
         // Extract the namespace from the module name to check if it's external
         let module_parts: Vec<&str> = config.module_name().split('.').collect();
         let namespace = module_parts.last().map_or("", |v| *v);
@@ -78,14 +128,14 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error> {
+    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime(
             &include_dir!("runtime/java/com/novi/serde"),
             "com/novi/serde",
         )
     }
 
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error> {
+    fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime(
             &include_dir!("runtime/java/com/novi/bincode"),
             "com/novi/bincode",

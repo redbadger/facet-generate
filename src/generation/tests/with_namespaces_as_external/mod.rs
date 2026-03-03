@@ -66,16 +66,15 @@ fn test() {
         match target {
             Language::Java => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(
-                    package_name,
-                    tmp_path,
-                    &[ExternalPackage {
-                        for_namespace: "other".to_string(),
-                        location: PackageLocation::Path("com.example2.other".to_string()),
-                        module_name: None,
-                        version: None,
-                    }],
-                );
+                let mut installer =
+                    java::Installer::new(package_name, tmp_path).external_packages(&[
+                        ExternalPackage {
+                            for_namespace: "other".to_string(),
+                            location: PackageLocation::Path("com.example2.other".to_string()),
+                            module_name: None,
+                            version: None,
+                        },
+                    ]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_parent(package_name);
                     installer.install_module(&config, registry).unwrap();
@@ -83,16 +82,13 @@ fn test() {
             }
             Language::Kotlin => {
                 let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(
-                    package_name,
-                    tmp_path,
-                    &[ExternalPackage {
+                let mut installer = kotlin::Installer::new(package_name, tmp_path)
+                    .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),
                         location: PackageLocation::Path("com.example2.other".to_string()),
                         module_name: None,
                         version: None,
-                    }],
-                );
+                    }]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_parent(package_name);
                     installer.install_module(&config, registry).unwrap();
@@ -100,18 +96,15 @@ fn test() {
             }
             Language::Swift => {
                 let package_name = "Example";
-                let mut installer = swift::Installer::new(
-                    package_name,
-                    tmp_path,
-                    &[ExternalPackage {
+                let mut installer = swift::Installer::new(package_name, tmp_path)
+                    .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),
                         location: PackageLocation::Url(
                             "https://github.com/example/other".to_string(),
                         ),
                         module_name: None,
                         version: Some("1.0.0".to_string()),
-                    }],
-                );
+                    }]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     installer.install_module(module.config(), registry).unwrap();
                 }
@@ -119,18 +112,16 @@ fn test() {
             }
             Language::TypeScript => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(
-                    tmp_path,
-                    &[ExternalPackage {
-                        for_namespace: "other".to_string(),
-                        location: PackageLocation::Url(
-                            "https://registry.npmjs.org/other".to_string(),
-                        ),
-                        module_name: None,
-                        version: Some("^1.0.0".to_string()),
-                    }],
-                    InstallTarget::Node,
-                );
+                let mut installer =
+                    typescript::Installer::new(package_name, tmp_path, InstallTarget::Node)
+                        .external_packages(&[ExternalPackage {
+                            for_namespace: "other".to_string(),
+                            location: PackageLocation::Url(
+                                "https://registry.npmjs.org/other".to_string(),
+                            ),
+                            module_name: None,
+                            version: Some("^1.0.0".to_string()),
+                        }]);
 
                 for (module, registry) in &module::split(package_name, &registry) {
                     installer.install_module(module.config(), registry).unwrap();

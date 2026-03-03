@@ -9,6 +9,7 @@ use std::{
 
 use derive_builder::Builder;
 use serde::Serialize;
+use thiserror::Error;
 
 use crate::{
     Registry,
@@ -79,28 +80,39 @@ pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ 
 pub type CustomCode =
     BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
+/// Errors that can occur during code generation and installation.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// An I/O error occurred while reading or writing files.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// A runtime file contained invalid UTF-8.
+    #[error("invalid UTF-8 in runtime file: {0}")]
+    Utf8(#[from] std::str::Utf8Error),
+
+    /// JSON serialization failed (e.g. when writing a TypeScript `package.json`).
+    #[error("JSON serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+}
+
 /// How to copy generated source code and available runtimes for a given language.
 pub trait SourceInstaller {
-    type Error;
-
     /// Create a module exposing the container types contained in the registry.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
-    ) -> std::result::Result<(), Self::Error>;
+    ) -> std::result::Result<(), Error>;
 
     /// Install the serde runtime.
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Self::Error>;
+    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error>;
 
     /// Install the bincode runtime.
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error>;
+    fn install_bincode_runtime(&self) -> std::result::Result<(), Error>;
 
     /// Install a package manifest.
-    fn install_manifest(
-        &self,
-        _module_name: &str,
-    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    fn install_manifest(&self, _module_name: &str) -> std::result::Result<(), Error> {
         Ok(())
     }
 }
@@ -258,9 +270,11 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
-    /// Whether to add runtimes to the generated types.
-    #[builder(default = false, setter(custom))]
-    pub add_runtimes: bool,
+    /// The encoding to use for serialization/deserialization.
+    /// When set to anything other than `Encoding::None`, the appropriate
+    /// runtimes will be installed automatically.
+    #[builder(default, setter(custom))]
+    pub encoding: Encoding,
     /// Whether to add extensions to the generated types.
     #[builder(default = false, setter(custom))]
     pub add_extensions: bool,
@@ -278,8 +292,8 @@ impl Config {
 
 impl ConfigBuilder {
     #[must_use]
-    pub fn add_runtimes(&mut self) -> &mut Self {
-        self.add_runtimes = Some(true);
+    pub fn encoding(&mut self, encoding: Encoding) -> &mut Self {
+        self.encoding = Some(encoding);
         self
     }
 

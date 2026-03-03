@@ -39,7 +39,7 @@ fn test() {
         match target {
             Language::Kotlin => {
                 let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = kotlin::Installer::new(package_name, tmp_path);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module
                         .config()

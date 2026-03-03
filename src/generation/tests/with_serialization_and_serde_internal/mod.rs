@@ -51,7 +51,7 @@ fn test() {
         match target {
             Language::Java => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = java::Installer::new(package_name, tmp_path);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module
@@ -64,7 +64,7 @@ fn test() {
             }
             Language::Kotlin => {
                 let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(package_name, tmp_path, &[]);
+                let mut installer = kotlin::Installer::new(package_name, tmp_path);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module
@@ -77,7 +77,7 @@ fn test() {
             }
             Language::Swift => {
                 let package_name = "Example";
-                let mut installer = Installer::new(package_name, tmp_path, &[]);
+                let mut installer = Installer::new(package_name, tmp_path);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_encoding(Encoding::Bincode);
@@ -87,7 +87,8 @@ fn test() {
             }
             Language::TypeScript => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(tmp_path, &[], InstallTarget::Node);
+                let mut installer =
+                    typescript::Installer::new(package_name, tmp_path, InstallTarget::Node);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_encoding(Encoding::Bincode);

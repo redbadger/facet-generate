@@ -24,7 +24,7 @@ fn test_that_kotlin_code_compiles() {
 
     let package_name = "com.example.testing";
 
-    let mut installer = kotlin::Installer::new(package_name, &dir, &[]);
+    let mut installer = kotlin::Installer::new(package_name, &dir);
     for (module, registry) in &module::split(package_name, &registry) {
         installer.install_module(module.config(), registry).unwrap();
     }
