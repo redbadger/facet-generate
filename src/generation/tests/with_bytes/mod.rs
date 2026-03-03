@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, Language, SourceInstaller as _, kotlin, module,
+        Encoding, Language, kotlin,
         tests::{check, read_files_and_create_expect_dirs},
     },
     reflect,
@@ -38,16 +38,10 @@ fn test() {
 
         match target {
             Language::Kotlin => {
-                let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(package_name, tmp_path);
-                for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .config()
-                        .clone()
-                        .with_parent(package_name)
-                        .with_encoding(Encoding::Bincode);
-                    installer.install_module(&config, registry).unwrap();
-                }
+                kotlin::Installer::new("com.example", tmp_path)
+                    .encoding(Encoding::Bincode)
+                    .generate(&registry)
+                    .unwrap();
             }
             _ => unreachable!(),
         }

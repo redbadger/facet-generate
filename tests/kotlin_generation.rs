@@ -2,10 +2,7 @@
 
 use std::process::Command;
 
-use facet_generate::{
-    generation::{SourceInstaller, kotlin, module},
-    reflect,
-};
+use facet_generate::{generation::kotlin, reflect};
 use tempfile::tempdir;
 
 pub mod common;
@@ -24,11 +21,9 @@ fn test_that_kotlin_code_compiles() {
 
     let package_name = "com.example.testing";
 
-    let mut installer = kotlin::Installer::new(package_name, &dir);
-    for (module, registry) in &module::split(package_name, &registry) {
-        installer.install_module(module.config(), registry).unwrap();
-    }
-    installer.install_manifest(package_name).unwrap();
+    kotlin::Installer::new(package_name, &dir)
+        .generate(&registry)
+        .unwrap();
 
     let args = ["--configuration-cache"];
 
