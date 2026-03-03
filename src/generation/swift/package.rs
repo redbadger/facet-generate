@@ -9,6 +9,7 @@ impl ExternalPackage {
         let indent_str = " ".repeat(4 * level);
         let base_string = match self.location {
             PackageLocation::Path(location) => {
+                let location = super::normalize_path(&location);
                 formatdoc! {r#"
                 .package(
                     path: "{location}"

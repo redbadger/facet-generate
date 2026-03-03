@@ -1,3 +1,6 @@
+# Use powershell on Windows to avoid Git Bash's `link.exe` shadowing MSVC's linker
+set windows-shell := ["pwsh", "-c"]
+
 # default target for local development
 default: dev
 
@@ -25,7 +28,7 @@ fix:
 check:
     @echo '{{ style("command") }}check:{{ NORMAL }}'
     cargo fmt --all -- --check
-    cargo clippy --all-targets -- --no-deps -Dclippy::pedantic -Dwarnings
+    cargo clippy --all-targets -- --no-deps '-Dclippy::pedantic' -Dwarnings
 
 # local development: fix, check, build, test with snapshot review
 dev: fix check build test-review

@@ -9,7 +9,10 @@ use crate::common::{SerdeData, Tree};
 use facet::Facet;
 use facet_generate::{
     Registry,
-    generation::{CodeGeneratorConfig, Encoding, swift::CodeGenerator},
+    generation::{
+        CodeGeneratorConfig, Encoding,
+        swift::{CodeGenerator, normalize_path},
+    },
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -60,7 +63,7 @@ let package = Package(
     ]
 )
 "#,
-            serde_package_path.to_str().unwrap()
+            normalize_path(serde_package_path.to_str().unwrap())
         )
         .unwrap();
     } else {
@@ -94,9 +97,12 @@ let package = Package(
     let generator = CodeGenerator::new(config);
     generator.output(&mut source, registry).unwrap();
 
+    // Disable the index store: it's not needed for compilation checks, and on
+    // Windows parallel builds race over index-store .pcm files because Windows
+    // enforces mandatory file locks.
     let status = Command::new("swift")
         .current_dir(dir.path())
-        .arg("build")
+        .args(["build", "--disable-index-store"])
         .status()
         .unwrap();
     assert!(status.success());
