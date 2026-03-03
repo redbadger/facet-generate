@@ -605,7 +605,6 @@ fn struct_<W: IndentWrite>(
             }
             write_bincode_deserialize(&mut w, name)?;
         }
-        Encoding::Bcs => todo!(),
     }
 
     Ok(())
@@ -759,7 +758,6 @@ fn enum_<W: IndentWrite>(
             }
             write_bincode_deserialize(&mut w, name)?;
         }
-        Encoding::Bcs => todo!(),
     }
 
     Ok(())

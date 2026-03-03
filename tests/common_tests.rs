@@ -6,9 +6,10 @@
 ))]
 
 use crate::common::{
-    Runtime, SerdeData, get_alternate_sample_value_with_container_depth, get_registry,
-    get_sample_value_with_container_depth, get_sample_value_with_long_sequence, get_sample_values,
-    get_simple_registry,
+    get_alternate_sample_with_container_depth, get_alternate_sample_value_with_container_depth,
+    get_positive_samples, get_registry, get_sample_value_with_container_depth,
+    get_sample_value_with_long_sequence, get_sample_values, get_sample_with_container_depth,
+    get_sample_with_long_sequence, get_simple_registry,
 };
 
 pub mod common;
@@ -16,7 +17,7 @@ pub mod common;
 #[test]
 fn test_get_sample_values() {
     // assert_eq!(get_sample_values(false, true).len(), 18);
-    assert_eq!(get_sample_values(false, true).len(), 17);
+    assert_eq!(get_sample_values().len(), 17);
 }
 
 #[test]
@@ -372,151 +373,70 @@ fn test_get_registry() {
 
 #[test]
 fn test_bincode_get_sample_with_long_sequence() {
-    test_get_sample_with_long_sequence(Runtime::Bincode);
-}
-
-#[test]
-fn test_bcs_get_sample_with_long_sequence() {
-    test_get_sample_with_long_sequence(Runtime::Bcs);
-}
-
-// Make sure the direct computation of the serialization of these test values
-// agrees with the usual serialization.
-fn test_get_sample_with_long_sequence(runtime: Runtime) {
     let value = get_sample_value_with_long_sequence(0);
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_long_sequence(0)
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_long_sequence(0)
     );
 
     let value = get_sample_value_with_long_sequence(20);
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_long_sequence(20)
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_long_sequence(20)
     );
 
     let value = get_sample_value_with_long_sequence(200);
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_long_sequence(200)
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_long_sequence(200)
     );
 }
 
 #[test]
 fn test_bincode_samples_with_container_depth() {
-    test_get_sample_with_container_depth(Runtime::Bincode);
-    test_get_alternate_sample_with_container_depth(Runtime::Bincode);
-}
-
-#[test]
-fn test_bcs_samples_with_container_depth() {
-    test_get_sample_with_container_depth(Runtime::Bcs);
-    test_get_alternate_sample_with_container_depth(Runtime::Bcs);
-}
-
-// Make sure the direct computation of the serialization of these test values
-// agrees with the usual serialization.
-fn test_get_sample_with_container_depth(runtime: Runtime) {
     let value = get_sample_value_with_container_depth(2).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_container_depth(2).unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_container_depth(2).unwrap()
     );
 
     let value = get_sample_value_with_container_depth(20).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_container_depth(20).unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_container_depth(20).unwrap()
     );
 
     let value = get_sample_value_with_container_depth(200).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime.get_sample_with_container_depth(200).unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_sample_with_container_depth(200).unwrap()
     );
-}
 
-// Make sure the direct computation of the serialization of these test values
-// agrees with the usual serialization.
-fn test_get_alternate_sample_with_container_depth(runtime: Runtime) {
     let value = get_alternate_sample_value_with_container_depth(2).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime
-            .get_alternate_sample_with_container_depth(2)
-            .unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_alternate_sample_with_container_depth(2).unwrap()
     );
 
     let value = get_alternate_sample_value_with_container_depth(20).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime
-            .get_alternate_sample_with_container_depth(20)
-            .unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_alternate_sample_with_container_depth(20).unwrap()
     );
 
     let value = get_alternate_sample_value_with_container_depth(200).unwrap();
     assert_eq!(
-        runtime.serialize(&value),
-        runtime
-            .get_alternate_sample_with_container_depth(200)
-            .unwrap()
+        bincode::serialize(&value).unwrap(),
+        get_alternate_sample_with_container_depth(200).unwrap()
     );
 }
 
 #[test]
 fn test_bincode_get_positive_samples() {
-    // assert_eq!(test_get_positive_samples(Runtime::Bincode), 18);
-    assert_eq!(test_get_positive_samples(Runtime::Bincode), 17);
-}
-
-#[test]
-// This test requires --release because of deserialization of long (unit) vectors.
-#[cfg(not(debug_assertions))]
-fn test_bcs_get_positive_samples() {
-    assert_eq!(test_get_positive_samples(Runtime::Bcs), 82);
-}
-
-// Make sure all the "positive" samples successfully deserialize with the reference Rust
-// implementation.
-fn test_get_positive_samples(runtime: Runtime) -> usize {
-    let samples = runtime.get_positive_samples();
-    let length = samples.len();
+    let samples = get_positive_samples();
+    // assert_eq!(samples.len(), 18);
+    assert_eq!(samples.len(), 17);
     for sample in samples {
-        assert!(runtime.deserialize::<SerdeData>(&sample).is_some());
+        assert!(bincode::deserialize::<common::SerdeData>(&sample).is_ok());
     }
-    length
-}
-
-#[test]
-fn test_bincode_get_negative_samples() {
-    assert_eq!(test_get_negative_samples(Runtime::Bincode), 0);
-}
-
-#[test]
-// This test requires --release because of deserialization of long (unit) vectors.
-#[cfg(not(debug_assertions))]
-fn test_bcs_get_negative_samples() {
-    assert_eq!(test_get_negative_samples(Runtime::Bcs), 59);
-}
-
-// Make sure all the "negative" samples fail to deserialize with the reference Rust
-// implementation.
-fn test_get_negative_samples(runtime: Runtime) -> usize {
-    let samples = runtime.get_negative_samples();
-    let length = samples.len();
-    for sample in samples {
-        assert!(runtime.deserialize::<SerdeData>(&sample).is_none());
-    }
-    length
-}
-
-#[test]
-fn test_bcs_serialize_with_noise_and_deserialize() {
-    let value = "\u{10348}.".to_string();
-    let samples = Runtime::Bcs.serialize_with_noise_and_deserialize(&value);
-    // 1 for original encoding
-    // 1 for each byte in the serialization (value.len() + 1)
-    // 1 for added incorrect 5-byte UTF8-like codepoint
-    assert_eq!(samples.len(), value.len() + 3);
 }

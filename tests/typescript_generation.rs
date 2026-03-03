@@ -29,9 +29,6 @@ fn test_typescript_code_compiles_with_config(
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
-    installer.install_bcs_runtime().unwrap();
-    assert_deno_info(dir_path.join("bcs/mod.ts").as_path());
-
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
@@ -78,10 +75,6 @@ fn test_is_error_output() {
             false,
         ),
         (
-            "error: Cannot resolve module \"file:///var/folders/l0/x592_pjj18n6r2m0nqn05vmc0000gn/T/.tmp5NPlE2/bcs/mod.ts\"",
-            true,
-        ),
-        (
             "file:///var/folders/l0/x592_pjj18n6r2m0nqn05vmc0000gn/T/.tmpG1an6c/something/noSerializer.ts (error)",
             true,
         ),
@@ -93,9 +86,10 @@ fn test_is_error_output() {
 }
 
 #[test]
-fn test_typescript_code_compiles_with_bcs() {
+fn test_typescript_code_compiles_with_bincode() {
     let dir = tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bcs);
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
     test_typescript_code_compiles_with_config(dir.path(), &config);
 }
 
@@ -165,13 +159,13 @@ fn test_typescript_code_generation_without_extensions() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
-    // Test with extensionless_imports = true
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bcs);
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Node);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
-    installer.install_bcs_runtime().unwrap();
+    installer.install_bincode_runtime().unwrap();
 
     // Check that the generated module file is index.ts instead of mod.ts
     let module_path = dir.path().join("testing.ts");
@@ -180,9 +174,7 @@ fn test_typescript_code_generation_without_extensions() {
     // Check that the generated content doesn't have .ts extensions in imports
     let content = std::fs::read_to_string(&module_path).unwrap();
     assert!(content.contains(r#"from "./serde""#));
-    assert!(content.contains(r#"from "./bcs""#));
     assert!(!content.contains(r#"from "./serde/mod.ts""#));
-    assert!(!content.contains(r#"from "./bcs/mod.ts""#));
 
     // Check that runtime files were transformed
     let serde_index = dir.path().join("serde").join("index.ts");
@@ -206,13 +198,13 @@ fn test_typescript_code_generation_with_extensions() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
-    // Test with extensionless_imports = false (default)
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bcs);
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
     let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
-    installer.install_bcs_runtime().unwrap();
+    installer.install_bincode_runtime().unwrap();
 
     // Check that the generated module file is mod.ts
     let module_path = dir.path().join("testing").join("mod.ts");
@@ -221,7 +213,6 @@ fn test_typescript_code_generation_with_extensions() {
     // Check that the generated content has .ts extensions in imports
     let content = std::fs::read_to_string(&module_path).unwrap();
     assert!(content.contains(r#"from "./serde/mod.ts""#));
-    assert!(content.contains(r#"from "./bcs/mod.ts""#));
 
     // Check that runtime files kept original structure
     let serde_mod = dir.path().join("serde").join("mod.ts");

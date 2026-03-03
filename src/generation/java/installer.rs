@@ -92,7 +92,4 @@ impl SourceInstaller for Installer {
         )
     }
 
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        self.install_runtime(&include_dir!("runtime/java/com/novi/bcs"), "com/novi/bcs")
-    }
 }

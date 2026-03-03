@@ -246,11 +246,6 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error> {
-        // Ignored. Currently always installed with Serde.
-        Ok(())
-    }
-
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Self::Error> {
         let manifest = self.make_manifest(package_name);
 

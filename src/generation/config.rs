@@ -34,7 +34,6 @@ pub enum Encoding {
     None,
     Json,
     Bincode,
-    Bcs,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
@@ -64,10 +63,6 @@ impl Encoding {
         self == Encoding::Bincode
     }
 
-    #[must_use]
-    pub fn is_bcs(self) -> bool {
-        self == Encoding::Bcs
-    }
 }
 
 /// Track type definitions provided by other modules (key = <module>, value = <type names>).
@@ -101,9 +96,6 @@ pub trait SourceInstaller {
 
     /// Install the bincode runtime.
     fn install_bincode_runtime(&self) -> std::result::Result<(), Self::Error>;
-
-    /// Install the Libra Canonical Serialization (BCS) runtime.
-    fn install_bcs_runtime(&self) -> std::result::Result<(), Self::Error>;
 
     /// Install a package manifest.
     fn install_manifest(
@@ -246,7 +238,6 @@ impl Encoding {
             Encoding::None => "none",
             Encoding::Json => "json",
             Encoding::Bincode => "bincode",
-            Encoding::Bcs => "bcs",
         }
     }
 }

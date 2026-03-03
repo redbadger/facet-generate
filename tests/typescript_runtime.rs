@@ -3,17 +3,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub mod common;
 
-use common::{Choice, Runtime, Test};
+use common::{Choice, Test};
 use facet_generate::generation::{
-    CodeGeneratorConfig, SourceInstaller,
+    CodeGeneratorConfig, Encoding, SourceInstaller,
     typescript::{self, InstallTarget},
 };
-use heck::ToUpperCamelCase;
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
 #[test]
-fn test_typescript_runtime_bcs_serialization() {
+fn test_typescript_runtime_bincode_serialization() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
@@ -21,44 +20,51 @@ fn test_typescript_runtime_bcs_serialization() {
 
     let mut installer = typescript::Installer::new(dir_path, &[], InstallTarget::Deno);
     installer.install_serde_runtime().unwrap();
-    installer.install_bcs_runtime().unwrap();
+    installer.install_bincode_runtime().unwrap();
 
     let source_path = dir_path.join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let runtime = Runtime::Bcs;
-    let config = CodeGeneratorConfig::new("main".to_string()).with_encoding(runtime.into());
+    writeln!(
+        source,
+        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/mod.ts";
+"#
+    )
+    .unwrap();
+
+    let config = CodeGeneratorConfig::new("main".to_string()).with_encoding(Encoding::Bincode);
     let generator = typescript::CodeGenerator::new(&config, InstallTarget::Deno);
     generator.output(&mut source, &registry).unwrap();
 
-    let reference = runtime.serialize(&Test {
+    let reference = bincode::serialize(&Test {
         a: vec![4, 6],
         b: (-3, 5),
         c: Choice::C { x: 7 },
-    });
+    })
+    .unwrap();
 
     writeln!(
         source,
         r#"
-import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
-Deno.test("{1} serialization matches deserialization", () => {{
-	const expectedBytes = new Uint8Array([{0}]);
-  const {1}Deserializer: {2}Deserializer = new {2}Deserializer(expectedBytes);
-  const deserializedInstance: Test = Test.deserialize({1}Deserializer);
+Deno.test("bincode serialization matches deserialization", () => {{
+  const expectedBytes = new Uint8Array([{0}]);
+  const deserializer = new BincodeDeserializer(expectedBytes);
+  const deserializedInstance: Test = Test.deserialize(deserializer);
 
   const expectedInstance: Test = new Test(
-		[4, 6],
+    [4, 6],
     [BigInt(-3), BigInt(5)],
-		new ChoiceVariantC(7),
-	);
+    new ChoiceVariantC(7),
+  );
 
   assertEquals(deserializedInstance, expectedInstance, "Object instances should match");
 
-  const {1}Serializer = new {2}Serializer();
-	expectedInstance.serialize({1}Serializer);
-  const serializedBytes = {1}Serializer.getBytes();
+  const serializer = new BincodeSerializer();
+  expectedInstance.serialize(serializer);
+  const serializedBytes = serializer.getBytes();
 
-  assertEquals(serializedBytes, expectedBytes, "{1} bytes should match");
+  assertEquals(serializedBytes, expectedBytes, "bincode bytes should match");
 }});
 "#,
         reference
@@ -66,8 +72,6 @@ Deno.test("{1} serialization matches deserialization", () => {{
             .map(|x| format!("{x}"))
             .collect::<Vec<_>>()
             .join(", "),
-        runtime.name().to_lowercase(),
-        runtime.name().to_upper_camel_case(),
     )
     .unwrap();
 

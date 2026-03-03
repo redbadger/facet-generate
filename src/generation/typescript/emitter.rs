@@ -8,7 +8,7 @@ use heck::ToUpperCamelCase;
 use crate::{
     Registry,
     generation::{
-        Encoding, PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
+        PackageLocation, common, indent::IndentWrite, typescript::CodeGenerator,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder as _, Named, Namespace, QualifiedTypeName,
@@ -42,9 +42,9 @@ where
 
     pub fn output_preamble(&mut self, out: &mut T) -> std::io::Result<()> {
         if self.generator.config.has_encoding() {
-            let (serde, bcs) = match self.generator.target {
-                InstallTarget::Node => ("serde", "bcs"),
-                InstallTarget::Deno => ("serde/mod.ts", "bcs/mod.ts"),
+            let serde = match self.generator.target {
+                InstallTarget::Node => "serde",
+                InstallTarget::Deno => "serde/mod.ts",
             };
             let import_path =
                 if let Some(path) = self.generator.config.external_packages.get("serde") {
@@ -66,12 +66,6 @@ where
                 out,
                 r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
             )?;
-            if let Encoding::Bcs = self.generator.config.encoding {
-                writeln!(
-                    out,
-                    r#"import {{ BcsSerializer, BcsDeserializer }} from "./{bcs}";"#
-                )?;
-            }
         }
 
         let mut import_paths: BTreeMap<String, String> = BTreeMap::new();

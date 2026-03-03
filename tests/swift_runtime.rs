@@ -4,8 +4,8 @@
 
 pub mod common;
 
-use common::{Choice, Runtime, Test};
-use facet_generate::generation::{CodeGeneratorConfig, SourceInstaller, swift};
+use common::{Choice, Test};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, swift};
 use std::{fs::File, io::Write as _, process::Command};
 
 #[test]
@@ -26,26 +26,20 @@ fn test_swift_runtime_autotests() {
 
 #[test]
 fn test_swift_bincode_runtime_on_simple_data() {
-    test_swift_runtime_on_simple_data(Runtime::Bincode);
-}
-
-fn test_swift_runtime_on_simple_data(runtime: Runtime) {
-    // To see the source, uncomment this and replace `dir.path()` by `my_path` below.
-    // let my_path = std::path::Path::new("../test");
-    // std::fs::remove_dir_all(my_path).unwrap_or(());
-    // std::fs::create_dir_all(my_path).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(runtime.into());
+    let config =
+        CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_simple_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 
-    let reference = runtime.serialize(&Test {
+    let reference = bincode::serialize(&Test {
         a: vec![4, 6],
         b: (-3, 5),
         c: Choice::C { x: 7 },
-    });
+    })
+    .unwrap();
 
     std::fs::create_dir_all(dir.path().join("Sources/main")).unwrap();
     let main_path = dir.path().join("Sources/main/main.swift");
@@ -57,7 +51,7 @@ import Serde
 import Testing
 
 var input : [UInt8] = [{0}]
-let value = try Test.{1}Deserialize(input: input)
+let value = try Test.bincodeDeserialize(input: input)
 
 let value2 = Test.init(
     a: [4, 6],
@@ -66,19 +60,19 @@ let value2 = Test.init(
 )
 assert(value == value2, "value != value2")
 
-let output = try value2.{1}Serialize()
+let output = try value2.bincodeSerialize()
 assert(input == output, "input != output")
 
 input += [0]
 do {{
-    let _ = try Test.{1}Deserialize(input: input)
+    let _ = try Test.bincodeDeserialize(input: input)
     assertionFailure("Was expecting an error")
 }}
 catch {{}}
 
 do {{
     let input2 : [UInt8] = [0, 1]
-    let _ = try Test.{1}Deserialize(input: input2)
+    let _ = try Test.bincodeDeserialize(input: input2)
     assertionFailure("Was expecting an error")
 }}
 catch {{}}
@@ -88,7 +82,6 @@ catch {{}}
             .map(|x| format!("{x}"))
             .collect::<Vec<_>>()
             .join(", "),
-        runtime.name(),
     )
     .unwrap();
 
@@ -128,27 +121,9 @@ let package = Package(
 
 #[test]
 fn test_swift_bincode_runtime_on_supported_types() {
-    test_swift_runtime_on_supported_types(Runtime::Bincode);
-}
-
-fn quote_bytes(bytes: &[u8]) -> String {
-    format!(
-        "[{}]",
-        bytes
-            .iter()
-            .map(|x| format!("{x}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    )
-}
-
-fn test_swift_runtime_on_supported_types(runtime: Runtime) {
-    // To see the source, uncomment this and replace `dir.path()` by `my_path` below.
-    // let my_path = std::path::Path::new("../test");
-    // std::fs::remove_dir_all(my_path).unwrap_or(());
-    // std::fs::create_dir_all(my_path).unwrap();
     let dir = tempfile::tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(runtime.into());
+    let config =
+        CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
     installer.install_module(&config, &registry).unwrap();
@@ -158,15 +133,7 @@ fn test_swift_runtime_on_supported_types(runtime: Runtime) {
     let main_path = dir.path().join("Sources/main/main.swift");
     let mut main = File::create(main_path).unwrap();
 
-    let positive_encodings = runtime
-        .get_positive_samples_quick()
-        .iter()
-        .map(|bytes| quote_bytes(bytes))
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    let negative_encodings = runtime
-        .get_negative_samples()
+    let positive_encodings = common::get_positive_samples()
         .iter()
         .map(|bytes| quote_bytes(bytes))
         .collect::<Vec<_>>()
@@ -179,38 +146,29 @@ import Serde
 import Testing
 
 let positive_inputs : [[UInt8]] = [{0}]
-let negative_inputs : [[UInt8]] = [{1}]
 
 for input in positive_inputs {{
-    let value = try SerdeData.{2}Deserialize(input: input)
-    let output = try value.{2}Serialize()
+    let value = try SerdeData.bincodeDeserialize(input: input)
+    let output = try value.bincodeSerialize()
     assert(input == output, "input != output:\n  \(input)\n  \(output)")
 
     // Test self-equality for the Serde value.
-    let value2 = try SerdeData.{2}Deserialize(input: input)
+    let value2 = try SerdeData.bincodeDeserialize(input: input)
     assert(value == value2, "Deserialized value should test equal to itself: \(input)")
 
     // Test simple mutations of the input.
     for i in 0..<min(40, input.count) {{
         var input3 = input
         input3[i] ^= 0x80
-        let value3 = try? SerdeData.{2}Deserialize(input: input3)
+        let value3 = try? SerdeData.bincodeDeserialize(input: input3)
         if let value3 = value3 {{
             assert(value3 != value, "Modified input should give a different value:\n  \(input)\n  \(input3)")
         }}
     }}
 
 }}
-
-for input in negative_inputs {{
-    if let _ = try? SerdeData.{2}Deserialize(input: input) {{
-        assertionFailure("Input should fail to deserialize: \(input)")
-    }}
-}}
 "#,
         positive_encodings,
-        negative_encodings,
-        runtime.name(),
     )
     .unwrap();
 
@@ -246,4 +204,15 @@ let package = Package(
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+fn quote_bytes(bytes: &[u8]) -> String {
+    format!(
+        "[{}]",
+        bytes
+            .iter()
+            .map(|x| format!("{x}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
