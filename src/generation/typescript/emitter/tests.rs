@@ -400,6 +400,7 @@ fn enum_with_unit_struct_variants() {
 
     let actual = emit::<MyEnum>(Encoding::None);
     insta::assert_snapshot!(actual, @"
+
     export abstract class MyEnum {
     }
 
