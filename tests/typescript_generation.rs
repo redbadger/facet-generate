@@ -4,10 +4,12 @@
 
 pub mod common;
 
+use facet::Facet;
 use facet_generate::generation::{
     CodeGeneratorConfig, Encoding, SourceInstaller,
     typescript::{self, InstallTarget},
 };
+use facet_generate::reflection::RegistryBuilder;
 use regex::Regex;
 use serde_json::Value;
 use std::{
@@ -94,23 +96,35 @@ fn test_typescript_code_compiles_with_bincode() {
 
 #[test]
 fn test_typescript_code_compiles_with_comments() {
-    let dir = tempdir().unwrap();
-    let comments = vec![(vec!["SerdeData".to_string()], "Some\ncomments".to_string())]
-        .into_iter()
-        .collect();
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_comments(comments);
+    /// Some
+    /// comments
+    #[derive(Facet)]
+    struct CommentedType {
+        value: String,
+    }
 
-    let path = test_typescript_code_compiles_with_config(dir.path(), &config);
-    // Comment was correctly generated.
-    let content = std::fs::read_to_string(path.join("test.ts")).unwrap();
-    assert!(content.contains(
-        r"
-/**
- * Some
- * comments
- */
-"
-    ));
+    let dir = tempdir().unwrap();
+    let registry = RegistryBuilder::new()
+        .add_type::<CommentedType>()
+        .unwrap()
+        .build()
+        .unwrap();
+
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    let source_path = dir.path().join("testing");
+    std::fs::create_dir_all(&source_path).unwrap();
+    let source_file = source_path.join("test.ts");
+    let mut file = File::create(&source_file).unwrap();
+
+    let generator = typescript::CodeGenerator::new(&config, InstallTarget::Deno);
+    generator.output(&mut file, &registry).unwrap();
+    assert_deno_info(&source_file);
+
+    let content = std::fs::read_to_string(&source_file).unwrap();
+    assert!(
+        content.contains("/// Some\n/// comments\n"),
+        "Doc comments should be present in output:\n{content}"
+    );
 }
 
 #[test]

@@ -1,4 +1,3 @@
-import * as Other from "../other";
 type str = string;
 export class OtherChild {
 

@@ -5,7 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use include_dir::include_dir;
 use serde_json::{Value, json};
 
 use crate::{
@@ -115,61 +114,14 @@ impl Installer {
         let dir_path = self.install_dir.join(path);
         create_dir_all(&dir_path)?;
         for entry in source_dir.files() {
-            let (file_name, content) = self.transform_runtime_file(entry)?;
+            let original_name = entry.path().to_string_lossy();
+            let file_name = self.target.transform_runtime_filename(&original_name);
+            let content_str = std::str::from_utf8(entry.contents())?;
+            let content = self.target.transform_import_path(content_str);
             let mut file = File::create(dir_path.join(file_name))?;
-            file.write_all(&content)?;
+            file.write_all(content.as_bytes())?;
         }
         Ok(())
-    }
-
-    fn transform_imports(content: &str) -> String {
-        // Transform imports and exports to remove .ts extensions
-        content
-            .lines()
-            .map(|line| {
-                let trimmed = line.trim_start();
-                if (trimmed.starts_with("import") || trimmed.starts_with("export"))
-                    && line.contains(".ts")
-                {
-                    // Remove .ts extensions from import and export statements
-                    line.replace(".ts\"", "\"").replace(".ts'", "'")
-                } else {
-                    line.to_string()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    fn transform_runtime_file(
-        &self,
-        entry: &include_dir::File,
-    ) -> Result<(String, Vec<u8>), Error> {
-        let file_name = match self.target {
-            InstallTarget::Node => {
-                if entry.path().file_name() == Some(std::ffi::OsStr::new("mod.ts")) {
-                    "index.ts".to_string()
-                } else {
-                    entry.path().to_string_lossy().to_string()
-                }
-            }
-            InstallTarget::Deno => entry.path().to_string_lossy().to_string(),
-        };
-
-        let content = match self.target {
-            InstallTarget::Node => {
-                // Strip .ts extensions from imports and exports
-                let content_str = std::str::from_utf8(entry.contents())?;
-                let transformed = Self::transform_imports(content_str);
-                transformed.into_bytes()
-            }
-            InstallTarget::Deno => {
-                // Keep original content with .ts extensions
-                entry.contents().to_vec()
-            }
-        };
-
-        Ok((file_name, content))
     }
 
     #[must_use]
@@ -192,8 +144,6 @@ impl Installer {
                     PackageLocation::Url(url) => (
                         {
                             // Extract package name from URL
-                            // For npm packages, the URL might be like "https://registry.npmjs.org/package-name"
-                            // or "https://registry.npmjs.org/@scope/package-name"
                             let parts: Vec<&str> = url.split('/').collect();
                             if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
                                 // Scoped package: @scope/package-name
@@ -264,19 +214,11 @@ impl SourceInstaller for Installer {
     }
 
     fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let dir = match self.target {
-            InstallTarget::Node => include_dir!("runtime/typescript-node/serde"),
-            InstallTarget::Deno => include_dir!("runtime/typescript-deno/serde"),
-        };
-        self.install_runtime(&dir, "serde")
+        self.install_runtime(self.target.serde_runtime(), "serde")
     }
 
     fn install_bincode_runtime(&self) -> Result<(), Error> {
-        let dir = match self.target {
-            InstallTarget::Node => include_dir!("runtime/typescript-node/bincode"),
-            InstallTarget::Deno => include_dir!("runtime/typescript-deno/bincode"),
-        };
-        self.install_runtime(&dir, "bincode")
+        self.install_runtime(self.target.bincode_runtime(), "bincode")
     }
 
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
@@ -292,5 +234,4 @@ impl SourceInstaller for Installer {
 }
 
 #[cfg(test)]
-#[path = "installer_tests.rs"]
-mod installer_tests;
+mod tests;

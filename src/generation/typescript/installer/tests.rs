@@ -1,10 +1,10 @@
 use facet::Facet;
 
+use super::Installer;
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _,
-        module::split,
-        typescript::{InstallTarget, installer::Installer},
+        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        typescript::InstallTarget,
     },
     reflect,
 };
