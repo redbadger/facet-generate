@@ -25,7 +25,7 @@ fn test_typescript_code_compiles_with_config(
     let registry = common::get_registry();
     make_output_file(dir_path);
 
-    let mut installer = typescript::Installer::new(dir_path, &[], InstallTarget::Deno);
+    let mut installer = typescript::Installer::new("testing", dir_path, InstallTarget::Deno);
     installer.install_serde_runtime().unwrap();
     assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
@@ -137,7 +137,8 @@ fn test_typescript_code_compiles_with_external_definitions() {
 fn test_typescript_manifest_generation() {
     let dir = tempdir().unwrap();
 
-    let installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
+    let installer =
+        typescript::Installer::new("my-typescript-package", dir.path(), InstallTarget::Deno);
     installer.install_manifest("my-typescript-package").unwrap();
 
     // Check that package.json was created
@@ -160,7 +161,7 @@ fn test_typescript_code_generation_without_extensions() {
 
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
-    let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Node);
+    let mut installer = typescript::Installer::new("testing", dir.path(), InstallTarget::Node);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();
@@ -198,7 +199,7 @@ fn test_typescript_code_generation_with_extensions() {
 
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
-    let mut installer = typescript::Installer::new(dir.path(), &[], InstallTarget::Deno);
+    let mut installer = typescript::Installer::new("testing", dir.path(), InstallTarget::Deno);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();

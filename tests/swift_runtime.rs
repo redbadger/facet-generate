@@ -29,7 +29,7 @@ fn test_swift_bincode_runtime_on_simple_data() {
     let dir = tempfile::tempdir().unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_simple_registry();
-    let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
+    let mut installer = swift::Installer::new(&config.module_name, dir.path());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 
@@ -123,7 +123,7 @@ fn test_swift_bincode_runtime_on_supported_types() {
     let dir = tempfile::tempdir().unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     let registry = common::get_registry();
-    let mut installer = swift::Installer::new(&config.module_name, dir.path(), &[]);
+    let mut installer = swift::Installer::new(&config.module_name, dir.path());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 

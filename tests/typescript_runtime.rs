@@ -18,7 +18,7 @@ fn test_typescript_runtime_bincode_serialization() {
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path).unwrap();
 
-    let mut installer = typescript::Installer::new(dir_path, &[], InstallTarget::Deno);
+    let mut installer = typescript::Installer::new("main", dir_path, InstallTarget::Deno);
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();
 

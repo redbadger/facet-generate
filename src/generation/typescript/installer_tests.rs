@@ -14,7 +14,7 @@ fn simple_manifest() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
 
     let manifest = installer.make_manifest(package_name);
 
@@ -34,7 +34,7 @@ fn manifest_with_dependencies() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let external_packages = vec![
+    let external_pkgs = vec![
         ExternalPackage {
             for_namespace: "lodash".to_string(),
             location: PackageLocation::Url("https://registry.npmjs.org/lodash".to_string()),
@@ -49,7 +49,8 @@ fn manifest_with_dependencies() {
         },
     ];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
+        .external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
 
@@ -73,14 +74,15 @@ fn manifest_with_local_dependencies() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let external_packages = vec![ExternalPackage {
+    let external_pkgs = vec![ExternalPackage {
         for_namespace: "shared-types".to_string(),
         location: PackageLocation::Path("../shared-types".to_string()),
         module_name: None,
         version: None,
     }];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
+        .external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
@@ -102,7 +104,7 @@ fn manifest_with_mixed_dependencies() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let external_packages = vec![
+    let external_pkgs = vec![
         ExternalPackage {
             for_namespace: "lodash".to_string(),
             location: PackageLocation::Url("https://registry.npmjs.org/lodash".to_string()),
@@ -118,7 +120,8 @@ fn manifest_with_mixed_dependencies() {
         },
     ];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
+        .external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
@@ -149,7 +152,7 @@ fn manifest_with_serde_module() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
+    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -188,7 +191,7 @@ fn manifest_with_namespaces() {
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(install_dir.path(), &[], InstallTarget::Node);
+    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -226,14 +229,15 @@ fn manifest_with_external_namespace_dependencies() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let external_packages = vec![ExternalPackage {
+    let external_pkgs = vec![ExternalPackage {
         for_namespace: "external_package".to_string(),
         location: PackageLocation::Url("https://registry.npmjs.org/external-package".to_string()),
         module_name: None,
         version: Some("^1.0.0".to_string()),
     }];
 
-    let mut installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
+    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
+        .external_packages(&external_pkgs);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -261,14 +265,15 @@ fn manifest_with_scoped_package() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let external_packages = vec![ExternalPackage {
+    let external_pkgs = vec![ExternalPackage {
         for_namespace: "types".to_string(),
         location: PackageLocation::Url("https://registry.npmjs.org/@types/node".to_string()),
         module_name: None,
         version: Some("^20.0.0".to_string()),
     }];
 
-    let installer = Installer::new(install_dir.path(), &external_packages, InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
+        .external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"

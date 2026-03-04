@@ -54,16 +54,15 @@ fn test() {
         match target {
             Language::Java => {
                 let package_name = "com.example";
-                let mut installer = java::Installer::new(
-                    package_name,
-                    tmp_path,
-                    &[ExternalPackage {
-                        for_namespace: "serde".to_string(),
-                        location: PackageLocation::Path("com.novi.serde".to_string()),
-                        module_name: None,
-                        version: None,
-                    }],
-                );
+                let mut installer =
+                    java::Installer::new(package_name, tmp_path).external_packages(&[
+                        ExternalPackage {
+                            for_namespace: "serde".to_string(),
+                            location: PackageLocation::Path("com.novi.serde".to_string()),
+                            module_name: None,
+                            version: None,
+                        },
+                    ]);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module
@@ -76,16 +75,13 @@ fn test() {
             }
             Language::Kotlin => {
                 let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(
-                    package_name,
-                    tmp_path,
-                    &[ExternalPackage {
+                let mut installer = kotlin::Installer::new(package_name, tmp_path)
+                    .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("com.novi.serde".to_string()),
                         module_name: None,
                         version: None,
-                    }],
-                );
+                    }]);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module
@@ -98,16 +94,13 @@ fn test() {
             }
             Language::Swift => {
                 let package_name = "Example";
-                let mut installer = Installer::new(
-                    package_name,
-                    tmp_path.join(package_name),
-                    &[ExternalPackage {
+                let mut installer = Installer::new(package_name, tmp_path.join(package_name))
+                    .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../Serde".to_string()),
                         module_name: None,
                         version: None,
-                    }],
-                );
+                    }]);
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_encoding(Encoding::Bincode);
                     installer.install_module(&config, registry).unwrap();
@@ -115,22 +108,23 @@ fn test() {
                 installer.install_manifest(package_name).unwrap();
 
                 let package_name = "Serde";
-                let mut installer = Installer::new(package_name, tmp_path.join(package_name), &[]);
+                let mut installer = Installer::new(package_name, tmp_path.join(package_name));
                 installer.install_serde_runtime().unwrap();
                 installer.install_manifest(package_name).unwrap();
             }
             Language::TypeScript => {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(
+                    package_name,
                     tmp_path.join(package_name),
-                    &[ExternalPackage {
-                        for_namespace: "serde".to_string(),
-                        location: PackageLocation::Path("../serde".to_string()),
-                        module_name: None,
-                        version: None,
-                    }],
                     InstallTarget::Node,
-                );
+                )
+                .external_packages(&[ExternalPackage {
+                    for_namespace: "serde".to_string(),
+                    location: PackageLocation::Path("../serde".to_string()),
+                    module_name: None,
+                    version: None,
+                }]);
 
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_encoding(Encoding::Bincode);
@@ -140,8 +134,8 @@ fn test() {
 
                 let package_name = "serde";
                 let mut installer = typescript::Installer::new(
+                    package_name,
                     tmp_path.join(package_name),
-                    &[],
                     InstallTarget::Node,
                 );
                 installer.install_serde_runtime().unwrap();

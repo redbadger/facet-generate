@@ -53,42 +53,34 @@ let registry = RegistryBuilder::new()
     .build()?;
 ```
 
-To generate code from the registry, use a language-specific `Installer` which writes source files to an output directory. The registry is first split by namespace using `module::split`, then each module is installed.
+To generate code from the registry, use a language-specific `Installer`. Configure it with an encoding and call `generate()` — the installer takes care of splitting by namespace, installing runtimes, generating each module, and writing the package manifest.
 
-When using an encoding like Bincode, you also need to install the **runtimes** — these are small serialization libraries (in the target language) that the generated `serialize`/`deserialize` methods depend on. The `install_serde_runtime()` method installs the base serialization code, and `install_bincode_runtime()` installs any Bincode-specific implementations.
+When an encoding like Bincode is configured, the appropriate **runtimes** — small serialization libraries in the target language — are installed automatically alongside the generated code.
 
 ```rust
-use facet_generate::generation::{Encoding, SourceInstaller, module};
+use facet_generate::generation::Encoding;
 
 // Swift
-let mut installer = swift::Installer::new("MyPackage", &out_dir, &[]);
-installer.install_serde_runtime()?;
-installer.install_bincode_runtime()?;
-for (module, registry) in &module::split("MyPackage", &registry) {
-    let config = module.config().clone().with_encoding(Encoding::Bincode);
-    installer.install_module(&config, &registry)?;
-}
-installer.install_manifest("MyPackage")?;
+swift::Installer::new("MyPackage", &out_dir)
+    .encoding(Encoding::Bincode)
+    .generate(&registry)?;
 
 // Kotlin
-let mut installer = kotlin::Installer::new("com.example", &out_dir, &[]);
-installer.install_serde_runtime()?;
-installer.install_bincode_runtime()?;
-for (module, registry) in &module::split("com.example", &registry) {
-    let config = module.config().clone().with_encoding(Encoding::Bincode);
-    installer.install_module(&config, &registry)?;
-}
-installer.install_manifest("com.example")?;
+kotlin::Installer::new("com.example", &out_dir)
+    .encoding(Encoding::Bincode)
+    .generate(&registry)?;
 
 // TypeScript
-let mut installer = typescript::Installer::new(&out_dir, &[], InstallTarget::Node);
-installer.install_serde_runtime()?;
-installer.install_bincode_runtime()?;
-for (module, registry) in &module::split("example", &registry) {
-    let config = module.config().clone().with_encoding(Encoding::Bincode);
-    installer.install_module(&config, &registry)?;
-}
-installer.install_manifest("example")?;
+typescript::Installer::new("example", &out_dir, InstallTarget::Node)
+    .encoding(Encoding::Bincode)
+    .generate(&registry)?;
+```
+
+To generate type definitions only (without serialization), simply omit the encoding:
+
+```rust
+swift::Installer::new("MyPackage", &out_dir)
+    .generate(&registry)?;
 ```
 
 When configured with an encoding such as `Encoding::Bincode`, the generated types include `serialize` and `deserialize` methods alongside the type definitions. Without an encoding (the default), only the type definitions are generated. For the types above with Bincode, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly):
