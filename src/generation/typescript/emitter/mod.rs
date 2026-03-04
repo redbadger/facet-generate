@@ -4,6 +4,7 @@ use std::{
 };
 
 use heck::ToUpperCamelCase;
+use indoc::writedoc;
 
 use crate::{
     Registry,
@@ -535,15 +536,16 @@ fn output_serialization_helper<W: IndentWrite>(
         let mut w = w.blockln()?;
         match format0 {
             Format::Option(format) => {
-                write!(
+                writedoc!(
                     w,
-                    r"if (value) {{
-    serializer.serializeOptionTag(true);
-    {}
-}} else {{
-    serializer.serializeOptionTag(false);
-}}
-",
+                    r"
+                    if (value) {{
+                        serializer.serializeOptionTag(true);
+                        {}
+                    }} else {{
+                        serializer.serializeOptionTag(false);
+                    }}
+                    ",
                     quote_serialize_value("value", format, false)
                 )?;
             }
@@ -551,28 +553,30 @@ fn output_serialization_helper<W: IndentWrite>(
             Format::Seq(format) | Format::Set(format) => {
                 let type_ = quote_type(format);
                 let item = quote_serialize_value("item", format, false);
-                write!(
+                writedoc!(
                     w,
-                    r"serializer.serializeLen(value.length);
-value.forEach((item: {type_}) => {{
-    {item}
-}});
-"
+                    r"
+                    serializer.serializeLen(value.length);
+                    value.forEach((item: {type_}) => {{
+                        {item}
+                    }});
+                    "
                 )?;
             }
 
             Format::Map { key, value } => {
-                write!(
+                writedoc!(
                     w,
-                    r"serializer.serializeLen(value.size);
-const offsets: number[] = [];
-for (const [k, v] of value.entries()) {{
-  offsets.push(serializer.getBufferOffset());
-  {}
-  {}
-}}
-serializer.sortMapEntries(offsets);
-",
+                    r"
+                    serializer.serializeLen(value.size);
+                    const offsets: number[] = [];
+                    for (const [k, v] of value.entries()) {{
+                        offsets.push(serializer.getBufferOffset());
+                        {}
+                        {}
+                    }}
+                    serializer.sortMapEntries(offsets);
+                    ",
                     quote_serialize_value("k", key, false),
                     quote_serialize_value("v", value, false)
                 )?;
@@ -586,12 +590,13 @@ serializer.sortMapEntries(offsets);
             }
 
             Format::TupleArray { content, .. } => {
-                write!(
+                writedoc!(
                     w,
-                    r"value.forEach((item) =>{{
-    {}
-}});
-",
+                    r"
+                    value.forEach((item) =>{{
+                        {}
+                    }});
+                    ",
                     quote_serialize_value("item[0]", content, false)
                 )?;
             }
@@ -617,30 +622,32 @@ fn output_deserialization_helper<W: IndentWrite>(
         let mut w = w.blockln()?;
         match format0 {
             Format::Option(format) => {
-                write!(
+                writedoc!(
                     w,
-                    r"const tag = deserializer.deserializeOptionTag();
-if (!tag) {{
-    return null;
-}} else {{
-    return {};
-}}
-",
+                    r"
+                    const tag = deserializer.deserializeOptionTag();
+                    if (!tag) {{
+                        return null;
+                    }} else {{
+                        return {};
+                    }}
+                    ",
                     quote_deserialize(format),
                 )?;
             }
 
             Format::Seq(format) | Format::Set(format) => {
                 let format0_str = quote_type(format0);
-                write!(
+                writedoc!(
                     w,
-                    r"const length = deserializer.deserializeLen();
-const list: {format0_str} = [];
-for (let i = 0; i < length; i++) {{
-    list.push({});
-}}
-return list;
-",
+                    r"
+                    const length = deserializer.deserializeLen();
+                    const list: {format0_str} = [];
+                    for (let i = 0; i < length; i++) {{
+                        list.push({});
+                    }}
+                    return list;
+                    ",
                     quote_deserialize(format)
                 )?;
             }
@@ -648,39 +655,41 @@ return list;
             Format::Map { key, value } => {
                 let key_type = quote_type(key);
                 let value_type = quote_type(value);
-                write!(
+                writedoc!(
                     w,
-                    r"const length = deserializer.deserializeLen();
-const obj = new Map<{key_type}, {value_type}>();
-let previousKeyStart = 0;
-let previousKeyEnd = 0;
-for (let i = 0; i < length; i++) {{
-    const keyStart = deserializer.getBufferOffset();
-    const key = {0};
-    const keyEnd = deserializer.getBufferOffset();
-    if (i > 0) {{
-        deserializer.checkThatKeySlicesAreIncreasing(
-            [previousKeyStart, previousKeyEnd],
-            [keyStart, keyEnd]);
-    }}
-    previousKeyStart = keyStart;
-    previousKeyEnd = keyEnd;
-    const value = {1};
-    obj.set(key, value);
-}}
-return obj;
-",
+                    r"
+                    const length = deserializer.deserializeLen();
+                    const obj = new Map<{key_type}, {value_type}>();
+                    let previousKeyStart = 0;
+                    let previousKeyEnd = 0;
+                    for (let i = 0; i < length; i++) {{
+                        const keyStart = deserializer.getBufferOffset();
+                        const key = {0};
+                        const keyEnd = deserializer.getBufferOffset();
+                        if (i > 0) {{
+                            deserializer.checkThatKeySlicesAreIncreasing(
+                                [previousKeyStart, previousKeyEnd],
+                                [keyStart, keyEnd]);
+                        }}
+                        previousKeyStart = keyStart;
+                        previousKeyEnd = keyEnd;
+                        const value = {1};
+                        obj.set(key, value);
+                    }}
+                    return obj;
+                    ",
                     quote_deserialize(key),
                     quote_deserialize(value),
                 )?;
             }
 
             Format::Tuple(format_list) => {
-                write!(
+                writedoc!(
                     w,
-                    r"return [{}
-];
-",
+                    r"
+                    return [{}
+                    ];
+                    ",
                     format_list
                         .iter()
                         .map(|f| format!("\n    {}", quote_deserialize(f)))
@@ -692,14 +701,15 @@ return obj;
             Format::TupleArray { content, size } => {
                 let format0_str = quote_type(format0);
                 let content = quote_deserialize(content);
-                write!(
+                writedoc!(
                     w,
-                    r"const list: {format0_str} = [];
-for (let i = 0; i < {size}; i++) {{
-    list.push([{content}]);
-}}
-return list;
-",
+                    r"
+                    const list: {format0_str} = [];
+                    for (let i = 0; i < {size}; i++) {{
+                        list.push([{content}]);
+                    }}
+                    return list;
+                    ",
                 )?;
             }
 
