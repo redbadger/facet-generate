@@ -271,6 +271,72 @@ fn struct_with_fields_of_user_types() {
 }
 
 #[test]
+fn struct_with_field_that_is_a_2_tuple() {
+    #[derive(Facet)]
+    struct MyStruct {
+        one: (String, i32),
+    }
+
+    let actual = emit::<MyStruct>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type int32 = number;
+    type str = string;
+    type Tuple<T extends any[]> = T;
+    export class MyStruct {
+
+      constructor (public one: Tuple<[str, int32]>) {
+      }
+
+    }
+    ");
+}
+
+#[test]
+fn struct_with_field_that_is_a_3_tuple() {
+    #[derive(Facet)]
+    struct MyStruct {
+        one: (String, i32, u16),
+    }
+
+    let actual = emit::<MyStruct>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type int32 = number;
+    type str = string;
+    type Tuple<T extends any[]> = T;
+    type uint16 = number;
+    export class MyStruct {
+
+      constructor (public one: Tuple<[str, int32, uint16]>) {
+      }
+
+    }
+    ");
+}
+
+#[test]
+fn struct_with_field_that_is_a_4_tuple() {
+    #[derive(Facet)]
+    struct MyStruct {
+        one: (String, i32, u16, f32),
+    }
+
+    let actual = emit::<MyStruct>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type float32 = number;
+    type int32 = number;
+    type str = string;
+    type Tuple<T extends any[]> = T;
+    type uint16 = number;
+    export class MyStruct {
+
+      constructor (public one: Tuple<[str, int32, uint16, float32]>) {
+      }
+
+    }
+    ");
+}
+
+#[test]
 fn enum_with_unit_variants() {
     /// line one
     #[derive(Facet)]
@@ -314,6 +380,58 @@ fn enum_with_unit_variants() {
     /// variant three
     export class EnumWithUnitVariantsVariantVariant3 extends EnumWithUnitVariants {
       constructor () {
+        super();
+      }
+
+    }
+    ");
+}
+
+#[test]
+fn enum_with_unit_struct_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        // TS has no separate "unit struct variant" representation, so this maps
+        // to the same empty variant class shape as a unit variant.
+        Variant1 {},
+    }
+
+    let actual = emit::<MyEnum>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    export abstract class MyEnum {
+    }
+
+
+    export class MyEnumVariantVariant1 extends MyEnum {
+      constructor () {
+        super();
+      }
+
+    }
+    ");
+}
+
+#[test]
+fn enum_with_1_tuple_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Variant1(String),
+    }
+
+    let actual = emit::<MyEnum>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type str = string;
+    export abstract class MyEnum {
+    }
+
+
+    export class MyEnumVariantVariant1 extends MyEnum {
+
+      constructor (public value: str) {
         super();
       }
 
@@ -555,6 +673,7 @@ fn struct_with_nested_generics() {
         list_of_optionals: Vec<Option<i32>>,
         map_to_list: HashMap<String, Vec<bool>>,
         optional_map: Option<HashMap<String, i32>>,
+        complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
     let actual = emit::<MyStruct>(Encoding::None);
@@ -566,7 +685,7 @@ fn struct_with_nested_generics() {
     type str = string;
     export class MyStruct {
 
-      constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>) {
+      constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
       }
 
     }
@@ -729,6 +848,34 @@ fn struct_with_arc_field() {
 }
 
 #[test]
+fn struct_with_mixed_collections_and_pointers() {
+    #[derive(Facet)]
+    #[allow(clippy::box_collection)]
+    struct MyStruct {
+        vec_of_sets: Vec<HashSet<String>>,
+        optional_btree: Option<BTreeMap<String, i32>>,
+        boxed_vec: Box<Vec<String>>,
+        arc_option: Arc<Option<String>>,
+        array_of_boxes: [Box<i32>; 3],
+    }
+
+    let actual = emit::<MyStruct>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type int32 = number;
+    type ListTuple<T extends any[]> = Tuple<T>[];
+    type Optional<T> = T | null;
+    type Seq<T> = T[];
+    type str = string;
+    export class MyStruct {
+
+      constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
+      }
+
+    }
+    ");
+}
+
+#[test]
 fn struct_with_bytes_field() {
     #[derive(Facet)]
     struct MyStruct {
@@ -746,6 +893,34 @@ fn struct_with_bytes_field() {
     export class MyStruct {
 
       constructor (public data: bytes, public name: str, public header: bytes) {
+      }
+
+    }
+    ");
+}
+
+#[test]
+fn struct_with_bytes_field_and_slice() {
+    #[derive(Facet)]
+    struct MyStruct {
+        #[facet(bytes)]
+        data: &'static [u8],
+        name: String,
+        #[facet(bytes)]
+        header: Vec<u8>,
+        optional_bytes: Option<Vec<u8>>,
+    }
+
+    let actual = emit::<MyStruct>(Encoding::None);
+    insta::assert_snapshot!(actual, @"
+    type bytes = Uint8Array;
+    type Optional<T> = T | null;
+    type Seq<T> = T[];
+    type str = string;
+    type uint8 = number;
+    export class MyStruct {
+
+      constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {
       }
 
     }
