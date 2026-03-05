@@ -27,7 +27,6 @@ fn unit_struct_1() {
         static deserialize(deserializer: Deserializer): UnitStruct {
             return new UnitStruct();
         }
-
     }
     ");
 }
@@ -50,7 +49,6 @@ fn unit_struct_2() {
         static deserialize(deserializer: Deserializer): UnitStruct {
             return new UnitStruct();
         }
-
     }
     ");
 }
@@ -63,8 +61,8 @@ fn newtype_struct() {
     let actual = emit::<NewType>(Encoding::Bincode);
     insta::assert_snapshot!(actual, @"
     type str = string;
-    export class NewType {
 
+    export class NewType {
         constructor (public value: str) {
         }
 
@@ -76,7 +74,6 @@ fn newtype_struct() {
             const value = deserializer.deserializeStr();
             return new NewType(value);
         }
-
     }
     ");
 }
@@ -90,8 +87,8 @@ fn tuple_struct() {
     insta::assert_snapshot!(actual, @"
     type int32 = number;
     type str = string;
-    export class TupleStruct {
 
+    export class TupleStruct {
         constructor (public field0: str, public field1: int32) {
         }
 
@@ -105,7 +102,6 @@ fn tuple_struct() {
             const field1 = deserializer.deserializeI32();
             return new TupleStruct(field0,field1);
         }
-
     }
     ");
 }
@@ -150,8 +146,8 @@ fn struct_with_fields_of_primitive_types() {
     type uint64 = bigint;
     type uint8 = number;
     type unit = null;
-    export class StructWithFields {
 
+    export class StructWithFields {
         constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
         }
 
@@ -193,7 +189,6 @@ fn struct_with_fields_of_primitive_types() {
             const string = deserializer.deserializeStr();
             return new StructWithFields(unit,bool,i8,i16,i32,i64,i128,u8,u16,u32,u64,u128,f32,f64,char,string);
         }
-
     }
     ");
 }
@@ -222,8 +217,8 @@ fn struct_with_fields_of_user_types() {
     insta::assert_snapshot!(actual, @"
     type int32 = number;
     type str = string;
-    export class Inner1 {
 
+    export class Inner1 {
         constructor (public field1: str) {
         }
 
@@ -235,10 +230,9 @@ fn struct_with_fields_of_user_types() {
             const field1 = deserializer.deserializeStr();
             return new Inner1(field1);
         }
-
     }
-    export class Inner2 {
 
+    export class Inner2 {
         constructor (public value: str) {
         }
 
@@ -250,10 +244,9 @@ fn struct_with_fields_of_user_types() {
             const value = deserializer.deserializeStr();
             return new Inner2(value);
         }
-
     }
-    export class Inner3 {
 
+    export class Inner3 {
         constructor (public field0: str, public field1: int32) {
         }
 
@@ -267,10 +260,9 @@ fn struct_with_fields_of_user_types() {
             const field1 = deserializer.deserializeI32();
             return new Inner3(field0,field1);
         }
-
     }
-    export class Outer {
 
+    export class Outer {
         constructor (public one: Inner1, public two: Inner2, public three: Inner3) {
         }
 
@@ -286,7 +278,6 @@ fn struct_with_fields_of_user_types() {
             const three = Inner3.deserialize(deserializer);
             return new Outer(one,two,three);
         }
-
     }
     ");
 }
@@ -303,8 +294,8 @@ fn struct_with_field_that_is_a_2_tuple() {
     type int32 = number;
     type str = string;
     type Tuple<T extends any[]> = T;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public one: Tuple<[str, int32]>) {
         }
 
@@ -319,7 +310,6 @@ fn struct_with_field_that_is_a_2_tuple() {
             const one = [field0, field1] as [str, int32];
             return new MyStruct(one);
         }
-
     }
     ");
 }
@@ -337,8 +327,8 @@ fn struct_with_field_that_is_a_3_tuple() {
     type str = string;
     type Tuple<T extends any[]> = T;
     type uint16 = number;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16]>) {
         }
 
@@ -355,7 +345,6 @@ fn struct_with_field_that_is_a_3_tuple() {
             const one = [field0, field1, field2] as [str, int32, uint16];
             return new MyStruct(one);
         }
-
     }
     ");
 }
@@ -374,8 +363,8 @@ fn struct_with_field_that_is_a_4_tuple() {
     type str = string;
     type Tuple<T extends any[]> = T;
     type uint16 = number;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16, float32]>) {
         }
 
@@ -394,7 +383,6 @@ fn struct_with_field_that_is_a_4_tuple() {
             const one = [field0, field1, field2, field3] as [str, int32, uint16, float32];
             return new MyStruct(one);
         }
-
     }
     ");
 }
@@ -413,6 +401,7 @@ fn enum_with_unit_variants() {
     let actual = emit::<EnumWithUnitVariants>(Encoding::Bincode);
     insta::assert_snapshot!(actual, @r#"
 
+
     export abstract class EnumWithUnitVariants {
         abstract serialize(serializer: Serializer): void;
 
@@ -427,7 +416,6 @@ fn enum_with_unit_variants() {
         }
     }
 
-
     export class EnumWithUnitVariantsVariantVariant1 extends EnumWithUnitVariants {
         constructor () {
             super();
@@ -440,7 +428,6 @@ fn enum_with_unit_variants() {
         static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant1 {
             return new EnumWithUnitVariantsVariantVariant1();
         }
-
     }
 
     export class EnumWithUnitVariantsVariantVariant2 extends EnumWithUnitVariants {
@@ -455,7 +442,6 @@ fn enum_with_unit_variants() {
         static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant2 {
             return new EnumWithUnitVariantsVariantVariant2();
         }
-
     }
 
     export class EnumWithUnitVariantsVariantVariant3 extends EnumWithUnitVariants {
@@ -470,7 +456,6 @@ fn enum_with_unit_variants() {
         static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant3 {
             return new EnumWithUnitVariantsVariantVariant3();
         }
-
     }
     "#);
 }
@@ -488,6 +473,7 @@ fn enum_with_unit_struct_variants() {
     let actual = emit::<MyEnum>(Encoding::Bincode);
     insta::assert_snapshot!(actual, @r#"
 
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -499,7 +485,6 @@ fn enum_with_unit_struct_variants() {
             }
         }
     }
-
 
     export class MyEnumVariantVariant1 extends MyEnum {
         constructor () {
@@ -513,7 +498,6 @@ fn enum_with_unit_struct_variants() {
         static load(deserializer: Deserializer): MyEnumVariantVariant1 {
             return new MyEnumVariantVariant1();
         }
-
     }
     "#);
 }
@@ -530,6 +514,7 @@ fn enum_with_1_tuple_variants() {
     let actual = emit::<MyEnum>(Encoding::Bincode);
     insta::assert_snapshot!(actual, @r#"
     type str = string;
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -542,9 +527,7 @@ fn enum_with_1_tuple_variants() {
         }
     }
 
-
     export class MyEnumVariantVariant1 extends MyEnum {
-
         constructor (public value: str) {
             super();
         }
@@ -558,7 +541,6 @@ fn enum_with_1_tuple_variants() {
             const value = deserializer.deserializeStr();
             return new MyEnumVariantVariant1(value);
         }
-
     }
     "#);
 }
@@ -577,6 +559,7 @@ fn enum_with_newtype_variants() {
     insta::assert_snapshot!(actual, @r#"
     type int32 = number;
     type str = string;
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -590,9 +573,7 @@ fn enum_with_newtype_variants() {
         }
     }
 
-
     export class MyEnumVariantVariant1 extends MyEnum {
-
         constructor (public value: str) {
             super();
         }
@@ -606,11 +587,9 @@ fn enum_with_newtype_variants() {
             const value = deserializer.deserializeStr();
             return new MyEnumVariantVariant1(value);
         }
-
     }
 
     export class MyEnumVariantVariant2 extends MyEnum {
-
         constructor (public value: int32) {
             super();
         }
@@ -624,7 +603,6 @@ fn enum_with_newtype_variants() {
             const value = deserializer.deserializeI32();
             return new MyEnumVariantVariant2(value);
         }
-
     }
     "#);
 }
@@ -646,6 +624,7 @@ fn enum_with_tuple_variants() {
     type int32 = number;
     type str = string;
     type uint8 = number;
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -659,9 +638,7 @@ fn enum_with_tuple_variants() {
         }
     }
 
-
     export class MyEnumVariantVariant1 extends MyEnum {
-
         constructor (public field0: str, public field1: int32) {
             super();
         }
@@ -677,11 +654,9 @@ fn enum_with_tuple_variants() {
             const field1 = deserializer.deserializeI32();
             return new MyEnumVariantVariant1(field0,field1);
         }
-
     }
 
     export class MyEnumVariantVariant2 extends MyEnum {
-
         constructor (public field0: bool, public field1: float64, public field2: uint8) {
             super();
         }
@@ -699,7 +674,6 @@ fn enum_with_tuple_variants() {
             const field2 = deserializer.deserializeU8();
             return new MyEnumVariantVariant2(field0,field1,field2);
         }
-
     }
     "#);
 }
@@ -717,6 +691,7 @@ fn enum_with_struct_variants() {
     insta::assert_snapshot!(actual, @r#"
     type int32 = number;
     type str = string;
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -729,9 +704,7 @@ fn enum_with_struct_variants() {
         }
     }
 
-
     export class MyEnumVariantVariant1 extends MyEnum {
-
         constructor (public field1: str, public field2: int32) {
             super();
         }
@@ -747,7 +720,6 @@ fn enum_with_struct_variants() {
             const field2 = deserializer.deserializeI32();
             return new MyEnumVariantVariant1(field1,field2);
         }
-
     }
     "#);
 }
@@ -769,6 +741,7 @@ fn enum_with_mixed_variants() {
     type bool = boolean;
     type int32 = number;
     type str = string;
+
     export abstract class MyEnum {
         abstract serialize(serializer: Serializer): void;
 
@@ -784,7 +757,6 @@ fn enum_with_mixed_variants() {
         }
     }
 
-
     export class MyEnumVariantUnit extends MyEnum {
         constructor () {
             super();
@@ -797,11 +769,9 @@ fn enum_with_mixed_variants() {
         static load(deserializer: Deserializer): MyEnumVariantUnit {
             return new MyEnumVariantUnit();
         }
-
     }
 
     export class MyEnumVariantNewType extends MyEnum {
-
         constructor (public value: str) {
             super();
         }
@@ -815,11 +785,9 @@ fn enum_with_mixed_variants() {
             const value = deserializer.deserializeStr();
             return new MyEnumVariantNewType(value);
         }
-
     }
 
     export class MyEnumVariantTuple extends MyEnum {
-
         constructor (public field0: str, public field1: int32) {
             super();
         }
@@ -835,11 +803,9 @@ fn enum_with_mixed_variants() {
             const field1 = deserializer.deserializeI32();
             return new MyEnumVariantTuple(field0,field1);
         }
-
     }
 
     export class MyEnumVariantStruct extends MyEnum {
-
         constructor (public field: bool) {
             super();
         }
@@ -853,7 +819,6 @@ fn enum_with_mixed_variants() {
             const field = deserializer.deserializeBool();
             return new MyEnumVariantStruct(field);
         }
-
     }
     "#);
 }
@@ -872,8 +837,8 @@ fn struct_with_vec_field_1() {
     type int32 = number;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public items: Seq<str>, public numbers: Seq<int32>, public nested_items: Seq<Seq<str>>) {
         }
 
@@ -905,7 +870,6 @@ fn struct_with_vec_field_1() {
             });
             return new MyStruct(items,numbers,nested_items);
         }
-
     }
     ");
 }
@@ -926,8 +890,8 @@ fn struct_with_vec_field_2() {
     insta::assert_snapshot!(actual, @"
     type Seq<T> = T[];
     type str = string;
-    export class Child {
 
+    export class Child {
         constructor (public name: str) {
         }
 
@@ -939,10 +903,9 @@ fn struct_with_vec_field_2() {
             const name = deserializer.deserializeStr();
             return new Child(name);
         }
-
     }
-    export class Parent {
 
+    export class Parent {
         constructor (public children: Seq<Seq<Child>>) {
         }
 
@@ -962,7 +925,6 @@ fn struct_with_vec_field_2() {
             });
             return new Parent(children);
         }
-
     }
     ");
 }
@@ -985,8 +947,8 @@ fn struct_with_option_field() {
     type Optional<T> = T | null;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public simple: Optional<str>, public nested: Optional<Optional<int32>>, public list: Optional<Seq<bool>>, public list_of_options: Seq<Optional<bool>>) {
         }
 
@@ -1032,7 +994,6 @@ fn struct_with_option_field() {
             });
             return new MyStruct(simple,nested,list,list_of_options);
         }
-
     }
     ");
 }
@@ -1050,8 +1011,8 @@ fn struct_with_hashmap_field() {
     type bool = boolean;
     type int32 = number;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
         }
 
@@ -1079,7 +1040,6 @@ fn struct_with_hashmap_field() {
             });
             return new MyStruct(string_to_int,int_to_bool);
         }
-
     }
     ");
 }
@@ -1102,8 +1062,8 @@ fn struct_with_nested_generics() {
     type Optional<T> = T | null;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
         }
 
@@ -1180,7 +1140,6 @@ fn struct_with_nested_generics() {
             });
             return new MyStruct(optional_list,list_of_optionals,map_to_list,optional_map,complex);
         }
-
     }
     ");
 }
@@ -1201,8 +1160,8 @@ fn struct_with_array_field() {
     type ListTuple<T extends any[]> = Tuple<T>[];
     type str = string;
     type uint8 = number;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public fixed_array: ListTuple<[int32]>, public byte_array: ListTuple<[uint8]>, public string_array: ListTuple<[str]>) {
         }
 
@@ -1233,7 +1192,6 @@ fn struct_with_array_field() {
             });
             return new MyStruct(fixed_array,byte_array,string_array);
         }
-
     }
     ");
 }
@@ -1251,8 +1209,8 @@ fn struct_with_btreemap_field() {
     type bool = boolean;
     type int32 = number;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
         }
 
@@ -1280,7 +1238,6 @@ fn struct_with_btreemap_field() {
             });
             return new MyStruct(string_to_int,int_to_bool);
         }
-
     }
     ");
 }
@@ -1298,8 +1255,8 @@ fn struct_with_nested_map_field() {
     type int32 = number;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public map_to_list: Map<str,Seq<int32>>, public list_to_map: Seq<Map<int32,str>>) {
         }
 
@@ -1335,7 +1292,6 @@ fn struct_with_nested_map_field() {
             });
             return new MyStruct(map_to_list,list_to_map);
         }
-
     }
     ");
 }
@@ -1353,8 +1309,8 @@ fn struct_with_hashset_field() {
     type int32 = number;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
         }
 
@@ -1376,7 +1332,6 @@ fn struct_with_hashset_field() {
             });
             return new MyStruct(string_set,int_set);
         }
-
     }
     ");
 }
@@ -1394,8 +1349,8 @@ fn struct_with_btreeset_field() {
     type int32 = number;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
         }
 
@@ -1417,7 +1372,6 @@ fn struct_with_btreeset_field() {
             });
             return new MyStruct(string_set,int_set);
         }
-
     }
     ");
 }
@@ -1435,8 +1389,8 @@ fn struct_with_nested_set_field() {
     type int32 = number;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public vec_of_sets: Seq<Seq<str>>, public set_of_ints: Seq<int32>) {
         }
 
@@ -1462,7 +1416,6 @@ fn struct_with_nested_set_field() {
             });
             return new MyStruct(vec_of_sets,set_of_ints);
         }
-
     }
     ");
 }
@@ -1480,8 +1433,8 @@ fn struct_with_box_field() {
     insta::assert_snapshot!(actual, @"
     type int32 = number;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public boxed_string: str, public boxed_int: int32) {
         }
 
@@ -1495,7 +1448,6 @@ fn struct_with_box_field() {
             const boxed_int = deserializer.deserializeI32();
             return new MyStruct(boxed_string,boxed_int);
         }
-
     }
     ");
 }
@@ -1512,8 +1464,8 @@ fn struct_with_rc_field() {
     insta::assert_snapshot!(actual, @"
     type int32 = number;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public rc_string: str, public rc_int: int32) {
         }
 
@@ -1527,7 +1479,6 @@ fn struct_with_rc_field() {
             const rc_int = deserializer.deserializeI32();
             return new MyStruct(rc_string,rc_int);
         }
-
     }
     ");
 }
@@ -1544,8 +1495,8 @@ fn struct_with_arc_field() {
     insta::assert_snapshot!(actual, @"
     type int32 = number;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public arc_string: str, public arc_int: int32) {
         }
 
@@ -1559,7 +1510,6 @@ fn struct_with_arc_field() {
             const arc_int = deserializer.deserializeI32();
             return new MyStruct(arc_string,arc_int);
         }
-
     }
     ");
 }
@@ -1583,8 +1533,8 @@ fn struct_with_mixed_collections_and_pointers() {
     type Optional<T> = T | null;
     type Seq<T> = T[];
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
         }
 
@@ -1636,7 +1586,6 @@ fn struct_with_mixed_collections_and_pointers() {
             });
             return new MyStruct(vec_of_sets,optional_btree,boxed_vec,arc_option,array_of_boxes);
         }
-
     }
     ");
 }
@@ -1656,8 +1605,8 @@ fn struct_with_bytes_field() {
     insta::assert_snapshot!(actual, @"
     type bytes = Uint8Array;
     type str = string;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes) {
         }
 
@@ -1673,7 +1622,6 @@ fn struct_with_bytes_field() {
             const header = deserializer.deserializeBytes();
             return new MyStruct(data,name,header);
         }
-
     }
     ");
 }
@@ -1697,8 +1645,8 @@ fn struct_with_bytes_field_and_slice() {
     type Seq<T> = T[];
     type str = string;
     type uint8 = number;
-    export class MyStruct {
 
+    export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {
         }
 
@@ -1724,7 +1672,6 @@ fn struct_with_bytes_field_and_slice() {
             });
             return new MyStruct(data,name,header,optional_bytes);
         }
-
     }
     ");
 }

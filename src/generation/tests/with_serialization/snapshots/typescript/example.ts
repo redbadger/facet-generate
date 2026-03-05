@@ -101,8 +101,8 @@ type int32 = number;
 type Optional<T> = T | null;
 type Seq<T> = T[];
 type str = string;
-export class Child {
 
+export class Child {
     constructor (public name: str) {
     }
 
@@ -114,10 +114,9 @@ export class Child {
         const name = deserializer.deserializeStr();
         return new Child(name);
     }
-
 }
-export class MyStruct {
 
+export class MyStruct {
     constructor (public string_to_int: Map<str,int32>, public map_to_list: Map<str,Seq<int32>>, public option_of_vec_of_set: Optional<Seq<Seq<str>>>, public parent: Parent) {
     }
 
@@ -165,8 +164,8 @@ export class MyStruct {
         const parent = Parent.deserialize(deserializer);
         return new MyStruct(string_to_int,map_to_list,option_of_vec_of_set,parent);
     }
-
 }
+
 export abstract class Parent {
     abstract serialize(serializer: Serializer): void;
 
@@ -179,9 +178,7 @@ export abstract class Parent {
     }
 }
 
-
 export class ParentVariantChild extends Parent {
-
     constructor (public value: Child) {
         super();
     }
@@ -195,5 +192,4 @@ export class ParentVariantChild extends Parent {
         const value = Child.deserialize(deserializer);
         return new ParentVariantChild(value);
     }
-
 }

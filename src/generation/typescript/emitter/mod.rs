@@ -134,6 +134,7 @@ pub(crate) fn collect_used_namespaces(registry: &Registry) -> BTreeSet<String> {
                         namespaces.insert(ns.clone());
                     }
                 }
+
                 Ok(())
             })
             .unwrap();
@@ -166,6 +167,7 @@ impl Emitter<TypeScript> for Doc {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
+
         Ok(())
     }
 }
@@ -362,6 +364,7 @@ fn write_serialize<W: IndentWrite>(w: &mut W, value_expr: &str, format: &Format)
             for (i, fmt) in formats.iter().enumerate() {
                 write_serialize(w, &format!("{value_expr}[{i}]"), fmt)?;
             }
+
             Ok(())
         }
 
@@ -439,6 +442,7 @@ fn is_primitive_or_named(format: &Format) -> bool {
 ///
 /// When `field_name` is Some, emits `const <name> = <expr>;`.
 /// When `field_name` is None, emits `return <expr>;`.
+#[allow(clippy::too_many_lines)]
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
@@ -597,8 +601,8 @@ fn output_struct_or_variant<W: IndentWrite>(
 ) -> Result<()> {
     let mut variant_base_name = String::new();
 
+    writeln!(w)?;
     doc.write(w, lang)?;
-
     if let Some(base) = variant_base {
         write!(w, "export class {base}Variant{name} extends {base} ")?;
         variant_base_name = format!("{base}Variant");
@@ -606,9 +610,6 @@ fn output_struct_or_variant<W: IndentWrite>(
         write!(w, "export class {name} ")?;
     }
     let mut w = w.block(Newlines::BOTH)?;
-    if !fields.is_empty() {
-        writeln!(w)?;
-    }
     let args: Vec<String> = fields
         .iter()
         .map(|f| {
@@ -624,8 +625,8 @@ fn output_struct_or_variant<W: IndentWrite>(
             writeln!(w, "super();")?;
         }
     }
-    writeln!(w)?;
     if lang.encoding.is_bincode() || lang.encoding.is_json() {
+        writeln!(w)?;
         write!(w, "public serialize(serializer: Serializer): void ")?;
         {
             let mut w = w.block(Newlines::BOTH)?;
@@ -638,8 +639,6 @@ fn output_struct_or_variant<W: IndentWrite>(
             }
         }
         writeln!(w)?;
-    }
-    if lang.encoding.is_bincode() || lang.encoding.is_json() {
         if variant_index.is_none() {
             write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
         } else {
@@ -665,8 +664,8 @@ fn output_struct_or_variant<W: IndentWrite>(
                     .join(",")
             )?;
         }
-        writeln!(w)?;
     }
+
     Ok(())
 }
 
@@ -702,6 +701,7 @@ fn output_enum_container<W: IndentWrite>(
     doc: &Doc,
     lang: TypeScript,
 ) -> Result<()> {
+    writeln!(w)?;
     doc.write(w, lang)?;
     write!(w, "export abstract class {name} ")?;
     {
@@ -730,9 +730,7 @@ fn output_enum_container<W: IndentWrite>(
             }
         }
     }
-    writeln!(w)?;
     for (index, variant) in variants {
-        writeln!(w)?;
         output_variant(
             w,
             name,
@@ -743,6 +741,7 @@ fn output_enum_container<W: IndentWrite>(
             lang,
         )?;
     }
+
     Ok(())
 }
 
@@ -806,6 +805,7 @@ pub(crate) fn collect_type_alias_keys(registry: &Registry) -> BTreeSet<String> {
                 if !key.is_empty() {
                     keys.insert(key.to_string());
                 }
+
                 Ok(())
             })
             .unwrap();

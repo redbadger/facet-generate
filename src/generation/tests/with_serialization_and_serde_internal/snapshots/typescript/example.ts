@@ -1,7 +1,7 @@
 import { Serializer, Deserializer } from "./serde";
 type str = string;
-export class Child {
 
+export class Child {
     constructor (public name: str) {
     }
 
@@ -13,8 +13,8 @@ export class Child {
         const name = deserializer.deserializeStr();
         return new Child(name);
     }
-
 }
+
 export abstract class Parent {
     abstract serialize(serializer: Serializer): void;
 
@@ -27,9 +27,7 @@ export abstract class Parent {
     }
 }
 
-
 export class ParentVariantChild extends Parent {
-
     constructor (public value: Child) {
         super();
     }
@@ -43,5 +41,4 @@ export class ParentVariantChild extends Parent {
         const value = Child.deserialize(deserializer);
         return new ParentVariantChild(value);
     }
-
 }
