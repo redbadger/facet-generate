@@ -14,6 +14,10 @@ use crate::{
 };
 
 /// Installer for generated source files in Java.
+#[deprecated(
+    since = "0.16.0",
+    note = "The Java generator is deprecated. Use the Kotlin generator instead."
+)]
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,

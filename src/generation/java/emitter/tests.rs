@@ -1,4 +1,5 @@
 #![allow(clippy::too_many_lines)]
+#![expect(deprecated, reason = "tests use deprecated emit_java macro")]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     rc::Rc,

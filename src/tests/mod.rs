@@ -42,6 +42,7 @@ macro_rules! test {
 
     (@generate_tests [$($ty:ident),*] $language:ident $(, $rest:ident)*) => {
         #[test]
+        #[allow(deprecated)]
         fn $language() -> Result<()> {
             let registry = RegistryBuilder::new()
                 $(.add_type::<$ty>().unwrap())*

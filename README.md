@@ -2,6 +2,8 @@
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, and TypeScript. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
+> **Note:** A Java generator is also available but deprecated — use Kotlin for Android targets.
+
 ## Usage
 
 ```sh

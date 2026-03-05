@@ -6,14 +6,46 @@ use std::{
 use expect_test::ExpectFile;
 use ignore::WalkBuilder;
 
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod basic;
 mod with_bytes;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_namespaces_as_external;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_namespaces_as_internal;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_serialization;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_serialization_and_namespaces_as_external;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_serialization_and_serde_external;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_serialization_and_serde_internal;
+#[expect(
+    deprecated,
+    reason = "snapshot tests cover the deprecated Java generator"
+)]
 mod with_serialization_and_serde_local;
 
 fn read_files_and_create_expect_dirs(
