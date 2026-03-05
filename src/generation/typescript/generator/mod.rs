@@ -48,7 +48,7 @@ impl<'a> CodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(2));
+        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
 
         let mut config = self.config.clone();
         config.update_from(registry);

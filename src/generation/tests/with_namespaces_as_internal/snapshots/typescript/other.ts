@@ -1,8 +1,8 @@
 type str = string;
 export class OtherChild {
 
-  constructor (public name: str) {
-  }
+    constructor (public name: str) {
+    }
 
 }
 export abstract class OtherParent {
@@ -11,8 +11,8 @@ export abstract class OtherParent {
 
 export class OtherParentVariantChild extends OtherParent {
 
-  constructor (public value: OtherChild) {
-    super();
-  }
+    constructor (public value: OtherChild) {
+        super();
+    }
 
 }

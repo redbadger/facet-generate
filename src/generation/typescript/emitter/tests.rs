@@ -73,7 +73,7 @@ pub(super) fn emit<T: for<'a> facet::Facet<'a>>(encoding: Encoding) -> String {
     let lang = TypeScript::new(encoding, InstallTarget::Node);
 
     let mut out = Vec::new();
-    let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(2));
+    let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
 
     write_type_aliases(&mut w, &type_alias_keys).unwrap();
     for container in registry.iter().map(Container::from) {
@@ -96,8 +96,8 @@ fn unit_struct() {
     /// line 1
     /// line 2
     export class UnitStruct {
-      constructor () {
-      }
+        constructor () {
+        }
 
     }
     ");
@@ -116,8 +116,8 @@ fn unit_struct_empty_body() {
     /// line 1
     /// line 2
     export class UnitStruct {
-      constructor () {
-      }
+        constructor () {
+        }
 
     }
     ");
@@ -137,8 +137,8 @@ fn newtype_struct() {
     /// line 2
     export class NewType {
 
-      constructor (public value: str) {
-      }
+        constructor (public value: str) {
+        }
 
     }
     ");
@@ -159,8 +159,8 @@ fn tuple_struct() {
     /// line 2
     export class TupleStruct {
 
-      constructor (public field0: str, public field1: int32) {
-      }
+        constructor (public field0: str, public field1: int32) {
+        }
 
     }
     ");
@@ -212,8 +212,8 @@ fn struct_with_fields_of_primitive_types() {
     /// line 2
     export class StructWithFields {
 
-      constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
-      }
+        constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
+        }
 
     }
     ");
@@ -245,26 +245,26 @@ fn struct_with_fields_of_user_types() {
     type str = string;
     export class Inner1 {
 
-      constructor (public field1: str) {
-      }
+        constructor (public field1: str) {
+        }
 
     }
     export class Inner2 {
 
-      constructor (public value: str) {
-      }
+        constructor (public value: str) {
+        }
 
     }
     export class Inner3 {
 
-      constructor (public field0: str, public field1: int32) {
-      }
+        constructor (public field0: str, public field1: int32) {
+        }
 
     }
     export class Outer {
 
-      constructor (public one: Inner1, public two: Inner2, public three: Inner3) {
-      }
+        constructor (public one: Inner1, public two: Inner2, public three: Inner3) {
+        }
 
     }
     ");
@@ -284,8 +284,8 @@ fn struct_with_field_that_is_a_2_tuple() {
     type Tuple<T extends any[]> = T;
     export class MyStruct {
 
-      constructor (public one: Tuple<[str, int32]>) {
-      }
+        constructor (public one: Tuple<[str, int32]>) {
+        }
 
     }
     ");
@@ -306,8 +306,8 @@ fn struct_with_field_that_is_a_3_tuple() {
     type uint16 = number;
     export class MyStruct {
 
-      constructor (public one: Tuple<[str, int32, uint16]>) {
-      }
+        constructor (public one: Tuple<[str, int32, uint16]>) {
+        }
 
     }
     ");
@@ -329,8 +329,8 @@ fn struct_with_field_that_is_a_4_tuple() {
     type uint16 = number;
     export class MyStruct {
 
-      constructor (public one: Tuple<[str, int32, uint16, float32]>) {
-      }
+        constructor (public one: Tuple<[str, int32, uint16, float32]>) {
+        }
 
     }
     ");
@@ -363,25 +363,25 @@ fn enum_with_unit_variants() {
 
     /// variant one
     export class EnumWithUnitVariantsVariantVariant1 extends EnumWithUnitVariants {
-      constructor () {
-        super();
-      }
+        constructor () {
+            super();
+        }
 
     }
 
     /// variant two
     export class EnumWithUnitVariantsVariantVariant2 extends EnumWithUnitVariants {
-      constructor () {
-        super();
-      }
+        constructor () {
+            super();
+        }
 
     }
 
     /// variant three
     export class EnumWithUnitVariantsVariantVariant3 extends EnumWithUnitVariants {
-      constructor () {
-        super();
-      }
+        constructor () {
+            super();
+        }
 
     }
     ");
@@ -406,9 +406,9 @@ fn enum_with_unit_struct_variants() {
 
 
     export class MyEnumVariantVariant1 extends MyEnum {
-      constructor () {
-        super();
-      }
+        constructor () {
+            super();
+        }
 
     }
     ");
@@ -432,9 +432,9 @@ fn enum_with_1_tuple_variants() {
 
     export class MyEnumVariantVariant1 extends MyEnum {
 
-      constructor (public value: str) {
-        super();
-      }
+        constructor (public value: str) {
+            super();
+        }
 
     }
     ");
@@ -460,17 +460,17 @@ fn enum_with_newtype_variants() {
 
     export class MyEnumVariantVariant1 extends MyEnum {
 
-      constructor (public value: str) {
-        super();
-      }
+        constructor (public value: str) {
+            super();
+        }
 
     }
 
     export class MyEnumVariantVariant2 extends MyEnum {
 
-      constructor (public value: int32) {
-        super();
-      }
+        constructor (public value: int32) {
+            super();
+        }
 
     }
     ");
@@ -499,17 +499,17 @@ fn enum_with_tuple_variants() {
 
     export class MyEnumVariantVariant1 extends MyEnum {
 
-      constructor (public field0: str, public field1: int32) {
-        super();
-      }
+        constructor (public field0: str, public field1: int32) {
+            super();
+        }
 
     }
 
     export class MyEnumVariantVariant2 extends MyEnum {
 
-      constructor (public field0: bool, public field1: float64, public field2: uint8) {
-        super();
-      }
+        constructor (public field0: bool, public field1: float64, public field2: uint8) {
+            super();
+        }
 
     }
     ");
@@ -534,9 +534,9 @@ fn enum_with_struct_variants() {
 
     export class MyEnumVariantVariant1 extends MyEnum {
 
-      constructor (public field1: str, public field2: int32) {
-        super();
-      }
+        constructor (public field1: str, public field2: int32) {
+            super();
+        }
 
     }
     ");
@@ -564,33 +564,33 @@ fn enum_with_mixed_variants() {
 
 
     export class MyEnumVariantUnit extends MyEnum {
-      constructor () {
-        super();
-      }
+        constructor () {
+            super();
+        }
 
     }
 
     export class MyEnumVariantNewType extends MyEnum {
 
-      constructor (public value: str) {
-        super();
-      }
+        constructor (public value: str) {
+            super();
+        }
 
     }
 
     export class MyEnumVariantTuple extends MyEnum {
 
-      constructor (public field0: str, public field1: int32) {
-        super();
-      }
+        constructor (public field0: str, public field1: int32) {
+            super();
+        }
 
     }
 
     export class MyEnumVariantStruct extends MyEnum {
 
-      constructor (public field: bool) {
-        super();
-      }
+        constructor (public field: bool) {
+            super();
+        }
 
     }
     ");
@@ -612,8 +612,8 @@ fn struct_with_vec_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public items: Seq<str>, public numbers: Seq<int32>, public nested_items: Seq<Seq<str>>) {
-      }
+        constructor (public items: Seq<str>, public numbers: Seq<int32>, public nested_items: Seq<Seq<str>>) {
+        }
 
     }
     ");
@@ -637,8 +637,8 @@ fn struct_with_option_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public optional_string: Optional<str>, public optional_number: Optional<int32>, public optional_bool: Optional<bool>) {
-      }
+        constructor (public optional_string: Optional<str>, public optional_number: Optional<int32>, public optional_bool: Optional<bool>) {
+        }
 
     }
     ");
@@ -659,8 +659,8 @@ fn struct_with_hashmap_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
-      }
+        constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
+        }
 
     }
     ");
@@ -686,8 +686,8 @@ fn struct_with_nested_generics() {
     type str = string;
     export class MyStruct {
 
-      constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
-      }
+        constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
+        }
 
     }
     ");
@@ -711,8 +711,8 @@ fn struct_with_array_field() {
     type uint8 = number;
     export class MyStruct {
 
-      constructor (public fixed_array: ListTuple<[int32]>, public byte_array: ListTuple<[uint8]>, public string_array: ListTuple<[str]>) {
-      }
+        constructor (public fixed_array: ListTuple<[int32]>, public byte_array: ListTuple<[uint8]>, public string_array: ListTuple<[str]>) {
+        }
 
     }
     ");
@@ -733,8 +733,8 @@ fn struct_with_btreemap_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
-      }
+        constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
+        }
 
     }
     ");
@@ -755,8 +755,8 @@ fn struct_with_hashset_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
-      }
+        constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
+        }
 
     }
     ");
@@ -777,8 +777,8 @@ fn struct_with_btreeset_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
-      }
+        constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
+        }
 
     }
     ");
@@ -799,8 +799,8 @@ fn struct_with_box_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public boxed_string: str, public boxed_int: int32) {
-      }
+        constructor (public boxed_string: str, public boxed_int: int32) {
+        }
 
     }
     ");
@@ -820,8 +820,8 @@ fn struct_with_rc_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public rc_string: str, public rc_int: int32) {
-      }
+        constructor (public rc_string: str, public rc_int: int32) {
+        }
 
     }
     ");
@@ -841,8 +841,8 @@ fn struct_with_arc_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public arc_string: str, public arc_int: int32) {
-      }
+        constructor (public arc_string: str, public arc_int: int32) {
+        }
 
     }
     ");
@@ -869,8 +869,8 @@ fn struct_with_mixed_collections_and_pointers() {
     type str = string;
     export class MyStruct {
 
-      constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
-      }
+        constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
+        }
 
     }
     ");
@@ -893,8 +893,8 @@ fn struct_with_bytes_field() {
     type str = string;
     export class MyStruct {
 
-      constructor (public data: bytes, public name: str, public header: bytes) {
-      }
+        constructor (public data: bytes, public name: str, public header: bytes) {
+        }
 
     }
     ");
@@ -921,8 +921,8 @@ fn struct_with_bytes_field_and_slice() {
     type uint8 = number;
     export class MyStruct {
 
-      constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {
-      }
+        constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {
+        }
 
     }
     ");
@@ -956,8 +956,8 @@ fn type_in_root_and_named_namespace() {
     type int32 = number;
     export class Child {
 
-      constructor (public value: int32) {
-      }
+        constructor (public value: int32) {
+        }
 
     }
     ");
@@ -966,14 +966,14 @@ fn type_in_root_and_named_namespace() {
     type str = string;
     export class Child {
 
-      constructor (public value: str) {
-      }
+        constructor (public value: str) {
+        }
 
     }
     export class Parent {
 
-      constructor (public child: Child, public other_child: Other.Child) {
-      }
+        constructor (public child: Child, public other_child: Other.Child) {
+        }
 
     }
     "#);
