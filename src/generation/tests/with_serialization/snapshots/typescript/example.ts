@@ -1,4 +1,102 @@
 import { Serializer, Deserializer } from "./serde";
+
+function serializeArray<T>(
+    value: T[],
+    serializer: Serializer,
+    serializeElement: (item: T, serializer: Serializer) => void,
+): void {
+    serializer.serializeLen(value.length);
+    value.forEach((item) => {
+        serializeElement(item, serializer);
+    });
+}
+
+function deserializeArray<T>(
+    deserializer: Deserializer,
+    deserializeElement: (deserializer: Deserializer) => T,
+): T[] {
+    const length = deserializer.deserializeLen();
+    const list: T[] = [];
+    for (let i = 0; i < length; i++) {
+        list.push(deserializeElement(deserializer));
+    }
+    return list;
+}
+
+function serializeMap<K, V>(
+    value: Map<K, V>,
+    serializer: Serializer,
+    serializeEntry: (key: K, value: V, serializer: Serializer) => void,
+): void {
+    serializer.serializeLen(value.size);
+    const offsets: number[] = [];
+    for (const [k, v] of value.entries()) {
+        offsets.push(serializer.getBufferOffset());
+        serializeEntry(k, v, serializer);
+    }
+    serializer.sortMapEntries(offsets);
+}
+
+function deserializeMap<K, V>(
+    deserializer: Deserializer,
+    deserializeEntry: (deserializer: Deserializer) => [K, V],
+): Map<K, V> {
+    const length = deserializer.deserializeLen();
+    const obj = new Map<K, V>();
+    for (let i = 0; i < length; i++) {
+        const [key, value] = deserializeEntry(deserializer);
+        obj.set(key, value);
+    }
+    return obj;
+}
+
+function serializeOption<T>(
+    value: T | null,
+    serializer: Serializer,
+    serializeElement: (value: T, serializer: Serializer) => void,
+): void {
+    if (value !== null) {
+        serializer.serializeOptionTag(true);
+        serializeElement(value, serializer);
+    } else {
+        serializer.serializeOptionTag(false);
+    }
+}
+
+function deserializeOption<T>(
+    deserializer: Deserializer,
+    deserializeElement: (deserializer: Deserializer) => T,
+): T | null {
+    const tag = deserializer.deserializeOptionTag();
+    if (!tag) {
+        return null;
+    } else {
+        return deserializeElement(deserializer);
+    }
+}
+
+function serializeSet<T>(
+    value: T[],
+    serializer: Serializer,
+    serializeElement: (item: T, serializer: Serializer) => void,
+): void {
+    serializer.serializeLen(value.length);
+    value.forEach((item) => {
+        serializeElement(item, serializer);
+    });
+}
+
+function deserializeSet<T>(
+    deserializer: Deserializer,
+    deserializeElement: (deserializer: Deserializer) => T,
+): T[] {
+    const length = deserializer.deserializeLen();
+    const list: T[] = [];
+    for (let i = 0; i < length; i++) {
+        list.push(deserializeElement(deserializer));
+    }
+    return list;
+}
 type int32 = number;
 type Optional<T> = T | null;
 type Seq<T> = T[];

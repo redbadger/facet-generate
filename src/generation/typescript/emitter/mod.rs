@@ -9,7 +9,8 @@ use indoc::writedoc;
 use crate::{
     Registry,
     generation::{
-        Container, Emitter, Encoding, PackageLocation, common, indent::IndentWrite, module::Module,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation, common,
+        indent::IndentWrite, module::Module,
     },
     reflection::format::{
         ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
@@ -17,6 +18,12 @@ use crate::{
 };
 
 use super::InstallTarget;
+
+const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ArrayOfT.ts");
+const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.ts");
+const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.ts");
+const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.ts");
+const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.ts");
 
 /// Language tag for TypeScript code generation.
 #[derive(Debug, Clone, Copy)]
@@ -72,12 +79,44 @@ impl Module {
 
 impl Emitter<TypeScript> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
+        let CodeGeneratorConfig {
+            encoding, features, ..
+        } = self.config();
+
         if self.config().has_encoding() {
             let import_path = self.ts_serde_import_path(lang.target);
             writeln!(
                 w,
                 r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
             )?;
+        }
+
+        if !encoding.is_none() {
+            for feature in features {
+                match feature {
+                    Feature::ListOfT => {
+                        writeln!(w)?;
+                        w.write_all(FEATURE_LIST_OF_T)?;
+                    }
+                    Feature::OptionOfT => {
+                        writeln!(w)?;
+                        w.write_all(FEATURE_OPTION_OF_T)?;
+                    }
+                    Feature::SetOfT => {
+                        writeln!(w)?;
+                        w.write_all(FEATURE_SET_OF_T)?;
+                    }
+                    Feature::MapOfT => {
+                        writeln!(w)?;
+                        w.write_all(FEATURE_MAP_OF_T)?;
+                    }
+                    Feature::TupleArray => {
+                        writeln!(w)?;
+                        w.write_all(FEATURE_TUPLE_ARRAY)?;
+                    }
+                    Feature::BigInt | Feature::Bytes => {}
+                }
+            }
         }
 
         Ok(())
