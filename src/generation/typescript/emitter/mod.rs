@@ -9,7 +9,8 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
-        indent::IndentWrite, module::Module,
+        indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
+        module::Module,
     },
     reflection::format::{
         ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
@@ -278,10 +279,7 @@ impl Emitter<TypeScript> for Named<Format> {
 /// Render a type expression to a string.
 fn quote_type(format: &Format) -> String {
     let mut buf = Vec::new();
-    let mut w = crate::generation::indent::IndentedWriter::new(
-        &mut buf,
-        crate::generation::indent::IndentConfig::Space(0),
-    );
+    let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(0));
     format
         .write(&mut w, TypeScript::new(Encoding::None, InstallTarget::Node))
         .expect("writing to Vec should not fail");
@@ -312,48 +310,52 @@ fn write_serialize<W: IndentWrite>(w: &mut W, value_expr: &str, format: &Format)
         Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
 
         Format::Option(inner) => {
-            writeln!(
+            write!(
                 w,
-                "serializeOption({value_expr}, serializer, (value, serializer) => {{"
+                "serializeOption({value_expr}, serializer, (value, serializer) => "
             )?;
-            w.indent();
-            write_serialize(w, "value", inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_serialize(&mut w, "value", inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Seq(inner) => {
-            writeln!(
+            write!(
                 w,
-                "serializeArray({value_expr}, serializer, (item, serializer) => {{"
+                "serializeArray({value_expr}, serializer, (item, serializer) => "
             )?;
-            w.indent();
-            write_serialize(w, "item", inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_serialize(&mut w, "item", inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Set(inner) => {
-            writeln!(
+            write!(
                 w,
-                "serializeSet({value_expr}, serializer, (item, serializer) => {{"
+                "serializeSet({value_expr}, serializer, (item, serializer) => "
             )?;
-            w.indent();
-            write_serialize(w, "item", inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_serialize(&mut w, "item", inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Map { key, value } => {
-            writeln!(
+            write!(
                 w,
-                "serializeMap({value_expr}, serializer, (key, value, serializer) => {{"
+                "serializeMap({value_expr}, serializer, (key, value, serializer) => "
             )?;
-            w.indent();
-            write_serialize(w, "key", key)?;
-            write_serialize(w, "value", value)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_serialize(&mut w, "key", key)?;
+                write_serialize(&mut w, "value", value)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Tuple(formats) => {
@@ -364,14 +366,15 @@ fn write_serialize<W: IndentWrite>(w: &mut W, value_expr: &str, format: &Format)
         }
 
         Format::TupleArray { content, .. } => {
-            writeln!(
+            write!(
                 w,
-                "serializeTupleArray({value_expr}, serializer, (item, serializer) => {{"
+                "serializeTupleArray({value_expr}, serializer, (item, serializer) => "
             )?;
-            w.indent();
-            write_serialize(w, "item[0]", content)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_serialize(&mut w, "item[0]", content)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Variable(_) => panic!("unexpected value"),
@@ -455,88 +458,86 @@ fn write_deserialize<W: IndentWrite>(
         // Container types - nested closures
         Format::Option(inner) => {
             if let Some(name) = field_name {
-                writeln!(
+                write!(
                     w,
-                    "const {name} = deserializeOption(deserializer, (deserializer) => {{"
+                    "const {name} = deserializeOption(deserializer, (deserializer) => "
                 )?;
             } else {
-                writeln!(
+                write!(
                     w,
-                    "return deserializeOption(deserializer, (deserializer) => {{"
+                    "return deserializeOption(deserializer, (deserializer) => "
                 )?;
             }
-            w.indent();
-            write_deserialize(w, None, inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_deserialize(&mut w, None, inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Seq(inner) => {
             if let Some(name) = field_name {
-                writeln!(
+                write!(
                     w,
-                    "const {name} = deserializeArray(deserializer, (deserializer) => {{"
+                    "const {name} = deserializeArray(deserializer, (deserializer) => "
                 )?;
             } else {
-                writeln!(
+                write!(
                     w,
-                    "return deserializeArray(deserializer, (deserializer) => {{"
+                    "return deserializeArray(deserializer, (deserializer) => "
                 )?;
             }
-            w.indent();
-            write_deserialize(w, None, inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_deserialize(&mut w, None, inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Set(inner) => {
             if let Some(name) = field_name {
-                writeln!(
+                write!(
                     w,
-                    "const {name} = deserializeSet(deserializer, (deserializer) => {{"
+                    "const {name} = deserializeSet(deserializer, (deserializer) => "
                 )?;
             } else {
-                writeln!(
-                    w,
-                    "return deserializeSet(deserializer, (deserializer) => {{"
-                )?;
+                write!(w, "return deserializeSet(deserializer, (deserializer) => ")?;
             }
-            w.indent();
-            write_deserialize(w, None, inner)?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_deserialize(&mut w, None, inner)?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Map { key, value } => {
             if let Some(name) = field_name {
-                writeln!(
+                write!(
                     w,
-                    "const {name} = deserializeMap(deserializer, (deserializer) => {{"
+                    "const {name} = deserializeMap(deserializer, (deserializer) => "
                 )?;
             } else {
-                writeln!(
-                    w,
-                    "return deserializeMap(deserializer, (deserializer) => {{"
-                )?;
+                write!(w, "return deserializeMap(deserializer, (deserializer) => ")?;
             }
-            w.indent();
-            // Key deserialization
-            if is_primitive_or_named(key) {
-                let key_expr = deserialize_primitive_expr(key);
-                writeln!(w, "const key = {key_expr};")?;
-            } else {
-                write_deserialize(w, Some("key"), key)?;
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                // Key deserialization
+                if is_primitive_or_named(key) {
+                    let key_expr = deserialize_primitive_expr(key);
+                    writeln!(w, "const key = {key_expr};")?;
+                } else {
+                    write_deserialize(&mut w, Some("key"), key)?;
+                }
+                // Value deserialization
+                if is_primitive_or_named(value) {
+                    let value_expr = deserialize_primitive_expr(value);
+                    writeln!(w, "const value = {value_expr};")?;
+                } else {
+                    write_deserialize(&mut w, Some("value"), value)?;
+                }
+                writeln!(w, "return [key, value];")?;
             }
-            // Value deserialization
-            if is_primitive_or_named(value) {
-                let value_expr = deserialize_primitive_expr(value);
-                writeln!(w, "const value = {value_expr};")?;
-            } else {
-                write_deserialize(w, Some("value"), value)?;
-            }
-            writeln!(w, "return [key, value];")?;
-            w.unindent();
-            writeln!(w, "}});")
+            writeln!(w, ");")
         }
 
         Format::Tuple(formats) => {
@@ -550,7 +551,7 @@ fn write_deserialize<W: IndentWrite>(
                 .join(", ");
             let type_str = formats
                 .iter()
-                .map(|f| quote_type(f))
+                .map(quote_type)
                 .collect::<Vec<_>>()
                 .join(", ");
             if let Some(name) = field_name {
@@ -562,21 +563,22 @@ fn write_deserialize<W: IndentWrite>(
 
         Format::TupleArray { content, size } => {
             if let Some(name) = field_name {
-                writeln!(
+                write!(
                     w,
-                    "const {name} = deserializeTupleArray(deserializer, {size}, (deserializer) => {{"
+                    "const {name} = deserializeTupleArray(deserializer, {size}, (deserializer) => "
                 )?;
             } else {
-                writeln!(
+                write!(
                     w,
-                    "return deserializeTupleArray(deserializer, {size}, (deserializer) => {{"
+                    "return deserializeTupleArray(deserializer, {size}, (deserializer) => "
                 )?;
             }
-            w.indent();
-            write_deserialize(w, Some("item"), content)?;
-            writeln!(w, "return [item];")?;
-            w.unindent();
-            writeln!(w, "}});")
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                write_deserialize(&mut w, Some("item"), content)?;
+                writeln!(w, "return [item];")?;
+            }
+            writeln!(w, ");")
         }
 
         Format::Variable(_) => panic!("unexpected value"),
@@ -603,7 +605,7 @@ fn output_struct_or_variant<W: IndentWrite>(
     } else {
         write!(w, "export class {name} ")?;
     }
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
     if !fields.is_empty() {
         writeln!(w)?;
     }
@@ -617,7 +619,7 @@ fn output_struct_or_variant<W: IndentWrite>(
     let args = args.join(", ");
     write!(w, "constructor ({args}) ")?;
     {
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         if variant_base.is_some() {
             writeln!(w, "super();")?;
         }
@@ -626,7 +628,7 @@ fn output_struct_or_variant<W: IndentWrite>(
     if lang.encoding.is_bincode() || lang.encoding.is_json() {
         write!(w, "public serialize(serializer: Serializer): void ")?;
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             if let Some(index) = variant_index {
                 writeln!(w, "serializer.serializeVariantIndex({index});")?;
             }
@@ -647,7 +649,7 @@ fn output_struct_or_variant<W: IndentWrite>(
             )?;
         }
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             for field in fields {
                 write_deserialize(&mut w, Some(&field.name), &field.value)?;
             }
@@ -703,16 +705,16 @@ fn output_enum_container<W: IndentWrite>(
     doc.write(w, lang)?;
     write!(w, "export abstract class {name} ")?;
     {
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         if lang.encoding.is_bincode() || lang.encoding.is_json() {
             writeln!(w, "abstract serialize(serializer: Serializer): void;\n")?;
             write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 writeln!(w, "const index = deserializer.deserializeVariantIndex();")?;
                 write!(w, "switch (index) ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     for (index, variant) in variants {
                         writeln!(
                             w,

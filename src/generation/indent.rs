@@ -6,40 +6,63 @@ pub enum IndentConfig {
     Space(usize),
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct Newlines {
+    pub after_open: usize,
+    pub after_close: usize,
+}
+
+impl Newlines {
+    /// `{...}` — no extra newlines.
+    pub const NONE: Self = Self {
+        after_open: 0,
+        after_close: 0,
+    };
+
+    /// `{\n...}` — newline after the opening brace only.
+    pub const OPEN: Self = Self {
+        after_open: 1,
+        after_close: 0,
+    };
+
+    /// `{...}\n` — newline after the closing brace only.
+    pub const CLOSE: Self = Self {
+        after_open: 0,
+        after_close: 1,
+    };
+
+    /// `{\n...}\n` — newlines after both braces.
+    pub const BOTH: Self = Self {
+        after_open: 1,
+        after_close: 1,
+    };
+}
+
 pub trait IndentWrite: Write {
     fn indent(&mut self) {}
     fn unindent(&mut self) {}
 
     /// Start a new block with RAII-style automatic closing.
     ///
-    /// Writes `{\n`, indents, and returns a [`Block`] guard that implements
-    /// [`IndentWrite`]. When the guard is dropped it unindents and writes `}\n`.
+    /// Writes a brace and indents, returning a [`Block`] guard that implements [`IndentWrite`].
+    /// When the guard is dropped it unindents and writes a closing brace.
+    /// Newlines are inserted according to the configured [`Newlines`].
     ///
     /// # Errors
     /// Returns an error if writing to the underlying writer fails.
-    fn blockln(&mut self) -> Result<Block<'_>>
-    where
-        Self: Sized,
-    {
-        writeln!(self, "{{")?;
-        self.indent();
-        Ok(Block { writer: self })
-    }
-
-    /// Start a new block with RAII-style automatic closing.
-    ///
-    /// Indents, and returns a [`Block`] guard that implements
-    /// [`IndentWrite`]. When the guard is dropped it unindents and writes `}\n`.
-    ///
-    /// # Errors
-    /// Returns an error if writing to the underlying writer fails.
-    fn block(&mut self) -> Result<Block<'_>>
+    fn block(&mut self, newlines: Newlines) -> Result<Block<'_>>
     where
         Self: Sized,
     {
         write!(self, "{{")?;
+        for _ in 0..newlines.after_open {
+            writeln!(self)?;
+        }
         self.indent();
-        Ok(Block { writer: self })
+        Ok(Block {
+            writer: self,
+            newlines,
+        })
     }
 }
 
@@ -49,6 +72,7 @@ pub trait IndentWrite: Write {
 /// writer. On [`Drop`], it unindents and writes the closing `}\n`.
 pub struct Block<'a> {
     writer: &'a mut dyn IndentWrite,
+    newlines: Newlines,
 }
 
 impl Write for Block<'_> {
@@ -74,7 +98,10 @@ impl IndentWrite for Block<'_> {
 impl Drop for Block<'_> {
     fn drop(&mut self) {
         self.writer.unindent();
-        let _ = writeln!(self.writer, "}}");
+        let _ = write!(self.writer, "}}");
+        for _ in 0..self.newlines.after_close {
+            let _ = writeln!(self.writer);
+        }
     }
 }
 
@@ -196,14 +223,14 @@ mod test {
     }
 
     #[test]
-    fn block() -> Result<()> {
+    fn function_block() -> Result<()> {
         let mut buffer: Vec<u8> = Vec::new();
 
         let mut w = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
 
         write!(w, "fn foo() ")?;
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             writeln!(w, r#"let _ = "hello";"#)?;
         }
 
@@ -217,14 +244,34 @@ mod test {
     }
 
     #[test]
-    fn block_no_newline() -> Result<()> {
+    fn closure_block() -> Result<()> {
         let mut buffer: Vec<u8> = Vec::new();
 
         let mut w = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
 
         write!(w, "fn foo() ")?;
         {
-            let mut w = w.block()?;
+            let mut w = w.block(Newlines::OPEN)?;
+            write!(w, r#"let _ = "hello";"#)?;
+        }
+
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @r#"
+        fn foo() {
+          let _ = "hello";}
+        "#);
+
+        Ok(())
+    }
+
+    #[test]
+    fn trailing_block() -> Result<()> {
+        let mut buffer: Vec<u8> = Vec::new();
+
+        let mut w = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
+
+        write!(w, "fn foo() ")?;
+        {
+            let mut w = w.block(Newlines::CLOSE)?;
             write!(w, r#"let _ = "hello";"#)?;
         }
 

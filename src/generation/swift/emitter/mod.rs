@@ -11,7 +11,8 @@ use heck::ToUpperCamelCase as _;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, indent::IndentWrite,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
+        indent::{IndentWrite, Newlines},
         module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
@@ -478,7 +479,7 @@ fn struct_<W: IndentWrite>(
     } else {
         write!(w, "public struct {name}: Hashable ")?;
     }
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
 
     for field in fields {
         (*field, Usage::Field).write(&mut w, lang)?;
@@ -497,7 +498,7 @@ fn struct_<W: IndentWrite>(
     }
     write!(w, ") ")?;
     {
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         for field in fields {
             (*field, Usage::Assignment).write(&mut w, lang)?;
         }
@@ -512,7 +513,7 @@ fn struct_<W: IndentWrite>(
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_serializer(&mut w)?;
                 for field in fields {
                     (
@@ -532,7 +533,7 @@ fn struct_<W: IndentWrite>(
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_deserializer(&mut w)?;
                 for field in fields {
                     (
@@ -562,7 +563,7 @@ fn struct_<W: IndentWrite>(
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_serializer(&mut w)?;
                 for field in fields {
                     (
@@ -582,7 +583,7 @@ fn struct_<W: IndentWrite>(
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_deserializer(&mut w)?;
                 for field in fields {
                     (
@@ -624,7 +625,7 @@ fn enum_<W: IndentWrite>(
     } else {
         write!(w, "indirect public enum {name}: Hashable ")?;
     }
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
 
     let variants = variants.values().collect::<Vec<_>>();
 
@@ -641,11 +642,11 @@ fn enum_<W: IndentWrite>(
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_serializer(&mut w)?;
                 write!(w, "switch self ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     w.unindent();
                     for (i, variant) in variants.iter().enumerate() {
                         (
@@ -668,7 +669,7 @@ fn enum_<W: IndentWrite>(
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 writeln!(
                     w,
                     "let index = try deserializer.deserialize_variant_index()"
@@ -676,7 +677,7 @@ fn enum_<W: IndentWrite>(
                 push_deserializer(&mut w)?;
                 write!(w, "switch index ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     w.unindent();
                     for (i, variant) in variants.iter().enumerate() {
                         (
@@ -703,11 +704,11 @@ fn enum_<W: IndentWrite>(
                 "public func serialize<S: Serializer>(serializer: S) throws "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_serializer(&mut w)?;
                 write!(w, "switch self ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     w.unindent();
                     for (i, variant) in variants.iter().enumerate() {
                         (
@@ -730,7 +731,7 @@ fn enum_<W: IndentWrite>(
                 "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
             )?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 writeln!(
                     w,
                     "let index = try deserializer.deserialize_variant_index()"
@@ -738,7 +739,7 @@ fn enum_<W: IndentWrite>(
                 push_deserializer(&mut w)?;
                 write!(w, "switch index ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     w.unindent();
                     for (i, variant) in variants.iter().enumerate() {
                         (
@@ -841,7 +842,7 @@ fn write_format_serialize<W: IndentWrite>(
                 "try serializeOption(value: {value_expr}, serializer: serializer) "
             )?;
             {
-                let mut w = w.block()?;
+                let mut w = w.block(Newlines::CLOSE)?;
                 writeln!(w, " value, serializer in")?;
                 write_format_serialize(&mut w, inner, "value")
             }
@@ -852,7 +853,7 @@ fn write_format_serialize<W: IndentWrite>(
                 "try serializeArray(value: {value_expr}, serializer: serializer) "
             )?;
             {
-                let mut w = w.block()?;
+                let mut w = w.block(Newlines::CLOSE)?;
                 writeln!(w, " item, serializer in")?;
                 write_format_serialize(&mut w, inner, "item")
             }
@@ -863,7 +864,7 @@ fn write_format_serialize<W: IndentWrite>(
                 "try serializeSet(value: {value_expr}, serializer: serializer) "
             )?;
             {
-                let mut w = w.block()?;
+                let mut w = w.block(Newlines::CLOSE)?;
                 writeln!(w, " item, serializer in")?;
                 write_format_serialize(&mut w, inner, "item")
             }
@@ -874,7 +875,7 @@ fn write_format_serialize<W: IndentWrite>(
                 "try serializeMap(value: {value_expr}, serializer: serializer) "
             )?;
             {
-                let mut w = w.block()?;
+                let mut w = w.block(Newlines::CLOSE)?;
                 writeln!(w, " key, value, serializer in")?;
                 write_format_serialize(&mut w, key, "key")?;
                 write_format_serialize(&mut w, value, "value")
@@ -892,7 +893,7 @@ fn write_format_serialize<W: IndentWrite>(
                 "try serializeTupleArray(value: {value_expr}, serializer: serializer) "
             )?;
             {
-                let mut w = w.block()?;
+                let mut w = w.block(Newlines::CLOSE)?;
                 writeln!(w, " item, serializer in")?;
                 write_format_serialize(&mut w, content, "item")
             }
