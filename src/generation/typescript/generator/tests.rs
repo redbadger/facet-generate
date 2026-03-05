@@ -537,5 +537,5 @@ fn output_user_example_multiple_external_references() {
     assert!(output.contains(r#"import * as Other from "other-package/models";"#));
     assert_eq!(output.matches("Other.Other").count(), 4);
     assert!(output.contains("public image: Optional<CatImage>"));
-    assert!(output.contains("const image = Helpers.deserializeOptionCatImage(deserializer);"));
+    assert!(output.contains("const image = deserializeOption(deserializer, (deserializer) => {"));
 }

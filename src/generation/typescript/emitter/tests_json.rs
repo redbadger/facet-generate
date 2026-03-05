@@ -309,11 +309,14 @@ fn struct_with_field_that_is_a_2_tuple() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeTuple2StrI32(this.one, serializer);
+            serializer.serializeStr(this.one[0]);
+            serializer.serializeI32(this.one[1]);
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const one = Helpers.deserializeTuple2StrI32(deserializer);
+            const field0 = deserializer.deserializeStr();
+            const field1 = deserializer.deserializeI32();
+            const one = [field0, field1] as [str, int32];
             return new MyStruct(one);
         }
 
@@ -340,11 +343,16 @@ fn struct_with_field_that_is_a_3_tuple() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeTuple3StrI32U16(this.one, serializer);
+            serializer.serializeStr(this.one[0]);
+            serializer.serializeI32(this.one[1]);
+            serializer.serializeU16(this.one[2]);
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const one = Helpers.deserializeTuple3StrI32U16(deserializer);
+            const field0 = deserializer.deserializeStr();
+            const field1 = deserializer.deserializeI32();
+            const field2 = deserializer.deserializeU16();
+            const one = [field0, field1, field2] as [str, int32, uint16];
             return new MyStruct(one);
         }
 
@@ -372,11 +380,18 @@ fn struct_with_field_that_is_a_4_tuple() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeTuple4StrI32U16F32(this.one, serializer);
+            serializer.serializeStr(this.one[0]);
+            serializer.serializeI32(this.one[1]);
+            serializer.serializeU16(this.one[2]);
+            serializer.serializeF32(this.one[3]);
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const one = Helpers.deserializeTuple4StrI32U16F32(deserializer);
+            const field0 = deserializer.deserializeStr();
+            const field1 = deserializer.deserializeI32();
+            const field2 = deserializer.deserializeU16();
+            const field3 = deserializer.deserializeF32();
+            const one = [field0, field1, field2, field3] as [str, int32, uint16, float32];
             return new MyStruct(one);
         }
 
@@ -863,15 +878,31 @@ fn struct_with_vec_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeVectorStr(this.items, serializer);
-            Helpers.serializeVectorI32(this.numbers, serializer);
-            Helpers.serializeVectorVectorStr(this.nested_items, serializer);
+            serializeArray(this.items, serializer, (item, serializer) => {
+                serializer.serializeStr(item);
+            });
+            serializeArray(this.numbers, serializer, (item, serializer) => {
+                serializer.serializeI32(item);
+            });
+            serializeArray(this.nested_items, serializer, (item, serializer) => {
+                serializeArray(item, serializer, (item, serializer) => {
+                    serializer.serializeStr(item);
+                });
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const items = Helpers.deserializeVectorStr(deserializer);
-            const numbers = Helpers.deserializeVectorI32(deserializer);
-            const nested_items = Helpers.deserializeVectorVectorStr(deserializer);
+            const items = deserializeArray(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const numbers = deserializeArray(deserializer, (deserializer) => {
+                return deserializer.deserializeI32();
+            });
+            const nested_items = deserializeArray(deserializer, (deserializer) => {
+                return deserializeArray(deserializer, (deserializer) => {
+                    return deserializer.deserializeStr();
+                });
+            });
             return new MyStruct(items,numbers,nested_items);
         }
 
@@ -901,15 +932,27 @@ fn struct_with_option_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeOptionStr(this.optional_string, serializer);
-            Helpers.serializeOptionI32(this.optional_number, serializer);
-            Helpers.serializeOptionBool(this.optional_bool, serializer);
+            serializeOption(this.optional_string, serializer, (value, serializer) => {
+                serializer.serializeStr(value);
+            });
+            serializeOption(this.optional_number, serializer, (value, serializer) => {
+                serializer.serializeI32(value);
+            });
+            serializeOption(this.optional_bool, serializer, (value, serializer) => {
+                serializer.serializeBool(value);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const optional_string = Helpers.deserializeOptionStr(deserializer);
-            const optional_number = Helpers.deserializeOptionI32(deserializer);
-            const optional_bool = Helpers.deserializeOptionBool(deserializer);
+            const optional_string = deserializeOption(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const optional_number = deserializeOption(deserializer, (deserializer) => {
+                return deserializer.deserializeI32();
+            });
+            const optional_bool = deserializeOption(deserializer, (deserializer) => {
+                return deserializer.deserializeBool();
+            });
             return new MyStruct(optional_string,optional_number,optional_bool);
         }
 
@@ -936,13 +979,27 @@ fn struct_with_hashmap_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeMapStrToI32(this.string_to_int, serializer);
-            Helpers.serializeMapI32ToBool(this.int_to_bool, serializer);
+            serializeMap(this.string_to_int, serializer, (key, value, serializer) => {
+                serializer.serializeStr(key);
+                serializer.serializeI32(value);
+            });
+            serializeMap(this.int_to_bool, serializer, (key, value, serializer) => {
+                serializer.serializeI32(key);
+                serializer.serializeBool(value);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const string_to_int = Helpers.deserializeMapStrToI32(deserializer);
-            const int_to_bool = Helpers.deserializeMapI32ToBool(deserializer);
+            const string_to_int = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeStr();
+                const value = deserializer.deserializeI32();
+                return [key, value];
+            });
+            const int_to_bool = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeI32();
+                const value = deserializer.deserializeBool();
+                return [key, value];
+            });
             return new MyStruct(string_to_int,int_to_bool);
         }
 
@@ -974,19 +1031,76 @@ fn struct_with_nested_generics() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeOptionVectorStr(this.optional_list, serializer);
-            Helpers.serializeVectorOptionI32(this.list_of_optionals, serializer);
-            Helpers.serializeMapStrToVectorBool(this.map_to_list, serializer);
-            Helpers.serializeOptionMapStrToI32(this.optional_map, serializer);
-            Helpers.serializeVectorOptionMapStrToVectorBool(this.complex, serializer);
+            serializeOption(this.optional_list, serializer, (value, serializer) => {
+                serializeArray(value, serializer, (item, serializer) => {
+                    serializer.serializeStr(item);
+                });
+            });
+            serializeArray(this.list_of_optionals, serializer, (item, serializer) => {
+                serializeOption(item, serializer, (value, serializer) => {
+                    serializer.serializeI32(value);
+                });
+            });
+            serializeMap(this.map_to_list, serializer, (key, value, serializer) => {
+                serializer.serializeStr(key);
+                serializeArray(value, serializer, (item, serializer) => {
+                    serializer.serializeBool(item);
+                });
+            });
+            serializeOption(this.optional_map, serializer, (value, serializer) => {
+                serializeMap(value, serializer, (key, value, serializer) => {
+                    serializer.serializeStr(key);
+                    serializer.serializeI32(value);
+                });
+            });
+            serializeArray(this.complex, serializer, (item, serializer) => {
+                serializeOption(item, serializer, (value, serializer) => {
+                    serializeMap(value, serializer, (key, value, serializer) => {
+                        serializer.serializeStr(key);
+                        serializeArray(value, serializer, (item, serializer) => {
+                            serializer.serializeBool(item);
+                        });
+                    });
+                });
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const optional_list = Helpers.deserializeOptionVectorStr(deserializer);
-            const list_of_optionals = Helpers.deserializeVectorOptionI32(deserializer);
-            const map_to_list = Helpers.deserializeMapStrToVectorBool(deserializer);
-            const optional_map = Helpers.deserializeOptionMapStrToI32(deserializer);
-            const complex = Helpers.deserializeVectorOptionMapStrToVectorBool(deserializer);
+            const optional_list = deserializeOption(deserializer, (deserializer) => {
+                return deserializeArray(deserializer, (deserializer) => {
+                    return deserializer.deserializeStr();
+                });
+            });
+            const list_of_optionals = deserializeArray(deserializer, (deserializer) => {
+                return deserializeOption(deserializer, (deserializer) => {
+                    return deserializer.deserializeI32();
+                });
+            });
+            const map_to_list = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeStr();
+                const value = deserializeArray(deserializer, (deserializer) => {
+                    return deserializer.deserializeBool();
+                });
+                return [key, value];
+            });
+            const optional_map = deserializeOption(deserializer, (deserializer) => {
+                return deserializeMap(deserializer, (deserializer) => {
+                    const key = deserializer.deserializeStr();
+                    const value = deserializer.deserializeI32();
+                    return [key, value];
+                });
+            });
+            const complex = deserializeArray(deserializer, (deserializer) => {
+                return deserializeOption(deserializer, (deserializer) => {
+                    return deserializeMap(deserializer, (deserializer) => {
+                        const key = deserializer.deserializeStr();
+                        const value = deserializeArray(deserializer, (deserializer) => {
+                            return deserializer.deserializeBool();
+                        });
+                        return [key, value];
+                    });
+                });
+            });
             return new MyStruct(optional_list,list_of_optionals,map_to_list,optional_map,complex);
         }
 
@@ -1016,15 +1130,30 @@ fn struct_with_array_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeArray5I32Array(this.fixed_array, serializer);
-            Helpers.serializeArray32U8Array(this.byte_array, serializer);
-            Helpers.serializeArray3StrArray(this.string_array, serializer);
+            serializeTupleArray(this.fixed_array, serializer, (item, serializer) => {
+                serializer.serializeI32(item[0]);
+            });
+            serializeTupleArray(this.byte_array, serializer, (item, serializer) => {
+                serializer.serializeU8(item[0]);
+            });
+            serializeTupleArray(this.string_array, serializer, (item, serializer) => {
+                serializer.serializeStr(item[0]);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const fixed_array = Helpers.deserializeArray5I32Array(deserializer);
-            const byte_array = Helpers.deserializeArray32U8Array(deserializer);
-            const string_array = Helpers.deserializeArray3StrArray(deserializer);
+            const fixed_array = deserializeTupleArray(deserializer, 5, (deserializer) => {
+                const item = deserializer.deserializeI32();
+                return [item];
+            });
+            const byte_array = deserializeTupleArray(deserializer, 32, (deserializer) => {
+                const item = deserializer.deserializeU8();
+                return [item];
+            });
+            const string_array = deserializeTupleArray(deserializer, 3, (deserializer) => {
+                const item = deserializer.deserializeStr();
+                return [item];
+            });
             return new MyStruct(fixed_array,byte_array,string_array);
         }
 
@@ -1051,13 +1180,27 @@ fn struct_with_btreemap_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeMapStrToI32(this.string_to_int, serializer);
-            Helpers.serializeMapI32ToBool(this.int_to_bool, serializer);
+            serializeMap(this.string_to_int, serializer, (key, value, serializer) => {
+                serializer.serializeStr(key);
+                serializer.serializeI32(value);
+            });
+            serializeMap(this.int_to_bool, serializer, (key, value, serializer) => {
+                serializer.serializeI32(key);
+                serializer.serializeBool(value);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const string_to_int = Helpers.deserializeMapStrToI32(deserializer);
-            const int_to_bool = Helpers.deserializeMapI32ToBool(deserializer);
+            const string_to_int = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeStr();
+                const value = deserializer.deserializeI32();
+                return [key, value];
+            });
+            const int_to_bool = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeI32();
+                const value = deserializer.deserializeBool();
+                return [key, value];
+            });
             return new MyStruct(string_to_int,int_to_bool);
         }
 
@@ -1084,13 +1227,21 @@ fn struct_with_hashset_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeSetStr(this.string_set, serializer);
-            Helpers.serializeSetI32(this.int_set, serializer);
+            serializeSet(this.string_set, serializer, (item, serializer) => {
+                serializer.serializeStr(item);
+            });
+            serializeSet(this.int_set, serializer, (item, serializer) => {
+                serializer.serializeI32(item);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const string_set = Helpers.deserializeSetStr(deserializer);
-            const int_set = Helpers.deserializeSetI32(deserializer);
+            const string_set = deserializeSet(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const int_set = deserializeSet(deserializer, (deserializer) => {
+                return deserializer.deserializeI32();
+            });
             return new MyStruct(string_set,int_set);
         }
 
@@ -1117,13 +1268,21 @@ fn struct_with_btreeset_field() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeSetStr(this.string_set, serializer);
-            Helpers.serializeSetI32(this.int_set, serializer);
+            serializeSet(this.string_set, serializer, (item, serializer) => {
+                serializer.serializeStr(item);
+            });
+            serializeSet(this.int_set, serializer, (item, serializer) => {
+                serializer.serializeI32(item);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const string_set = Helpers.deserializeSetStr(deserializer);
-            const int_set = Helpers.deserializeSetI32(deserializer);
+            const string_set = deserializeSet(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const int_set = deserializeSet(deserializer, (deserializer) => {
+                return deserializer.deserializeI32();
+            });
             return new MyStruct(string_set,int_set);
         }
 
@@ -1253,19 +1412,51 @@ fn struct_with_mixed_collections_and_pointers() {
         }
 
         public serialize(serializer: Serializer): void {
-            Helpers.serializeVectorSetStr(this.vec_of_sets, serializer);
-            Helpers.serializeOptionMapStrToI32(this.optional_btree, serializer);
-            Helpers.serializeVectorStr(this.boxed_vec, serializer);
-            Helpers.serializeOptionStr(this.arc_option, serializer);
-            Helpers.serializeArray3I32Array(this.array_of_boxes, serializer);
+            serializeArray(this.vec_of_sets, serializer, (item, serializer) => {
+                serializeSet(item, serializer, (item, serializer) => {
+                    serializer.serializeStr(item);
+                });
+            });
+            serializeOption(this.optional_btree, serializer, (value, serializer) => {
+                serializeMap(value, serializer, (key, value, serializer) => {
+                    serializer.serializeStr(key);
+                    serializer.serializeI32(value);
+                });
+            });
+            serializeArray(this.boxed_vec, serializer, (item, serializer) => {
+                serializer.serializeStr(item);
+            });
+            serializeOption(this.arc_option, serializer, (value, serializer) => {
+                serializer.serializeStr(value);
+            });
+            serializeTupleArray(this.array_of_boxes, serializer, (item, serializer) => {
+                serializer.serializeI32(item[0]);
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
-            const vec_of_sets = Helpers.deserializeVectorSetStr(deserializer);
-            const optional_btree = Helpers.deserializeOptionMapStrToI32(deserializer);
-            const boxed_vec = Helpers.deserializeVectorStr(deserializer);
-            const arc_option = Helpers.deserializeOptionStr(deserializer);
-            const array_of_boxes = Helpers.deserializeArray3I32Array(deserializer);
+            const vec_of_sets = deserializeArray(deserializer, (deserializer) => {
+                return deserializeSet(deserializer, (deserializer) => {
+                    return deserializer.deserializeStr();
+                });
+            });
+            const optional_btree = deserializeOption(deserializer, (deserializer) => {
+                return deserializeMap(deserializer, (deserializer) => {
+                    const key = deserializer.deserializeStr();
+                    const value = deserializer.deserializeI32();
+                    return [key, value];
+                });
+            });
+            const boxed_vec = deserializeArray(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const arc_option = deserializeOption(deserializer, (deserializer) => {
+                return deserializer.deserializeStr();
+            });
+            const array_of_boxes = deserializeTupleArray(deserializer, 3, (deserializer) => {
+                const item = deserializer.deserializeI32();
+                return [item];
+            });
             return new MyStruct(vec_of_sets,optional_btree,boxed_vec,arc_option,array_of_boxes);
         }
 
@@ -1338,14 +1529,22 @@ fn struct_with_bytes_field_and_slice() {
             serializer.serializeBytes(this.data);
             serializer.serializeStr(this.name);
             serializer.serializeBytes(this.header);
-            Helpers.serializeOptionVectorU8(this.optional_bytes, serializer);
+            serializeOption(this.optional_bytes, serializer, (value, serializer) => {
+                serializeArray(value, serializer, (item, serializer) => {
+                    serializer.serializeU8(item);
+                });
+            });
         }
 
         static deserialize(deserializer: Deserializer): MyStruct {
             const data = deserializer.deserializeBytes();
             const name = deserializer.deserializeStr();
             const header = deserializer.deserializeBytes();
-            const optional_bytes = Helpers.deserializeOptionVectorU8(deserializer);
+            const optional_bytes = deserializeOption(deserializer, (deserializer) => {
+                return deserializeArray(deserializer, (deserializer) => {
+                    return deserializer.deserializeU8();
+                });
+            });
             return new MyStruct(data,name,header,optional_bytes);
         }
 

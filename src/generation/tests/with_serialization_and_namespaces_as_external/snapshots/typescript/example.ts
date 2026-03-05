@@ -46,6 +46,3 @@ export class ParentVariantChild extends Parent {
     }
 
 }
-export class Helpers {
-}
-

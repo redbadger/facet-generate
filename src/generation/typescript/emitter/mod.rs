@@ -4,12 +4,11 @@ use std::{
 };
 
 use heck::ToUpperCamelCase;
-use indoc::writedoc;
 
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation, common,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
         indent::IndentWrite, module::Module,
     },
     reflection::format::{
@@ -289,40 +288,98 @@ fn quote_type(format: &Format) -> String {
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
 }
 
-fn quote_serialize_value(value: &str, format: &Format, use_this: bool) -> String {
-    let this_str = if use_this { "this." } else { "" };
-
+/// Write a serialize statement for the given format, using nested closures
+/// for container types (matching the Kotlin/Swift pattern).
+fn write_serialize<W: IndentWrite>(w: &mut W, value_expr: &str, format: &Format) -> Result<()> {
     match format {
-        Format::TypeName(_) => {
-            format!("{this_str}{value}.serialize(serializer);")
+        Format::TypeName(_) => writeln!(w, "{value_expr}.serialize(serializer);"),
+        Format::Unit => writeln!(w, "serializer.serializeUnit({value_expr});"),
+        Format::Bool => writeln!(w, "serializer.serializeBool({value_expr});"),
+        Format::I8 => writeln!(w, "serializer.serializeI8({value_expr});"),
+        Format::I16 => writeln!(w, "serializer.serializeI16({value_expr});"),
+        Format::I32 => writeln!(w, "serializer.serializeI32({value_expr});"),
+        Format::I64 => writeln!(w, "serializer.serializeI64({value_expr});"),
+        Format::I128 => writeln!(w, "serializer.serializeI128({value_expr});"),
+        Format::U8 => writeln!(w, "serializer.serializeU8({value_expr});"),
+        Format::U16 => writeln!(w, "serializer.serializeU16({value_expr});"),
+        Format::U32 => writeln!(w, "serializer.serializeU32({value_expr});"),
+        Format::U64 => writeln!(w, "serializer.serializeU64({value_expr});"),
+        Format::U128 => writeln!(w, "serializer.serializeU128({value_expr});"),
+        Format::F32 => writeln!(w, "serializer.serializeF32({value_expr});"),
+        Format::F64 => writeln!(w, "serializer.serializeF64({value_expr});"),
+        Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
+        Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
+        Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
+
+        Format::Option(inner) => {
+            writeln!(
+                w,
+                "serializeOption({value_expr}, serializer, (value, serializer) => {{"
+            )?;
+            w.indent();
+            write_serialize(w, "value", inner)?;
+            w.unindent();
+            writeln!(w, "}});")
         }
-        Format::Unit => format!("serializer.serializeUnit({this_str}{value});"),
-        Format::Bool => format!("serializer.serializeBool({this_str}{value});"),
-        Format::I8 => format!("serializer.serializeI8({this_str}{value});"),
-        Format::I16 => format!("serializer.serializeI16({this_str}{value});"),
-        Format::I32 => format!("serializer.serializeI32({this_str}{value});"),
-        Format::I64 => format!("serializer.serializeI64({this_str}{value});"),
-        Format::I128 => format!("serializer.serializeI128({this_str}{value});"),
-        Format::U8 => format!("serializer.serializeU8({this_str}{value});"),
-        Format::U16 => format!("serializer.serializeU16({this_str}{value});"),
-        Format::U32 => format!("serializer.serializeU32({this_str}{value});"),
-        Format::U64 => format!("serializer.serializeU64({this_str}{value});"),
-        Format::U128 => format!("serializer.serializeU128({this_str}{value});"),
-        Format::F32 => format!("serializer.serializeF32({this_str}{value});"),
-        Format::F64 => format!("serializer.serializeF64({this_str}{value});"),
-        Format::Char => format!("serializer.serializeChar({this_str}{value});"),
-        Format::Str => format!("serializer.serializeStr({this_str}{value});"),
-        Format::Bytes => format!("serializer.serializeBytes({this_str}{value});"),
-        _ => format!(
-            "Helpers.serialize{}({}{}, serializer);",
-            common::mangle_type(format).to_upper_camel_case(),
-            this_str,
-            value
-        ),
+
+        Format::Seq(inner) => {
+            writeln!(
+                w,
+                "serializeArray({value_expr}, serializer, (item, serializer) => {{"
+            )?;
+            w.indent();
+            write_serialize(w, "item", inner)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Set(inner) => {
+            writeln!(
+                w,
+                "serializeSet({value_expr}, serializer, (item, serializer) => {{"
+            )?;
+            w.indent();
+            write_serialize(w, "item", inner)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Map { key, value } => {
+            writeln!(
+                w,
+                "serializeMap({value_expr}, serializer, (key, value, serializer) => {{"
+            )?;
+            w.indent();
+            write_serialize(w, "key", key)?;
+            write_serialize(w, "value", value)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Tuple(formats) => {
+            for (i, fmt) in formats.iter().enumerate() {
+                write_serialize(w, &format!("{value_expr}[{i}]"), fmt)?;
+            }
+            Ok(())
+        }
+
+        Format::TupleArray { content, .. } => {
+            writeln!(
+                w,
+                "serializeTupleArray({value_expr}, serializer, (item, serializer) => {{"
+            )?;
+            w.indent();
+            write_serialize(w, "item[0]", content)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Variable(_) => panic!("unexpected value"),
     }
 }
 
-fn quote_deserialize(format: &Format) -> String {
+/// Returns a simple deserialize expression string for primitive/named types.
+fn deserialize_primitive_expr(format: &Format) -> String {
     match format {
         Format::TypeName(qualified_name) => format!(
             "{}.deserialize(deserializer)",
@@ -345,10 +402,185 @@ fn quote_deserialize(format: &Format) -> String {
         Format::Char => "deserializer.deserializeChar()".to_string(),
         Format::Str => "deserializer.deserializeStr()".to_string(),
         Format::Bytes => "deserializer.deserializeBytes()".to_string(),
-        _ => format!(
-            "Helpers.deserialize{}(deserializer)",
-            common::mangle_type(format).to_upper_camel_case(),
-        ),
+        _ => panic!("deserialize_primitive_expr called with non-primitive format"),
+    }
+}
+
+/// Returns true if the format is a primitive type or a named type (not a container).
+fn is_primitive_or_named(format: &Format) -> bool {
+    matches!(
+        format,
+        Format::TypeName(_)
+            | Format::Unit
+            | Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::I64
+            | Format::I128
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::U64
+            | Format::U128
+            | Format::F32
+            | Format::F64
+            | Format::Char
+            | Format::Str
+            | Format::Bytes
+    )
+}
+
+/// Write a deserialize statement for the given format, using nested closures
+/// for container types (matching the Kotlin/Swift pattern).
+///
+/// When `field_name` is Some, emits `const <name> = <expr>;`.
+/// When `field_name` is None, emits `return <expr>;`.
+fn write_deserialize<W: IndentWrite>(
+    w: &mut W,
+    field_name: Option<&str>,
+    format: &Format,
+) -> Result<()> {
+    match format {
+        // Primitive and named types - single expression
+        f if is_primitive_or_named(f) => {
+            let expr = deserialize_primitive_expr(f);
+            if let Some(name) = field_name {
+                writeln!(w, "const {name} = {expr};")
+            } else {
+                writeln!(w, "return {expr};")
+            }
+        }
+
+        // Container types - nested closures
+        Format::Option(inner) => {
+            if let Some(name) = field_name {
+                writeln!(
+                    w,
+                    "const {name} = deserializeOption(deserializer, (deserializer) => {{"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "return deserializeOption(deserializer, (deserializer) => {{"
+                )?;
+            }
+            w.indent();
+            write_deserialize(w, None, inner)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Seq(inner) => {
+            if let Some(name) = field_name {
+                writeln!(
+                    w,
+                    "const {name} = deserializeArray(deserializer, (deserializer) => {{"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "return deserializeArray(deserializer, (deserializer) => {{"
+                )?;
+            }
+            w.indent();
+            write_deserialize(w, None, inner)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Set(inner) => {
+            if let Some(name) = field_name {
+                writeln!(
+                    w,
+                    "const {name} = deserializeSet(deserializer, (deserializer) => {{"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "return deserializeSet(deserializer, (deserializer) => {{"
+                )?;
+            }
+            w.indent();
+            write_deserialize(w, None, inner)?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Map { key, value } => {
+            if let Some(name) = field_name {
+                writeln!(
+                    w,
+                    "const {name} = deserializeMap(deserializer, (deserializer) => {{"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "return deserializeMap(deserializer, (deserializer) => {{"
+                )?;
+            }
+            w.indent();
+            // Key deserialization
+            if is_primitive_or_named(key) {
+                let key_expr = deserialize_primitive_expr(key);
+                writeln!(w, "const key = {key_expr};")?;
+            } else {
+                write_deserialize(w, Some("key"), key)?;
+            }
+            // Value deserialization
+            if is_primitive_or_named(value) {
+                let value_expr = deserialize_primitive_expr(value);
+                writeln!(w, "const value = {value_expr};")?;
+            } else {
+                write_deserialize(w, Some("value"), value)?;
+            }
+            writeln!(w, "return [key, value];")?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Tuple(formats) => {
+            // Deserialize each element into a temp variable, then build the tuple array
+            for (i, f) in formats.iter().enumerate() {
+                write_deserialize(w, Some(&format!("field{i}")), f)?;
+            }
+            let fields = (0..formats.len())
+                .map(|i| format!("field{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let type_str = formats
+                .iter()
+                .map(|f| quote_type(f))
+                .collect::<Vec<_>>()
+                .join(", ");
+            if let Some(name) = field_name {
+                writeln!(w, "const {name} = [{fields}] as [{type_str}];")
+            } else {
+                writeln!(w, "return [{fields}] as [{type_str}];")
+            }
+        }
+
+        Format::TupleArray { content, size } => {
+            if let Some(name) = field_name {
+                writeln!(
+                    w,
+                    "const {name} = deserializeTupleArray(deserializer, {size}, (deserializer) => {{"
+                )?;
+            } else {
+                writeln!(
+                    w,
+                    "return deserializeTupleArray(deserializer, {size}, (deserializer) => {{"
+                )?;
+            }
+            w.indent();
+            write_deserialize(w, Some("item"), content)?;
+            writeln!(w, "return [item];")?;
+            w.unindent();
+            writeln!(w, "}});")
+        }
+
+        Format::Variable(_) => panic!("unexpected value"),
+        _ => unreachable!(),
     }
 }
 
@@ -399,11 +631,8 @@ fn output_struct_or_variant<W: IndentWrite>(
                 writeln!(w, "serializer.serializeVariantIndex({index});")?;
             }
             for field in fields {
-                writeln!(
-                    w,
-                    "{}",
-                    quote_serialize_value(&field.name, &field.value, true)
-                )?;
+                let value_expr = format!("this.{}", &field.name);
+                write_serialize(&mut w, &value_expr, &field.value)?;
             }
         }
         writeln!(w)?;
@@ -420,12 +649,7 @@ fn output_struct_or_variant<W: IndentWrite>(
         {
             let mut w = w.blockln()?;
             for field in fields {
-                writeln!(
-                    w,
-                    "const {} = {};",
-                    field.name,
-                    quote_deserialize(&field.value)
-                )?;
+                write_deserialize(&mut w, Some(&field.name), &field.value)?;
             }
             writeln!(
                 w,
@@ -518,244 +742,6 @@ fn output_enum_container<W: IndentWrite>(
         )?;
     }
     Ok(())
-}
-
-fn needs_helper(format: &Format) -> bool {
-    matches!(
-        format,
-        Format::Option(_)
-            | Format::Seq(_)
-            | Format::Set(_)
-            | Format::Map { .. }
-            | Format::Tuple(_)
-            | Format::TupleArray { .. }
-    )
-}
-
-pub(crate) fn output_helpers<W: IndentWrite>(
-    w: &mut W,
-    registry: &Registry,
-    _lang: TypeScript,
-) -> Result<()> {
-    let mut subtypes = BTreeMap::new();
-    for format in registry.values() {
-        format
-            .visit(&mut |f| {
-                if needs_helper(f) {
-                    subtypes.insert(common::mangle_type(f), f.clone());
-                }
-                Ok(())
-            })
-            .unwrap();
-    }
-
-    write!(w, "export class Helpers ")?;
-    {
-        let mut w = w.blockln()?;
-        for (mangled_name, subtype) in &subtypes {
-            output_serialization_helper(&mut w, mangled_name, subtype)?;
-            output_deserialization_helper(&mut w, mangled_name, subtype)?;
-        }
-    }
-    writeln!(w)
-}
-
-fn output_serialization_helper<W: IndentWrite>(
-    w: &mut W,
-    name: &str,
-    format0: &Format,
-) -> Result<()> {
-    let type_ = quote_type(format0);
-    let name = name.to_upper_camel_case();
-    write!(
-        w,
-        "static serialize{name}(value: {type_}, serializer: Serializer): void ",
-    )?;
-    {
-        let mut w = w.blockln()?;
-        match format0 {
-            Format::Option(format) => {
-                writedoc!(
-                    w,
-                    r"
-                    if (value) {{
-                        serializer.serializeOptionTag(true);
-                        {}
-                    }} else {{
-                        serializer.serializeOptionTag(false);
-                    }}
-                    ",
-                    quote_serialize_value("value", format, false)
-                )?;
-            }
-
-            Format::Seq(format) | Format::Set(format) => {
-                let type_ = quote_type(format);
-                let item = quote_serialize_value("item", format, false);
-                writedoc!(
-                    w,
-                    r"
-                    serializer.serializeLen(value.length);
-                    value.forEach((item: {type_}) => {{
-                        {item}
-                    }});
-                    "
-                )?;
-            }
-
-            Format::Map { key, value } => {
-                writedoc!(
-                    w,
-                    r"
-                    serializer.serializeLen(value.size);
-                    const offsets: number[] = [];
-                    for (const [k, v] of value.entries()) {{
-                        offsets.push(serializer.getBufferOffset());
-                        {}
-                        {}
-                    }}
-                    serializer.sortMapEntries(offsets);
-                    ",
-                    quote_serialize_value("k", key, false),
-                    quote_serialize_value("v", value, false)
-                )?;
-            }
-
-            Format::Tuple(format_list) => {
-                for (index, format) in format_list.iter().enumerate() {
-                    let expr = format!("value[{index}]");
-                    writeln!(w, "{}", quote_serialize_value(&expr, format, false))?;
-                }
-            }
-
-            Format::TupleArray { content, .. } => {
-                writedoc!(
-                    w,
-                    r"
-                    value.forEach((item) =>{{
-                        {}
-                    }});
-                    ",
-                    quote_serialize_value("item[0]", content, false)
-                )?;
-            }
-
-            _ => panic!("unexpected case"),
-        }
-    }
-    writeln!(w)
-}
-
-fn output_deserialization_helper<W: IndentWrite>(
-    w: &mut W,
-    name: &str,
-    format0: &Format,
-) -> Result<()> {
-    let name = name.to_upper_camel_case();
-    let type_ = quote_type(format0);
-    write!(
-        w,
-        "static deserialize{name}(deserializer: Deserializer): {type_} ",
-    )?;
-    {
-        let mut w = w.blockln()?;
-        match format0 {
-            Format::Option(format) => {
-                writedoc!(
-                    w,
-                    r"
-                    const tag = deserializer.deserializeOptionTag();
-                    if (!tag) {{
-                        return null;
-                    }} else {{
-                        return {};
-                    }}
-                    ",
-                    quote_deserialize(format),
-                )?;
-            }
-
-            Format::Seq(format) | Format::Set(format) => {
-                let format0_str = quote_type(format0);
-                writedoc!(
-                    w,
-                    r"
-                    const length = deserializer.deserializeLen();
-                    const list: {format0_str} = [];
-                    for (let i = 0; i < length; i++) {{
-                        list.push({});
-                    }}
-                    return list;
-                    ",
-                    quote_deserialize(format)
-                )?;
-            }
-
-            Format::Map { key, value } => {
-                let key_type = quote_type(key);
-                let value_type = quote_type(value);
-                writedoc!(
-                    w,
-                    r"
-                    const length = deserializer.deserializeLen();
-                    const obj = new Map<{key_type}, {value_type}>();
-                    let previousKeyStart = 0;
-                    let previousKeyEnd = 0;
-                    for (let i = 0; i < length; i++) {{
-                        const keyStart = deserializer.getBufferOffset();
-                        const key = {0};
-                        const keyEnd = deserializer.getBufferOffset();
-                        if (i > 0) {{
-                            deserializer.checkThatKeySlicesAreIncreasing(
-                                [previousKeyStart, previousKeyEnd],
-                                [keyStart, keyEnd]);
-                        }}
-                        previousKeyStart = keyStart;
-                        previousKeyEnd = keyEnd;
-                        const value = {1};
-                        obj.set(key, value);
-                    }}
-                    return obj;
-                    ",
-                    quote_deserialize(key),
-                    quote_deserialize(value),
-                )?;
-            }
-
-            Format::Tuple(format_list) => {
-                writedoc!(
-                    w,
-                    r"
-                    return [{}
-                    ];
-                    ",
-                    format_list
-                        .iter()
-                        .map(|f| format!("\n    {}", quote_deserialize(f)))
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )?;
-            }
-
-            Format::TupleArray { content, size } => {
-                let format0_str = quote_type(format0);
-                let content = quote_deserialize(content);
-                writedoc!(
-                    w,
-                    r"
-                    const list: {format0_str} = [];
-                    for (let i = 0; i < {size}; i++) {{
-                        list.push([{content}]);
-                    }}
-                    return list;
-                    ",
-                )?;
-            }
-
-            _ => panic!("unexpected case"),
-        }
-    }
-    writeln!(w)
 }
 
 const TYPE_ALIASES: [(&str, &str); 21] = [

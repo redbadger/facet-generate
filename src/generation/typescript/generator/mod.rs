@@ -9,7 +9,7 @@ use crate::{
         typescript::{
             InstallTarget,
             emitter::{
-                TypeScript, collect_type_alias_keys, collect_used_namespaces, output_helpers,
+                TypeScript, collect_type_alias_keys, collect_used_namespaces,
                 write_namespace_imports, write_type_aliases,
             },
         },
@@ -67,10 +67,6 @@ impl<'a> CodeGenerator<'a> {
         write_type_aliases(w, &type_alias_keys)?;
         for container in updated_registry.iter().map(Container::from) {
             container.write(w, lang)?;
-        }
-
-        if config.has_encoding() {
-            output_helpers(w, &updated_registry, lang)?;
         }
 
         Ok(())
