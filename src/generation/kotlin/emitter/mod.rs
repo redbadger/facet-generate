@@ -10,7 +10,8 @@ use indoc::writedoc;
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
-        indent::IndentWrite, module::Module,
+        indent::{IndentWrite, Newlines},
+        module::Module,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -500,18 +501,18 @@ fn data_object<W: IndentWrite>(
 
     if lang.encoding.is_bincode() {
         write!(w, " ")?;
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         if variant_index.is_some() {
             write!(w, "override ")?;
         }
         write!(w, "fun serialize(serializer: Serializer) ")?;
         if let Some(index) = variant_index {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             push_serializer(&mut w)?;
             writeln!(w, "serializer.serialize_variant_index({index})")?;
             pop_serializer(&mut w)?;
         } else {
-            let _ = w.block()?;
+            let _ = w.block(Newlines::CLOSE)?;
         }
         writeln!(w)?;
 
@@ -521,7 +522,7 @@ fn data_object<W: IndentWrite>(
         }
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             writeln!(w, "return {name}")?;
         }
         if variant_index.is_none() {
@@ -568,15 +569,15 @@ fn data_class<W: IndentWrite>(
     if lang.encoding.is_bincode() {
         write!(w, " ")?;
 
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         if variant_index.is_some() {
             write!(w, "override ")?;
         }
         write!(w, "fun serialize(serializer: Serializer) ")?;
         if fields.is_empty() {
-            let _ = w.block()?;
+            let _ = w.block(Newlines::CLOSE)?;
         } else {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             push_serializer(&mut w)?;
             if let Some(index) = variant_index {
                 writeln!(w, "serializer.serialize_variant_index({index})")?;
@@ -594,10 +595,10 @@ fn data_class<W: IndentWrite>(
         }
         write!(w, "companion object ")?;
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 if fields.is_empty() {
                     writeln!(w, "return {name}()")?;
                 } else {
@@ -648,7 +649,7 @@ fn enum_class<W: IndentWrite>(
     }
 
     write!(w, "enum class {name} ")?;
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
 
     for (i, variant) in variants {
         if *i > 0 {
@@ -674,7 +675,7 @@ fn enum_class<W: IndentWrite>(
             writeln!(w)?;
             write!(w, "fun serialize(serializer: Serializer) ")?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 push_serializer(&mut w)?;
                 writeln!(w, "serializer.serialize_variant_index(ordinal)")?;
                 pop_serializer(&mut w)?;
@@ -686,18 +687,18 @@ fn enum_class<W: IndentWrite>(
 
             write!(w, "companion object ")?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
 
                 writeln!(w, "@Throws(DeserializationError::class)")?;
                 write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
                 {
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     push_deserializer(&mut w)?;
                     writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
                     pop_deserializer(&mut w)?;
                     write!(w, "return when (index) ")?;
                     {
-                        let mut w = w.blockln()?;
+                        let mut w = w.block(Newlines::BOTH)?;
                         for (i, variant) in variants {
                             write!(w, "{i} -> ")?;
                             (&variant.without_docs(), &VariantContext::EnumClass)
@@ -734,7 +735,7 @@ fn sealed_interface<W: IndentWrite>(
         writeln!(w, r#"@SerialName("{name}")"#)?;
     }
     write!(w, "sealed interface {name} ")?;
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
 
     if lang.encoding.is_bincode() {
         writeln!(w, "fun serialize(serializer: Serializer)")?;
@@ -754,15 +755,15 @@ fn sealed_interface<W: IndentWrite>(
     if lang.encoding.is_bincode() {
         writeln!(w)?;
         write!(w, "companion object ")?;
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         writeln!(w, "@Throws(DeserializationError::class)")?;
         write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
         {
-            let mut w = w.blockln()?;
+            let mut w = w.block(Newlines::BOTH)?;
             writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
             write!(w, "return when (index) ")?;
             {
-                let mut w = w.blockln()?;
+                let mut w = w.block(Newlines::BOTH)?;
                 for (i, variant) in variants.iter().enumerate() {
                     let name = &variant.name;
                     writeln!(w, "{i} -> {name}.deserialize(deserializer)")?;
@@ -910,11 +911,11 @@ fn write_serialize<W: IndentWrite>(
 
 fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usize) -> Result<()> {
     if format.is_leaf() {
-        let mut w = w.blockln()?;
+        let mut w = w.block(Newlines::BOTH)?;
         write_serialize(&mut w, "it", format, level + 1)
     } else {
         let param_name = format!("level{}", level + 1);
-        let mut w = w.block()?;
+        let mut w = w.block(Newlines::CLOSE)?;
         writeln!(w, " {param_name} ->")?;
         write_serialize(&mut w, &param_name, format, level + 1)
     }
@@ -926,7 +927,7 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     value_format: &Format,
     level: usize,
 ) -> Result<()> {
-    let mut w = w.block()?;
+    let mut w = w.block(Newlines::CLOSE)?;
     writeln!(w, " key, value ->")?;
 
     // For key, just call write_serialize directly - it handles all format types
@@ -1013,7 +1014,7 @@ fn write_deserialize<W: IndentWrite>(
                 2 => {
                     // Pair<A, B> - deserialize inline and construct Pair
                     write!(w, "run ")?;
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     write!(w, "val first = ")?;
                     write_deserialize(&mut w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
@@ -1023,7 +1024,7 @@ fn write_deserialize<W: IndentWrite>(
                 3 => {
                     // Triple<A, B, C> - deserialize inline and construct Triple
                     write!(w, "run ")?;
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     write!(w, "val first = ")?;
                     write_deserialize(&mut w, None, &formats[0], true)?;
                     write!(w, "val second = ")?;
@@ -1036,7 +1037,7 @@ fn write_deserialize<W: IndentWrite>(
                     // NTupleN - deserialize and construct
                     let typename = format!("NTuple{len}");
                     write!(w, "run ")?;
-                    let mut w = w.blockln()?;
+                    let mut w = w.block(Newlines::BOTH)?;
                     for (i, format) in formats.iter().enumerate() {
                         write!(w, "val v{i} = ")?;
                         write_deserialize(&mut w, None, format, true)?;
@@ -1082,7 +1083,7 @@ fn write_deserialize<W: IndentWrite>(
 }
 
 fn write_deserialize_lambda<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
     write_deserialize(&mut w, None, format, true)
 }
 
@@ -1091,7 +1092,7 @@ fn write_map_deserialize_lambda<W: IndentWrite>(
     key_format: &Format,
     value_format: &Format,
 ) -> Result<()> {
-    let mut w = w.blockln()?;
+    let mut w = w.block(Newlines::BOTH)?;
     write!(w, "val key =")?;
     if key_format.is_leaf() {
         write!(w, " ")?;
