@@ -37,6 +37,8 @@ fn single_namespace() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace: ROOT
         name: ChildOne
       : STRUCT:
@@ -118,6 +120,8 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace: ROOT
         name: Parent
       : STRUCT:
@@ -142,6 +146,8 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace:
           NAMED: one
         name: ChildOne
@@ -169,6 +175,8 @@ fn root_namespace_with_two_child_namespaces() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace:
           NAMED: two
         name: ChildTwo
@@ -238,6 +246,8 @@ fn same_namespace_with_external_dependency_bug_regression() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace: ROOT
         name: Child
       : STRUCT:
@@ -265,6 +275,8 @@ fn same_namespace_with_external_dependency_bug_regression() {
       custom_code: {}
       package_manifest: true
       features: []
+      used_format_types: []
+      referenced_namespaces: []
     : ? namespace:
           NAMED: api
         name: GrandChild

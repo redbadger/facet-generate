@@ -1,20 +1,19 @@
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     io::{Result, Write},
 };
 
 use heck::ToUpperCamelCase;
 
 use crate::{
-    Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
     },
-    reflection::format::{
-        ContainerFormat, Doc, Format, FormatHolder as _, Named, Namespace, VariantFormat,
-    },
+    reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
 
 use super::InstallTarget;
@@ -90,7 +89,11 @@ impl Module {
 impl Emitter<TypeScript> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
         let CodeGeneratorConfig {
-            encoding, features, ..
+            encoding,
+            features,
+            referenced_namespaces,
+            used_format_types,
+            ..
         } = self.config();
 
         if self.config().has_encoding() {
@@ -99,6 +102,26 @@ impl Emitter<TypeScript> for Module {
                 w,
                 r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
             )?;
+        }
+
+        // Write namespace imports (e.g. `import * as Foo from "../foo";`)
+        let mut import_paths: BTreeMap<String, String> = BTreeMap::new();
+        for namespace in referenced_namespaces {
+            let import_path = self.ts_namespace_import_path(namespace);
+            import_paths.insert(namespace.to_upper_camel_case(), import_path);
+        }
+        for (namespace, path) in import_paths {
+            writeln!(w, r#"import * as {namespace} from "{path}";"#)?;
+        }
+
+        // Write type aliases (e.g. `type bool = boolean;`)
+        let alias_map = BTreeMap::from(TYPE_ALIASES);
+        let aliases: Vec<String> = used_format_types
+            .iter()
+            .filter_map(|k| alias_map.get(k.as_str()).map(|s| (*s).to_string()))
+            .collect();
+        if !aliases.is_empty() {
+            writeln!(w, "{}", aliases.join("\n"))?;
         }
 
         if !encoding.is_none() {
@@ -131,45 +154,6 @@ impl Emitter<TypeScript> for Module {
 
         Ok(())
     }
-}
-
-/// Collect namespaces actually referenced in the registry.
-pub(crate) fn collect_used_namespaces(registry: &Registry) -> BTreeSet<String> {
-    let mut namespaces = BTreeSet::new();
-    for format in registry.values() {
-        format
-            .visit(&mut |f| {
-                if let Format::TypeName(qualified_name) = f {
-                    if let Namespace::Named(ns) = &qualified_name.namespace {
-                        namespaces.insert(ns.clone());
-                    }
-                }
-
-                Ok(())
-            })
-            .unwrap();
-    }
-    namespaces
-}
-
-/// Write namespace import statements for the given namespaces.
-pub(crate) fn write_namespace_imports<W: Write>(
-    w: &mut W,
-    module: &Module,
-    namespaces: &BTreeSet<String>,
-) -> Result<()> {
-    let mut import_paths: BTreeMap<String, String> = BTreeMap::new();
-
-    for namespace in namespaces {
-        let import_path = module.ts_namespace_import_path(namespace);
-        import_paths.insert(namespace.to_upper_camel_case(), import_path);
-    }
-
-    for (namespace, path) in import_paths {
-        writeln!(w, r#"import * as {namespace} from "{path}";"#)?;
-    }
-
-    Ok(())
 }
 
 impl Emitter<TypeScript> for Doc {
@@ -781,60 +765,6 @@ const TYPE_ALIASES: [(&str, &str); 21] = [
         "type ListTuple<T extends any[]> = Tuple<T>[];",
     ),
 ];
-
-pub(crate) fn collect_type_alias_keys(registry: &Registry) -> BTreeSet<String> {
-    let mut keys = BTreeSet::new();
-    for format in registry.values() {
-        format
-            .visit(&mut |f| {
-                let key = match f {
-                    Format::Unit => "unit",
-                    Format::Bool => "bool",
-                    Format::I8 => "int8",
-                    Format::I16 => "int16",
-                    Format::I32 => "int32",
-                    Format::I64 => "int64",
-                    Format::I128 => "int128",
-                    Format::U8 => "uint8",
-                    Format::U16 => "uint16",
-                    Format::U32 => "uint32",
-                    Format::U64 => "uint64",
-                    Format::U128 => "uint128",
-                    Format::F32 => "float32",
-                    Format::F64 => "float64",
-                    Format::Char => "char",
-                    Format::Str => "str",
-                    Format::Bytes => "bytes",
-                    Format::Option(_) => "option",
-                    Format::Seq(_) | Format::Set(_) => "seq",
-                    Format::Map { .. } => "map",
-                    Format::Tuple(_) => "tuple",
-                    Format::TupleArray { .. } => "list_tuple",
-                    Format::TypeName(_) | Format::Variable(_) => "",
-                };
-                if !key.is_empty() {
-                    keys.insert(key.to_string());
-                }
-
-                Ok(())
-            })
-            .unwrap();
-    }
-    keys
-}
-
-pub(crate) fn write_type_aliases<W: Write>(
-    w: &mut W,
-    type_alias_keys: &BTreeSet<String>,
-) -> Result<()> {
-    let map = BTreeMap::from(TYPE_ALIASES);
-    let aliases: String = type_alias_keys
-        .iter()
-        .filter_map(|k| map.get(k.as_str()).map(|s| (*s).to_string()))
-        .collect::<Vec<_>>()
-        .join("\n");
-    writeln!(w, "{aliases}")
-}
 
 #[cfg(test)]
 fn format_type_aliases(input: &BTreeSet<String>) -> String {
