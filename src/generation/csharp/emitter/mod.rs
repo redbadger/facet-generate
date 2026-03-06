@@ -136,7 +136,7 @@ fn write_sealed_record<W: IndentWrite>(
     }
 
     let bincode_interfaces = if has_bincode {
-        format!(", IFacetSerializable, IFacetDeserializable<{record_name}>")
+        format!(" : IFacetSerializable, IFacetDeserializable<{record_name}>")
     } else {
         String::new()
     };
@@ -456,7 +456,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
 ) -> Result<()> {
     let base_name = name.to_upper_camel_case();
     let base_interfaces = if lang.encoding == Encoding::Bincode {
-        format!(", IFacetSerializable, IFacetDeserializable<{base_name}>")
+        format!(" : IFacetSerializable, IFacetDeserializable<{base_name}>")
     } else {
         String::new()
     };
@@ -479,10 +479,17 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     write!(w, "public abstract record {base_name}{base_interfaces} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
+    // Bincode serialization is emitted as a separate partial record declaration,
+    // so the primary declaration must also be partial to satisfy the C# compiler.
+    let partial = if lang.encoding == Encoding::Bincode {
+        " partial"
+    } else {
+        ""
+    };
     for variant in variants {
         variant.doc.write(&mut w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
-        write!(w, "public sealed record {variant_name}")?;
+        write!(w, "public sealed{partial} record {variant_name}")?;
         match &variant.value {
             VariantFormat::Unit => {
                 writeln!(w, "() : {base_name};")?;

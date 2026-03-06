@@ -21,7 +21,7 @@ fn unit_struct() {
 
     /// line 1
     /// line 2
-    public sealed record UnitStruct, IFacetSerializable, IFacetDeserializable<UnitStruct> {
+    public sealed record UnitStruct : IFacetSerializable, IFacetDeserializable<UnitStruct> {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
@@ -867,8 +867,8 @@ fn enum_with_1_tuple_variants() {
     let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public abstract record MyEnum, IFacetSerializable, IFacetDeserializable<MyEnum> {
-        public sealed record Variant1(string Value) : MyEnum;
+    public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
+        public sealed partial record Variant1(string Value) : MyEnum;
 
         public abstract void Serialize(ISerializer serializer);
 
@@ -938,10 +938,10 @@ fn enum_with_newtype_variants() {
     let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public abstract record MyEnum, IFacetSerializable, IFacetDeserializable<MyEnum> {
-        public sealed record Variant1(string Value) : MyEnum;
+    public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
+        public sealed partial record Variant1(string Value) : MyEnum;
 
-        public sealed record Variant2(int Value) : MyEnum;
+        public sealed partial record Variant2(int Value) : MyEnum;
 
         public abstract void Serialize(ISerializer serializer);
 
@@ -1029,10 +1029,10 @@ fn enum_with_tuple_variants() {
     let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public abstract record MyEnum, IFacetSerializable, IFacetDeserializable<MyEnum> {
-        public sealed record Variant1(string Field0, int Field1) : MyEnum;
+    public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
+        public sealed partial record Variant1(string Field0, int Field1) : MyEnum;
 
-        public sealed record Variant2(bool Field0, double Field1, byte Field2) : MyEnum;
+        public sealed partial record Variant2(bool Field0, double Field1, byte Field2) : MyEnum;
 
         public abstract void Serialize(ISerializer serializer);
 
@@ -1125,8 +1125,8 @@ fn enum_with_struct_variants() {
     let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public abstract record MyEnum, IFacetSerializable, IFacetDeserializable<MyEnum> {
-        public sealed record Variant1(string Field1, int Field2) : MyEnum;
+    public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
+        public sealed partial record Variant1(string Field1, int Field2) : MyEnum;
 
         public abstract void Serialize(ISerializer serializer);
 
@@ -1200,14 +1200,14 @@ fn enum_with_mixed_variants() {
     let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public abstract record MyEnum, IFacetSerializable, IFacetDeserializable<MyEnum> {
-        public sealed record Unit() : MyEnum;
+    public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
+        public sealed partial record Unit() : MyEnum;
 
-        public sealed record NewType(string Value) : MyEnum;
+        public sealed partial record NewType(string Value) : MyEnum;
 
-        public sealed record Tuple(string Field0, int Field1) : MyEnum;
+        public sealed partial record Tuple(string Field0, int Field1) : MyEnum;
 
-        public sealed record Struct(bool Field) : MyEnum;
+        public sealed partial record Struct(bool Field) : MyEnum;
 
         public abstract void Serialize(ISerializer serializer);
 
