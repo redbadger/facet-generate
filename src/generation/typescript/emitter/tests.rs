@@ -8,7 +8,7 @@ use std::{
 use facet::Facet;
 
 use super::*;
-use crate::{emit_two_modules, generation::typescript::CodeGenerator};
+use crate::{emit, emit_two_modules, generation::typescript::CodeGenerator};
 
 #[test]
 fn test_format_type_aliases() {
@@ -61,28 +61,6 @@ fn test_format_type_aliases() {
     ");
 }
 
-pub(super) fn emit<T: for<'a> facet::Facet<'a>>(encoding: Encoding) -> String {
-    use crate::generation::{
-        Container, Emitter,
-        indent::{IndentConfig, IndentedWriter},
-    };
-
-    let registry = crate::reflect!(T).unwrap();
-
-    let type_alias_keys = collect_type_alias_keys(&registry);
-    let lang = TypeScript::new(encoding, InstallTarget::Node);
-
-    let mut out = Vec::new();
-    let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
-
-    write_type_aliases(&mut w, &type_alias_keys).unwrap();
-    for container in registry.iter().map(Container::from) {
-        container.write(&mut w, lang).unwrap();
-    }
-
-    String::from_utf8(out).unwrap()
-}
-
 #[test]
 fn unit_struct() {
     /// line 1
@@ -90,8 +68,9 @@ fn unit_struct() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit::<UnitStruct>(Encoding::None);
+    let actual = emit!(UnitStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
+
 
     /// line 1
     /// line 2
@@ -109,8 +88,9 @@ fn unit_struct_empty_body() {
     /// line 2
     struct UnitStruct {}
 
-    let actual = emit::<UnitStruct>(Encoding::None);
+    let actual = emit!(UnitStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
+
 
     /// line 1
     /// line 2
@@ -128,9 +108,9 @@ fn newtype_struct() {
     /// line 2
     struct NewType(String);
 
-    let actual = emit::<NewType>(Encoding::None);
+    let actual = emit!(NewType as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type str = string;
+
 
     /// line 1
     /// line 2
@@ -148,10 +128,9 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit::<TupleStruct>(Encoding::None);
+    let actual = emit!(TupleStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     /// line 1
     /// line 2
@@ -186,24 +165,9 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit::<StructWithFields>(Encoding::None);
+    let actual = emit!(StructWithFields as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type char = string;
-    type float32 = number;
-    type float64 = number;
-    type int128 = bigint;
-    type int16 = number;
-    type int32 = number;
-    type int64 = bigint;
-    type int8 = number;
-    type str = string;
-    type uint128 = bigint;
-    type uint16 = number;
-    type uint32 = number;
-    type uint64 = bigint;
-    type uint8 = number;
-    type unit = null;
+
 
     /// line 1
     /// line 2
@@ -234,25 +198,27 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit::<Outer>(Encoding::None);
+    let actual = emit!(Outer as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export class Inner1 {
         constructor (public field1: str) {
         }
     }
 
+
     export class Inner2 {
         constructor (public value: str) {
         }
     }
 
+
     export class Inner3 {
         constructor (public field0: str, public field1: int32) {
         }
     }
+
 
     export class Outer {
         constructor (public one: Inner1, public two: Inner2, public three: Inner3) {
@@ -268,11 +234,9 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
-    type Tuple<T extends any[]> = T;
+
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32]>) {
@@ -288,12 +252,9 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
-    type Tuple<T extends any[]> = T;
-    type uint16 = number;
+
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16]>) {
@@ -309,13 +270,9 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type float32 = number;
-    type int32 = number;
-    type str = string;
-    type Tuple<T extends any[]> = T;
-    type uint16 = number;
+
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16, float32]>) {
@@ -340,7 +297,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit::<EnumWithUnitVariants>(Encoding::None);
+    let actual = emit!(EnumWithUnitVariants as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
 
@@ -383,7 +340,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
 
 
@@ -407,9 +364,9 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type str = string;
+
 
     export abstract class MyEnum {
     }
@@ -432,10 +389,9 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export abstract class MyEnum {
     }
@@ -464,13 +420,9 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type float64 = number;
-    type int32 = number;
-    type str = string;
-    type uint8 = number;
+
 
     export abstract class MyEnum {
     }
@@ -498,10 +450,9 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export abstract class MyEnum {
     }
@@ -526,11 +477,9 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit::<MyEnum>(Encoding::None);
+    let actual = emit!(MyEnum as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type int32 = number;
-    type str = string;
+
 
     export abstract class MyEnum {
     }
@@ -570,11 +519,9 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type Seq<T> = T[];
-    type str = string;
+
 
     export class MyStruct {
         constructor (public items: Seq<str>, public numbers: Seq<int32>, public nested_items: Seq<Seq<str>>) {
@@ -593,12 +540,9 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type int32 = number;
-    type Optional<T> = T | null;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public optional_string: Optional<str>, public optional_number: Optional<int32>, public optional_bool: Optional<bool>) {
@@ -615,11 +559,9 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type int32 = number;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
@@ -639,13 +581,9 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type int32 = number;
-    type Optional<T> = T | null;
-    type Seq<T> = T[];
-    type str = string;
+
 
     export class MyStruct {
         constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
@@ -664,12 +602,9 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type ListTuple<T extends any[]> = Tuple<T>[];
-    type str = string;
-    type uint8 = number;
+
 
     export class MyStruct {
         constructor (public fixed_array: ListTuple<[int32]>, public byte_array: ListTuple<[uint8]>, public string_array: ListTuple<[str]>) {
@@ -686,11 +621,9 @@ fn struct_with_btreemap_field() {
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bool = boolean;
-    type int32 = number;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
@@ -707,11 +640,9 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type Seq<T> = T[];
-    type str = string;
+
 
     export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
@@ -728,11 +659,9 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type Seq<T> = T[];
-    type str = string;
+
 
     export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
@@ -750,10 +679,9 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public boxed_string: str, public boxed_int: int32) {
@@ -770,10 +698,9 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public rc_string: str, public rc_int: int32) {
@@ -790,10 +717,9 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public arc_string: str, public arc_int: int32) {
@@ -814,13 +740,9 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type int32 = number;
-    type ListTuple<T extends any[]> = Tuple<T>[];
-    type Optional<T> = T | null;
-    type Seq<T> = T[];
-    type str = string;
+
 
     export class MyStruct {
         constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
@@ -840,10 +762,9 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bytes = Uint8Array;
-    type str = string;
+
 
     export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes) {
@@ -864,13 +785,9 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit::<MyStruct>(Encoding::None);
+    let actual = emit!(MyStruct as TypeScript with Encoding::None).unwrap();
     insta::assert_snapshot!(actual, @"
-    type bytes = Uint8Array;
-    type Optional<T> = T | null;
-    type Seq<T> = T[];
-    type str = string;
-    type uint8 = number;
+
 
     export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {

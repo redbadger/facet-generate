@@ -6,13 +6,7 @@ use crate::{
         CodeGen, CodeGeneratorConfig, Container, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
-        typescript::{
-            InstallTarget,
-            emitter::{
-                TypeScript, collect_type_alias_keys, collect_used_namespaces,
-                write_namespace_imports, write_type_aliases,
-            },
-        },
+        typescript::{InstallTarget, emitter::TypeScript},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -53,18 +47,11 @@ impl<'a> CodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = TypeScript::new(config.encoding, self.target);
+        let lang = TypeScript::new(config.encoding).with_target(self.target);
 
-        let module = Module::new(&config);
-        module.write(w, lang)?;
+        Module::new(&config).write(w, lang)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-
-        let used_namespaces = collect_used_namespaces(&updated_registry);
-        write_namespace_imports(w, &module, &used_namespaces)?;
-
-        let type_alias_keys = collect_type_alias_keys(registry);
-        write_type_aliases(w, &type_alias_keys)?;
         for container in updated_registry.iter().map(Container::from) {
             container.write(w, lang)?;
         }

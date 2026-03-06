@@ -1,4 +1,8 @@
 import { Serializer, Deserializer } from "./serde";
+type int32 = number;
+type Optional<T> = T | null;
+type Seq<T> = T[];
+type str = string;
 
 function serializeArray<T>(
     value: T[],
@@ -97,10 +101,6 @@ function deserializeSet<T>(
     }
     return list;
 }
-type int32 = number;
-type Optional<T> = T | null;
-type Seq<T> = T[];
-type str = string;
 
 export class Child {
     constructor (public name: str) {

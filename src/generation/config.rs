@@ -32,6 +32,12 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
+    /// Which primitive/leaf format types are used in the registry.
+    /// Populated by `update_from`. Used by TypeScript to emit type aliases.
+    pub used_format_types: BTreeSet<String>,
+    /// External namespaces actually referenced via `Format::TypeName` in the registry.
+    /// Populated by `update_from`. Used to generate namespace import statements.
+    pub referenced_namespaces: BTreeSet<String>,
 }
 
 #[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
@@ -143,6 +149,8 @@ impl CodeGeneratorConfig {
             custom_code: BTreeMap::new(),
             package_manifest: true,
             features: BTreeSet::new(),
+            used_format_types: BTreeSet::new(),
+            referenced_namespaces: BTreeSet::new(),
         }
     }
 
@@ -243,6 +251,46 @@ impl CodeGeneratorConfig {
                         }
                         _ => (),
                     }
+
+                    // Track external namespaces actually referenced in format types.
+                    if let Format::TypeName(qualified_name) = f {
+                        if let Namespace::Named(ns) = &qualified_name.namespace {
+                            if ns != &self.module_name {
+                                self.referenced_namespaces.insert(ns.clone());
+                            }
+                        }
+                    }
+
+                    // Also record the leaf format type key (used by TypeScript for type aliases).
+                    let format_key = match f {
+                        Format::Unit => "unit",
+                        Format::Bool => "bool",
+                        Format::I8 => "int8",
+                        Format::I16 => "int16",
+                        Format::I32 => "int32",
+                        Format::I64 => "int64",
+                        Format::I128 => "int128",
+                        Format::U8 => "uint8",
+                        Format::U16 => "uint16",
+                        Format::U32 => "uint32",
+                        Format::U64 => "uint64",
+                        Format::U128 => "uint128",
+                        Format::F32 => "float32",
+                        Format::F64 => "float64",
+                        Format::Char => "char",
+                        Format::Str => "str",
+                        Format::Bytes => "bytes",
+                        Format::Option(_) => "option",
+                        Format::Seq(_) | Format::Set(_) => "seq",
+                        Format::Map { .. } => "map",
+                        Format::Tuple(_) => "tuple",
+                        Format::TupleArray { .. } => "list_tuple",
+                        Format::TypeName(_) | Format::Variable(_) => "",
+                    };
+                    if !format_key.is_empty() {
+                        self.used_format_types.insert(format_key.to_string());
+                    }
+
                     Ok(())
                 })
                 .expect("failed to parse registry");

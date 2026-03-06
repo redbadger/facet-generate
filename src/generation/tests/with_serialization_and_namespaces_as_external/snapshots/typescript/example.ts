@@ -1,7 +1,6 @@
 import { Serializer, Deserializer } from "./serde";
 import * as Other from "other";
 
-
 export class Child {
     constructor (public external: Other.OtherParent) {
     }
