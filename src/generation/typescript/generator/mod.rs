@@ -53,7 +53,7 @@ impl<'a> CodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = TypeScript::new(config.encoding, self.target);
+        let lang = TypeScript::new(config.encoding).with_target(self.target);
 
         let module = Module::new(&config);
         module.write(w, lang)?;

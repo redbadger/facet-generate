@@ -33,8 +33,18 @@ pub struct TypeScript {
 }
 
 impl TypeScript {
-    pub fn new(encoding: Encoding, target: InstallTarget) -> Self {
-        Self { encoding, target }
+    pub fn new(encoding: Encoding) -> Self {
+        Self {
+            encoding,
+            target: InstallTarget::Node,
+        }
+    }
+
+    /// Which `InstallTarget` to use (Node or Deno)
+    #[must_use]
+    pub fn with_target(mut self, target: InstallTarget) -> Self {
+        self.target = target;
+        self
     }
 }
 
@@ -283,7 +293,7 @@ fn quote_type(format: &Format) -> String {
     let mut buf = Vec::new();
     let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(0));
     format
-        .write(&mut w, TypeScript::new(Encoding::None, InstallTarget::Node))
+        .write(&mut w, TypeScript::new(Encoding::None))
         .expect("writing to Vec should not fail");
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
 }
