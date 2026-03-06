@@ -1,6 +1,6 @@
 use std::io::{Result, Write};
 
-use heck::ToUpperCamelCase;
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::{
     generation::{
@@ -28,6 +28,7 @@ impl Emitter<CSharp> for Module {
     fn write<W: Write>(&self, w: &mut W, lang: CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();
         writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
+        writeln!(w, "using Facet.Runtime;")?;
         writeln!(w, "using System.Collections.Generic;")?;
         writeln!(w, "using System.Collections.ObjectModel;")?;
         match lang.encoding {
@@ -85,13 +86,13 @@ impl Emitter<CSharp> for Container<'_> {
 impl Emitter<CSharp> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: CSharp) -> Result<()> {
         self.doc.write(w, lang)?;
-        write!(
+        writeln!(w, "[ObservableProperty]")?;
+        writeln!(
             w,
-            "public {} {} {{ get; set; }}",
+            "private {} _{};",
             csharp_type(&self.value),
-            self.name.to_upper_camel_case()
-        )?;
-        writeln!(w)
+            self.name.to_lower_camel_case()
+        )
     }
 }
 
@@ -200,19 +201,24 @@ fn write_class_bincode_methods<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         writeln!(w, "deserializer.IncreaseContainerDepth();")?;
         for field in fields {
-            let field_name = field.name.to_upper_camel_case();
-            write_deserialize_binding(&mut w, &field_name, &field.value)?;
+            let local_name = field.name.to_lower_camel_case();
+            write_deserialize_binding(&mut w, &local_name, &field.value)?;
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
-        writeln!(w, "return new {}", class_name)?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            for field in fields {
-                let field_name = field.name.to_upper_camel_case();
-                writeln!(w, "{} = {},", field_name, field_name)?;
+        if fields.is_empty() {
+            writeln!(w, "return new {}();", class_name)?;
+        } else {
+            write!(w, "return new {} ", class_name)?;
+            {
+                let mut w = w.block(Newlines::OPEN)?;
+                for field in fields {
+                    let prop_name = field.name.to_upper_camel_case();
+                    let local_name = field.name.to_lower_camel_case();
+                    writeln!(w, "{} = {},", prop_name, local_name)?;
+                }
             }
+            writeln!(w, ";")?;
         }
-        writeln!(w, ";")?;
     }
 
     writeln!(w)?;
@@ -270,108 +276,112 @@ fn write_enum<W: IndentWrite>(
         writeln!(w, "[JsonConverter(typeof(JsonStringEnumConverter))]")?;
     }
     write!(w, "public enum {} ", enum_name)?;
-    let mut w = w.block(Newlines::BOTH)?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
 
-    let len = variants.len();
-    for (index, variant) in variants.values().enumerate() {
-        variant.doc.write(&mut w, lang)?;
-        write!(w, "{}", variant.name.to_upper_camel_case())?;
-        if index + 1 < len {
-            writeln!(w, ",")?;
-        } else {
-            writeln!(w)?;
+        let len = variants.len();
+        for (index, variant) in variants.values().enumerate() {
+            variant.doc.write(&mut w, lang)?;
+            write!(w, "{}", variant.name.to_upper_camel_case())?;
+            if index + 1 < len {
+                writeln!(w, ",")?;
+            } else {
+                writeln!(w)?;
+            }
         }
     }
 
     if lang.encoding == Encoding::Bincode {
         writeln!(w)?;
-        writeln!(w, "public static class {}Bincode", enum_name)?;
-        let mut w = w.block(Newlines::BOTH)?;
-
-        writeln!(
-            w,
-            "public static void Serialize({} value, ISerializer serializer)",
-            enum_name
-        )?;
+        write!(w, "public static class {}Bincode ", enum_name)?;
         {
             let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "serializer.IncreaseContainerDepth();")?;
-            writeln!(w, "serializer.SerializeVariantIndex((uint)value);")?;
-            writeln!(w, "serializer.DecreaseContainerDepth();")?;
-        }
 
-        writeln!(w)?;
-        writeln!(
-            w,
-            "public static {} Deserialize(IDeserializer deserializer)",
-            enum_name
-        )?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "deserializer.IncreaseContainerDepth();")?;
-            writeln!(w, "var index = deserializer.DeserializeVariantIndex();")?;
-            writeln!(w, "deserializer.DecreaseContainerDepth();")?;
-            writeln!(w, "return index switch")?;
+            writeln!(
+                w,
+                "public static void Serialize({} value, ISerializer serializer)",
+                enum_name
+            )?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                for (index, variant) in variants.values().enumerate() {
+                writeln!(w, "serializer.IncreaseContainerDepth();")?;
+                writeln!(w, "serializer.SerializeVariantIndex((uint)value);")?;
+                writeln!(w, "serializer.DecreaseContainerDepth();")?;
+            }
+
+            writeln!(w)?;
+            writeln!(
+                w,
+                "public static {} Deserialize(IDeserializer deserializer)",
+                enum_name
+            )?;
+            {
+                let mut w = w.block(Newlines::BOTH)?;
+                writeln!(w, "deserializer.IncreaseContainerDepth();")?;
+                writeln!(w, "var index = deserializer.DeserializeVariantIndex();")?;
+                writeln!(w, "deserializer.DecreaseContainerDepth();")?;
+                writeln!(w, "return index switch")?;
+                {
+                    let mut w = w.block(Newlines::BOTH)?;
+                    for (index, variant) in variants.values().enumerate() {
+                        writeln!(
+                            w,
+                            "{} => {}.{},",
+                            index,
+                            enum_name,
+                            variant.name.to_upper_camel_case()
+                        )?;
+                    }
                     writeln!(
                         w,
-                        "{} => {}.{},",
-                        index,
-                        enum_name,
-                        variant.name.to_upper_camel_case()
+                        "_ => throw new DeserializationError(\"Unknown variant index for {}: \" + index),",
+                        enum_name
                     )?;
                 }
-                writeln!(
-                    w,
-                    "_ => throw new DeserializationError(\"Unknown variant index for {}: \" + index),",
-                    enum_name
-                )?;
+                writeln!(w, ";")?;
             }
-            writeln!(w, ";")?;
-        }
 
-        writeln!(w)?;
-        writeln!(
-            w,
-            "public static byte[] BincodeSerialize({} value)",
-            enum_name
-        )?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "var serializer = new BincodeSerializer();")?;
-            writeln!(w, "Serialize(value, serializer);")?;
-            writeln!(w, "return serializer.GetBytes();")?;
-        }
-
-        writeln!(w)?;
-        writeln!(
-            w,
-            "public static {} BincodeDeserialize(byte[] input)",
-            enum_name
-        )?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "if (input is null)")?;
+            writeln!(w)?;
+            writeln!(
+                w,
+                "public static byte[] BincodeSerialize({} value)",
+                enum_name
+            )?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(
-                    w,
-                    "throw new DeserializationError(\"Cannot deserialize null array\");"
-                )?;
+                writeln!(w, "var serializer = new BincodeSerializer();")?;
+                writeln!(w, "Serialize(value, serializer);")?;
+                writeln!(w, "return serializer.GetBytes();")?;
             }
-            writeln!(w, "var deserializer = new BincodeDeserializer(input);")?;
-            writeln!(w, "var value = Deserialize(deserializer);")?;
-            writeln!(w, "if (deserializer.GetBufferOffset() < input.Length)")?;
+
+            writeln!(w)?;
+            writeln!(
+                w,
+                "public static {} BincodeDeserialize(byte[] input)",
+                enum_name
+            )?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(
-                    w,
-                    "throw new DeserializationError(\"Some input bytes were not read\");"
-                )?;
+                writeln!(w, "if (input is null)")?;
+                {
+                    let mut w = w.block(Newlines::BOTH)?;
+                    writeln!(
+                        w,
+                        "throw new DeserializationError(\"Cannot deserialize null array\");"
+                    )?;
+                }
+                writeln!(w, "var deserializer = new BincodeDeserializer(input);")?;
+                writeln!(w, "var value = Deserialize(deserializer);")?;
+                writeln!(w, "if (deserializer.GetBufferOffset() < input.Length)")?;
+                {
+                    let mut w = w.block(Newlines::BOTH)?;
+                    writeln!(
+                        w,
+                        "throw new DeserializationError(\"Some input bytes were not read\");"
+                    )?;
+                }
+                writeln!(w, "return value;")?;
             }
-            writeln!(w, "return value;")?;
         }
     }
 
@@ -627,11 +637,11 @@ fn deserializer_variant_body<W: IndentWrite>(
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_deserialize_binding(w, &field.name.to_upper_camel_case(), &field.value)?;
+                write_deserialize_binding(w, &field.name.to_lower_camel_case(), &field.value)?;
             }
             let args = fields
                 .iter()
-                .map(|field| field.name.to_upper_camel_case())
+                .map(|field| field.name.to_lower_camel_case())
                 .collect::<Vec<_>>()
                 .join(", ");
             writeln!(
