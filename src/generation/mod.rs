@@ -4,6 +4,9 @@ pub mod indent;
 /// Modules for code generation that map to Namespaces declared as `#[facet(namespace = "my_namespace")]`
 pub mod module;
 
+/// Support for code-generation in C#
+#[cfg(feature = "csharp")]
+pub mod csharp;
 /// Support for code-generation in Java.
 ///
 /// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.

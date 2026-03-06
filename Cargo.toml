@@ -40,8 +40,9 @@ bytes = "1.11"
 
 [features]
 default = ["generate"]
-generate = ["java", "kotlin", "swift", "typescript"]
+generate = ["java", "kotlin", "swift", "typescript", "csharp"]
 java = ["include_dir"]
 kotlin = ["include_dir", "indoc"]
 swift = ["include_dir", "indoc"]
 typescript = ["include_dir", "indoc"]
+csharp = ["indoc"]
