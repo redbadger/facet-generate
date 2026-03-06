@@ -1,6 +1,6 @@
 use crate::{
-    generation::{csharp::Installer, Encoding, ExternalPackage, PackageLocation},
     Registry,
+    generation::{Encoding, ExternalPackage, PackageLocation, csharp::Installer},
 };
 
 #[test]
@@ -80,47 +80,67 @@ fn test_generate_bincode_installs_runtime_files() {
 
     installer.generate(&registry).unwrap();
 
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/ISerializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/IDeserializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/DeserializationError.cs")
-        .exists());
-    assert!(!install_dir
-        .path()
-        .join("Facet/Runtime/Json/JsonSerde.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/Unit.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Bincode/BincodeSerializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Bincode/BincodeDeserializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Bincode/IFacetSerializable.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Bincode/IFacetDeserializable.cs")
-        .exists());
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/ISerializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/IDeserializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/DeserializationError.cs")
+            .exists()
+    );
+    assert!(
+        !install_dir
+            .path()
+            .join("Facet/Runtime/Json/JsonSerde.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/Unit.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Bincode/BincodeSerializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Bincode/BincodeDeserializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Bincode/IFacetSerializable.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Bincode/IFacetDeserializable.cs")
+            .exists()
+    );
 
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/SerializationError.cs")
-        .exists());
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/SerializationError.cs")
+            .exists()
+    );
 
     let serializer = std::fs::read_to_string(
         install_dir
@@ -140,20 +160,21 @@ fn test_generate_no_encoding_skips_runtime_files() {
 
     installer.generate(&registry).unwrap();
 
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/Unit.cs")
-        .exists());
-    assert!(!install_dir
-        .path()
-        .join("Facet/Runtime/Serde/ISerializer.cs")
-        .exists());
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/Unit.cs")
+            .exists()
+    );
+    assert!(
+        !install_dir
+            .path()
+            .join("Facet/Runtime/Serde/ISerializer.cs")
+            .exists()
+    );
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
     assert!(!install_dir.path().join("Facet/Runtime/Json").exists());
-    assert!(install_dir
-        .path()
-        .join("Example.Types.csproj")
-        .exists());
+    assert!(install_dir.path().join("Example.Types.csproj").exists());
 }
 
 #[test]
@@ -164,29 +185,41 @@ fn test_generate_json_encoding_installs_serde_but_not_bincode() {
 
     installer.generate(&registry).unwrap();
 
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/ISerializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/IDeserializer.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/SerializationError.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/DeserializationError.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/Unit.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Json/JsonSerde.cs")
-        .exists());
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/ISerializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/IDeserializer.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/SerializationError.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/DeserializationError.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Serde/Unit.cs")
+            .exists()
+    );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Json/JsonSerde.cs")
+            .exists()
+    );
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
 }

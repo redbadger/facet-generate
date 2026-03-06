@@ -19,6 +19,7 @@ pub struct CSharp {
 }
 
 impl CSharp {
+    #[must_use]
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }
@@ -130,7 +131,7 @@ fn write_sealed_record<W: IndentWrite>(
     let has_bincode = lang.encoding == Encoding::Bincode;
 
     if !has_json && !has_bincode {
-        writeln!(w, "public sealed record {};", record_name)?;
+        writeln!(w, "public sealed record {record_name};")?;
         return Ok(());
     }
 
@@ -140,7 +141,7 @@ fn write_sealed_record<W: IndentWrite>(
         String::new()
     };
 
-    write!(w, "public sealed record {}{} ", record_name, bincode_interfaces)?;
+    write!(w, "public sealed record {record_name}{bincode_interfaces} ")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
 
@@ -179,8 +180,7 @@ fn write_class<W: IndentWrite>(
 
     write!(
         w,
-        "public partial class {} : ObservableObject{} ",
-        class_name, bincode_interfaces
+        "public partial class {class_name} : ObservableObject{bincode_interfaces} "
     )?;
 
     if fields.is_empty() && !has_json && !has_bincode {
@@ -217,11 +217,7 @@ fn write_json_helpers<W: IndentWrite>(w: &mut W, type_name: &str) -> Result<()> 
         writeln!(w, "return JsonSerde.Serialize(this);")?;
     }
     writeln!(w)?;
-    writeln!(
-        w,
-        "public static {} JsonDeserialize(string input)",
-        type_name
-    )?;
+    writeln!(w, "public static {type_name} JsonDeserialize(string input)")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
         writeln!(w, "return JsonSerde.Deserialize<{type_name}>(input);")?;
@@ -248,8 +244,7 @@ fn write_class_bincode_methods<W: IndentWrite>(
     writeln!(w)?;
     writeln!(
         w,
-        "public static {} Deserialize(IDeserializer deserializer)",
-        class_name
+        "public static {class_name} Deserialize(IDeserializer deserializer)"
     )?;
     {
         let mut w = w.block(Newlines::BOTH)?;
@@ -260,15 +255,15 @@ fn write_class_bincode_methods<W: IndentWrite>(
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
         if fields.is_empty() {
-            writeln!(w, "return new {}();", class_name)?;
+            writeln!(w, "return new {class_name}();")?;
         } else {
-            write!(w, "return new {} ", class_name)?;
+            write!(w, "return new {class_name} ")?;
             {
                 let mut w = w.block(Newlines::OPEN)?;
                 for field in fields {
                     let prop_name = field.name.to_upper_camel_case();
                     let local_name = field.name.to_lower_camel_case();
-                    writeln!(w, "{} = {},", prop_name, local_name)?;
+                    writeln!(w, "{prop_name} = {local_name},")?;
                 }
             }
             writeln!(w, ";")?;
@@ -287,8 +282,7 @@ fn write_class_bincode_methods<W: IndentWrite>(
     writeln!(w)?;
     writeln!(
         w,
-        "public static {} BincodeDeserialize(byte[] input)",
-        class_name
+        "public static {class_name} BincodeDeserialize(byte[] input)"
     )?;
     {
         let mut w = w.block(Newlines::BOTH)?;
@@ -329,7 +323,7 @@ fn write_enum<W: IndentWrite>(
     if lang.encoding == Encoding::Json {
         writeln!(w, "[JsonConverter(typeof(JsonStringEnumConverter))]")?;
     }
-    write!(w, "public enum {} ", enum_name)?;
+    write!(w, "public enum {enum_name} ")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
 
@@ -347,102 +341,106 @@ fn write_enum<W: IndentWrite>(
 
     if lang.encoding == Encoding::Bincode {
         writeln!(w)?;
-        writeln!(w, "/// <summary>")?;
+        write_enum_bincode_helpers(w, &enum_name, variants)?;
+    }
+
+    Ok(())
+}
+
+fn write_enum_bincode_helpers<W: IndentWrite>(
+    w: &mut W,
+    enum_name: &str,
+    variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
+) -> Result<()> {
+    writeln!(w, "/// <summary>")?;
+    writeln!(
+        w,
+        "/// Bincode serialization helpers for <see cref=\"{enum_name}\"/>."
+    )?;
+    writeln!(w, "/// </summary>")?;
+    write!(w, "public static class {enum_name}Bincode ")?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+
         writeln!(
             w,
-            "/// Bincode serialization helpers for <see cref=\"{}\"/>.",
-            enum_name
+            "public static void Serialize({enum_name} value, ISerializer serializer)"
         )?;
-        writeln!(w, "/// </summary>")?;
-        write!(w, "public static class {}Bincode ", enum_name)?;
         {
             let mut w = w.block(Newlines::BOTH)?;
+            writeln!(w, "serializer.IncreaseContainerDepth();")?;
+            writeln!(w, "serializer.SerializeVariantIndex((uint)value);")?;
+            writeln!(w, "serializer.DecreaseContainerDepth();")?;
+        }
 
-            writeln!(
-                w,
-                "public static void Serialize({} value, ISerializer serializer)",
-                enum_name
-            )?;
+        writeln!(w)?;
+        writeln!(
+            w,
+            "public static {enum_name} Deserialize(IDeserializer deserializer)"
+        )?;
+        {
+            let mut w = w.block(Newlines::BOTH)?;
+            writeln!(w, "deserializer.IncreaseContainerDepth();")?;
+            writeln!(w, "var index = deserializer.DeserializeVariantIndex();")?;
+            writeln!(w, "deserializer.DecreaseContainerDepth();")?;
+            writeln!(w, "return index switch")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "serializer.IncreaseContainerDepth();")?;
-                writeln!(w, "serializer.SerializeVariantIndex((uint)value);")?;
-                writeln!(w, "serializer.DecreaseContainerDepth();")?;
-            }
-
-            writeln!(w)?;
-            writeln!(
-                w,
-                "public static {} Deserialize(IDeserializer deserializer)",
-                enum_name
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "deserializer.IncreaseContainerDepth();")?;
-                writeln!(w, "var index = deserializer.DeserializeVariantIndex();")?;
-                writeln!(w, "deserializer.DecreaseContainerDepth();")?;
-                writeln!(w, "return index switch")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    for (index, variant) in variants.values().enumerate() {
-                        writeln!(
-                            w,
-                            "{} => {}.{},",
-                            index,
-                            enum_name,
-                            variant.name.to_upper_camel_case()
-                        )?;
-                    }
+                for (index, variant) in variants.values().enumerate() {
                     writeln!(
                         w,
-                        "_ => throw new DeserializationError(\"Unknown variant index for {}: \" + index),",
-                        enum_name
+                        "{} => {}.{},",
+                        index,
+                        enum_name,
+                        variant.name.to_upper_camel_case()
                     )?;
                 }
-                writeln!(w, ";")?;
+                writeln!(
+                    w,
+                    "_ => throw new DeserializationError(\"Unknown variant index for {enum_name}: \" + index),"
+                )?;
             }
+            writeln!(w, ";")?;
+        }
 
-            writeln!(w)?;
-            writeln!(
-                w,
-                "public static byte[] BincodeSerialize({} value)",
-                enum_name
-            )?;
+        writeln!(w)?;
+        writeln!(
+            w,
+            "public static byte[] BincodeSerialize({enum_name} value)"
+        )?;
+        {
+            let mut w = w.block(Newlines::BOTH)?;
+            writeln!(w, "var serializer = new BincodeSerializer();")?;
+            writeln!(w, "Serialize(value, serializer);")?;
+            writeln!(w, "return serializer.GetBytes();")?;
+        }
+
+        writeln!(w)?;
+        writeln!(
+            w,
+            "public static {enum_name} BincodeDeserialize(byte[] input)"
+        )?;
+        {
+            let mut w = w.block(Newlines::BOTH)?;
+            writeln!(w, "if (input is null)")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "var serializer = new BincodeSerializer();")?;
-                writeln!(w, "Serialize(value, serializer);")?;
-                writeln!(w, "return serializer.GetBytes();")?;
+                writeln!(
+                    w,
+                    "throw new DeserializationError(\"Cannot deserialize null array\");"
+                )?;
             }
-
-            writeln!(w)?;
-            writeln!(
-                w,
-                "public static {} BincodeDeserialize(byte[] input)",
-                enum_name
-            )?;
+            writeln!(w, "var deserializer = new BincodeDeserializer(input);")?;
+            writeln!(w, "var value = Deserialize(deserializer);")?;
+            writeln!(w, "if (deserializer.GetBufferOffset() < input.Length)")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "if (input is null)")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    writeln!(
-                        w,
-                        "throw new DeserializationError(\"Cannot deserialize null array\");"
-                    )?;
-                }
-                writeln!(w, "var deserializer = new BincodeDeserializer(input);")?;
-                writeln!(w, "var value = Deserialize(deserializer);")?;
-                writeln!(w, "if (deserializer.GetBufferOffset() < input.Length)")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    writeln!(
-                        w,
-                        "throw new DeserializationError(\"Some input bytes were not read\");"
-                    )?;
-                }
-                writeln!(w, "return value;")?;
+                writeln!(
+                    w,
+                    "throw new DeserializationError(\"Some input bytes were not read\");"
+                )?;
             }
+            writeln!(w, "return value;")?;
         }
     }
 
@@ -478,20 +476,16 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
             )?;
         }
     }
-    write!(
-        w,
-        "public abstract record {}{} ",
-        base_name, base_interfaces
-    )?;
+    write!(w, "public abstract record {base_name}{base_interfaces} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
     for variant in variants {
         variant.doc.write(&mut w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
-        write!(w, "public sealed record {}", variant_name)?;
+        write!(w, "public sealed record {variant_name}")?;
         match &variant.value {
             VariantFormat::Unit => {
-                writeln!(w, "() : {};", base_name)?;
+                writeln!(w, "() : {base_name};")?;
             }
             VariantFormat::NewType(inner) => {
                 writeln!(w, "({} Value) : {};", csharp_type(inner), base_name)?;
@@ -504,7 +498,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
                     }
                     write!(w, "{} Field{}", csharp_type(format), index)?;
                 }
-                writeln!(w, ") : {};", base_name)?;
+                writeln!(w, ") : {base_name};")?;
             }
             VariantFormat::Struct(fields) => {
                 write!(w, "(")?;
@@ -519,7 +513,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
                         field.name.to_upper_camel_case()
                     )?;
                 }
-                writeln!(w, ") : {};", base_name)?;
+                writeln!(w, ") : {base_name};")?;
             }
             VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
         }
@@ -547,11 +541,7 @@ fn write_record_json_helpers<W: IndentWrite>(w: &mut W, base_name: &str) -> Resu
         writeln!(w, "return JsonSerde.Serialize(this);")?;
     }
     writeln!(w)?;
-    writeln!(
-        w,
-        "public static {} JsonDeserialize(string input)",
-        base_name
-    )?;
+    writeln!(w, "public static {base_name} JsonDeserialize(string input)")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
         writeln!(w, "return JsonSerde.Deserialize<{base_name}>(input);")?;
@@ -571,8 +561,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
         let variant_name = variant.name.to_upper_camel_case();
         writeln!(
             w,
-            "private static {} Deserialize{}(IDeserializer deserializer)",
-            base_name, variant_name
+            "private static {base_name} Deserialize{variant_name}(IDeserializer deserializer)"
         )?;
         {
             let mut w = w.block(Newlines::BOTH)?;
@@ -580,13 +569,13 @@ fn write_record_bincode_helpers<W: IndentWrite>(
         }
         writeln!(w)?;
 
-        writeln!(w, "public sealed partial record {}", variant_name)?;
+        writeln!(w, "public sealed partial record {variant_name}")?;
         let mut w = w.block(Newlines::BOTH)?;
         writeln!(w, "public override void Serialize(ISerializer serializer)")?;
         {
             let mut w = w.block(Newlines::BOTH)?;
             writeln!(w, "serializer.IncreaseContainerDepth();")?;
-            writeln!(w, "serializer.SerializeVariantIndex({});", index)?;
+            writeln!(w, "serializer.SerializeVariantIndex({index});")?;
             serializer_variant_body_write(&mut w, variant)?;
             writeln!(w, "serializer.DecreaseContainerDepth();")?;
         }
@@ -595,8 +584,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
 
     writeln!(
         w,
-        "public static {} Deserialize(IDeserializer deserializer)",
-        base_name
+        "public static {base_name} Deserialize(IDeserializer deserializer)"
     )?;
     {
         let mut w = w.block(Newlines::BOTH)?;
@@ -606,12 +594,11 @@ fn write_record_bincode_helpers<W: IndentWrite>(
             let mut w = w.block(Newlines::BOTH)?;
             for (index, variant) in variants.iter().enumerate() {
                 let variant_name = variant.name.to_upper_camel_case();
-                writeln!(w, "{} => Deserialize{}(deserializer),", index, variant_name)?;
+                writeln!(w, "{index} => Deserialize{variant_name}(deserializer),")?;
             }
             writeln!(
                 w,
-                "_ => throw new DeserializationError(\"Unknown variant index for {}: \" + index),",
-                base_name
+                "_ => throw new DeserializationError(\"Unknown variant index for {base_name}: \" + index),"
             )?;
         }
         writeln!(w, ";")?;
@@ -629,8 +616,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
     writeln!(w)?;
     writeln!(
         w,
-        "public static {} BincodeDeserialize(byte[] input)",
-        base_name
+        "public static {base_name} BincodeDeserialize(byte[] input)"
     )?;
     {
         let mut w = w.block(Newlines::BOTH)?;
@@ -667,7 +653,7 @@ fn serializer_variant_body_write<W: IndentWrite>(
         VariantFormat::NewType(format) => write_serialize_value(w, "Value", format),
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_serialize_value(w, &format!("Field{}", index), format)?;
+                write_serialize_value(w, &format!("Field{index}"), format)?;
             }
             Ok(())
         }
@@ -697,10 +683,10 @@ fn deserializer_variant_body<W: IndentWrite>(
         }
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("field{}", index), format)?;
+                write_deserialize_binding(w, &format!("field{index}"), format)?;
             }
             let args = (0..formats.len())
-                .map(|i| format!("field{}", i))
+                .map(|i| format!("field{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
             writeln!(
@@ -737,26 +723,26 @@ fn write_serialize_value<W: IndentWrite>(
 ) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(_) => writeln!(w, "{}.Serialize(serializer);", value_expr),
-        Format::Unit => writeln!(w, "serializer.SerializeUnit({});", value_expr),
-        Format::Bool => writeln!(w, "serializer.SerializeBool({});", value_expr),
-        Format::I8 => writeln!(w, "serializer.SerializeI8({});", value_expr),
-        Format::I16 => writeln!(w, "serializer.SerializeI16({});", value_expr),
-        Format::I32 => writeln!(w, "serializer.SerializeI32({});", value_expr),
-        Format::I64 => writeln!(w, "serializer.SerializeI64({});", value_expr),
-        Format::I128 => writeln!(w, "serializer.SerializeI128({});", value_expr),
-        Format::U8 => writeln!(w, "serializer.SerializeU8({});", value_expr),
-        Format::U16 => writeln!(w, "serializer.SerializeU16({});", value_expr),
-        Format::U32 => writeln!(w, "serializer.SerializeU32({});", value_expr),
-        Format::U64 => writeln!(w, "serializer.SerializeU64({});", value_expr),
-        Format::U128 => writeln!(w, "serializer.SerializeU128({});", value_expr),
-        Format::F32 => writeln!(w, "serializer.SerializeF32({});", value_expr),
-        Format::F64 => writeln!(w, "serializer.SerializeF64({});", value_expr),
-        Format::Char => writeln!(w, "serializer.SerializeChar({});", value_expr),
-        Format::Str => writeln!(w, "serializer.SerializeStr({});", value_expr),
-        Format::Bytes => writeln!(w, "serializer.SerializeBytes({});", value_expr),
+        Format::TypeName(_) => writeln!(w, "{value_expr}.Serialize(serializer);"),
+        Format::Unit => writeln!(w, "serializer.SerializeUnit({value_expr});"),
+        Format::Bool => writeln!(w, "serializer.SerializeBool({value_expr});"),
+        Format::I8 => writeln!(w, "serializer.SerializeI8({value_expr});"),
+        Format::I16 => writeln!(w, "serializer.SerializeI16({value_expr});"),
+        Format::I32 => writeln!(w, "serializer.SerializeI32({value_expr});"),
+        Format::I64 => writeln!(w, "serializer.SerializeI64({value_expr});"),
+        Format::I128 => writeln!(w, "serializer.SerializeI128({value_expr});"),
+        Format::U8 => writeln!(w, "serializer.SerializeU8({value_expr});"),
+        Format::U16 => writeln!(w, "serializer.SerializeU16({value_expr});"),
+        Format::U32 => writeln!(w, "serializer.SerializeU32({value_expr});"),
+        Format::U64 => writeln!(w, "serializer.SerializeU64({value_expr});"),
+        Format::U128 => writeln!(w, "serializer.SerializeU128({value_expr});"),
+        Format::F32 => writeln!(w, "serializer.SerializeF32({value_expr});"),
+        Format::F64 => writeln!(w, "serializer.SerializeF64({value_expr});"),
+        Format::Char => writeln!(w, "serializer.SerializeChar({value_expr});"),
+        Format::Str => writeln!(w, "serializer.SerializeStr({value_expr});"),
+        Format::Bytes => writeln!(w, "serializer.SerializeBytes({value_expr});"),
         Format::Option(inner) => {
-            writeln!(w, "if ({} is not null)", value_expr)?;
+            writeln!(w, "if ({value_expr} is not null)")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 writeln!(w, "serializer.SerializeOptionTag(true);")?;
@@ -770,8 +756,8 @@ fn write_serialize_value<W: IndentWrite>(
             Ok(())
         }
         Format::Seq(inner) | Format::Set(inner) => {
-            writeln!(w, "serializer.SerializeLen((ulong){}.Count);", value_expr)?;
-            writeln!(w, "foreach (var item in {})", value_expr)?;
+            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Count);")?;
+            writeln!(w, "foreach (var item in {value_expr})")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 write_serialize_value(&mut w, "item", inner)?;
@@ -779,8 +765,8 @@ fn write_serialize_value<W: IndentWrite>(
             Ok(())
         }
         Format::Map { key, value } => {
-            writeln!(w, "serializer.SerializeLen((ulong){}.Count);", value_expr)?;
-            writeln!(w, "foreach (var entry in {})", value_expr)?;
+            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Count);")?;
+            writeln!(w, "foreach (var entry in {value_expr})")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 write_serialize_value(&mut w, "entry.Key", key)?;
@@ -795,8 +781,8 @@ fn write_serialize_value<W: IndentWrite>(
             Ok(())
         }
         Format::TupleArray { content, .. } => {
-            writeln!(w, "serializer.SerializeLen((ulong){}.Length);", value_expr)?;
-            writeln!(w, "foreach (var item in {})", value_expr)?;
+            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Length);")?;
+            writeln!(w, "foreach (var item in {value_expr})")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 write_serialize_value(&mut w, "item", content)?;
@@ -821,121 +807,127 @@ fn write_deserialize_binding<W: IndentWrite>(
                 csharp_type(&Format::TypeName(type_name.clone()))
             )
         }
-        Format::Unit => writeln!(w, "var {} = deserializer.DeserializeUnit();", var_name),
-        Format::Bool => writeln!(w, "var {} = deserializer.DeserializeBool();", var_name),
-        Format::I8 => writeln!(w, "var {} = deserializer.DeserializeI8();", var_name),
-        Format::I16 => writeln!(w, "var {} = deserializer.DeserializeI16();", var_name),
-        Format::I32 => writeln!(w, "var {} = deserializer.DeserializeI32();", var_name),
-        Format::I64 => writeln!(w, "var {} = deserializer.DeserializeI64();", var_name),
-        Format::I128 => writeln!(w, "var {} = deserializer.DeserializeI128();", var_name),
-        Format::U8 => writeln!(w, "var {} = deserializer.DeserializeU8();", var_name),
-        Format::U16 => writeln!(w, "var {} = deserializer.DeserializeU16();", var_name),
-        Format::U32 => writeln!(w, "var {} = deserializer.DeserializeU32();", var_name),
-        Format::U64 => writeln!(w, "var {} = deserializer.DeserializeU64();", var_name),
-        Format::U128 => writeln!(w, "var {} = deserializer.DeserializeU128();", var_name),
-        Format::F32 => writeln!(w, "var {} = deserializer.DeserializeF32();", var_name),
-        Format::F64 => writeln!(w, "var {} = deserializer.DeserializeF64();", var_name),
-        Format::Char => writeln!(w, "var {} = deserializer.DeserializeChar();", var_name),
-        Format::Str => writeln!(w, "var {} = deserializer.DeserializeStr();", var_name),
-        Format::Bytes => writeln!(w, "var {} = deserializer.DeserializeBytes();", var_name),
-        Format::Option(inner) => {
-            let inner_type = csharp_type(inner);
-            writeln!(w, "{}? {};", inner_type, var_name)?;
-            writeln!(w, "if (deserializer.DeserializeOptionTag())")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                let temp_name = format!("{}_value", var_name);
-                write_deserialize_binding(&mut w, &temp_name, inner)?;
-                writeln!(w, "{} = {};", var_name, temp_name)?;
-            }
-            writeln!(w, "else")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "{} = null;", var_name)?;
-            }
-            Ok(())
-        }
+        Format::Unit => writeln!(w, "var {var_name} = deserializer.DeserializeUnit();"),
+        Format::Bool => writeln!(w, "var {var_name} = deserializer.DeserializeBool();"),
+        Format::I8 => writeln!(w, "var {var_name} = deserializer.DeserializeI8();"),
+        Format::I16 => writeln!(w, "var {var_name} = deserializer.DeserializeI16();"),
+        Format::I32 => writeln!(w, "var {var_name} = deserializer.DeserializeI32();"),
+        Format::I64 => writeln!(w, "var {var_name} = deserializer.DeserializeI64();"),
+        Format::I128 => writeln!(w, "var {var_name} = deserializer.DeserializeI128();"),
+        Format::U8 => writeln!(w, "var {var_name} = deserializer.DeserializeU8();"),
+        Format::U16 => writeln!(w, "var {var_name} = deserializer.DeserializeU16();"),
+        Format::U32 => writeln!(w, "var {var_name} = deserializer.DeserializeU32();"),
+        Format::U64 => writeln!(w, "var {var_name} = deserializer.DeserializeU64();"),
+        Format::U128 => writeln!(w, "var {var_name} = deserializer.DeserializeU128();"),
+        Format::F32 => writeln!(w, "var {var_name} = deserializer.DeserializeF32();"),
+        Format::F64 => writeln!(w, "var {var_name} = deserializer.DeserializeF64();"),
+        Format::Char => writeln!(w, "var {var_name} = deserializer.DeserializeChar();"),
+        Format::Str => writeln!(w, "var {var_name} = deserializer.DeserializeStr();"),
+        Format::Bytes => writeln!(w, "var {var_name} = deserializer.DeserializeBytes();"),
+        Format::Option(inner) => write_deserialize_option(w, var_name, inner),
         Format::Seq(inner) => {
-            writeln!(w, "var {}_len = deserializer.DeserializeLen();", var_name)?;
-            writeln!(
-                w,
-                "var {} = new ObservableCollection<{}>();",
-                var_name,
-                csharp_type(inner)
-            )?;
-            writeln!(w, "for (ulong i = 0; i < {}_len; i++)", var_name)?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_deserialize_binding(&mut w, "item", inner)?;
-                writeln!(w, "{}.Add(item);", var_name)?;
-            }
-            Ok(())
+            let collection_type = format!("ObservableCollection<{}>", csharp_type(inner));
+            write_deserialize_collection(w, var_name, inner, &collection_type)
         }
         Format::Set(inner) => {
-            writeln!(w, "var {}_len = deserializer.DeserializeLen();", var_name)?;
-            writeln!(
-                w,
-                "var {} = new HashSet<{}>();",
-                var_name,
-                csharp_type(inner)
-            )?;
-            writeln!(w, "for (ulong i = 0; i < {}_len; i++)", var_name)?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_deserialize_binding(&mut w, "item", inner)?;
-                writeln!(w, "{}.Add(item);", var_name)?;
-            }
-            Ok(())
+            let collection_type = format!("HashSet<{}>", csharp_type(inner));
+            write_deserialize_collection(w, var_name, inner, &collection_type)
         }
-        Format::Map { key, value } => {
-            writeln!(w, "var {}_len = deserializer.DeserializeLen();", var_name)?;
-            writeln!(
-                w,
-                "var {} = new Dictionary<{}, {}>();",
-                var_name,
-                csharp_type(key),
-                csharp_type(value)
-            )?;
-            writeln!(w, "for (ulong i = 0; i < {}_len; i++)", var_name)?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_deserialize_binding(&mut w, "key", key)?;
-                write_deserialize_binding(&mut w, "value", value)?;
-                writeln!(w, "{}.Add(key, value);", var_name)?;
-            }
-            Ok(())
-        }
+        Format::Map { key, value } => write_deserialize_map(w, var_name, key, value),
         Format::Tuple(formats) => {
             for (index, inner) in formats.iter().enumerate() {
                 write_deserialize_binding(w, &format!("{}_item{}", var_name, index + 1), inner)?;
             }
             if formats.is_empty() {
-                writeln!(w, "var {} = new Unit();", var_name)
+                writeln!(w, "var {var_name} = new Unit();")
             } else {
                 let values = (0..formats.len())
                     .map(|i| format!("{}_item{}", var_name, i + 1))
                     .collect::<Vec<_>>()
                     .join(", ");
-                writeln!(w, "var {} = ({});", var_name, values)
+                writeln!(w, "var {var_name} = ({values});")
             }
         }
         Format::TupleArray { content, .. } => {
-            writeln!(w, "var {}_len = deserializer.DeserializeLen();", var_name)?;
+            writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
             writeln!(
                 w,
                 "var {}_list = new List<{}>();",
                 var_name,
                 csharp_type(content)
             )?;
-            writeln!(w, "for (ulong i = 0; i < {}_len; i++)", var_name)?;
+            writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 write_deserialize_binding(&mut w, "item", content)?;
-                writeln!(w, "{}_list.Add(item);", var_name)?;
+                writeln!(w, "{var_name}_list.Add(item);")?;
             }
-            writeln!(w, "var {} = {}_list.ToArray();", var_name, var_name)
+            writeln!(w, "var {var_name} = {var_name}_list.ToArray();")
         }
     }
+}
+
+fn write_deserialize_option<W: IndentWrite>(
+    w: &mut W,
+    var_name: &str,
+    inner: &Format,
+) -> Result<()> {
+    let inner_type = csharp_type(inner);
+    writeln!(w, "{inner_type}? {var_name};")?;
+    writeln!(w, "if (deserializer.DeserializeOptionTag())")?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        let temp_name = format!("{var_name}_value");
+        write_deserialize_binding(&mut w, &temp_name, inner)?;
+        writeln!(w, "{var_name} = {temp_name};")?;
+    }
+    writeln!(w, "else")?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        writeln!(w, "{var_name} = null;")?;
+    }
+    Ok(())
+}
+
+fn write_deserialize_collection<W: IndentWrite>(
+    w: &mut W,
+    var_name: &str,
+    inner: &Format,
+    collection_type: &str,
+) -> Result<()> {
+    writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
+    writeln!(w, "var {var_name} = new {collection_type}();")?;
+    writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        write_deserialize_binding(&mut w, "item", inner)?;
+        writeln!(w, "{var_name}.Add(item);")?;
+    }
+    Ok(())
+}
+
+fn write_deserialize_map<W: IndentWrite>(
+    w: &mut W,
+    var_name: &str,
+    key: &Format,
+    value: &Format,
+) -> Result<()> {
+    writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
+    writeln!(
+        w,
+        "var {} = new Dictionary<{}, {}>();",
+        var_name,
+        csharp_type(key),
+        csharp_type(value)
+    )?;
+    writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        write_deserialize_binding(&mut w, "key", key)?;
+        write_deserialize_binding(&mut w, "value", value)?;
+        writeln!(w, "{var_name}.Add(key, value);")?;
+    }
+    Ok(())
 }
 
 fn csharp_type(format: &Format) -> String {
