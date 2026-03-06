@@ -111,7 +111,7 @@ fn output_uses_rooted_namespace_for_external_types() {
     )));
 
     let output = render_output(&config, &registry);
-    assert!(output.contains("public Company.Models.Shared.Child Value { get; set; }"));
+    assert!(output.contains("private Company.Models.Shared.Child _value;"));
 }
 
 #[test]
