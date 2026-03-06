@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::io::{Result, Write};
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
@@ -753,7 +754,12 @@ fn write_serialize_value<W: IndentWrite>(
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 writeln!(w, "serializer.SerializeOptionTag(true);")?;
-                write_serialize_value(&mut w, value_expr, inner)?;
+                let unwrapped = if is_csharp_value_type(inner) {
+                    format!("{value_expr}.Value")
+                } else {
+                    value_expr.to_string()
+                };
+                write_serialize_value(&mut w, &unwrapped, inner)?;
             }
             writeln!(w, "else")?;
             {
@@ -902,13 +908,15 @@ fn write_deserialize_collection<W: IndentWrite>(
     inner: &Format,
     collection_type: &str,
 ) -> Result<()> {
+    let idx = format!("{var_name}_idx");
+    let item = format!("{var_name}_item");
     writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
     writeln!(w, "var {var_name} = new {collection_type}();")?;
-    writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
+    writeln!(w, "for (ulong {idx} = 0; {idx} < {var_name}_len; {idx}++)")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
-        write_deserialize_binding(&mut w, "item", inner)?;
-        writeln!(w, "{var_name}.Add(item);")?;
+        write_deserialize_binding(&mut w, &item, inner)?;
+        writeln!(w, "{var_name}.Add({item});")?;
     }
     Ok(())
 }
@@ -919,6 +927,9 @@ fn write_deserialize_map<W: IndentWrite>(
     key: &Format,
     value: &Format,
 ) -> Result<()> {
+    let idx = format!("{var_name}_idx");
+    let key_var = format!("{var_name}_key");
+    let val_var = format!("{var_name}_val");
     writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
     writeln!(
         w,
@@ -927,12 +938,12 @@ fn write_deserialize_map<W: IndentWrite>(
         csharp_type(key),
         csharp_type(value)
     )?;
-    writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
+    writeln!(w, "for (ulong {idx} = 0; {idx} < {var_name}_len; {idx}++)")?;
     {
         let mut w = w.block(Newlines::BOTH)?;
-        write_deserialize_binding(&mut w, "key", key)?;
-        write_deserialize_binding(&mut w, "value", value)?;
-        writeln!(w, "{var_name}.Add(key, value);")?;
+        write_deserialize_binding(&mut w, &key_var, key)?;
+        write_deserialize_binding(&mut w, &val_var, value)?;
+        writeln!(w, "{var_name}.Add({key_var}, {val_var});")?;
     }
     Ok(())
 }
@@ -998,6 +1009,28 @@ fn namespace_name(namespace: &str) -> String {
         .map(str::to_upper_camel_case)
         .collect::<Vec<_>>()
         .join(".")
+}
+
+fn is_csharp_value_type(format: &Format) -> bool {
+    matches!(
+        format,
+        Format::Unit
+            | Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::I64
+            | Format::I128
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::U64
+            | Format::U128
+            | Format::F32
+            | Format::F64
+            | Format::Char
+            | Format::Tuple(_)
+    )
 }
 
 fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {

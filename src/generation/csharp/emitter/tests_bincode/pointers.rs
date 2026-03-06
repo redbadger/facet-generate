@@ -276,27 +276,27 @@ fn struct_with_mixed_collections_and_pointers() {
             deserializer.IncreaseContainerDepth();
             var vecOfSets_len = deserializer.DeserializeLen();
             var vecOfSets = new ObservableCollection<HashSet<string>>();
-            for (ulong i = 0; i < vecOfSets_len; i++)
+            for (ulong vecOfSets_idx = 0; vecOfSets_idx < vecOfSets_len; vecOfSets_idx++)
             {
-                var item_len = deserializer.DeserializeLen();
-                var item = new HashSet<string>();
-                for (ulong i = 0; i < item_len; i++)
+                var vecOfSets_item_len = deserializer.DeserializeLen();
+                var vecOfSets_item = new HashSet<string>();
+                for (ulong vecOfSets_item_idx = 0; vecOfSets_item_idx < vecOfSets_item_len; vecOfSets_item_idx++)
                 {
-                    var item = deserializer.DeserializeStr();
-                    item.Add(item);
+                    var vecOfSets_item_item = deserializer.DeserializeStr();
+                    vecOfSets_item.Add(vecOfSets_item_item);
                 }
-                vecOfSets.Add(item);
+                vecOfSets.Add(vecOfSets_item);
             }
             Dictionary<string, int>? optionalBtree;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalBtree_value_len = deserializer.DeserializeLen();
                 var optionalBtree_value = new Dictionary<string, int>();
-                for (ulong i = 0; i < optionalBtree_value_len; i++)
+                for (ulong optionalBtree_value_idx = 0; optionalBtree_value_idx < optionalBtree_value_len; optionalBtree_value_idx++)
                 {
-                    var key = deserializer.DeserializeStr();
-                    var value = deserializer.DeserializeI32();
-                    optionalBtree_value.Add(key, value);
+                    var optionalBtree_value_key = deserializer.DeserializeStr();
+                    var optionalBtree_value_val = deserializer.DeserializeI32();
+                    optionalBtree_value.Add(optionalBtree_value_key, optionalBtree_value_val);
                 }
                 optionalBtree = optionalBtree_value;
             }
@@ -306,10 +306,10 @@ fn struct_with_mixed_collections_and_pointers() {
             }
             var boxedVec_len = deserializer.DeserializeLen();
             var boxedVec = new ObservableCollection<string>();
-            for (ulong i = 0; i < boxedVec_len; i++)
+            for (ulong boxedVec_idx = 0; boxedVec_idx < boxedVec_len; boxedVec_idx++)
             {
-                var item = deserializer.DeserializeStr();
-                boxedVec.Add(item);
+                var boxedVec_item = deserializer.DeserializeStr();
+                boxedVec.Add(boxedVec_item);
             }
             string? arcOption;
             if (deserializer.DeserializeOptionTag())

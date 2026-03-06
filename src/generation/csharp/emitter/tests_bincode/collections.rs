@@ -57,30 +57,30 @@ fn struct_with_vec_field() {
             deserializer.IncreaseContainerDepth();
             var items_len = deserializer.DeserializeLen();
             var items = new ObservableCollection<string>();
-            for (ulong i = 0; i < items_len; i++)
+            for (ulong items_idx = 0; items_idx < items_len; items_idx++)
             {
-                var item = deserializer.DeserializeStr();
-                items.Add(item);
+                var items_item = deserializer.DeserializeStr();
+                items.Add(items_item);
             }
             var numbers_len = deserializer.DeserializeLen();
             var numbers = new ObservableCollection<int>();
-            for (ulong i = 0; i < numbers_len; i++)
+            for (ulong numbers_idx = 0; numbers_idx < numbers_len; numbers_idx++)
             {
-                var item = deserializer.DeserializeI32();
-                numbers.Add(item);
+                var numbers_item = deserializer.DeserializeI32();
+                numbers.Add(numbers_item);
             }
             var nestedItems_len = deserializer.DeserializeLen();
             var nestedItems = new ObservableCollection<ObservableCollection<string>>();
-            for (ulong i = 0; i < nestedItems_len; i++)
+            for (ulong nestedItems_idx = 0; nestedItems_idx < nestedItems_len; nestedItems_idx++)
             {
-                var item_len = deserializer.DeserializeLen();
-                var item = new ObservableCollection<string>();
-                for (ulong i = 0; i < item_len; i++)
+                var nestedItems_item_len = deserializer.DeserializeLen();
+                var nestedItems_item = new ObservableCollection<string>();
+                for (ulong nestedItems_item_idx = 0; nestedItems_item_idx < nestedItems_item_len; nestedItems_item_idx++)
                 {
-                    var item = deserializer.DeserializeStr();
-                    item.Add(item);
+                    var nestedItems_item_item = deserializer.DeserializeStr();
+                    nestedItems_item.Add(nestedItems_item_item);
                 }
-                nestedItems.Add(item);
+                nestedItems.Add(nestedItems_item);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -151,7 +151,7 @@ fn struct_with_option_field() {
             if (OptionalNumber is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeI32(OptionalNumber);
+                serializer.SerializeI32(OptionalNumber.Value);
             }
             else
             {
@@ -160,7 +160,7 @@ fn struct_with_option_field() {
             if (OptionalBool is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeBool(OptionalBool);
+                serializer.SerializeBool(OptionalBool.Value);
             }
             else
             {
@@ -275,19 +275,19 @@ fn struct_with_hashmap_field() {
             deserializer.IncreaseContainerDepth();
             var stringToInt_len = deserializer.DeserializeLen();
             var stringToInt = new Dictionary<string, int>();
-            for (ulong i = 0; i < stringToInt_len; i++)
+            for (ulong stringToInt_idx = 0; stringToInt_idx < stringToInt_len; stringToInt_idx++)
             {
-                var key = deserializer.DeserializeStr();
-                var value = deserializer.DeserializeI32();
-                stringToInt.Add(key, value);
+                var stringToInt_key = deserializer.DeserializeStr();
+                var stringToInt_val = deserializer.DeserializeI32();
+                stringToInt.Add(stringToInt_key, stringToInt_val);
             }
             var intToBool_len = deserializer.DeserializeLen();
             var intToBool = new Dictionary<int, bool>();
-            for (ulong i = 0; i < intToBool_len; i++)
+            for (ulong intToBool_idx = 0; intToBool_idx < intToBool_len; intToBool_idx++)
             {
-                var key = deserializer.DeserializeI32();
-                var value = deserializer.DeserializeBool();
-                intToBool.Add(key, value);
+                var intToBool_key = deserializer.DeserializeI32();
+                var intToBool_val = deserializer.DeserializeBool();
+                intToBool.Add(intToBool_key, intToBool_val);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -369,7 +369,7 @@ fn struct_with_nested_generics() {
                 if (item is not null)
                 {
                     serializer.SerializeOptionTag(true);
-                    serializer.SerializeI32(item);
+                    serializer.SerializeI32(item.Value);
                 }
                 else
                 {
@@ -433,10 +433,10 @@ fn struct_with_nested_generics() {
             {
                 var optionalList_value_len = deserializer.DeserializeLen();
                 var optionalList_value = new ObservableCollection<string>();
-                for (ulong i = 0; i < optionalList_value_len; i++)
+                for (ulong optionalList_value_idx = 0; optionalList_value_idx < optionalList_value_len; optionalList_value_idx++)
                 {
-                    var item = deserializer.DeserializeStr();
-                    optionalList_value.Add(item);
+                    var optionalList_value_item = deserializer.DeserializeStr();
+                    optionalList_value.Add(optionalList_value_item);
                 }
                 optionalList = optionalList_value;
             }
@@ -446,44 +446,44 @@ fn struct_with_nested_generics() {
             }
             var listOfOptionals_len = deserializer.DeserializeLen();
             var listOfOptionals = new ObservableCollection<int?>();
-            for (ulong i = 0; i < listOfOptionals_len; i++)
+            for (ulong listOfOptionals_idx = 0; listOfOptionals_idx < listOfOptionals_len; listOfOptionals_idx++)
             {
-                int? item;
+                int? listOfOptionals_item;
                 if (deserializer.DeserializeOptionTag())
                 {
-                    var item_value = deserializer.DeserializeI32();
-                    item = item_value;
+                    var listOfOptionals_item_value = deserializer.DeserializeI32();
+                    listOfOptionals_item = listOfOptionals_item_value;
                 }
                 else
                 {
-                    item = null;
+                    listOfOptionals_item = null;
                 }
-                listOfOptionals.Add(item);
+                listOfOptionals.Add(listOfOptionals_item);
             }
             var mapToList_len = deserializer.DeserializeLen();
             var mapToList = new Dictionary<string, ObservableCollection<bool>>();
-            for (ulong i = 0; i < mapToList_len; i++)
+            for (ulong mapToList_idx = 0; mapToList_idx < mapToList_len; mapToList_idx++)
             {
-                var key = deserializer.DeserializeStr();
-                var value_len = deserializer.DeserializeLen();
-                var value = new ObservableCollection<bool>();
-                for (ulong i = 0; i < value_len; i++)
+                var mapToList_key = deserializer.DeserializeStr();
+                var mapToList_val_len = deserializer.DeserializeLen();
+                var mapToList_val = new ObservableCollection<bool>();
+                for (ulong mapToList_val_idx = 0; mapToList_val_idx < mapToList_val_len; mapToList_val_idx++)
                 {
-                    var item = deserializer.DeserializeBool();
-                    value.Add(item);
+                    var mapToList_val_item = deserializer.DeserializeBool();
+                    mapToList_val.Add(mapToList_val_item);
                 }
-                mapToList.Add(key, value);
+                mapToList.Add(mapToList_key, mapToList_val);
             }
             Dictionary<string, int>? optionalMap;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalMap_value_len = deserializer.DeserializeLen();
                 var optionalMap_value = new Dictionary<string, int>();
-                for (ulong i = 0; i < optionalMap_value_len; i++)
+                for (ulong optionalMap_value_idx = 0; optionalMap_value_idx < optionalMap_value_len; optionalMap_value_idx++)
                 {
-                    var key = deserializer.DeserializeStr();
-                    var value = deserializer.DeserializeI32();
-                    optionalMap_value.Add(key, value);
+                    var optionalMap_value_key = deserializer.DeserializeStr();
+                    var optionalMap_value_val = deserializer.DeserializeI32();
+                    optionalMap_value.Add(optionalMap_value_key, optionalMap_value_val);
                 }
                 optionalMap = optionalMap_value;
             }
@@ -493,32 +493,32 @@ fn struct_with_nested_generics() {
             }
             var complex_len = deserializer.DeserializeLen();
             var complex = new ObservableCollection<Dictionary<string, ObservableCollection<bool>>?>();
-            for (ulong i = 0; i < complex_len; i++)
+            for (ulong complex_idx = 0; complex_idx < complex_len; complex_idx++)
             {
-                Dictionary<string, ObservableCollection<bool>>? item;
+                Dictionary<string, ObservableCollection<bool>>? complex_item;
                 if (deserializer.DeserializeOptionTag())
                 {
-                    var item_value_len = deserializer.DeserializeLen();
-                    var item_value = new Dictionary<string, ObservableCollection<bool>>();
-                    for (ulong i = 0; i < item_value_len; i++)
+                    var complex_item_value_len = deserializer.DeserializeLen();
+                    var complex_item_value = new Dictionary<string, ObservableCollection<bool>>();
+                    for (ulong complex_item_value_idx = 0; complex_item_value_idx < complex_item_value_len; complex_item_value_idx++)
                     {
-                        var key = deserializer.DeserializeStr();
-                        var value_len = deserializer.DeserializeLen();
-                        var value = new ObservableCollection<bool>();
-                        for (ulong i = 0; i < value_len; i++)
+                        var complex_item_value_key = deserializer.DeserializeStr();
+                        var complex_item_value_val_len = deserializer.DeserializeLen();
+                        var complex_item_value_val = new ObservableCollection<bool>();
+                        for (ulong complex_item_value_val_idx = 0; complex_item_value_val_idx < complex_item_value_val_len; complex_item_value_val_idx++)
                         {
-                            var item = deserializer.DeserializeBool();
-                            value.Add(item);
+                            var complex_item_value_val_item = deserializer.DeserializeBool();
+                            complex_item_value_val.Add(complex_item_value_val_item);
                         }
-                        item_value.Add(key, value);
+                        complex_item_value.Add(complex_item_value_key, complex_item_value_val);
                     }
-                    item = item_value;
+                    complex_item = complex_item_value;
                 }
                 else
                 {
-                    item = null;
+                    complex_item = null;
                 }
-                complex.Add(item);
+                complex.Add(complex_item);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -697,19 +697,19 @@ fn struct_with_btreemap_field() {
             deserializer.IncreaseContainerDepth();
             var stringToInt_len = deserializer.DeserializeLen();
             var stringToInt = new Dictionary<string, int>();
-            for (ulong i = 0; i < stringToInt_len; i++)
+            for (ulong stringToInt_idx = 0; stringToInt_idx < stringToInt_len; stringToInt_idx++)
             {
-                var key = deserializer.DeserializeStr();
-                var value = deserializer.DeserializeI32();
-                stringToInt.Add(key, value);
+                var stringToInt_key = deserializer.DeserializeStr();
+                var stringToInt_val = deserializer.DeserializeI32();
+                stringToInt.Add(stringToInt_key, stringToInt_val);
             }
             var intToBool_len = deserializer.DeserializeLen();
             var intToBool = new Dictionary<int, bool>();
-            for (ulong i = 0; i < intToBool_len; i++)
+            for (ulong intToBool_idx = 0; intToBool_idx < intToBool_len; intToBool_idx++)
             {
-                var key = deserializer.DeserializeI32();
-                var value = deserializer.DeserializeBool();
-                intToBool.Add(key, value);
+                var intToBool_key = deserializer.DeserializeI32();
+                var intToBool_val = deserializer.DeserializeBool();
+                intToBool.Add(intToBool_key, intToBool_val);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -781,17 +781,17 @@ fn struct_with_hashset_field() {
             deserializer.IncreaseContainerDepth();
             var stringSet_len = deserializer.DeserializeLen();
             var stringSet = new HashSet<string>();
-            for (ulong i = 0; i < stringSet_len; i++)
+            for (ulong stringSet_idx = 0; stringSet_idx < stringSet_len; stringSet_idx++)
             {
-                var item = deserializer.DeserializeStr();
-                stringSet.Add(item);
+                var stringSet_item = deserializer.DeserializeStr();
+                stringSet.Add(stringSet_item);
             }
             var intSet_len = deserializer.DeserializeLen();
             var intSet = new HashSet<int>();
-            for (ulong i = 0; i < intSet_len; i++)
+            for (ulong intSet_idx = 0; intSet_idx < intSet_len; intSet_idx++)
             {
-                var item = deserializer.DeserializeI32();
-                intSet.Add(item);
+                var intSet_item = deserializer.DeserializeI32();
+                intSet.Add(intSet_item);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -863,17 +863,17 @@ fn struct_with_btreeset_field() {
             deserializer.IncreaseContainerDepth();
             var stringSet_len = deserializer.DeserializeLen();
             var stringSet = new HashSet<string>();
-            for (ulong i = 0; i < stringSet_len; i++)
+            for (ulong stringSet_idx = 0; stringSet_idx < stringSet_len; stringSet_idx++)
             {
-                var item = deserializer.DeserializeStr();
-                stringSet.Add(item);
+                var stringSet_item = deserializer.DeserializeStr();
+                stringSet.Add(stringSet_item);
             }
             var intSet_len = deserializer.DeserializeLen();
             var intSet = new HashSet<int>();
-            for (ulong i = 0; i < intSet_len; i++)
+            for (ulong intSet_idx = 0; intSet_idx < intSet_len; intSet_idx++)
             {
-                var item = deserializer.DeserializeI32();
-                intSet.Add(item);
+                var intSet_item = deserializer.DeserializeI32();
+                intSet.Add(intSet_item);
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
