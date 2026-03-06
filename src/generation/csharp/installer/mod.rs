@@ -103,8 +103,7 @@ impl Installer {
         for external_package in self.external_packages.values() {
             match &external_package.location {
                 PackageLocation::Path(path) => {
-                    project_references
-                        .push(format!("    <ProjectReference Include=\"{path}\" />"));
+                    project_references.push(format!("    <ProjectReference Include=\"{path}\" />"));
                 }
                 PackageLocation::Url(url) => {
                     let package_name = url
@@ -152,12 +151,12 @@ impl Installer {
             let project_refs = project_references.join("\n");
             writedoc!(
                 &mut manifest,
-                r#"
+                r"
 
                   <ItemGroup>
                 {project_refs}
                   </ItemGroup>
-                "#
+                "
             )
             .expect("writing to String cannot fail");
         }
@@ -176,10 +175,10 @@ impl Installer {
     fn install_core_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Serde/Unit.cs",
-            r#"namespace Facet.Runtime.Serde;
+            r"namespace Facet.Runtime.Serde;
 
 public readonly record struct Unit;
-"#,
+",
         )?;
         Ok(())
     }
@@ -327,7 +326,7 @@ impl SourceInstaller for Installer {
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Serde/ISerializer.cs",
-            r#"namespace Facet.Runtime.Serde;
+            r"namespace Facet.Runtime.Serde;
 
 public interface ISerializer
 {
@@ -379,11 +378,11 @@ public interface ISerializer
 
     int GetBufferOffset();
 }
-"#,
+",
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/IDeserializer.cs",
-            r#"namespace Facet.Runtime.Serde;
+            r"namespace Facet.Runtime.Serde;
 
 public interface IDeserializer
 {
@@ -433,11 +432,11 @@ public interface IDeserializer
 
     int GetBufferOffset();
 }
-"#,
+",
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/DeserializationError.cs",
-            r#"using System;
+            r"using System;
 
 namespace Facet.Runtime.Serde;
 
@@ -447,11 +446,11 @@ public sealed class DeserializationError : Exception
     {
     }
 }
-"#,
+",
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/SerializationError.cs",
-            r#"using System;
+            r"using System;
 
 namespace Facet.Runtime.Serde;
 
@@ -461,7 +460,7 @@ public sealed class SerializationError : Exception
     {
     }
 }
-"#,
+",
         )?;
         Ok(())
     }
@@ -469,375 +468,19 @@ public sealed class SerializationError : Exception
     fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Bincode/BincodeSerializer.cs",
-            r#"using System;
-using System.IO;
-
-using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Bincode;
-
-public sealed class BincodeSerializer : ISerializer
-{
-    private readonly MemoryStream stream = new();
-    private readonly BinaryWriter writer;
-    private long containerDepthBudget = long.MaxValue;
-
-    public BincodeSerializer()
-    {
-        writer = new BinaryWriter(stream);
-    }
-
-    public void IncreaseContainerDepth()
-    {
-        if (containerDepthBudget == 0)
-        {
-            throw new SerializationError("Exceeded maximum container depth");
-        }
-
-        containerDepthBudget -= 1;
-    }
-
-    public void DecreaseContainerDepth()
-    {
-        containerDepthBudget += 1;
-    }
-
-    public void SerializeUnit(Unit value)
-    {
-    }
-
-    public void SerializeBool(bool value)
-    {
-        writer.Write((byte)(value ? 1 : 0));
-    }
-
-    public void SerializeI8(sbyte value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeI16(short value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeI32(int value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeI64(long value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeI128(Int128 value)
-    {
-        SerializeU128(unchecked((UInt128)value));
-    }
-
-    public void SerializeU8(byte value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeU16(ushort value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeU32(uint value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeU64(ulong value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeU128(UInt128 value)
-    {
-        writer.Write((ulong)(value & ulong.MaxValue));
-        writer.Write((ulong)(value >> 64));
-    }
-
-    public void SerializeF32(float value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeF64(double value)
-    {
-        writer.Write(value);
-    }
-
-    public void SerializeChar(char value)
-    {
-        SerializeU32(value);
-    }
-
-    public void SerializeStr(string value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        SerializeBytes(System.Text.Encoding.UTF8.GetBytes(value));
-    }
-
-    public void SerializeBytes(byte[] value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        SerializeLen((ulong)value.Length);
-        writer.Write(value);
-    }
-
-    public void SerializeLen(ulong value)
-    {
-        SerializeU64(value);
-    }
-
-    public void SerializeVariantIndex(uint value)
-    {
-        SerializeU32(value);
-    }
-
-    public void SerializeOptionTag(bool value)
-    {
-        SerializeBool(value);
-    }
-
-    public byte[] GetBytes()
-    {
-        return stream.ToArray();
-    }
-
-    public int GetBufferOffset()
-    {
-        return checked((int)stream.Position);
-    }
-
-    public static byte[] Serialize<T>(T value) where T : notnull
-    {
-        var serializer = new BincodeSerializer();
-        switch (value)
-        {
-            case IFacetSerializable serializable:
-                serializable.Serialize(serializer);
-                break;
-            default:
-                throw new SerializationError($"Type {typeof(T).Name} does not implement IFacetSerializable");
-        }
-
-        return serializer.GetBytes();
-    }
-}
-"#,
+            include_str!("runtime/bincode/BincodeSerializer.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Bincode/BincodeDeserializer.cs",
-            r#"using Facet.Runtime.Serde;
-using System;
-using System.IO;
-
-namespace Facet.Runtime.Bincode;
-
-public sealed class BincodeDeserializer : IDeserializer
-{
-    private readonly MemoryStream stream;
-    private readonly BinaryReader reader;
-    private long containerDepthBudget = long.MaxValue;
-
-    public BincodeDeserializer(byte[] input)
-    {
-        if (input is null || input.Length == 0)
-        {
-            throw new DeserializationError("Cannot deserialize null or empty input");
-        }
-
-        stream = new MemoryStream(input);
-        reader = new BinaryReader(stream);
-    }
-
-    public void IncreaseContainerDepth()
-    {
-        if (containerDepthBudget == 0)
-        {
-            throw new DeserializationError("Exceeded maximum container depth");
-        }
-
-        containerDepthBudget -= 1;
-    }
-
-    public void DecreaseContainerDepth()
-    {
-        containerDepthBudget += 1;
-    }
-
-    public Unit DeserializeUnit()
-    {
-        return new Unit();
-    }
-
-    public bool DeserializeBool()
-    {
-        var value = reader.ReadByte();
-        return value switch
-        {
-            0 => false,
-            1 => true,
-            _ => throw new DeserializationError("Incorrect boolean value")
-        };
-    }
-
-    public sbyte DeserializeI8()
-    {
-        return reader.ReadSByte();
-    }
-
-    public short DeserializeI16()
-    {
-        return reader.ReadInt16();
-    }
-
-    public int DeserializeI32()
-    {
-        return reader.ReadInt32();
-    }
-
-    public long DeserializeI64()
-    {
-        return reader.ReadInt64();
-    }
-
-    public Int128 DeserializeI128()
-    {
-        return unchecked((Int128)DeserializeU128());
-    }
-
-    public byte DeserializeU8()
-    {
-        return reader.ReadByte();
-    }
-
-    public ushort DeserializeU16()
-    {
-        return reader.ReadUInt16();
-    }
-
-    public uint DeserializeU32()
-    {
-        return reader.ReadUInt32();
-    }
-
-    public ulong DeserializeU64()
-    {
-        return reader.ReadUInt64();
-    }
-
-    public UInt128 DeserializeU128()
-    {
-        var lower = reader.ReadUInt64();
-        var upper = reader.ReadUInt64();
-        return ((UInt128)upper << 64) | lower;
-    }
-
-    public float DeserializeF32()
-    {
-        return reader.ReadSingle();
-    }
-
-    public double DeserializeF64()
-    {
-        return reader.ReadDouble();
-    }
-
-    public char DeserializeChar()
-    {
-        return checked((char)DeserializeU32());
-    }
-
-    public string DeserializeStr()
-    {
-        var bytes = DeserializeBytes();
-        return System.Text.Encoding.UTF8.GetString(bytes);
-    }
-
-    public byte[] DeserializeBytes()
-    {
-        var length = DeserializeLen();
-        if (length > int.MaxValue)
-        {
-            throw new DeserializationError("Incorrect length value for byte array");
-        }
-
-        return reader.ReadBytes((int)length);
-    }
-
-    public ulong DeserializeLen()
-    {
-        return DeserializeU64();
-    }
-
-    public uint DeserializeVariantIndex()
-    {
-        return DeserializeU32();
-    }
-
-    public bool DeserializeOptionTag()
-    {
-        return DeserializeBool();
-    }
-
-    public int GetBufferOffset()
-    {
-        return checked((int)stream.Position);
-    }
-
-    public static T Deserialize<T>(byte[] input)
-        where T : IFacetDeserializable<T>
-    {
-        var deserializer = new BincodeDeserializer(input);
-        var value = T.Deserialize(deserializer);
-        if (deserializer.GetBufferOffset() < input.Length)
-        {
-            throw new DeserializationError("Some input bytes were not read");
-        }
-
-        return value;
-    }
-}
-"#,
+            include_str!("runtime/bincode/BincodeDeserializer.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Bincode/IFacetSerializable.cs",
-            r#"using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Bincode;
-
-public interface IFacetSerializable
-{
-    void Serialize(ISerializer serializer);
-}
-"#,
+            include_str!("runtime/bincode/IFacetSerializable.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Bincode/IFacetDeserializable.cs",
-            r#"using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Bincode;
-
-public interface IFacetDeserializable<T>
-{
-    static abstract T Deserialize(IDeserializer deserializer);
-}
-"#,
+            include_str!("runtime/bincode/IFacetDeserializable.cs"),
         )?;
         Ok(())
     }
