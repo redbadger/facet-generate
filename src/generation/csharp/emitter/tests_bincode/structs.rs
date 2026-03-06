@@ -843,10 +843,10 @@ fn struct_with_bytes_field_and_slice() {
             {
                 var optionalBytes_value_len = deserializer.DeserializeLen();
                 var optionalBytes_value = new ObservableCollection<byte>();
-                for (ulong i = 0; i < optionalBytes_value_len; i++)
+                for (ulong optionalBytes_value_idx = 0; optionalBytes_value_idx < optionalBytes_value_len; optionalBytes_value_idx++)
                 {
-                    var item = deserializer.DeserializeU8();
-                    optionalBytes_value.Add(item);
+                    var optionalBytes_value_item = deserializer.DeserializeU8();
+                    optionalBytes_value.Add(optionalBytes_value_item);
                 }
                 optionalBytes = optionalBytes_value;
             }
