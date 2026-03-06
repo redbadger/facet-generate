@@ -21,7 +21,7 @@ fn unit_struct() {
 
     /// line 1
     /// line 2
-    public partial class UnitStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<UnitStruct> {
+    public sealed record UnitStruct, IFacetSerializable, IFacetDeserializable<UnitStruct> {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
@@ -739,6 +739,9 @@ fn enum_with_unit_variants() {
         Variant3
     }
 
+    /// <summary>
+    /// Bincode serialization helpers for <see cref="EnumWithUnitVariants"/>.
+    /// </summary>
     public static class EnumWithUnitVariantsBincode {
         public static void Serialize(EnumWithUnitVariants value, ISerializer serializer)
         {
@@ -803,6 +806,9 @@ fn enum_with_unit_struct_variants() {
         Variant1
     }
 
+    /// <summary>
+    /// Bincode serialization helpers for <see cref="MyEnum"/>.
+    /// </summary>
     public static class MyEnumBincode {
         public static void Serialize(MyEnum value, ISerializer serializer)
         {
@@ -1435,37 +1441,37 @@ fn struct_with_option_field() {
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
         [ObservableProperty]
-        private Option<string> _optionalString;
+        private string? _optionalString;
         [ObservableProperty]
-        private Option<int> _optionalNumber;
+        private int? _optionalNumber;
         [ObservableProperty]
-        private Option<bool> _optionalBool;
+        private bool? _optionalBool;
 
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            if (OptionalString.HasValue)
+            if (OptionalString is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeStr(OptionalString.Value);
+                serializer.SerializeStr(OptionalString);
             }
             else
             {
                 serializer.SerializeOptionTag(false);
             }
-            if (OptionalNumber.HasValue)
+            if (OptionalNumber is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeI32(OptionalNumber.Value);
+                serializer.SerializeI32(OptionalNumber);
             }
             else
             {
                 serializer.SerializeOptionTag(false);
             }
-            if (OptionalBool.HasValue)
+            if (OptionalBool is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeBool(OptionalBool.Value);
+                serializer.SerializeBool(OptionalBool);
             }
             else
             {
@@ -1477,35 +1483,35 @@ fn struct_with_option_field() {
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            Option<string> optionalString;
+            string? optionalString;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalString_value = deserializer.DeserializeStr();
-                optionalString = Option<string>.Some(optionalString_value);
+                optionalString = optionalString_value;
             }
             else
             {
-                optionalString = Option<string>.None();
+                optionalString = null;
             }
-            Option<int> optionalNumber;
+            int? optionalNumber;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalNumber_value = deserializer.DeserializeI32();
-                optionalNumber = Option<int>.Some(optionalNumber_value);
+                optionalNumber = optionalNumber_value;
             }
             else
             {
-                optionalNumber = Option<int>.None();
+                optionalNumber = null;
             }
-            Option<bool> optionalBool;
+            bool? optionalBool;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalBool_value = deserializer.DeserializeBool();
-                optionalBool = Option<bool>.Some(optionalBool_value);
+                optionalBool = optionalBool_value;
             }
             else
             {
-                optionalBool = Option<bool>.None();
+                optionalBool = null;
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
@@ -1642,24 +1648,24 @@ fn struct_with_nested_generics() {
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
         [ObservableProperty]
-        private Option<ObservableCollection<string>> _optionalList;
+        private ObservableCollection<string>? _optionalList;
         [ObservableProperty]
-        private ObservableCollection<Option<int>> _listOfOptionals;
+        private ObservableCollection<int?> _listOfOptionals;
         [ObservableProperty]
         private Dictionary<string, ObservableCollection<bool>> _mapToList;
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalMap;
+        private Dictionary<string, int>? _optionalMap;
         [ObservableProperty]
-        private ObservableCollection<Option<Dictionary<string, ObservableCollection<bool>>>> _complex;
+        private ObservableCollection<Dictionary<string, ObservableCollection<bool>>?> _complex;
 
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            if (OptionalList.HasValue)
+            if (OptionalList is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalList.Value.Count);
-                foreach (var item in OptionalList.Value)
+                serializer.SerializeLen((ulong)OptionalList.Count);
+                foreach (var item in OptionalList)
                 {
                     serializer.SerializeStr(item);
                 }
@@ -1671,10 +1677,10 @@ fn struct_with_nested_generics() {
             serializer.SerializeLen((ulong)ListOfOptionals.Count);
             foreach (var item in ListOfOptionals)
             {
-                if (item.HasValue)
+                if (item is not null)
                 {
                     serializer.SerializeOptionTag(true);
-                    serializer.SerializeI32(item.Value);
+                    serializer.SerializeI32(item);
                 }
                 else
                 {
@@ -1691,11 +1697,11 @@ fn struct_with_nested_generics() {
                     serializer.SerializeBool(item);
                 }
             }
-            if (OptionalMap.HasValue)
+            if (OptionalMap is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalMap.Value.Count);
-                foreach (var entry in OptionalMap.Value)
+                serializer.SerializeLen((ulong)OptionalMap.Count);
+                foreach (var entry in OptionalMap)
                 {
                     serializer.SerializeStr(entry.Key);
                     serializer.SerializeI32(entry.Value);
@@ -1708,11 +1714,11 @@ fn struct_with_nested_generics() {
             serializer.SerializeLen((ulong)Complex.Count);
             foreach (var item in Complex)
             {
-                if (item.HasValue)
+                if (item is not null)
                 {
                     serializer.SerializeOptionTag(true);
-                    serializer.SerializeLen((ulong)item.Value.Count);
-                    foreach (var entry in item.Value)
+                    serializer.SerializeLen((ulong)item.Count);
+                    foreach (var entry in item)
                     {
                         serializer.SerializeStr(entry.Key);
                         serializer.SerializeLen((ulong)entry.Value.Count);
@@ -1733,7 +1739,7 @@ fn struct_with_nested_generics() {
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            Option<ObservableCollection<string>> optionalList;
+            ObservableCollection<string>? optionalList;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalList_value_len = deserializer.DeserializeLen();
@@ -1743,25 +1749,25 @@ fn struct_with_nested_generics() {
                     var item = deserializer.DeserializeStr();
                     optionalList_value.Add(item);
                 }
-                optionalList = Option<ObservableCollection<string>>.Some(optionalList_value);
+                optionalList = optionalList_value;
             }
             else
             {
-                optionalList = Option<ObservableCollection<string>>.None();
+                optionalList = null;
             }
             var listOfOptionals_len = deserializer.DeserializeLen();
-            var listOfOptionals = new ObservableCollection<Option<int>>();
+            var listOfOptionals = new ObservableCollection<int?>();
             for (ulong i = 0; i < listOfOptionals_len; i++)
             {
-                Option<int> item;
+                int? item;
                 if (deserializer.DeserializeOptionTag())
                 {
                     var item_value = deserializer.DeserializeI32();
-                    item = Option<int>.Some(item_value);
+                    item = item_value;
                 }
                 else
                 {
-                    item = Option<int>.None();
+                    item = null;
                 }
                 listOfOptionals.Add(item);
             }
@@ -1779,7 +1785,7 @@ fn struct_with_nested_generics() {
                 }
                 mapToList.Add(key, value);
             }
-            Option<Dictionary<string, int>> optionalMap;
+            Dictionary<string, int>? optionalMap;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalMap_value_len = deserializer.DeserializeLen();
@@ -1790,17 +1796,17 @@ fn struct_with_nested_generics() {
                     var value = deserializer.DeserializeI32();
                     optionalMap_value.Add(key, value);
                 }
-                optionalMap = Option<Dictionary<string, int>>.Some(optionalMap_value);
+                optionalMap = optionalMap_value;
             }
             else
             {
-                optionalMap = Option<Dictionary<string, int>>.None();
+                optionalMap = null;
             }
             var complex_len = deserializer.DeserializeLen();
-            var complex = new ObservableCollection<Option<Dictionary<string, ObservableCollection<bool>>>>();
+            var complex = new ObservableCollection<Dictionary<string, ObservableCollection<bool>>?>();
             for (ulong i = 0; i < complex_len; i++)
             {
-                Option<Dictionary<string, ObservableCollection<bool>>> item;
+                Dictionary<string, ObservableCollection<bool>>? item;
                 if (deserializer.DeserializeOptionTag())
                 {
                     var item_value_len = deserializer.DeserializeLen();
@@ -1817,11 +1823,11 @@ fn struct_with_nested_generics() {
                         }
                         item_value.Add(key, value);
                     }
-                    item = Option<Dictionary<string, ObservableCollection<bool>>>.Some(item_value);
+                    item = item_value;
                 }
                 else
                 {
-                    item = Option<Dictionary<string, ObservableCollection<bool>>>.None();
+                    item = null;
                 }
                 complex.Add(item);
             }
@@ -2418,11 +2424,11 @@ fn struct_with_mixed_collections_and_pointers() {
         [ObservableProperty]
         private ObservableCollection<HashSet<string>> _vecOfSets;
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalBtree;
+        private Dictionary<string, int>? _optionalBtree;
         [ObservableProperty]
         private ObservableCollection<string> _boxedVec;
         [ObservableProperty]
-        private Option<string> _arcOption;
+        private string? _arcOption;
         [ObservableProperty]
         private int[] _arrayOfBoxes;
 
@@ -2438,11 +2444,11 @@ fn struct_with_mixed_collections_and_pointers() {
                     serializer.SerializeStr(item);
                 }
             }
-            if (OptionalBtree.HasValue)
+            if (OptionalBtree is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalBtree.Value.Count);
-                foreach (var entry in OptionalBtree.Value)
+                serializer.SerializeLen((ulong)OptionalBtree.Count);
+                foreach (var entry in OptionalBtree)
                 {
                     serializer.SerializeStr(entry.Key);
                     serializer.SerializeI32(entry.Value);
@@ -2457,10 +2463,10 @@ fn struct_with_mixed_collections_and_pointers() {
             {
                 serializer.SerializeStr(item);
             }
-            if (ArcOption.HasValue)
+            if (ArcOption is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeStr(ArcOption.Value);
+                serializer.SerializeStr(ArcOption);
             }
             else
             {
@@ -2490,7 +2496,7 @@ fn struct_with_mixed_collections_and_pointers() {
                 }
                 vecOfSets.Add(item);
             }
-            Option<Dictionary<string, int>> optionalBtree;
+            Dictionary<string, int>? optionalBtree;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalBtree_value_len = deserializer.DeserializeLen();
@@ -2501,11 +2507,11 @@ fn struct_with_mixed_collections_and_pointers() {
                     var value = deserializer.DeserializeI32();
                     optionalBtree_value.Add(key, value);
                 }
-                optionalBtree = Option<Dictionary<string, int>>.Some(optionalBtree_value);
+                optionalBtree = optionalBtree_value;
             }
             else
             {
-                optionalBtree = Option<Dictionary<string, int>>.None();
+                optionalBtree = null;
             }
             var boxedVec_len = deserializer.DeserializeLen();
             var boxedVec = new ObservableCollection<string>();
@@ -2514,15 +2520,15 @@ fn struct_with_mixed_collections_and_pointers() {
                 var item = deserializer.DeserializeStr();
                 boxedVec.Add(item);
             }
-            Option<string> arcOption;
+            string? arcOption;
             if (deserializer.DeserializeOptionTag())
             {
                 var arcOption_value = deserializer.DeserializeStr();
-                arcOption = Option<string>.Some(arcOption_value);
+                arcOption = arcOption_value;
             }
             else
             {
-                arcOption = Option<string>.None();
+                arcOption = null;
             }
             var arrayOfBoxes_len = deserializer.DeserializeLen();
             var arrayOfBoxes_list = new List<int>();
@@ -2660,7 +2666,7 @@ fn struct_with_bytes_field_and_slice() {
         [ObservableProperty]
         private byte[] _header;
         [ObservableProperty]
-        private Option<ObservableCollection<byte>> _optionalBytes;
+        private ObservableCollection<byte>? _optionalBytes;
 
         public void Serialize(ISerializer serializer)
         {
@@ -2668,11 +2674,11 @@ fn struct_with_bytes_field_and_slice() {
             serializer.SerializeBytes(Data);
             serializer.SerializeStr(Name);
             serializer.SerializeBytes(Header);
-            if (OptionalBytes.HasValue)
+            if (OptionalBytes is not null)
             {
                 serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalBytes.Value.Count);
-                foreach (var item in OptionalBytes.Value)
+                serializer.SerializeLen((ulong)OptionalBytes.Count);
+                foreach (var item in OptionalBytes)
                 {
                     serializer.SerializeU8(item);
                 }
@@ -2690,7 +2696,7 @@ fn struct_with_bytes_field_and_slice() {
             var data = deserializer.DeserializeBytes();
             var name = deserializer.DeserializeStr();
             var header = deserializer.DeserializeBytes();
-            Option<ObservableCollection<byte>> optionalBytes;
+            ObservableCollection<byte>? optionalBytes;
             if (deserializer.DeserializeOptionTag())
             {
                 var optionalBytes_value_len = deserializer.DeserializeLen();
@@ -2700,11 +2706,11 @@ fn struct_with_bytes_field_and_slice() {
                     var item = deserializer.DeserializeU8();
                     optionalBytes_value.Add(item);
                 }
-                optionalBytes = Option<ObservableCollection<byte>>.Some(optionalBytes_value);
+                optionalBytes = optionalBytes_value;
             }
             else
             {
-                optionalBytes = Option<ObservableCollection<byte>>.None();
+                optionalBytes = null;
             }
             deserializer.DecreaseContainerDepth();
             return new MyStruct {

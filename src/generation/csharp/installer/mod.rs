@@ -67,10 +67,13 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        self.install_core_runtime()?;
         if !self.encoding.is_none() {
             self.install_serde_runtime()?;
-            if let Encoding::Bincode = self.encoding {
-                self.install_bincode_runtime()?;
+            match self.encoding {
+                Encoding::Json => self.install_json_runtime()?,
+                Encoding::Bincode => self.install_bincode_runtime()?,
+                Encoding::None => {}
             }
         }
 
@@ -91,15 +94,17 @@ impl Installer {
 
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
-        let mut references = vec![
+        let mut package_references = vec![
             "    <PackageReference Include=\"CommunityToolkit.Mvvm\" Version=\"8.4.0\" />"
                 .to_string(),
         ];
+        let mut project_references = Vec::new();
 
         for external_package in self.external_packages.values() {
             match &external_package.location {
                 PackageLocation::Path(path) => {
-                    references.push(format!("    <ProjectReference Include=\"{path}\" />"));
+                    project_references
+                        .push(format!("    <ProjectReference Include=\"{path}\" />"));
                 }
                 PackageLocation::Url(url) => {
                     let package_name = url
@@ -116,14 +121,14 @@ impl Installer {
                         .clone()
                         .unwrap_or_else(|| "1.0.0".to_string());
 
-                    references.push(format!(
+                    package_references.push(format!(
                         "    <PackageReference Include=\"{package_name}\" Version=\"{version}\" />"
                     ));
                 }
             }
         }
 
-        let references = references.join("\n");
+        let package_refs = package_references.join("\n");
         let mut manifest = String::new();
         writedoc!(
             &mut manifest,
@@ -137,14 +142,137 @@ impl Installer {
               </PropertyGroup>
 
               <ItemGroup>
-            {references}
+            {package_refs}
               </ItemGroup>
-            </Project>
             "#
         )
         .expect("writing to String cannot fail");
 
+        if !project_references.is_empty() {
+            let project_refs = project_references.join("\n");
+            writedoc!(
+                &mut manifest,
+                r#"
+
+                  <ItemGroup>
+                {project_refs}
+                  </ItemGroup>
+                "#
+            )
+            .expect("writing to String cannot fail");
+        }
+
+        writedoc!(
+            &mut manifest,
+            r"
+            </Project>
+            "
+        )
+        .expect("writing to String cannot fail");
+
         manifest
+    }
+
+    fn install_core_runtime(&self) -> std::result::Result<(), Error> {
+        self.install_runtime_file(
+            "Facet/Runtime/Serde/Unit.cs",
+            r#"namespace Facet.Runtime.Serde;
+
+public readonly record struct Unit;
+"#,
+        )?;
+        Ok(())
+    }
+
+    fn install_json_runtime(&self) -> std::result::Result<(), Error> {
+        self.install_runtime_file(
+            "Facet/Runtime/Json/JsonSerde.cs",
+            r#"using System;
+using System.Collections.ObjectModel;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+using Facet.Runtime.Serde;
+
+namespace Facet.Runtime.Json;
+
+public static class JsonSerde
+{
+    internal static readonly JsonSerializerOptions Options = new()
+    {
+        Converters =
+        {
+            new JsonStringEnumConverter(),
+            new ObservableCollectionJsonConverterFactory()
+        }
+    };
+
+    public static string Serialize<T>(T value)
+    {
+        if (value is null)
+        {
+            throw new ArgumentNullException(nameof(value));
+        }
+
+        return JsonSerializer.Serialize(value, Options);
+    }
+
+    public static T Deserialize<T>(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            throw new DeserializationError("Cannot deserialize empty input");
+        }
+
+        var value = JsonSerializer.Deserialize<T>(input, Options);
+        if (value is null)
+        {
+            throw new DeserializationError($"Deserialization produced null for {typeof(T).Name}");
+        }
+
+        return value;
+    }
+}
+
+internal sealed class ObservableCollectionJsonConverterFactory : JsonConverterFactory
+{
+    public override bool CanConvert(Type typeToConvert)
+    {
+        return typeToConvert.IsGenericType &&
+               typeToConvert.GetGenericTypeDefinition() == typeof(ObservableCollection<>);
+    }
+
+    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+    {
+        var elementType = typeToConvert.GetGenericArguments()[0];
+        var converterType = typeof(ObservableCollectionJsonConverter<>).MakeGenericType(elementType);
+        return (JsonConverter)Activator.CreateInstance(converterType)!;
+    }
+
+    private sealed class ObservableCollectionJsonConverter<T> : JsonConverter<ObservableCollection<T>>
+    {
+        public override ObservableCollection<T> Read(
+            ref Utf8JsonReader reader,
+            Type typeToConvert,
+            JsonSerializerOptions options)
+        {
+            var list = JsonSerializer.Deserialize<List<T>>(ref reader, options)
+                ?? throw new DeserializationError("Failed to deserialize collection");
+            return new ObservableCollection<T>(list);
+        }
+
+        public override void Write(
+            Utf8JsonWriter writer,
+            ObservableCollection<T> value,
+            JsonSerializerOptions options)
+        {
+            JsonSerializer.Serialize(writer, (IEnumerable<T>)value, options);
+        }
+    }
+}
+"#,
+        )?;
+        Ok(())
     }
 
     fn install_runtime_file(
@@ -331,143 +459,6 @@ public sealed class SerializationError : Exception
 {
     public SerializationError(string message) : base(message)
     {
-    }
-}
-"#,
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/Unit.cs",
-            r#"namespace Facet.Runtime.Serde;
-
-public readonly struct Unit
-{
-}
-"#,
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/Option.cs",
-            r#"using System;
-
-namespace Facet.Runtime.Serde;
-
-public readonly struct Option<T>
-{
-    private readonly T? value;
-
-    public bool HasValue { get; }
-
-    public T Value => HasValue ? value! : throw new InvalidOperationException("Option has no value");
-
-    private Option(T value)
-    {
-        this.value = value;
-        HasValue = true;
-    }
-
-    public static Option<T> Some(T value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        return new Option<T>(value);
-    }
-
-    public static Option<T> None() => default;
-}
-"#,
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Json/JsonSerde.cs",
-            r#"using System;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Json;
-
-public static class JsonSerde
-{
-    internal static readonly JsonSerializerOptions Options = new()
-    {
-        Converters = { new JsonStringEnumConverter(), new OptionJsonConverterFactory() }
-    };
-
-    public static string Serialize<T>(T value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        return JsonSerializer.Serialize(value, Options);
-    }
-
-    public static T Deserialize<T>(string input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            throw new DeserializationError("Cannot deserialize empty input");
-        }
-
-        var value = JsonSerializer.Deserialize<T>(input, Options);
-        if (value is null)
-        {
-            throw new DeserializationError($"Deserialization produced null for {typeof(T).Name}");
-        }
-
-        return value;
-    }
-}
-
-internal sealed class OptionJsonConverterFactory : JsonConverterFactory
-{
-    public override bool CanConvert(Type typeToConvert)
-    {
-        return typeToConvert.IsGenericType &&
-               typeToConvert.GetGenericTypeDefinition() == typeof(Option<>);
-    }
-
-    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
-    {
-        var innerType = typeToConvert.GetGenericArguments()[0];
-        var converterType = typeof(OptionJsonConverter<>).MakeGenericType(innerType);
-        return (JsonConverter)Activator.CreateInstance(converterType)!;
-    }
-
-    private sealed class OptionJsonConverter<T> : JsonConverter<Option<T>>
-    {
-        public override Option<T> Read(
-            ref Utf8JsonReader reader,
-            Type typeToConvert,
-            JsonSerializerOptions options)
-        {
-            if (reader.TokenType == JsonTokenType.Null)
-            {
-                return Option<T>.None();
-            }
-
-            var value = JsonSerializer.Deserialize<T>(ref reader, options);
-            if (value is null)
-            {
-                return Option<T>.None();
-            }
-
-            return Option<T>.Some(value);
-        }
-
-        public override void Write(Utf8JsonWriter writer, Option<T> value, JsonSerializerOptions options)
-        {
-            if (!value.HasValue)
-            {
-                writer.WriteNullValue();
-                return;
-            }
-
-            JsonSerializer.Serialize(writer, value.Value, options);
-        }
     }
 }
 "#,

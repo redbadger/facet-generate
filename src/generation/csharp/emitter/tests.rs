@@ -21,7 +21,7 @@ fn unit_struct() {
 
     /// line 1
     /// line 2
-    public partial class UnitStruct : ObservableObject {}
+    public sealed record UnitStruct;
     ");
 }
 
@@ -414,11 +414,11 @@ fn struct_with_option_field() {
 
     public partial class MyStruct : ObservableObject {
         [ObservableProperty]
-        private Option<string> _optionalString;
+        private string? _optionalString;
         [ObservableProperty]
-        private Option<int> _optionalNumber;
+        private int? _optionalNumber;
         [ObservableProperty]
-        private Option<bool> _optionalBool;
+        private bool? _optionalBool;
     }
     ");
 }
@@ -461,13 +461,13 @@ fn struct_with_nested_types() {
 
     public partial class MyStruct : ObservableObject {
         [ObservableProperty]
-        private Option<ObservableCollection<string>> _optionalList;
+        private ObservableCollection<string>? _optionalList;
         [ObservableProperty]
-        private ObservableCollection<Option<int>> _listOfOptionals;
+        private ObservableCollection<int?> _listOfOptionals;
         [ObservableProperty]
         private Dictionary<string, ObservableCollection<bool>> _mapToList;
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalMap;
+        private Dictionary<string, int>? _optionalMap;
         [ObservableProperty]
         private HashSet<ushort> _setOfValues;
         [ObservableProperty]
@@ -546,7 +546,7 @@ fn struct_with_bytes_field_and_slice() {
         [ObservableProperty]
         private byte[] _header;
         [ObservableProperty]
-        private Option<ObservableCollection<byte>> _optionalBytes;
+        private ObservableCollection<byte>? _optionalBytes;
     }
     ");
 }
@@ -688,11 +688,11 @@ fn struct_with_mixed_collections_and_pointers() {
         [ObservableProperty]
         private ObservableCollection<HashSet<string>> _vecOfSets;
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalBtree;
+        private Dictionary<string, int>? _optionalBtree;
         [ObservableProperty]
         private ObservableCollection<string> _boxedVec;
         [ObservableProperty]
-        private Option<string> _arcOption;
+        private string? _arcOption;
         [ObservableProperty]
         private int[] _arrayOfBoxes;
     }
@@ -721,7 +721,7 @@ fn struct_with_external_namespace_type() {
         [ObservableProperty]
         private ExternalModels.Child _child;
         [ObservableProperty]
-        private Option<ExternalModels.Child> _maybeChild;
+        private ExternalModels.Child? _maybeChild;
         [ObservableProperty]
         private ObservableCollection<ExternalModels.Child> _manyChildren;
     }

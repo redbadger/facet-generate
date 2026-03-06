@@ -21,7 +21,7 @@ fn unit_struct() {
 
     /// line 1
     /// line 2
-    public partial class UnitStruct : ObservableObject {
+    public sealed record UnitStruct {
         public string JsonSerialize()
         {
             return JsonSerde.Serialize(this);
@@ -41,9 +41,10 @@ fn newtype_struct() {
     struct NewType(String);
 
     let actual = emit!(NewType as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class NewType : ObservableObject {
+        [JsonPropertyName("value")]
         [ObservableProperty]
         private string _value;
 
@@ -57,7 +58,7 @@ fn newtype_struct() {
             return JsonSerde.Deserialize<NewType>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -66,11 +67,13 @@ fn tuple_struct() {
     struct TupleStruct(String, i32);
 
     let actual = emit!(TupleStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class TupleStruct : ObservableObject {
+        [JsonPropertyName("field0")]
         [ObservableProperty]
         private string _field0;
+        [JsonPropertyName("field1")]
         [ObservableProperty]
         private int _field1;
 
@@ -84,7 +87,7 @@ fn tuple_struct() {
             return JsonSerde.Deserialize<TupleStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -111,39 +114,55 @@ fn struct_with_fields_of_primitive_types() {
     }
 
     let actual = emit!(StructWithFields as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class StructWithFields : ObservableObject {
+        [JsonPropertyName("unit")]
         [ObservableProperty]
         private Unit _unit;
+        [JsonPropertyName("bool")]
         [ObservableProperty]
         private bool _bool;
+        [JsonPropertyName("i8")]
         [ObservableProperty]
         private sbyte _i8;
+        [JsonPropertyName("i16")]
         [ObservableProperty]
         private short _i16;
+        [JsonPropertyName("i32")]
         [ObservableProperty]
         private int _i32;
+        [JsonPropertyName("i64")]
         [ObservableProperty]
         private long _i64;
+        [JsonPropertyName("i128")]
         [ObservableProperty]
         private Int128 _i128;
+        [JsonPropertyName("u8")]
         [ObservableProperty]
         private byte _u8;
+        [JsonPropertyName("u16")]
         [ObservableProperty]
         private ushort _u16;
+        [JsonPropertyName("u32")]
         [ObservableProperty]
         private uint _u32;
+        [JsonPropertyName("u64")]
         [ObservableProperty]
         private ulong _u64;
+        [JsonPropertyName("u128")]
         [ObservableProperty]
         private UInt128 _u128;
+        [JsonPropertyName("f32")]
         [ObservableProperty]
         private float _f32;
+        [JsonPropertyName("f64")]
         [ObservableProperty]
         private double _f64;
+        [JsonPropertyName("char")]
         [ObservableProperty]
         private char _char;
+        [JsonPropertyName("string")]
         [ObservableProperty]
         private string _string;
 
@@ -157,7 +176,7 @@ fn struct_with_fields_of_primitive_types() {
             return JsonSerde.Deserialize<StructWithFields>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -181,9 +200,10 @@ fn struct_with_fields_of_user_types() {
     }
 
     let actual = emit!(Outer as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class Inner1 : ObservableObject {
+        [JsonPropertyName("field1")]
         [ObservableProperty]
         private string _field1;
 
@@ -199,6 +219,7 @@ fn struct_with_fields_of_user_types() {
     }
 
     public partial class Inner2 : ObservableObject {
+        [JsonPropertyName("value")]
         [ObservableProperty]
         private string _value;
 
@@ -214,8 +235,10 @@ fn struct_with_fields_of_user_types() {
     }
 
     public partial class Inner3 : ObservableObject {
+        [JsonPropertyName("field0")]
         [ObservableProperty]
         private string _field0;
+        [JsonPropertyName("field1")]
         [ObservableProperty]
         private int _field1;
 
@@ -231,10 +254,13 @@ fn struct_with_fields_of_user_types() {
     }
 
     public partial class Outer : ObservableObject {
+        [JsonPropertyName("one")]
         [ObservableProperty]
         private Inner1 _one;
+        [JsonPropertyName("two")]
         [ObservableProperty]
         private Inner2 _two;
+        [JsonPropertyName("three")]
         [ObservableProperty]
         private Inner3 _three;
 
@@ -248,7 +274,7 @@ fn struct_with_fields_of_user_types() {
             return JsonSerde.Deserialize<Outer>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -259,9 +285,10 @@ fn struct_with_field_that_is_a_2_tuple() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("one")]
         [ObservableProperty]
         private (string, int) _one;
 
@@ -275,7 +302,7 @@ fn struct_with_field_that_is_a_2_tuple() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -286,9 +313,10 @@ fn struct_with_field_that_is_a_3_tuple() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("one")]
         [ObservableProperty]
         private (string, int, ushort) _one;
 
@@ -302,7 +330,7 @@ fn struct_with_field_that_is_a_3_tuple() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -313,9 +341,10 @@ fn struct_with_field_that_is_a_4_tuple() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("one")]
         [ObservableProperty]
         private (string, int, ushort, float) _one;
 
@@ -329,7 +358,7 @@ fn struct_with_field_that_is_a_4_tuple() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -384,8 +413,10 @@ fn enum_with_1_tuple_variants() {
     }
 
     let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Variant1), "Variant1")]
     public abstract record MyEnum {
         public sealed record Variant1(string Value) : MyEnum;
 
@@ -399,7 +430,7 @@ fn enum_with_1_tuple_variants() {
             return JsonSerde.Deserialize<MyEnum>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -413,8 +444,11 @@ fn enum_with_newtype_variants() {
     }
 
     let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Variant1), "Variant1")]
+    [JsonDerivedType(typeof(Variant2), "Variant2")]
     public abstract record MyEnum {
         public sealed record Variant1(string Value) : MyEnum;
 
@@ -430,7 +464,7 @@ fn enum_with_newtype_variants() {
             return JsonSerde.Deserialize<MyEnum>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -444,8 +478,11 @@ fn enum_with_tuple_variants() {
     }
 
     let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Variant1), "Variant1")]
+    [JsonDerivedType(typeof(Variant2), "Variant2")]
     public abstract record MyEnum {
         public sealed record Variant1(string Field0, int Field1) : MyEnum;
 
@@ -461,7 +498,7 @@ fn enum_with_tuple_variants() {
             return JsonSerde.Deserialize<MyEnum>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -474,8 +511,10 @@ fn enum_with_struct_variants() {
     }
 
     let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Variant1), "Variant1")]
     public abstract record MyEnum {
         public sealed record Variant1(string Field1, int Field2) : MyEnum;
 
@@ -489,7 +528,7 @@ fn enum_with_struct_variants() {
             return JsonSerde.Deserialize<MyEnum>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -505,8 +544,13 @@ fn enum_with_mixed_variants() {
     }
 
     let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Unit), "Unit")]
+    [JsonDerivedType(typeof(NewType), "NewType")]
+    [JsonDerivedType(typeof(Tuple), "Tuple")]
+    [JsonDerivedType(typeof(Struct), "Struct")]
     public abstract record MyEnum {
         public sealed record Unit() : MyEnum;
 
@@ -526,7 +570,7 @@ fn enum_with_mixed_variants() {
             return JsonSerde.Deserialize<MyEnum>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -539,13 +583,16 @@ fn struct_with_vec_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("items")]
         [ObservableProperty]
         private ObservableCollection<string> _items;
+        [JsonPropertyName("numbers")]
         [ObservableProperty]
         private ObservableCollection<int> _numbers;
+        [JsonPropertyName("nestedItems")]
         [ObservableProperty]
         private ObservableCollection<ObservableCollection<string>> _nestedItems;
 
@@ -559,7 +606,7 @@ fn struct_with_vec_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -573,15 +620,18 @@ fn struct_with_option_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("optionalString")]
         [ObservableProperty]
-        private Option<string> _optionalString;
+        private string? _optionalString;
+        [JsonPropertyName("optionalNumber")]
         [ObservableProperty]
-        private Option<int> _optionalNumber;
+        private int? _optionalNumber;
+        [JsonPropertyName("optionalBool")]
         [ObservableProperty]
-        private Option<bool> _optionalBool;
+        private bool? _optionalBool;
 
         public string JsonSerialize()
         {
@@ -593,7 +643,7 @@ fn struct_with_option_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -605,11 +655,13 @@ fn struct_with_hashmap_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("stringToInt")]
         [ObservableProperty]
         private Dictionary<string, int> _stringToInt;
+        [JsonPropertyName("intToBool")]
         [ObservableProperty]
         private Dictionary<int, bool> _intToBool;
 
@@ -623,7 +675,7 @@ fn struct_with_hashmap_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -638,19 +690,24 @@ fn struct_with_nested_generics() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("optionalList")]
         [ObservableProperty]
-        private Option<ObservableCollection<string>> _optionalList;
+        private ObservableCollection<string>? _optionalList;
+        [JsonPropertyName("listOfOptionals")]
         [ObservableProperty]
-        private ObservableCollection<Option<int>> _listOfOptionals;
+        private ObservableCollection<int?> _listOfOptionals;
+        [JsonPropertyName("mapToList")]
         [ObservableProperty]
         private Dictionary<string, ObservableCollection<bool>> _mapToList;
+        [JsonPropertyName("optionalMap")]
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalMap;
+        private Dictionary<string, int>? _optionalMap;
+        [JsonPropertyName("complex")]
         [ObservableProperty]
-        private ObservableCollection<Option<Dictionary<string, ObservableCollection<bool>>>> _complex;
+        private ObservableCollection<Dictionary<string, ObservableCollection<bool>>?> _complex;
 
         public string JsonSerialize()
         {
@@ -662,7 +719,7 @@ fn struct_with_nested_generics() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -676,13 +733,16 @@ fn struct_with_array_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("fixedArray")]
         [ObservableProperty]
         private int[] _fixedArray;
+        [JsonPropertyName("byteArray")]
         [ObservableProperty]
         private byte[] _byteArray;
+        [JsonPropertyName("stringArray")]
         [ObservableProperty]
         private string[] _stringArray;
 
@@ -696,7 +756,7 @@ fn struct_with_array_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -708,11 +768,13 @@ fn struct_with_btreemap_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("stringToInt")]
         [ObservableProperty]
         private Dictionary<string, int> _stringToInt;
+        [JsonPropertyName("intToBool")]
         [ObservableProperty]
         private Dictionary<int, bool> _intToBool;
 
@@ -726,7 +788,7 @@ fn struct_with_btreemap_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -738,11 +800,13 @@ fn struct_with_hashset_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("stringSet")]
         [ObservableProperty]
         private HashSet<string> _stringSet;
+        [JsonPropertyName("intSet")]
         [ObservableProperty]
         private HashSet<int> _intSet;
 
@@ -756,7 +820,7 @@ fn struct_with_hashset_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -768,11 +832,13 @@ fn struct_with_btreeset_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("stringSet")]
         [ObservableProperty]
         private HashSet<string> _stringSet;
+        [JsonPropertyName("intSet")]
         [ObservableProperty]
         private HashSet<int> _intSet;
 
@@ -786,7 +852,7 @@ fn struct_with_btreeset_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -799,11 +865,13 @@ fn struct_with_box_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("boxedString")]
         [ObservableProperty]
         private string _boxedString;
+        [JsonPropertyName("boxedInt")]
         [ObservableProperty]
         private int _boxedInt;
 
@@ -817,7 +885,7 @@ fn struct_with_box_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -829,11 +897,13 @@ fn struct_with_rc_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("rcString")]
         [ObservableProperty]
         private string _rcString;
+        [JsonPropertyName("rcInt")]
         [ObservableProperty]
         private int _rcInt;
 
@@ -847,7 +917,7 @@ fn struct_with_rc_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -859,11 +929,13 @@ fn struct_with_arc_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("arcString")]
         [ObservableProperty]
         private string _arcString;
+        [JsonPropertyName("arcInt")]
         [ObservableProperty]
         private int _arcInt;
 
@@ -877,7 +949,7 @@ fn struct_with_arc_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -893,17 +965,22 @@ fn struct_with_mixed_collections_and_pointers() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("vecOfSets")]
         [ObservableProperty]
         private ObservableCollection<HashSet<string>> _vecOfSets;
+        [JsonPropertyName("optionalBtree")]
         [ObservableProperty]
-        private Option<Dictionary<string, int>> _optionalBtree;
+        private Dictionary<string, int>? _optionalBtree;
+        [JsonPropertyName("boxedVec")]
         [ObservableProperty]
         private ObservableCollection<string> _boxedVec;
+        [JsonPropertyName("arcOption")]
         [ObservableProperty]
-        private Option<string> _arcOption;
+        private string? _arcOption;
+        [JsonPropertyName("arrayOfBoxes")]
         [ObservableProperty]
         private int[] _arrayOfBoxes;
 
@@ -917,7 +994,7 @@ fn struct_with_mixed_collections_and_pointers() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -932,13 +1009,16 @@ fn struct_with_bytes_field() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("data")]
         [ObservableProperty]
         private byte[] _data;
+        [JsonPropertyName("name")]
         [ObservableProperty]
         private string _name;
+        [JsonPropertyName("header")]
         [ObservableProperty]
         private byte[] _header;
 
@@ -952,7 +1032,7 @@ fn struct_with_bytes_field() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -968,17 +1048,21 @@ fn struct_with_bytes_field_and_slice() {
     }
 
     let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
+        [JsonPropertyName("data")]
         [ObservableProperty]
         private byte[] _data;
+        [JsonPropertyName("name")]
         [ObservableProperty]
         private string _name;
+        [JsonPropertyName("header")]
         [ObservableProperty]
         private byte[] _header;
+        [JsonPropertyName("optionalBytes")]
         [ObservableProperty]
-        private Option<ObservableCollection<byte>> _optionalBytes;
+        private ObservableCollection<byte>? _optionalBytes;
 
         public string JsonSerialize()
         {
@@ -990,5 +1074,5 @@ fn struct_with_bytes_field_and_slice() {
             return JsonSerde.Deserialize<MyStruct>(input);
         }
     }
-    ");
+    "#);
 }

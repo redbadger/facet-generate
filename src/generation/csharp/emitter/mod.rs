@@ -28,7 +28,7 @@ impl Emitter<CSharp> for Module {
     fn write<W: Write>(&self, w: &mut W, lang: CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();
         writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
-        writeln!(w, "using Facet.Runtime;")?;
+        writeln!(w, "using Facet.Runtime.Serde;")?;
         writeln!(w, "using System.Collections.Generic;")?;
         writeln!(w, "using System.Collections.ObjectModel;")?;
         match lang.encoding {
@@ -39,7 +39,6 @@ impl Emitter<CSharp> for Module {
             }
             Encoding::Bincode => {
                 writeln!(w, "using Facet.Runtime.Bincode;")?;
-                writeln!(w, "using Facet.Runtime.Serde;")?;
             }
         }
         writeln!(w)?;
@@ -56,7 +55,7 @@ impl Emitter<CSharp> for Container<'_> {
         } = self;
 
         match format {
-            ContainerFormat::UnitStruct(doc) => write_class(w, name, &[], doc, lang),
+            ContainerFormat::UnitStruct(doc) => write_sealed_record(w, name, doc, lang),
             ContainerFormat::NewTypeStruct(format, doc) => write_class(
                 w,
                 name,
@@ -67,7 +66,13 @@ impl Emitter<CSharp> for Container<'_> {
             ContainerFormat::TupleStruct(formats, doc) => {
                 write_class(w, name, &named(formats), doc, lang)
             }
-            ContainerFormat::Struct(fields, doc) => write_class(w, name, fields, doc, lang),
+            ContainerFormat::Struct(fields, doc) => {
+                if fields.is_empty() {
+                    write_sealed_record(w, name, doc, lang)
+                } else {
+                    write_class(w, name, fields, doc, lang)
+                }
+            }
             ContainerFormat::Enum(variants, doc) => {
                 let all_unit_variants = variants
                     .values()
@@ -86,6 +91,13 @@ impl Emitter<CSharp> for Container<'_> {
 impl Emitter<CSharp> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: CSharp) -> Result<()> {
         self.doc.write(w, lang)?;
+        if lang.encoding == Encoding::Json {
+            writeln!(
+                w,
+                "[JsonPropertyName(\"{}\")]",
+                self.name.to_lower_camel_case()
+            )?;
+        }
         writeln!(w, "[ObservableProperty]")?;
         writeln!(
             w,
@@ -103,6 +115,48 @@ impl Emitter<CSharp> for Doc {
         }
         Ok(())
     }
+}
+
+fn write_sealed_record<W: IndentWrite>(
+    w: &mut W,
+    name: &str,
+    doc: &Doc,
+    lang: CSharp,
+) -> Result<()> {
+    doc.write(w, lang)?;
+
+    let record_name = name.to_upper_camel_case();
+    let has_json = lang.encoding == Encoding::Json;
+    let has_bincode = lang.encoding == Encoding::Bincode;
+
+    if !has_json && !has_bincode {
+        writeln!(w, "public sealed record {};", record_name)?;
+        return Ok(());
+    }
+
+    let bincode_interfaces = if has_bincode {
+        format!(", IFacetSerializable, IFacetDeserializable<{record_name}>")
+    } else {
+        String::new()
+    };
+
+    write!(w, "public sealed record {}{} ", record_name, bincode_interfaces)?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+
+        if has_json {
+            write_json_helpers(&mut w, &record_name)?;
+        }
+
+        if has_bincode {
+            if has_json {
+                writeln!(w)?;
+            }
+            write_class_bincode_methods(&mut w, &record_name, &[])?;
+        }
+    }
+
+    Ok(())
 }
 
 fn write_class<W: IndentWrite>(
@@ -293,6 +347,13 @@ fn write_enum<W: IndentWrite>(
 
     if lang.encoding == Encoding::Bincode {
         writeln!(w)?;
+        writeln!(w, "/// <summary>")?;
+        writeln!(
+            w,
+            "/// Bincode serialization helpers for <see cref=\"{}\"/>.",
+            enum_name
+        )?;
+        writeln!(w, "/// </summary>")?;
         write!(w, "public static class {}Bincode ", enum_name)?;
         {
             let mut w = w.block(Newlines::BOTH)?;
@@ -403,6 +464,20 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     };
 
     doc.write(w, lang)?;
+    if lang.encoding == Encoding::Json {
+        writeln!(
+            w,
+            "[JsonPolymorphic(TypeDiscriminatorPropertyName = \"type\")]"
+        )?;
+        for variant in variants {
+            let variant_name = variant.name.to_upper_camel_case();
+            writeln!(
+                w,
+                "[JsonDerivedType(typeof({variant_name}), \"{}\")]",
+                variant.name
+            )?;
+        }
+    }
     write!(
         w,
         "public abstract record {}{} ",
@@ -681,11 +756,11 @@ fn write_serialize_value<W: IndentWrite>(
         Format::Str => writeln!(w, "serializer.SerializeStr({});", value_expr),
         Format::Bytes => writeln!(w, "serializer.SerializeBytes({});", value_expr),
         Format::Option(inner) => {
-            writeln!(w, "if ({}.HasValue)", value_expr)?;
+            writeln!(w, "if ({} is not null)", value_expr)?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 writeln!(w, "serializer.SerializeOptionTag(true);")?;
-                write_serialize_value(&mut w, &format!("{}.Value", value_expr), inner)?;
+                write_serialize_value(&mut w, value_expr, inner)?;
             }
             writeln!(w, "else")?;
             {
@@ -765,22 +840,18 @@ fn write_deserialize_binding<W: IndentWrite>(
         Format::Bytes => writeln!(w, "var {} = deserializer.DeserializeBytes();", var_name),
         Format::Option(inner) => {
             let inner_type = csharp_type(inner);
-            writeln!(w, "Option<{}> {};", inner_type, var_name)?;
+            writeln!(w, "{}? {};", inner_type, var_name)?;
             writeln!(w, "if (deserializer.DeserializeOptionTag())")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 let temp_name = format!("{}_value", var_name);
                 write_deserialize_binding(&mut w, &temp_name, inner)?;
-                writeln!(
-                    w,
-                    "{} = Option<{}>.Some({});",
-                    var_name, inner_type, temp_name
-                )?;
+                writeln!(w, "{} = {};", var_name, temp_name)?;
             }
             writeln!(w, "else")?;
             {
                 let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "{} = Option<{}>.None();", var_name, inner_type)?;
+                writeln!(w, "{} = null;", var_name)?;
             }
             Ok(())
         }
@@ -888,7 +959,7 @@ fn csharp_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
-        Format::Option(inner) => format!("Option<{}>", csharp_type(inner)),
+        Format::Option(inner) => format!("{}?", csharp_type(inner)),
         Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
         Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),
         Format::Map { key, value } => {

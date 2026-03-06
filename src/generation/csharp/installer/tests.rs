@@ -63,6 +63,9 @@ fn test_make_manifest_with_external_packages() {
       <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
         <PackageReference Include="Acme.Contracts" Version="2.4.1" />
+      </ItemGroup>
+
+      <ItemGroup>
         <ProjectReference Include="../internal.shared/internal.shared.csproj" />
       </ItemGroup>
     </Project>
@@ -89,13 +92,9 @@ fn test_generate_bincode_installs_runtime_files() {
         .path()
         .join("Facet/Runtime/Serde/DeserializationError.cs")
         .exists());
-    assert!(install_dir
+    assert!(!install_dir
         .path()
         .join("Facet/Runtime/Json/JsonSerde.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/Option.cs")
         .exists());
     assert!(install_dir
         .path()
@@ -141,7 +140,14 @@ fn test_generate_no_encoding_skips_runtime_files() {
 
     installer.generate(&registry).unwrap();
 
-    assert!(!install_dir.path().join("Facet/Runtime/Serde").exists());
+    assert!(install_dir
+        .path()
+        .join("Facet/Runtime/Serde/Unit.cs")
+        .exists());
+    assert!(!install_dir
+        .path()
+        .join("Facet/Runtime/Serde/ISerializer.cs")
+        .exists());
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
     assert!(!install_dir.path().join("Facet/Runtime/Json").exists());
     assert!(install_dir
@@ -177,10 +183,6 @@ fn test_generate_json_encoding_installs_serde_but_not_bincode() {
     assert!(install_dir
         .path()
         .join("Facet/Runtime/Serde/Unit.cs")
-        .exists());
-    assert!(install_dir
-        .path()
-        .join("Facet/Runtime/Serde/Option.cs")
         .exists());
     assert!(install_dir
         .path()
