@@ -37,9 +37,15 @@ macro_rules! emit {
     };
 }
 
+/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
 #[macro_export]
+#[deprecated(
+    since = "0.16.0",
+    note = "The Java generator is deprecated. Use the Kotlin generator instead."
+)]
 macro_rules! emit_java {
     ($($ty:ident),* as $encoding:path) => {
+        #[allow(deprecated)]
         || -> anyhow::Result<String> {
             use $crate::generation::{Encoding, indent::{IndentConfig, IndentedWriter}};
             let mut out = Vec::new();

@@ -1,4 +1,8 @@
 #![allow(clippy::missing_errors_doc)]
+#![expect(
+    deprecated,
+    reason = "internal implementation of the deprecated Java generator"
+)]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 

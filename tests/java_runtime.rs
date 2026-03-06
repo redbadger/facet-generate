@@ -1,4 +1,5 @@
 #![cfg(feature = "java")]
+#![expect(deprecated, reason = "tests for the deprecated Java generator")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub mod common;

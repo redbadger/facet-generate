@@ -4,7 +4,9 @@ pub mod indent;
 /// Modules for code generation that map to Namespaces declared as `#[facet(namespace = "my_namespace")]`
 pub mod module;
 
-/// Support for code-generation in Java
+/// Support for code-generation in Java.
+///
+/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
 #[cfg(feature = "java")]
 pub mod java;
 /// Support for code-generation in Kotlin
@@ -47,12 +49,20 @@ pub trait CodeGen<'a> {
 }
 
 pub enum Language {
+    #[deprecated(
+        since = "0.16.0",
+        note = "The Java generator is deprecated. Use Kotlin instead."
+    )]
     Java,
     Kotlin,
     Swift,
     TypeScript,
 }
 
+#[expect(
+    deprecated,
+    reason = "Display must handle all variants including deprecated Language::Java"
+)]
 impl Display for Language {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

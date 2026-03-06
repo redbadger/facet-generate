@@ -18,12 +18,17 @@ use crate::{
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug, Serialize)]
+#[expect(
+    deprecated,
+    reason = "CodeGeneratorConfig still contains the deprecated CustomCode field for backwards compatibility"
+)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
     pub encoding: Encoding,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
+    /// **Deprecated since 0.16.0:** `custom_code` was only used by the Java generator, which is deprecated. Use Kotlin instead.
     pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
@@ -77,6 +82,10 @@ pub type ExternalPackages =
 pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
 
 /// Track custom code to be added to particular definitions (use with care!).
+#[deprecated(
+    since = "0.16.0",
+    note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
+)]
 pub type CustomCode =
     BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
@@ -117,6 +126,10 @@ pub trait SourceInstaller {
     }
 }
 
+#[expect(
+    deprecated,
+    reason = "impl references the deprecated CustomCode type and with_custom_code method"
+)]
 impl CodeGeneratorConfig {
     /// Default config for the given module name.
     #[must_use]
@@ -138,7 +151,7 @@ impl CodeGeneratorConfig {
         &self.module_name
     }
 
-    /// for Java: updates the module name to be a child of the specified parent
+    /// for Kotlin: updates the module name to be a child of the specified parent
     #[must_use]
     pub fn with_parent(mut self, parent: &str) -> Self {
         if parent == self.module_name() {
@@ -181,6 +194,10 @@ impl CodeGeneratorConfig {
 
     /// Custom code attached to particular entity.
     #[must_use]
+    #[deprecated(
+        since = "0.16.0",
+        note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
+    )]
     pub fn with_custom_code(mut self, code: CustomCode) -> Self {
         self.custom_code = code;
         self
@@ -314,7 +331,7 @@ impl ConfigBuilder {
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PackageLocation {
-    /// Either a local file path or, for Java, a dot-separated package name.
+    /// Either a local file path or, for Kotlin, a dot-separated package name.
     Path(String),
     // The URL of a remote package.
     Url(String),
