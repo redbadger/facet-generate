@@ -1,3 +1,5 @@
+use crate as fg;
+
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 

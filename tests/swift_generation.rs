@@ -6,7 +6,9 @@
 pub mod common;
 
 use crate::common::{SerdeData, Tree};
+
 use facet::Facet;
+use facet_generate as fg;
 use facet_generate::{
     Registry,
     generation::{

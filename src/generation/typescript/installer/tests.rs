@@ -15,7 +15,7 @@
 
 use facet::Facet;
 
-use super::Installer;
+use crate as fg;
 use crate::{
     generation::{
         ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
@@ -23,6 +23,8 @@ use crate::{
     },
     reflect,
 };
+
+use super::Installer;
 
 #[test]
 fn simple_manifest() {

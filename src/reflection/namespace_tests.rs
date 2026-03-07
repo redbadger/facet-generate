@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use facet::Facet;
 
+use crate as fg;
 use crate::{
     reflect,
     reflection::{NamespaceAction, NamespaceContext, RegistryBuilder, format::Namespace},
@@ -12,6 +13,7 @@ use crate::{
 #[test]
 fn nested_namespaced_structs() {
     mod one {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -26,6 +28,7 @@ fn nested_namespaced_structs() {
         }
     }
     mod two {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -92,6 +95,7 @@ fn nested_namespaced_structs() {
 #[test]
 fn nested_namespaced_enums() {
     mod one {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -110,6 +114,7 @@ fn nested_namespaced_enums() {
         }
     }
     mod two {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -188,6 +193,7 @@ fn nested_namespaced_enums() {
 #[test]
 fn nested_namespaced_renamed_structs() {
     mod one {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -204,6 +210,7 @@ fn nested_namespaced_renamed_structs() {
         }
     }
     mod two {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -356,6 +363,7 @@ fn namespaced_collections() {
 #[test]
 fn namespaced_maps() {
     mod models {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet, Clone, Hash, Eq, PartialEq)]
@@ -424,6 +432,7 @@ fn namespaced_maps() {
 #[allow(clippy::too_many_lines)]
 fn complex_namespaced_enums() {
     mod events {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -662,6 +671,7 @@ fn cross_namespace_references() {
 #[test]
 fn namespace_with_byte_attributes() {
     mod data {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -729,6 +739,7 @@ fn invalid_namespace_identifier() {
 fn transparent_struct_explicit_namespace() {
     // Test transparent structs with explicit namespace annotations
     mod wrappers {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet, Clone)]
@@ -769,6 +780,7 @@ fn transparent_struct_explicit_namespace() {
 #[allow(clippy::too_many_lines)]
 fn explicit_namespace_declarations() {
     mod api_example {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -786,6 +798,7 @@ fn explicit_namespace_declarations() {
     }
 
     mod events_example {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]
@@ -1804,6 +1817,7 @@ fn type_in_root_and_named_namespace() {
     }
 
     mod other {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]

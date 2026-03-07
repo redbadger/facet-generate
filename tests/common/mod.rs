@@ -1,9 +1,12 @@
 #![allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
+
 use facet::Facet;
 use facet_generate::{Registry, reflect};
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use facet_generate as fg;
 
 // Simple data formats used to create and test values in each language.
 #[allow(clippy::unsafe_derive_deserialize)]

@@ -29,6 +29,7 @@ use std::{
     sync::Arc,
 };
 
+use crate as fg;
 use facet::Facet;
 
 use super::*;
@@ -877,6 +878,7 @@ fn type_in_root_and_named_namespace() {
     }
 
     mod other {
+        use crate as fg;
         use facet::Facet;
 
         #[derive(Facet)]

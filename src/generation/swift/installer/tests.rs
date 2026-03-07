@@ -14,6 +14,7 @@
 
 use facet::Facet;
 
+use crate as fg;
 use crate::{
     generation::{
         Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,

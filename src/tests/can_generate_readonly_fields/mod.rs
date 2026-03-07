@@ -1,3 +1,4 @@
+use crate as fg;
 use facet::Facet;
 
 #[derive(Facet)]

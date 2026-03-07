@@ -3,6 +3,7 @@
 use std::process::Command;
 
 use facet::Facet;
+use facet_generate as fg;
 use facet_generate::{
     generation::{Encoding, csharp},
     reflect,
@@ -96,7 +97,7 @@ fn test_csharp_code_with_external_definitions() {
     #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
     #[repr(C)]
     pub enum TestData {
-        Tree(#[facet(namespace = "foo")] common::Tree<Box<common::SerdeData>>),
+        Tree(#[facet(fg::namespace = "foo")] common::Tree<Box<common::SerdeData>>),
         SerdeData(common::SerdeData),
     }
 

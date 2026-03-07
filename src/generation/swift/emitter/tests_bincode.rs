@@ -19,6 +19,7 @@ use std::{
     sync::Arc,
 };
 
+use crate as fg;
 use facet::Facet;
 
 use super::*;

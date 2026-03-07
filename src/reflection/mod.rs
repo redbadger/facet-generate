@@ -43,7 +43,9 @@ use facet::{
 };
 use regex::Regex;
 
+use crate as fg;
 use crate::{Registry, error::Error};
+
 use format::{
     ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
