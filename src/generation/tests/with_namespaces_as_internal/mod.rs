@@ -4,6 +4,7 @@ use expect_test::expect_file;
 use facet::Facet;
 use tempfile::tempdir;
 
+use crate as fg;
 use crate::{
     generation::{
         Language, java, kotlin, swift,

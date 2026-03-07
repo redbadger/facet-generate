@@ -3,13 +3,17 @@
 //! These attributes are used with the `#[facet(fg::...)]` syntax.
 //! For example: `#[facet(fg::namespace = "MyNs")]`, `#[facet(fg::bytes)]`.
 //!
-//! Users of `facet_generate` get this crate transitively and should add
-//! `extern crate fg;` or `use fg;` at their crate root so that the
-//! `fg::__attr!` macro is resolvable by the `#[derive(Facet)]` expansion.
+//! This crate provides the attribute grammar definitions for facet-generate.
+//! It exists as a separate crate to work around Rust's restriction on
+//! accessing macro-expanded `#[macro_export]` macros by absolute paths
+//! within the same crate.
+//!
+//! Users should depend on `facet-generate` directly, which re-exports everything
+//! from this crate.
 
 facet::define_attr_grammar! {
     ns "fg";
-    crate_path ::fg;
+    crate_path ::facet_generate_attrs;
 
     /// Extension attributes for facet-generate code generation.
     pub enum Attr {

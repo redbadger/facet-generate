@@ -1,5 +1,6 @@
 use facet::Facet;
 
+use crate as fg;
 use crate::reflect;
 
 use super::*;

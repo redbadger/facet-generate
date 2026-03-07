@@ -1,3 +1,8 @@
+// Re-export attribute macros from facet-generate-attrs.
+// This allows users to write e.g. `#[facet(facet_generate::bytes)]`
+// or `use facet_generate as fg; #[facet(fg::bytes)]`
+pub use facet_generate_attrs::*;
+
 pub mod error;
 pub mod generation;
 pub mod reflection;
