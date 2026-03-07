@@ -7,7 +7,7 @@ use crate::{
     reflection::{NamespaceAction, NamespaceContext, RegistryBuilder, format::Namespace},
 };
 
-// Tests type-level namespace annotation: `#[facet(namespace = "ns")] struct Type { ... }`
+// Tests type-level namespace annotation: `#[facet(fg::namespace = "ns")] struct Type { ... }`
 // This sets the namespace context for all fields within the type, propagating to nested types.
 #[test]
 fn nested_namespaced_structs() {
@@ -20,7 +20,7 @@ fn nested_namespaced_structs() {
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "one")]
+        #[facet(fg::namespace = "one")]
         pub struct Child {
             child: GrandChild,
         }
@@ -29,7 +29,7 @@ fn nested_namespaced_structs() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "two")]
+        #[facet(fg::namespace = "two")]
         pub struct Child {
             field: String,
         }
@@ -102,7 +102,7 @@ fn nested_namespaced_enums() {
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "one")]
+        #[facet(fg::namespace = "one")]
         #[repr(C)]
         #[allow(unused)]
         pub enum Child {
@@ -113,7 +113,7 @@ fn nested_namespaced_enums() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "two")]
+        #[facet(fg::namespace = "two")]
         #[repr(C)]
         #[allow(unused)]
         pub enum Child {
@@ -191,14 +191,14 @@ fn nested_namespaced_renamed_structs() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(name = "GrandKid")]
+        #[facet(rename = "GrandKid")]
         pub struct GrandChild {
             field: String,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "one")]
-        #[facet(name = "Kid")]
+        #[facet(fg::namespace = "one")]
+        #[facet(rename = "Kid")]
         pub struct Child {
             child: GrandChild,
         }
@@ -207,8 +207,8 @@ fn nested_namespaced_renamed_structs() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "two")]
-        #[facet(name = "Kid")]
+        #[facet(fg::namespace = "two")]
+        #[facet(rename = "Kid")]
         pub struct Child {
             field: String,
         }
@@ -271,14 +271,14 @@ fn nested_namespaced_renamed_structs() {
 #[test]
 fn namespaced_collections() {
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     pub struct User {
         id: String,
         name: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     pub struct Group {
         users: Vec<User>,
     }
@@ -359,11 +359,11 @@ fn namespaced_maps() {
         use facet::Facet;
 
         #[derive(Facet, Clone, Hash, Eq, PartialEq)]
-        #[facet(namespace = "models")]
+        #[facet(fg::namespace = "models")]
         pub struct UserId(String);
 
         #[derive(Facet)]
-        #[facet(namespace = "models")]
+        #[facet(fg::namespace = "models")]
         pub struct UserProfile {
             name: String,
             active: bool,
@@ -427,20 +427,20 @@ fn complex_namespaced_enums() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         pub struct UserData {
             id: String,
             email: String,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         pub struct SystemData {
             timestamp: u64,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         #[repr(C)]
         #[allow(unused)]
         #[allow(clippy::enum_variant_names)]
@@ -536,11 +536,11 @@ fn complex_namespaced_enums() {
 #[test]
 fn namespaced_transparent_structs() {
     #[derive(Facet, Clone)]
-    #[facet(namespace = "wrappers")]
+    #[facet(fg::namespace = "wrappers")]
     pub struct UserId(String);
 
     #[derive(Facet)]
-    #[facet(namespace = "wrappers")]
+    #[facet(fg::namespace = "wrappers")]
     #[facet(transparent)]
     pub struct TransparentWrapper(UserId);
 
@@ -580,20 +580,20 @@ fn namespaced_transparent_structs() {
 #[test]
 fn cross_namespace_references() {
     #[derive(Facet)]
-    #[facet(namespace = "entities")]
+    #[facet(fg::namespace = "entities")]
     struct Entity {
         id: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     struct Request {
         entity: Entity,
         metadata: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "storage")]
+    #[facet(fg::namespace = "storage")]
     struct Record {
         entity: Entity,
         request: Request,
@@ -665,11 +665,11 @@ fn namespace_with_byte_attributes() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "data")]
+        #[facet(fg::namespace = "data")]
         pub struct BinaryData {
-            #[facet(bytes)]
+            #[facet(fg::bytes)]
             content: Vec<u8>,
-            #[facet(bytes)]
+            #[facet(fg::bytes)]
             header: &'static [u8],
             metadata: String,
         }
@@ -712,7 +712,7 @@ fn namespace_with_byte_attributes() {
 #[test]
 fn invalid_namespace_identifier() {
     #[derive(Facet)]
-    #[facet(namespace = "x.y")]
+    #[facet(fg::namespace = "x.y")]
     pub struct MyStruct {
         value: String,
     }
@@ -735,7 +735,7 @@ fn transparent_struct_explicit_namespace() {
         pub struct UserId(String);
 
         #[derive(Facet)]
-        #[facet(namespace = "wrappers")]
+        #[facet(fg::namespace = "wrappers")]
         #[facet(transparent)]
         pub struct TransparentWrapper(UserId);
     }
@@ -772,14 +772,14 @@ fn explicit_namespace_declarations() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "api")]
+        #[facet(fg::namespace = "api")]
         pub struct User {
             id: String,
             name: String,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "api")]
+        #[facet(fg::namespace = "api")]
         pub struct Group {
             users: Vec<User>,
         }
@@ -789,19 +789,19 @@ fn explicit_namespace_declarations() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         pub struct UserData {
             id: String,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         pub struct SystemData {
             timestamp: u64,
         }
 
         #[derive(Facet)]
-        #[facet(namespace = "events")]
+        #[facet(fg::namespace = "events")]
         #[repr(C)]
         #[allow(unused)]
         pub enum Event {
@@ -812,7 +812,7 @@ fn explicit_namespace_declarations() {
 
     #[derive(Facet)]
     struct ApiContainer {
-        #[facet(name = "user")]
+        #[facet(rename = "user")]
         user: api_example::User,
         group: api_example::Group,
     }
@@ -971,7 +971,7 @@ fn collections_with_explicit_namespace() {
 
     // Container with explicit namespace
     #[derive(Facet)]
-    #[facet(namespace = "system")]
+    #[facet(fg::namespace = "system")]
     struct UserManager {
         users: Vec<UnnamedUser>,
         admins: [UnnamedUser; 2],
@@ -1068,7 +1068,7 @@ fn enums_with_explicit_namespace() {
 
     // Enum with explicit namespace
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     #[repr(C)]
     #[allow(unused)]
     enum Response {
@@ -1195,7 +1195,7 @@ fn nested_structs_with_explicit_namespace() {
 
     // Container with explicit namespace
     #[derive(Facet)]
-    #[facet(namespace = "nested")]
+    #[facet(fg::namespace = "nested")]
     struct Container {
         top: TopLayer,
         middle_direct: MiddleLayer,
@@ -1289,7 +1289,7 @@ fn transparent_struct_chains() {
 
     // Container with explicit namespace
     #[derive(Facet)]
-    #[facet(namespace = "identity")]
+    #[facet(fg::namespace = "identity")]
     struct NamespacedWrapper(DoubleWrapperId);
 
     #[derive(Facet)]
@@ -1330,7 +1330,7 @@ fn mixed_containers_with_explicit_namespace() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "storage")]
+    #[facet(fg::namespace = "storage")]
     struct MixedContainer {
         single: Item,
         vector: Vec<Item>,
@@ -1421,13 +1421,13 @@ fn no_namespace_pollution() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "alpha")]
+    #[facet(fg::namespace = "alpha")]
     struct AlphaContainer {
         shared: SharedType,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "beta")]
+    #[facet(fg::namespace = "beta")]
     struct BetaContainer {
         shared: SharedType,
     }
@@ -1447,7 +1447,7 @@ fn no_namespace_pollution() {
     );
 }
 
-// Tests field-level namespace annotation: `#[facet(namespace = "ns")] field: Type`
+// Tests field-level namespace annotation: `#[facet(fg::namespace = "ns")] field: Type`
 // This overrides the namespace for a specific field, placing the referenced type in that namespace.
 #[test]
 fn struct_field_points_to_type_in_a_namespace() {
@@ -1458,7 +1458,7 @@ fn struct_field_points_to_type_in_a_namespace() {
 
     #[derive(Facet)]
     struct Parent {
-        #[facet(namespace = "other_namespace")]
+        #[facet(fg::namespace = "other_namespace")]
         value: Child,
     }
 
@@ -1496,7 +1496,7 @@ fn enum_variant_field_points_to_type_in_a_namespace() {
     #[repr(C)]
     #[allow(unused)]
     enum Parent {
-        Value(#[facet(namespace = "other_namespace")] Child),
+        Value(#[facet(fg::namespace = "other_namespace")] Child),
     }
 
     let registry = reflect!(Parent).unwrap();
@@ -1536,7 +1536,7 @@ fn enum_struct_variant_field_points_to_type_in_a_namespace() {
     #[allow(unused)]
     enum Parent {
         Value {
-            #[facet(namespace = "other_namespace")]
+            #[facet(fg::namespace = "other_namespace")]
             child: Child,
         },
     }
@@ -1585,9 +1585,9 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
     #[allow(unused)]
     enum Parent {
         Variant {
-            #[facet(namespace = "namespace_a")]
+            #[facet(fg::namespace = "namespace_a")]
             field_a: TypeA,
-            #[facet(namespace = "namespace_b")]
+            #[facet(fg::namespace = "namespace_b")]
             field_b: TypeB,
             regular_field: String,
         },
@@ -1652,7 +1652,7 @@ fn struct_field_recursively_points_to_type_in_a_namespace() {
 
     #[derive(Facet)]
     struct Parent {
-        #[facet(namespace = "other_namespace")]
+        #[facet(fg::namespace = "other_namespace")]
         value: Child,
     }
 
@@ -1704,7 +1704,7 @@ fn struct_field_with_pointer_inherits_namespace() {
 
     #[derive(Facet)]
     struct Parent {
-        #[facet(namespace = "other_namespace")]
+        #[facet(fg::namespace = "other_namespace")]
         value: Child,
     }
 
@@ -1756,7 +1756,7 @@ fn struct_field_with_collection_inherits_namespace() {
 
     #[derive(Facet)]
     struct Parent {
-        #[facet(namespace = "collection_namespace")]
+        #[facet(fg::namespace = "collection_namespace")]
         container: Container,
     }
 
@@ -1807,7 +1807,7 @@ fn type_in_root_and_named_namespace() {
         use facet::Facet;
 
         #[derive(Facet)]
-        #[facet(namespace = "other")]
+        #[facet(fg::namespace = "other")]
         pub struct Child {
             value: i32,
         }
@@ -1854,7 +1854,7 @@ fn type_in_root_and_named_namespace() {
     ");
 }
 
-/// Same type appearing in ROOT (via type-level `#[facet(namespace = None)]`) vs inherited namespace
+/// Same type appearing in ROOT (via type-level `#[facet(fg::namespace)]`) vs inherited namespace
 #[test]
 fn explicit_none_namespace() {
     #[derive(Facet)]
@@ -1863,13 +1863,13 @@ fn explicit_none_namespace() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = None)]
+    #[facet(fg::namespace)]
     struct ExplicitRootType {
         simple: SimpleType,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "wrapper")]
+    #[facet(fg::namespace = "wrapper")]
     struct WrapperType {
         explicit_root: ExplicitRootType,
         simple_direct: SimpleType,
@@ -1924,13 +1924,13 @@ fn explicit_none_namespace() {
 #[test]
 fn namespace_named_none_as_string() {
     #[derive(Facet)]
-    #[facet(namespace = "None")]
+    #[facet(fg::namespace = "None")]
     struct ExplicitNoneNamespace {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "wrapper")]
+    #[facet(fg::namespace = "wrapper")]
     struct Wrapper {
         none_named: ExplicitNoneNamespace,
     }
@@ -1960,7 +1960,7 @@ fn namespace_named_none_as_string() {
 }
 
 #[test]
-/// Same type appearing in ROOT (via field-level `#[facet(namespace = None)]`) vs inherited namespace
+/// Same type appearing in ROOT (via field-level `#[facet(fg::namespace)]`) vs inherited namespace
 fn field_level_explicit_none_namespace() {
     #[derive(Facet)]
     struct SimpleType {
@@ -1968,9 +1968,9 @@ fn field_level_explicit_none_namespace() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "container")]
+    #[facet(fg::namespace = "container")]
     struct Container {
-        #[facet(namespace = None)]
+        #[facet(fg::namespace)]
         field: SimpleType,
         normal_field: SimpleType,
     }
@@ -2014,13 +2014,13 @@ fn field_level_explicit_none_namespace() {
 #[test]
 fn enum_with_explicit_none_namespace() {
     #[derive(Facet)]
-    #[facet(namespace = "data")]
+    #[facet(fg::namespace = "data")]
     struct DataType {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = None)]
+    #[facet(fg::namespace)]
     #[repr(C)]
     #[allow(unused)]
     enum ExplicitRootEnum {
@@ -2029,7 +2029,7 @@ fn enum_with_explicit_none_namespace() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "wrapper")]
+    #[facet(fg::namespace = "wrapper")]
     struct Wrapper {
         root_enum: ExplicitRootEnum,
         data_direct: DataType,
@@ -2083,19 +2083,19 @@ fn enum_with_explicit_none_namespace() {
 #[test]
 fn deeply_nested_explicit_none() {
     #[derive(Facet)]
-    #[facet(namespace = "deep")]
+    #[facet(fg::namespace = "deep")]
     struct DeepType {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = None)]
+    #[facet(fg::namespace)]
     struct MiddleType {
         deep: DeepType,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "outer")]
+    #[facet(fg::namespace = "outer")]
     struct OuterType {
         middle: MiddleType,
         deep_direct: DeepType,
@@ -2149,13 +2149,13 @@ fn ambiguous_namespace_inheritance_should_error() {
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "namespace_a")]
+    #[facet(fg::namespace = "namespace_a")]
     struct ParentA {
         shared: SharedType, // SharedType inherits "namespace_a"
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "namespace_b")]
+    #[facet(fg::namespace = "namespace_b")]
     struct ParentB {
         shared: SharedType, // SharedType inherits "namespace_b" - conflict!
     }
@@ -2181,19 +2181,19 @@ fn explicit_namespace_prevents_inheritance_ambiguity() {
     // This test shows that explicit namespace annotations prevent inheritance conflicts
 
     #[derive(Facet)]
-    #[facet(namespace = "explicit")]
+    #[facet(fg::namespace = "explicit")]
     struct SharedType {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "namespace_a")]
+    #[facet(fg::namespace = "namespace_a")]
     struct ParentA {
         shared: SharedType, // SharedType has explicit "explicit" namespace
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "namespace_b")]
+    #[facet(fg::namespace = "namespace_b")]
     struct ParentB {
         shared: SharedType, // SharedType still has explicit "explicit" namespace - no conflict
     }
@@ -2220,19 +2220,19 @@ fn explicit_namespace_prevents_inheritance_ambiguity() {
 fn fixed_namespace_pollution_with_explicit_annotations() {
     // Test showing how to fix namespace pollution by adding explicit namespace annotations
     #[derive(Facet)]
-    #[facet(namespace = "shared")]
+    #[facet(fg::namespace = "shared")]
     struct SharedType {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "alpha")]
+    #[facet(fg::namespace = "alpha")]
     struct AlphaContainer {
         shared: SharedType, // SharedType has explicit "shared" namespace
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "beta")]
+    #[facet(fg::namespace = "beta")]
     struct BetaContainer {
         shared: SharedType, // SharedType still has explicit "shared" namespace - no conflict
     }
@@ -2315,14 +2315,14 @@ fn fixed_namespace_pollution_with_explicit_annotations() {
 #[test]
 fn mixed_field_and_type_level_explicit_override() {
     #[derive(Facet)]
-    #[facet(namespace = "parent")]
+    #[facet(fg::namespace = "parent")]
     struct Parent {
-        #[facet(namespace = "parent")]
+        #[facet(fg::namespace = "parent")]
         child: Child,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "child")]
+    #[facet(fg::namespace = "child")]
     struct Child {
         value: String,
     }
@@ -2355,14 +2355,14 @@ fn mixed_field_and_type_level_explicit_override() {
 fn field_level_none_vs_type_level_named() {
     // Test that type-level explicit Named overrides field-level explicit None
     #[derive(Facet)]
-    #[facet(namespace = "type_wins")]
+    #[facet(fg::namespace = "type_wins")]
     struct Child {
         value: String,
     }
 
     #[derive(Facet)]
     struct Parent {
-        #[facet(namespace = None)] // Field-level explicit None
+        #[facet(fg::namespace)] // Field-level explicit None
         child: Child, // But Child has type-level explicit "type_wins"
     }
 
@@ -2393,15 +2393,15 @@ fn field_level_none_vs_type_level_named() {
 fn field_level_named_vs_type_level_none() {
     // Test that type-level explicit None overrides field-level explicit Named
     #[derive(Facet)]
-    #[facet(namespace = None)]
+    #[facet(fg::namespace)]
     struct Child {
         value: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "parent")]
+    #[facet(fg::namespace = "parent")]
     struct Parent {
-        #[facet(namespace = "field_loses")] // Field-level explicit Named
+        #[facet(fg::namespace = "field_loses")] // Field-level explicit Named
         child: Child, // But Child has type-level explicit None
     }
 
@@ -2438,13 +2438,13 @@ fn same_type_with_different_field_level_overrides() {
 
     #[derive(Facet)]
     struct ContainerA {
-        #[facet(namespace = "namespace_a")]
+        #[facet(fg::namespace = "namespace_a")]
         shared: SharedType,
     }
 
     #[derive(Facet)]
     struct ContainerB {
-        #[facet(namespace = "namespace_b")]
+        #[facet(fg::namespace = "namespace_b")]
         shared: SharedType,
     }
 
@@ -2472,9 +2472,9 @@ fn collection_inner_types_inherit_field_level_namespace() {
 
     #[derive(Facet)]
     struct Container {
-        #[facet(namespace = "collection_ns")]
+        #[facet(fg::namespace = "collection_ns")]
         items: Vec<Item>,
-        #[facet(namespace = "collection_ns")]
+        #[facet(fg::namespace = "collection_ns")]
         item_map: HashMap<String, Item>,
     }
 
@@ -2528,8 +2528,8 @@ fn enum_tuple_variant_collection_inheritance() {
     #[repr(C)]
     #[allow(unused)]
     enum Container {
-        Items(#[facet(namespace = "ns1")] Vec<Item1>),
-        ItemMap(#[facet(namespace = "ns2")] HashMap<String, Item2>),
+        Items(#[facet(fg::namespace = "ns1")] Vec<Item1>),
+        ItemMap(#[facet(fg::namespace = "ns2")] HashMap<String, Item2>),
     }
 
     let registry = reflect!(Container).unwrap();
@@ -2595,9 +2595,9 @@ fn enum_struct_variant_collection_inheritance() {
     #[allow(unused)]
     enum Container {
         Data {
-            #[facet(namespace = "ns1")]
+            #[facet(fg::namespace = "ns1")]
             items: Vec<Item1>,
-            #[facet(namespace = "ns2")]
+            #[facet(fg::namespace = "ns2")]
             item_map: HashMap<String, Item2>,
         },
     }

@@ -1,5 +1,5 @@
 use facet::Facet;
 
 #[derive(Facet)]
-#[facet(serialized_as = "String")]
+#[facet(fg::serialized_as = "String")]
 pub struct ItemId(i64);

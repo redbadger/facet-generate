@@ -77,17 +77,17 @@ impl<'a> CodeGenerator<'a> {
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format {
-                    if let Namespace::Named(namespace) = &qualified_name.namespace {
-                        if namespace == config.module_name() {
-                            // Same-module type: strip namespace so it renders as a bare name
-                            *qualified_name = QualifiedTypeName::root(qualified_name.name.clone());
-                        } else if config.external_definitions.contains_key(namespace) {
-                            *qualified_name = QualifiedTypeName::namespaced(
-                                namespace.clone(),
-                                qualified_name.name.clone(),
-                            );
-                        }
+                if let Format::TypeName(qualified_name) = format
+                    && let Namespace::Named(namespace) = &qualified_name.namespace
+                {
+                    if namespace == config.module_name() {
+                        // Same-module type: strip namespace so it renders as a bare name
+                        *qualified_name = QualifiedTypeName::root(qualified_name.name.clone());
+                    } else if config.external_definitions.contains_key(namespace) {
+                        *qualified_name = QualifiedTypeName::namespaced(
+                            namespace.clone(),
+                            qualified_name.name.clone(),
+                        );
                     }
                 }
                 Ok(())

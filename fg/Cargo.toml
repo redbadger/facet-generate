@@ -1,0 +1,12 @@
+[package]
+name = "fg"
+description = "Extension attributes for facet-generate code generation"
+version = "0.1.0"
+authors = ["Red Badger Consulting Limited"]
+repository = "https://github.com/redbadger/facet-generate"
+license = "Apache-2.0"
+edition = "2024"
+rust-version = "1.90"
+
+[dependencies]
+facet = "=0.44.1"

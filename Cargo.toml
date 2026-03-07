@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "fg"]
+
 [package]
 name = "facet_generate"
 description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
@@ -7,11 +10,12 @@ repository = "https://github.com/redbadger/facet-generate"
 license = "Apache-2.0"
 keywords = ["codegen", "ffi", "facet"]
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.90"
 
 [dependencies]
 derive_builder = "0.20"
-facet = "=0.31"
+facet = "=0.44.1"
+fg = { path = "fg" }
 heck = "0.5"
 include_dir = { version = "0.7", optional = true }
 indent = "0.1"
@@ -29,7 +33,8 @@ bincode = "=1"
 chrono = "0.4.44"
 difficient = "0.1.0"
 expect-test = "1.5.1"
-facet = { version = "=0.31", features = ["chrono", "url", "bytes"] }
+facet = { version = "=0.44.1", features = ["chrono", "url", "bytes"] }
+fg = { path = "fg" }
 ignore = "0.4"
 insta = { version = "1.46.3", features = ["yaml", "json"] }
 maplit = "1.0.2"

@@ -16,7 +16,7 @@ use crate::{
 fn test() {
     #[derive(Facet)]
     struct StructWithBytes {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: Vec<u8>,
         name: String,
     }

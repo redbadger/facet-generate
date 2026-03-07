@@ -1,7 +1,7 @@
 use facet::Facet;
 
 /// This is a Person struct with camelCase rename
-#[derive(Facet)]
+#[derive(Default, Facet)]
 #[facet(default, rename_all = "camelCase")]
 pub struct Person {
     pub first_name: String,
@@ -12,7 +12,7 @@ pub struct Person {
 }
 
 /// This is a Person2 struct with `SCREAMING_SNAKE_CASE` rename
-#[derive(Facet)]
+#[derive(Default, Facet)]
 #[facet(default, rename_all = "SCREAMING_SNAKE_CASE")]
 pub struct Person2 {
     pub first_name: String,

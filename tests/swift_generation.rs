@@ -151,7 +151,7 @@ fn test_swift_code_with_external_definitions() {
     #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
     #[repr(C)]
     pub enum TestData {
-        Tree(#[facet(namespace = "foo")] Tree<Box<SerdeData>>),
+        Tree(#[facet(fg::namespace = "foo")] Tree<Box<SerdeData>>),
         SerdeData(SerdeData),
     }
 
