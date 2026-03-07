@@ -1,9 +1,7 @@
-#![expect(unused)]
-
 use facet::Facet;
 
 /// This struct has a unit field
-#[derive(Facet)]
+#[derive(Default, Facet)]
 #[facet(default, rename_all = "camelCase")]
 struct StructHasVoidType {
     this_is_a_unit: (),
@@ -15,4 +13,10 @@ struct StructHasVoidType {
 #[repr(C)]
 enum EnumHasVoidType {
     HasAUnit(()),
+}
+
+impl Default for EnumHasVoidType {
+    fn default() -> Self {
+        EnumHasVoidType::HasAUnit(())
+    }
 }

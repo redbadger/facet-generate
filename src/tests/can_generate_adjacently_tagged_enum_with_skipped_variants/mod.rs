@@ -10,7 +10,7 @@ pub enum SomeEnum {
     #[facet(skip)]
     B,
     C(i32),
-    #[facet(skip, asdf)]
+    #[facet(skip)]
     D(u32),
     #[facet(skip)]
     E,

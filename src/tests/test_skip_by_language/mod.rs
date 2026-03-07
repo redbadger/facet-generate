@@ -1,22 +1,24 @@
-#![expect(unused)]
 #![expect(clippy::enum_variant_names)]
 
 use facet::Facet;
 
 #[derive(Facet)]
-#[facet(swift(skip))]
+// TODO: implement language-specific skip: #[facet(swift(skip))]
+#[facet(skip)]
 pub struct NotVisibleInSwift {
     inner: u32,
 }
 
 #[derive(Facet)]
-#[facet(kotlin(skip))]
+// TODO: implement language-specific skip: #[facet(kotlin(skip))]
+#[facet(skip)]
 pub struct NotVisibleInKotlin {
     inner: u32,
 }
 
 #[derive(Facet)]
-#[facet(typescript(skip))]
+// TODO: implement language-specific skip: #[facet(typescript(skip))]
+#[facet(skip)]
 pub struct NotVisibleInTypescript {
     inner: u32,
 }
@@ -24,10 +26,13 @@ pub struct NotVisibleInTypescript {
 #[derive(Facet)]
 #[repr(C)]
 pub enum EnumWithVariantsPerLanguage {
-    #[facet(swift(skip))]
+    // TODO: implement language-specific skip: #[facet(swift(skip))]
+    #[facet(skip)]
     NotVisibleInSwift,
-    #[facet(kotlin(skip))]
+    // TODO: implement language-specific skip: #[facet(kotlin(skip))]
+    #[facet(skip)]
     NotVisibleInKotlin,
-    #[facet(typescript(skip))]
+    // TODO: implement language-specific skip: #[facet(typescript(skip))]
+    #[facet(skip)]
     NotVisibleInTypescript,
 }

@@ -728,7 +728,7 @@ fn struct_with_vec_of_u8() {
 fn struct_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: Vec<u8>,
     }
 
@@ -746,7 +746,7 @@ fn struct_with_vec_of_u8_to_bytes() {
 #[test]
 fn newtype_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] Vec<u8>);
+    struct MyStruct(#[facet(fg::bytes)] Vec<u8>);
 
     insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @"
     ? namespace: ROOT
@@ -760,7 +760,7 @@ fn newtype_with_vec_of_u8_to_bytes() {
 #[test]
 fn newtype_with_fixed_array_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] [u8; 32]);
+    struct MyStruct(#[facet(fg::bytes)] [u8; 32]);
 
     insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @"
     ? namespace: ROOT
@@ -775,7 +775,7 @@ fn newtype_with_fixed_array_to_bytes() {
 fn nested_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
-    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    struct MyBytes(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyBytes);
 
@@ -936,7 +936,7 @@ fn nested_unit_enum() {
 fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
-    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    struct MyBytes(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyBytes);
 
@@ -951,12 +951,12 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
         },
         VariantC(MyBytes),
         VariantD {
-            #[facet(bytes)]
+            #[facet(fg::bytes)]
             bytes: Vec<u8>,
             array: Vec<u8>,
         },
-        VariantE(#[facet(bytes)] Vec<u8>),
-        VariantF(#[facet(bytes)] Vec<u8>, u32),
+        VariantE(#[facet(fg::bytes)] Vec<u8>),
+        VariantF(#[facet(fg::bytes)] Vec<u8>, u32),
     }
 
     insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @"
@@ -1086,7 +1086,7 @@ fn nested_enum_newtype_transparent_with_str() {
 #[test]
 fn nested_tuple_struct_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] Vec<u8>);
+    struct MyStruct(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyStruct);
 
@@ -1110,7 +1110,7 @@ fn nested_tuple_struct_with_vec_of_u8_to_bytes() {
 fn struct_bytes_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: bytes::Bytes,
     }
 
@@ -1129,7 +1129,7 @@ fn struct_bytes_bytes() {
 fn struct_with_opt_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: Option<Vec<u8>>,
     }
 
@@ -1166,7 +1166,7 @@ fn struct_with_slice_of_u8() {
 fn struct_with_slice_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct<'a> {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: &'a [u8],
     }
 
@@ -2201,7 +2201,7 @@ fn own_result_enum() {
     struct HttpResponse {
         status: u16,
         headers: Vec<HttpHeader>,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         body: Vec<u8>,
     }
 
@@ -2295,7 +2295,7 @@ fn own_result_enum() {
 #[test]
 fn struct_rename() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     struct EffectFfi {
         name: String,
         active: bool,
@@ -2318,7 +2318,7 @@ fn struct_rename() {
 #[test]
 fn enum_rename() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     #[repr(C)]
     #[allow(unused)]
     enum EffectFfi {
@@ -2345,7 +2345,7 @@ fn enum_rename() {
 #[test]
 fn struct_rename_with_named_type() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     struct EffectFfi {
         inner: String,
     }

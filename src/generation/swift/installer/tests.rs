@@ -1,5 +1,6 @@
 use facet::Facet;
 
+use crate as fg;
 use crate::{
     generation::{
         Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
@@ -199,7 +200,7 @@ fn manifest_with_serde_as_a_local_dependency() {
 #[test]
 fn manifest_with_namespaces() {
     #[derive(Facet)]
-    #[facet(namespace = "another_target")]
+    #[facet(fg::namespace = "another_target")]
     struct Child {
         name: String,
     }
@@ -250,7 +251,7 @@ fn manifest_with_namespaces() {
 #[test]
 fn manifest_with_disjoint_namespaces() {
     #[derive(Facet)]
-    #[facet(namespace = "another_namespace")]
+    #[facet(fg::namespace = "another_namespace")]
     struct Another {
         name: String,
     }
@@ -345,7 +346,7 @@ fn manifest_with_remote_dependencies() {
 #[test]
 fn manifest_with_namespaces_and_dependencies() {
     #[derive(Facet)]
-    #[facet(namespace = "another_package")]
+    #[facet(fg::namespace = "another_package")]
     struct Child {
         name: String,
     }
@@ -407,7 +408,7 @@ fn manifest_with_namespaces_and_dependencies() {
 #[test]
 fn manifest_with_disjoint_namespaces_and_dependencies() {
     #[derive(Facet)]
-    #[facet(namespace = "another_namespace")]
+    #[facet(fg::namespace = "another_namespace")]
     struct Another {
         name: String,
     }
@@ -472,7 +473,7 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
     // ALL external dependencies from ALL types are collected properly.
     // Previously, only the first type's external dependencies were preserved.
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     struct GrandChild {
         test: String,
     }
@@ -536,13 +537,13 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
 #[test]
 fn external_dependency_references_local_dependency() {
     #[derive(Facet)]
-    #[facet(namespace = "local_dependency")]
+    #[facet(fg::namespace = "local_dependency")]
     struct GrandChild {
         inner: GreatGrandChild,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "external_dependency")]
+    #[facet(fg::namespace = "external_dependency")]
     struct GreatGrandChild {
         inner: String,
     }

@@ -1,5 +1,3 @@
-#![expect(unused)]
-
 use difficient::Diffable;
 use facet::Facet;
 

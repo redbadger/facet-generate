@@ -1,5 +1,3 @@
-#![expect(unused)]
-
 use facet::Facet;
 
 /// This is a comment.

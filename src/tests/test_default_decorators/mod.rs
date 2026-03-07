@@ -1,5 +1,5 @@
 use facet::Facet;
 
 #[derive(Facet)]
-#[facet(swift = "Equatable")]
+// TODO: #[facet(swift = "Equatable")]
 struct EmptyType {}

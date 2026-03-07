@@ -19,7 +19,7 @@ pub struct StructUsingGenericEnum {
 }
 
 #[derive(Facet)]
-#[facet(tag = "type", content = "content")]
+#[facet(tag = "type", content = "content", where T: Facet<'ʄ>)]
 #[repr(C)]
 pub enum GenericEnumUsingGenericEnum<T> {
     VariantC(GenericEnum<T, T>),
