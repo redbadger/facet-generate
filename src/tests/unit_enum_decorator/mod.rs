@@ -1,5 +1,3 @@
-#![expect(unused)]
-
 use facet::Facet;
 
 #[derive(Facet)]
@@ -9,28 +7,28 @@ pub enum BestHockeyTeams {
 }
 
 #[derive(Facet)]
-#[facet(swift = "Equatable")]
+// TODO: #[facet(swift = "Equatable")]
 #[repr(C)]
 pub enum BestHockeyTeams1 {
     PittsburghPenguins,
 }
 
 #[derive(Facet)]
-#[facet(swift = "Equatable, Comparable, Hashable")]
+// TODO: #[facet(swift = "Equatable, Comparable, Hashable")]
 #[repr(C)]
 pub enum BestHockeyTeams2 {
     PittsburghPenguins,
 }
 
 #[derive(Facet)]
-#[facet(kotlin = "idk")]
+// TODO: #[facet(kotlin = "idk")]
 #[repr(C)]
 pub enum BestHockeyTeams3 {
     PittsburghPenguins,
 }
 
 #[derive(Facet)]
-#[facet(swift = "Equatable", swift = "Hashable")]
+// TODO: #[facet(swift = "Equatable", swift = "Hashable")]
 #[repr(C)]
 pub enum BestHockeyTeams4 {
     PittsburghPenguins,

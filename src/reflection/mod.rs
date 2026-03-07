@@ -9,9 +9,9 @@ use std::{
 };
 
 use facet::{
-    ArrayDef, Def, EnumType, Facet, Field, FieldAttribute, ListDef, MapDef, NumericType, OptionDef,
-    PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape, ShapeAttribute, SliceDef,
-    StructKind, StructType, TextualType, Type, UserType, Variant, VariantAttribute,
+    ArrayDef, Def, EnumType, Facet, Field, FieldFlags, ListDef, MapDef, NumericType, OptionDef,
+    PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape, SliceDef, StructKind,
+    StructType, TextualType, Type, UserType, Variant,
 };
 use regex::Regex;
 
@@ -247,10 +247,8 @@ impl RegistryBuilder {
 
                 let should_move = type_level_namespace.should_move_to_namespace(namespace);
 
-                if should_move {
-                    if let Some(format) = self.registry.remove(&original_key) {
-                        self.registry.insert(namespaced_key.clone(), format);
-                    }
+                if should_move && let Some(format) = self.registry.remove(&original_key) {
+                    self.registry.insert(namespaced_key.clone(), format);
                 }
             }
         }
@@ -288,6 +286,7 @@ impl RegistryBuilder {
     fn is_supported_generic_type(&mut self, shape: &Shape) -> bool {
         if shape.type_params.is_empty()
             || shape.type_identifier.starts_with('&')
+            || shape.type_identifier.starts_with('[')
             || SUPPORTED_GENERIC_TYPES.contains(&shape.type_identifier)
         {
             return true;
@@ -520,11 +519,7 @@ impl RegistryBuilder {
                     let container = ContainerFormat::TupleStruct(vec![], shape.into());
                     self.push_with_type_check(struct_name.clone(), container, shape)?;
                     for field in struct_type.fields {
-                        let skip = field.attributes.iter().any(|attr| {
-                            matches!(attr ,
-                                FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
-                            )
-                        });
+                        let skip = field.flags.contains(FieldFlags::SKIP);
                         if skip {
                             continue;
                         }
@@ -539,11 +534,7 @@ impl RegistryBuilder {
                 let container = ContainerFormat::Struct(vec![], shape.into());
                 self.push_with_type_check(struct_name.clone(), container, shape)?;
                 for field in struct_type.fields {
-                    let skip = field.attributes.iter().any(|attr| {
-                        matches!(attr ,
-                            FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip",
-                        )
-                    });
+                    let skip = field.flags.contains(FieldFlags::SKIP);
                     if skip {
                         continue;
                     }
@@ -551,12 +542,12 @@ impl RegistryBuilder {
                 }
 
                 // If all fields were skipped, convert to UnitStruct to avoid empty data class issues
-                if let Some(ContainerFormat::Struct(fields, doc)) = self.get_mut() {
-                    if fields.is_empty() {
-                        let unit_container = ContainerFormat::UnitStruct(doc.clone());
-                        if let Some(current_name) = self.current.last() {
-                            self.registry.insert(current_name.clone(), unit_container);
-                        }
+                if let Some(ContainerFormat::Struct(fields, doc)) = self.get_mut()
+                    && fields.is_empty()
+                {
+                    let unit_container = ContainerFormat::UnitStruct(doc.clone());
+                    if let Some(current_name) = self.current.last() {
+                        self.registry.insert(current_name.clone(), unit_container);
                     }
                 }
 
@@ -651,28 +642,28 @@ impl RegistryBuilder {
     fn try_handle_option_field(&mut self, field: &Field) -> Result<bool, Error> {
         let field_shape = field.shape();
         // Check if the field is an Option
-        if field_shape.type_identifier == "Option" {
-            if let Def::Option(option_def) = field_shape.def {
-                // Handle Option types directly
-                let inner_shape = option_def.t();
-                // Handle pointer types specially
-                let inner_format = get_format_for_shape(inner_shape)?;
-                let option_format = Format::Option(Box::new(inner_format));
+        if field_shape.type_identifier == "Option"
+            && let Def::Option(option_def) = field_shape.def
+        {
+            // Handle Option types directly
+            let inner_shape = option_def.t();
+            // Handle pointer types specially
+            let inner_format = get_format_for_shape(inner_shape)?;
+            let option_format = Format::Option(Box::new(inner_format));
 
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field.name.to_string(),
-                        doc: field.into(),
-                        value: option_format,
-                    });
-                }
-
-                // If the inner type is a user-defined type, we need to process it too
-                if !matches!(inner_shape.def, Def::Scalar) {
-                    self.format(inner_shape)?;
-                }
-                return Ok(true);
+            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+                named_formats.push(Named {
+                    name: field.name.to_string(),
+                    doc: field.into(),
+                    value: option_format,
+                });
             }
+
+            // If the inner type is a user-defined type, we need to process it too
+            if !matches!(inner_shape.def, Def::Scalar) {
+                self.format(inner_shape)?;
+            }
+            return Ok(true);
         }
         Ok(false)
     }
@@ -791,9 +782,10 @@ impl RegistryBuilder {
         let mut variant_index = 0u32;
 
         for variant in enum_type.variants {
-            let skip = variant.attributes.iter().any(|attr| match attr {
-                VariantAttribute::Arbitrary(attr_str) => *attr_str == "skip",
-            });
+            let skip = variant
+                .attributes
+                .iter()
+                .any(|attr| attr.key == "skip" && attr.is_builtin());
             if skip {
                 continue;
             }
@@ -850,17 +842,16 @@ impl RegistryBuilder {
         let field_shape = field.shape();
         if is_transparent_shape(field_shape)
             && let Some(inner) = field_shape.inner
+            && let Some(format) = self.get_user_type_format(inner)?
         {
-            if let Some(format) = self.get_user_type_format(inner)? {
-                return Ok(VariantFormat::NewType(Box::new(format)));
-            }
+            return Ok(VariantFormat::NewType(Box::new(format)));
         }
-        if let Def::Option(v) = field_shape.def {
-            if let Some(format) = self.get_user_type_format(v.t)? {
-                return Ok(VariantFormat::NewType(Box::new(Format::Option(Box::new(
-                    format,
-                )))));
-            }
+        if let Def::Option(v) = field_shape.def
+            && let Some(format) = self.get_user_type_format(v.t)?
+        {
+            return Ok(VariantFormat::NewType(Box::new(Format::Option(Box::new(
+                format,
+            )))));
         }
 
         if field_shape.type_identifier == "()" {
@@ -973,9 +964,7 @@ impl RegistryBuilder {
         // Process all fields with their names
         for field in variant.data.fields {
             // Check for #[facet(skip)] attribute on the field
-            let skip = field.attributes.iter().any(
-                |attr| matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip"),
-            );
+            let skip = field.flags.contains(FieldFlags::SKIP);
             if skip {
                 continue;
             }
@@ -1000,29 +989,29 @@ impl RegistryBuilder {
             self.push_namespace(field_namespace.clone());
 
             // Handle Option types specially (like handle_struct_field does)
-            if field_shape.type_identifier == "Option" {
-                if let Def::Option(option_def) = field_shape.def {
-                    let inner_shape = option_def.t();
-                    let inner_format =
-                        get_inner_format_with_context(inner_shape, self.current_namespace())?;
-                    let option_format = Format::Option(Box::new(inner_format));
+            if field_shape.type_identifier == "Option"
+                && let Def::Option(option_def) = field_shape.def
+            {
+                let inner_shape = option_def.t();
+                let inner_format =
+                    get_inner_format_with_context(inner_shape, self.current_namespace())?;
+                let option_format = Format::Option(Box::new(inner_format));
 
-                    // Process any user-defined types in the nested structure
-                    if !matches!(inner_shape.def, Def::Scalar) {
-                        self.format(inner_shape)?;
-                    }
-
-                    self.pop_namespace();
-
-                    if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                        named_formats.push(Named {
-                            name: field.name.to_string(),
-                            doc: field.into(),
-                            value: option_format,
-                        });
-                    }
-                    continue;
+                // Process any user-defined types in the nested structure
+                if !matches!(inner_shape.def, Def::Scalar) {
+                    self.format(inner_shape)?;
                 }
+
+                self.pop_namespace();
+
+                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
+                    named_formats.push(Named {
+                        name: field.name.to_string(),
+                        doc: field.into(),
+                        value: option_format,
+                    });
+                }
+                continue;
             }
 
             // Determine the proper format with the field-level context in place
@@ -1093,9 +1082,7 @@ impl RegistryBuilder {
         // Process all fields
         for field in variant.data.fields {
             // Check for #[facet(skip)] attribute on the field
-            let skip = field.attributes.iter().any(
-                |attr| matches!(attr, FieldAttribute::Arbitrary(attr_str) if *attr_str == "skip"),
-            );
+            let skip = field.flags.contains(FieldFlags::SKIP);
             if skip {
                 continue;
             }
@@ -1321,13 +1308,10 @@ impl RegistryBuilder {
                 }
             }
             _ => {
-                // Check if this is a scalar opaque type that should be skipped
-                if let Def::Scalar = field_shape.def {
-                    match type_to_format(field_shape) {
-                        Ok(Some(format)) => Ok(Some(format)),
-                        Ok(None) => Ok(None), // This is an opaque type that should be skipped
-                        Err(e) => Err(e),
-                    }
+                // Check if this is an opaque type that should be skipped.
+                // #[facet(opaque)] fields use Def::Undefined.
+                if matches!(field_shape.def, Def::Undefined) {
+                    Ok(None)
                 } else {
                     match get_inner_format_with_context(field_shape, self.current_namespace()) {
                         Ok(format) => Ok(Some(format)),
@@ -1523,34 +1507,20 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
 
     let shape_namespace = extract_namespace_from_shape(shape)?;
 
-    // Extract name attribute
-    let mut name = None;
-    for attr in shape.attributes {
-        match attr {
-            ShapeAttribute::Arbitrary(attr_str) => {
-                // Check for rename attribute in the format "name = \"NewName\""
-                if let Some(stripped) = attr_str.strip_prefix("name = \"") {
-                    if let Some(end_idx) = stripped.find('"') {
-                        name = Some(stripped[..end_idx].to_string());
-                    }
-                }
-                // Check for rename attribute without quotes "name = NewName"
-                else if let Some(stripped) = attr_str.strip_prefix("name = ") {
-                    name = Some(stripped.trim_matches('"').to_string());
-                }
-            }
-            ShapeAttribute::Transparent => {
-                if let Some(inner) = shape.inner {
-                    return get_name(inner);
-                }
-            }
-            _ => (),
-        }
+    // Check for transparent via repr
+    if is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        return get_name(inner);
     }
 
-    // Determine the base name
-    let base_name = if let Some(custom_name) = name {
-        custom_name
+    // Determine the base name — use the built-in `rename` field if present,
+    // then check attributes for a rename (facet derive stores it there),
+    // otherwise fall back to the type identifier.
+    let base_name = if let Some(rename) = shape.rename {
+        rename.to_string()
+    } else if let Some(rename) = extract_rename_from_shape_attributes(shape) {
+        rename.to_string()
     } else {
         shape.type_identifier.to_string()
     };
@@ -1631,6 +1601,12 @@ fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
             "String" | "DateTime<Utc>" => Some(Format::Str),
             _ => None,
         },
+        // Handle () unit type which in facet 0.44.1 appears as User(Struct(Tuple, []))
+        Type::User(UserType::Struct(st))
+            if st.kind == StructKind::Tuple && st.fields.is_empty() =>
+        {
+            Some(Format::Unit)
+        }
         _ => unimplemented!(
             "Unsupported type for scalar format: {}: {:?}",
             shape.type_identifier,
@@ -1641,14 +1617,27 @@ fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
     Ok(format)
 }
 
+/// Extract a rename value from shape attributes.
+///
+/// In the latest facet, `#[facet(rename = "...")]` on a container is stored
+/// in `shape.attributes` rather than `shape.rename`. This helper checks the
+/// attributes for a builtin `rename` key and returns the value if found.
+fn extract_rename_from_shape_attributes(shape: &Shape) -> Option<&'static str> {
+    for attr in shape.attributes {
+        if attr.ns.is_none()
+            && attr.key == "rename"
+            && let Some(s) = attr.get_as::<&str>()
+        {
+            return Some(s);
+        }
+    }
+    None
+}
+
 fn extract_namespace_from_shape(shape: &Shape) -> Result<NamespaceAction, Error> {
     for attr in shape.attributes {
-        if let ShapeAttribute::Arbitrary(attr_str) = attr {
-            match extract_namespace(attr_str) {
-                Ok(None) => (),
-                Ok(Some(namespace)) => return Ok(namespace),
-                Err(e) => return Err(e),
-            }
+        if let Some(action) = extract_namespace_from_attr(attr)? {
+            return Ok(action);
         }
     }
     Ok(NamespaceAction::Inherit)
@@ -1656,54 +1645,51 @@ fn extract_namespace_from_shape(shape: &Shape) -> Result<NamespaceAction, Error>
 
 fn extract_namespace_from_field_attributes(field: &Field) -> Result<NamespaceAction, Error> {
     for attr in field.attributes {
-        if let FieldAttribute::Arbitrary(attr_str) = attr {
-            match extract_namespace(attr_str) {
-                Ok(None) => (),
-                Ok(Some(namespace)) => return Ok(namespace),
-                Err(e) => return Err(e),
-            }
+        if let Some(action) = extract_namespace_from_attr(attr)? {
+            return Ok(action);
         }
     }
     Ok(NamespaceAction::Inherit)
 }
 
-fn extract_namespace(attribute: &str) -> Result<Option<NamespaceAction>, Error> {
-    static IS_NAMESPACE_ATTR: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^namespace\s*=\s*(.*)$").expect("Invalid regex"));
-    static HAS_QUOTES: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r#"^"(.*)"$"#).expect("Invalid regex"));
-    static VALID_IDENT: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^[a-zA-Z_]\w*$").expect("Invalid regex"));
-
-    let Some(s) = IS_NAMESPACE_ATTR.captures(attribute) else {
+/// Extract a namespace action from a single `fg::namespace` extension attribute.
+///
+/// - `#[facet(fg::namespace = "MyNs")]` → `SetContext(explicit(Named("MyNs")))`
+/// - `#[facet(fg::namespace)]` (no value) → `SetContext(cleared())`
+/// - Any other attribute → `None` (not a namespace attr)
+fn extract_namespace_from_attr(attr: &facet::Attr) -> Result<Option<NamespaceAction>, Error> {
+    if attr.ns != Some("fg") || attr.key != "namespace" {
         return Ok(None);
-    };
+    }
 
-    let s = &s[1];
-    let Some(s) = HAS_QUOTES.captures(s) else {
-        if s == "None" {
-            return Ok(Some(NamespaceAction::SetContext(
-                NamespaceContext::cleared(),
-            )));
-        }
+    // The data is stored as fg::Attr::Namespace(Option<&'static str>)
+    let Some(gen_attr) = attr.get_as::<fg::Attr>() else {
         return Err(Error::InvalidNamespaceFormat);
     };
 
-    let s = &s[1];
-    if !VALID_IDENT.is_match(s) {
-        return Err(Error::InvalidNamespaceIdentifier);
+    match gen_attr {
+        fg::Attr::Namespace(Some(ns_str)) => {
+            static VALID_IDENT: LazyLock<Regex> =
+                LazyLock::new(|| Regex::new(r"^[a-zA-Z_]\w*$").expect("Invalid regex"));
+            if !VALID_IDENT.is_match(ns_str) {
+                return Err(Error::InvalidNamespaceIdentifier);
+            }
+            Ok(Some(NamespaceAction::SetContext(
+                NamespaceContext::explicit(Namespace::Named(ns_str.to_string())),
+            )))
+        }
+        fg::Attr::Namespace(None) => Ok(Some(NamespaceAction::SetContext(
+            NamespaceContext::cleared(),
+        ))),
+        _ => Ok(None),
     }
-
-    Ok(Some(NamespaceAction::SetContext(
-        NamespaceContext::explicit(Namespace::Named(s.to_string())),
-    )))
 }
 
 fn is_transparent_shape(shape: &Shape) -> bool {
     shape
         .attributes
         .iter()
-        .any(|attr| matches!(attr, ShapeAttribute::Transparent))
+        .any(|attr| attr.ns.is_none() && attr.key == "transparent")
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1723,11 +1709,10 @@ fn should_process_nested_type(shape: &Shape) -> bool {
 fn bytes_attribute_format(field: &Field) -> Option<Format> {
     let mut shape = field.shape();
     let is_bytes_attr = |field: &Field| {
-        field.attributes.iter().any(|attr| {
-            matches!(attr ,
-                FieldAttribute::Arbitrary(attr_str) if *attr_str == "bytes",
-            )
-        })
+        field
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "bytes" && attr.ns == Some("fg"))
     };
     let mut is_transparent_bytes = || {
         if is_transparent_shape(shape) {
@@ -1799,19 +1784,12 @@ fn bytes_attribute_format(field: &Field) -> Option<Format> {
     }
 
     // Handle bytes attribute for &[u8] slices
-    if field_shape.type_identifier == "&" {
-        // Check if it's a smart pointer to a slice of u8
-        if let Def::Pointer(PointerDef {
-            pointee: Some(target_shape_fn),
-            ..
-        }) = field_shape.def
-        {
-            let target_shape = target_shape_fn;
-            if let Def::Slice(slice_def) = target_shape.def {
-                let element_shape = slice_def.t();
-                if element_shape.type_identifier == "u8" {
-                    return Some(format());
-                }
+    if let Type::Pointer(PointerType::Reference(pd) | PointerType::Raw(pd)) = &field_shape.ty {
+        let target_shape = pd.target;
+        if let Def::Slice(slice_def) = target_shape.def {
+            let element_shape = slice_def.t();
+            if element_shape.type_identifier == "u8" {
+                return Some(format());
             }
         }
     }
@@ -1890,18 +1868,19 @@ fn get_inner_format_with_context(
         }
         Def::Undefined => {
             // Check if this is a tuple type by examining the type structure
-            if let Type::User(UserType::Struct(struct_type)) = &shape.ty {
-                if struct_type.kind == StructKind::Tuple && !struct_type.fields.is_empty() {
-                    // Handle tuple types -> TUPLE: [field1, field2, ...]
-                    let mut tuple_formats = vec![];
-                    for field in struct_type.fields {
-                        let field_shape = field.shape();
-                        let field_format =
-                            get_inner_format_with_context(field_shape, namespace_context)?;
-                        tuple_formats.push(field_format);
-                    }
-                    return Ok(Format::Tuple(tuple_formats));
+            if let Type::User(UserType::Struct(struct_type)) = &shape.ty
+                && struct_type.kind == StructKind::Tuple
+                && !struct_type.fields.is_empty()
+            {
+                // Handle tuple types -> TUPLE: [field1, field2, ...]
+                let mut tuple_formats = vec![];
+                for field in struct_type.fields {
+                    let field_shape = field.shape();
+                    let field_format =
+                        get_inner_format_with_context(field_shape, namespace_context)?;
+                    tuple_formats.push(field_format);
                 }
+                return Ok(Format::Tuple(tuple_formats));
             }
 
             // Special case for unit type
@@ -1966,66 +1945,3 @@ mod tests;
 #[cfg(test)]
 #[path = "namespace_tests.rs"]
 mod namespace_tests;
-
-#[cfg(test)]
-mod function_tests {
-    use crate::error::Error;
-
-    use super::*;
-
-    #[test]
-    fn extract_namespace_tests() {
-        let tests = [
-            ("not a namespace attribute", "some string", Ok(None)),
-            (
-                "error, no quotes around namespace",
-                "namespace = my_namespace",
-                Err(Error::InvalidNamespaceFormat),
-            ),
-            (
-                "error, invalid namespace",
-                r#"namespace = "%^t6!!""#,
-                Err(Error::InvalidNamespaceIdentifier),
-            ),
-            (
-                "set namespace",
-                r#"namespace = "my_namespace""#,
-                Ok(Some(NamespaceAction::SetContext(
-                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
-                ))),
-            ),
-            (
-                "no space before equals",
-                r#"namespace= "my_namespace""#,
-                Ok(Some(NamespaceAction::SetContext(
-                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
-                ))),
-            ),
-            (
-                "no space after equals",
-                r#"namespace ="my_namespace""#,
-                Ok(Some(NamespaceAction::SetContext(
-                    NamespaceContext::explicit(Namespace::Named("my_namespace".to_string())),
-                ))),
-            ),
-            (
-                "clear namespace",
-                "namespace = None",
-                Ok(Some(NamespaceAction::SetContext(
-                    NamespaceContext::cleared(),
-                ))),
-            ),
-            (
-                "set namespace to the name None",
-                r#"namespace = "None""#,
-                Ok(Some(NamespaceAction::SetContext(
-                    NamespaceContext::explicit(Namespace::Named("None".to_string())),
-                ))),
-            ),
-        ];
-
-        for (test, input, expected) in tests {
-            assert_eq!(extract_namespace(input), expected, "{test}: {input}");
-        }
-    }
-}

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 // Simple data formats used to create and test values in each language.
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Serialize, Deserialize)]
 pub struct Test {
     pub a: Vec<u32>,
@@ -53,6 +54,7 @@ pub enum SerdeData {
     EmptyStructVariant {},
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(clippy::struct_field_names)]
 pub struct PrimitiveTypes {
@@ -74,11 +76,12 @@ pub struct PrimitiveTypes {
     f_char: Option<char>,
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 #[allow(clippy::struct_field_names)]
 pub struct OtherTypes {
     f_string: String,
-    #[facet(bytes)]
+    #[facet(fg::bytes)]
     f_bytes: Vec<u8>,
     f_option: Option<Struct>,
     f_unit: (),
@@ -91,15 +94,19 @@ pub struct OtherTypes {
     f_nested_seq: Vec<Vec<Struct>>,
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct UnitStruct;
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct NewTypeStruct(u64);
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TupleStruct(u32, u64);
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Struct {
     x: u32,
@@ -119,6 +126,7 @@ pub struct Tree<T> {
     children: Vec<Tree<T>>,
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SimpleList(pub Option<Box<SimpleList>>);
 

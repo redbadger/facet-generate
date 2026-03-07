@@ -25,14 +25,14 @@ fn snapshot_dir(target: &str) -> PathBuf {
 #[test]
 fn test() {
     #[derive(Facet)]
-    #[facet(namespace = "other")]
+    #[facet(fg::namespace = "other")]
     pub struct OtherChild {
         name: String,
     }
 
     #[derive(Facet)]
     #[repr(C)]
-    #[facet(namespace = "other")]
+    #[facet(fg::namespace = "other")]
     #[allow(unused)]
     pub enum OtherParent {
         Child(OtherChild),

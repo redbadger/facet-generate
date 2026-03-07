@@ -2014,10 +2014,10 @@ fn struct_with_mixed_collections_and_pointers() {
 fn struct_with_bytes_field() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: Vec<u8>,
         name: String,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         header: Vec<u8>,
     }
 
@@ -2074,10 +2074,10 @@ fn struct_with_bytes_field() {
 fn struct_with_bytes_field_and_slice() {
     #[derive(Facet)]
     struct MyStruct<'a> {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: &'a [u8],
         name: String,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         header: Vec<u8>,
         optional_bytes: Option<Vec<u8>>,
     }
@@ -2146,7 +2146,7 @@ fn struct_with_bytes_field_and_slice() {
 #[test]
 fn namespaced_child() {
     #[derive(Facet)]
-    #[facet(namespace = "Test")]
+    #[facet(fg::namespace = "Test")]
     struct Child {
         test: String,
     }

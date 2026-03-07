@@ -83,19 +83,19 @@ fn single_namespace() {
 #[allow(clippy::too_many_lines)]
 fn root_namespace_with_two_child_namespaces() {
     #[derive(Facet)]
-    #[facet(namespace = "one")]
+    #[facet(fg::namespace = "one")]
     struct ChildOne {
         child: GrandChild,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "two")]
+    #[facet(fg::namespace = "two")]
     struct ChildTwo {
         field: String,
     }
 
     #[derive(Facet)]
-    #[facet(namespace = "one")]
+    #[facet(fg::namespace = "one")]
     struct GrandChild {
         field: String,
     }
@@ -195,7 +195,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
     // and the first type didn't have external dependencies.
 
     #[derive(Facet)]
-    #[facet(namespace = "api")]
+    #[facet(fg::namespace = "api")]
     struct GrandChild {
         test: String,
     }

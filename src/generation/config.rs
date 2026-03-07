@@ -253,12 +253,11 @@ impl CodeGeneratorConfig {
                     }
 
                     // Track external namespaces actually referenced in format types.
-                    if let Format::TypeName(qualified_name) = f {
-                        if let Namespace::Named(ns) = &qualified_name.namespace {
-                            if ns != &self.module_name {
-                                self.referenced_namespaces.insert(ns.clone());
-                            }
-                        }
+                    if let Format::TypeName(qualified_name) = f
+                        && let Namespace::Named(ns) = &qualified_name.namespace
+                        && ns != &self.module_name
+                    {
+                        self.referenced_namespaces.insert(ns.clone());
                     }
 
                     // Also record the leaf format type key (used by TypeScript for type aliases).
@@ -297,11 +296,11 @@ impl CodeGeneratorConfig {
         }
 
         for name in registry.keys() {
-            if let Namespace::Named(ns) = &name.namespace {
-                if ns != &self.module_name {
-                    let entry = self.external_definitions.entry(ns.to_owned()).or_default();
-                    entry.push(name.name.clone());
-                }
+            if let Namespace::Named(ns) = &name.namespace
+                && ns != &self.module_name
+            {
+                let entry = self.external_definitions.entry(ns.to_owned()).or_default();
+                entry.push(name.name.clone());
             }
         }
     }
@@ -387,7 +386,7 @@ pub enum PackageLocation {
 
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExternalPackage {
-    /// The namespace as specified in `#[facet(namespace = "namespace")]`.
+    /// The namespace as specified in `#[facet(fg::namespace = "namespace")]`.
     pub for_namespace: String,
     /// The location of the package.
     pub location: PackageLocation,

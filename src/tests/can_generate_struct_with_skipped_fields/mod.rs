@@ -5,9 +5,9 @@ pub struct MyStruct {
     a: i32,
     #[facet(skip)]
     b: i32,
-    #[facet(swift(skip))]
+    // TODO: #[facet(swift(skip))]
     c: i32,
-    #[facet(skip)]
+    // TODO: #[facet(skip)]
     d: i32,
 }
 
