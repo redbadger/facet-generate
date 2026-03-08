@@ -15,9 +15,9 @@
 //!    module path, and cross-namespace references use fully qualified dotted
 //!    names (e.g. `Company.Models.Shared.Child`).
 //!
-//! 3. **`.csproj` manifest** — generates an MSBuild project file targeting
+//! 3. **`.csproj` manifest** — generates an `MSBuild` project file targeting
 //!    `net10.0` with `CommunityToolkit.Mvvm` as a base package reference,
-//!    plus NuGet `PackageReference` (URL) or `ProjectReference` (path) for
+//!    plus `NuGet` `PackageReference` (URL) or `ProjectReference` (path) for
 //!    external packages.
 
 use std::{
@@ -116,8 +116,8 @@ impl Installer {
 
     /// Produce the contents of a `.csproj` project file.
     ///
-    /// The manifest includes a base `CommunityToolkit.Mvvm` NuGet reference,
-    /// plus any external NuGet `PackageReference` (URL) or `ProjectReference`
+    /// The manifest includes a base `CommunityToolkit.Mvvm` `NuGet` reference,
+    /// plus any external `NuGet` `PackageReference` (URL) or `ProjectReference`
     /// (path) entries configured via [`external_packages`](Self::external_packages).
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
@@ -321,7 +321,7 @@ impl SourceInstaller for Installer {
     ///
     /// The directory path is derived from the dotted module name (dots become
     /// path separators). External packages are skipped — they are expected to
-    /// be provided by NuGet or project references.
+    /// be provided by `NuGet` or project references.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,

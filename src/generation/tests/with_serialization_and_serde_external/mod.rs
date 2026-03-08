@@ -6,10 +6,9 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, kotlin,
-        module,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, kotlin, module,
         swift::Installer,
-        tests::{check, read_files_and_create_expect_dirs, TargetLanguage},
+        tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
     reflect,

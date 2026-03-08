@@ -3,7 +3,7 @@
 //! # Coverage
 //!
 //! - Basic `.csproj` manifest generation
-//! - External NuGet URL dependencies (`PackageReference`)
+//! - External `NuGet` URL dependencies (`PackageReference`)
 //! - External path dependencies (`ProjectReference`)
 //! - Bincode runtime file installation (serde interfaces, serializer,
 //!   deserializer, error types)

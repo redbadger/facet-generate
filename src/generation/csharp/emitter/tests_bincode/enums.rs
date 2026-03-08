@@ -615,6 +615,7 @@ fn enum_with_mixed_variants() {
 #[test]
 fn c_style_enum_field_uses_static_bincode_helpers() {
     #[derive(Facet)]
+    #[allow(dead_code)]
     #[repr(C)]
     enum Color {
         Red,

@@ -794,12 +794,7 @@ fn deserializer_variant_body<W: IndentWrite>(
 ///
 /// Tuple is not handled here — callers handle tuples specially since they
 /// expand to multiple statements.
-fn write_serialize_expr<W: Write>(
-    w: &mut W,
-    val: &str,
-    ser: &str,
-    format: &Format,
-) -> Result<()> {
+fn write_serialize_expr<W: Write>(w: &mut W, val: &str, ser: &str, format: &Format) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(_) => write!(w, "{val}.Serialize({ser})"),
@@ -932,17 +927,14 @@ fn write_serialize_value<W: IndentWrite>(
     value_expr: &str,
     format: &Format,
 ) -> Result<()> {
-    match format {
-        Format::Tuple(formats) => {
-            for (index, inner) in formats.iter().enumerate() {
-                write_serialize_value(w, &format!("{value_expr}.Item{}", index + 1), inner)?;
-            }
-            Ok(())
+    if let Format::Tuple(formats) = format {
+        for (index, inner) in formats.iter().enumerate() {
+            write_serialize_value(w, &format!("{value_expr}.Item{}", index + 1), inner)?;
         }
-        _ => {
-            write_serialize_expr(w, value_expr, "serializer", format)?;
-            writeln!(w, ";")
-        }
+        Ok(())
+    } else {
+        write_serialize_expr(w, value_expr, "serializer", format)?;
+        writeln!(w, ";")
     }
 }
 
@@ -953,8 +945,8 @@ fn write_serialize_value<W: IndentWrite>(
 ///
 /// # Examples
 ///
-/// - `I32` with var_name=`"x"` → `var x = deserializer.DeserializeI32();\n`
-/// - `Tuple([I32, Bool])` with var_name=`"x"` →
+/// - `I32` with `var_name`=`"x"` → `var x = deserializer.DeserializeI32();\n`
+/// - `Tuple([I32, Bool])` with `var_name`=`"x"` →
 ///   `var x_item1 = deserializer.DeserializeI32();\n`
 ///   `var x_item2 = deserializer.DeserializeBool();\n`
 ///   `var x = (x_item1, x_item2);\n`
@@ -963,26 +955,23 @@ fn write_deserialize_binding<W: IndentWrite>(
     var_name: &str,
     format: &Format,
 ) -> Result<()> {
-    match format {
-        Format::Tuple(formats) => {
-            for (index, inner) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner)?;
-            }
-            if formats.is_empty() {
-                writeln!(w, "var {var_name} = new Unit();")
-            } else {
-                let values = (0..formats.len())
-                    .map(|i| format!("{var_name}_item{}", i + 1))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                writeln!(w, "var {var_name} = ({values});")
-            }
+    if let Format::Tuple(formats) = format {
+        for (index, inner) in formats.iter().enumerate() {
+            write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner)?;
         }
-        _ => {
-            write!(w, "var {var_name} = ")?;
-            write_deserialize_expr(w, "deserializer", format)?;
-            writeln!(w, ";")
+        if formats.is_empty() {
+            writeln!(w, "var {var_name} = new Unit();")
+        } else {
+            let values = (0..formats.len())
+                .map(|i| format!("{var_name}_item{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+            writeln!(w, "var {var_name} = ({values});")
         }
+    } else {
+        write!(w, "var {var_name} = ")?;
+        write_deserialize_expr(w, "deserializer", format)?;
+        writeln!(w, ";")
     }
 }
 
@@ -1061,22 +1050,14 @@ fn write_serialize_tuple_stmts<W: Write>(
     ser: &str,
     format: &Format,
 ) -> Result<()> {
-    match format {
-        Format::Tuple(formats) => {
-            for (index, inner) in formats.iter().enumerate() {
-                write_serialize_tuple_stmts(
-                    w,
-                    &format!("{val}.Item{}", index + 1),
-                    ser,
-                    inner,
-                )?;
-            }
-            Ok(())
+    if let Format::Tuple(formats) = format {
+        for (index, inner) in formats.iter().enumerate() {
+            write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner)?;
         }
-        _ => {
-            write_serialize_expr(w, val, ser, format)?;
-            write!(w, "; ")
-        }
+        Ok(())
+    } else {
+        write_serialize_expr(w, val, ser, format)?;
+        write!(w, "; ")
     }
 }
 

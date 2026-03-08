@@ -4,7 +4,7 @@ use std::process::Command;
 
 use facet::Facet;
 use facet_generate::{
-    generation::{csharp, Encoding},
+    generation::{Encoding, csharp},
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -115,10 +115,7 @@ fn test_csharp_code_with_external_definitions() {
     // but we can verify the generated source references them correctly.
     generator.generate(&registry).unwrap();
 
-    let generated = std::fs::read_to_string(
-        source_dir.join("Example/Testing/Testing.cs"),
-    )
-    .unwrap();
+    let generated = std::fs::read_to_string(source_dir.join("Example/Testing/Testing.cs")).unwrap();
     assert!(
         generated.contains("Example.Testing.Foo"),
         "Generated code should reference external namespace: {generated}"

@@ -223,7 +223,7 @@ impl SourceInstaller for Installer {
     /// Skips modules whose namespace matches an external package (those types
     /// are provided by the external dependency, not generated). For the rest,
     /// converts the dot-separated module name to a directory path, creates it,
-    /// and writes the output of [`CodeGenerator::output`] into a PascalCased
+    /// and writes the output of [`CodeGenerator::output`] into a `PascalCased`
     /// `.kt` file (e.g. module `com.example.types` → `com/example/types/Types.kt`).
     fn install_module(
         &mut self,

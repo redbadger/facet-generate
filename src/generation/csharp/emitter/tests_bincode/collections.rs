@@ -549,6 +549,7 @@ fn struct_with_btreeset_field() {
 #[test]
 fn option_value_type_needs_dot_value_for_serialize() {
     #[derive(Facet)]
+    #[allow(clippy::struct_field_names)]
     struct HasOptionals {
         maybe_float: Option<f32>,
         maybe_double: Option<f64>,

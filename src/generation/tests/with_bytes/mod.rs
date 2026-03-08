@@ -7,7 +7,7 @@ use tempfile::tempdir;
 use crate::{
     generation::{
         Encoding, kotlin,
-        tests::{check, read_files_and_create_expect_dirs, TargetLanguage},
+        tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
     },
     reflect,
 };
