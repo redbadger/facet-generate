@@ -57,6 +57,10 @@ use crate::{
 pub(crate) const SERDE_NAMESPACE: &str = "serde";
 pub(crate) const BINCODE_NAMESPACE: &str = "bincode";
 
+// TODO: Consider renaming `CodeGen` → `CodeGenerator` and the per-language
+// `CodeGenerator` structs → `KotlinCodeGenerator`, `CSharpCodeGenerator`, etc.
+// The current names are confusing: the trait sounds like a utility and the
+// struct sounds like the trait.
 /// Transforms a [`Registry`] into a complete source file. Each target language provides
 /// its own implementation.
 pub trait CodeGen<'a> {

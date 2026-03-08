@@ -29,6 +29,20 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// and `Bar.Foo` respectively.
 pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
+// TODO: Consider removing `#[macro_export]` — this macro is only used in
+// tests but currently leaks into the public API.
+/// Test/convenience macro: reflects the given types and emits code for each
+/// container using the specified language tag and encoding.
+///
+/// Returns `anyhow::Result<String>` containing the generated source.
+///
+/// ```ignore
+/// let code = emit!(MyStruct, MyEnum as Kotlin with Encoding::Json)?;
+/// ```
+///
+/// This skips the [`Module`](generation::module::Module) header (no `package`
+/// or `import` statements) — it only emits the type declarations. Useful in
+/// tests to assert on individual type output without the file-level boilerplate.
 #[macro_export]
 macro_rules! emit {
     ($($ty:ident),* as $language:ident with $encoding:path) => {
@@ -105,6 +119,19 @@ macro_rules! reflect {
     };
 }
 
+// TODO: Consider removing `#[macro_export]` — this macro is only used in
+// tests but currently leaks into the public API.
+/// Test-only macro for multi-namespace generation tests.
+///
+/// Reflects `$facet`, splits the resulting registry by namespace (expecting
+/// exactly two namespaces), and runs the full [`CodeGen`](generation::CodeGen)
+/// pipeline for each. Returns `(String, String)` — the generated source for
+/// the non-root module and the root module, sorted alphabetically by module
+/// name.
+///
+/// This exercises the complete generator path *including* the
+/// [`Module`](generation::module::Module) header (package declaration,
+/// imports), unlike [`emit!`] which skips it.
 #[cfg(test)]
 #[macro_export]
 macro_rules! emit_two_modules {
