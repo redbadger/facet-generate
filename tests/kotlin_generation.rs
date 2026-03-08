@@ -1,3 +1,22 @@
+//! Compilation test for Kotlin code generation.
+//!
+//! This integration test verifies that the Kotlin code we generate is
+//! **syntactically and type-correct** by actually compiling it with
+//! `gradle build`. It does *not* run the generated code — see
+//! `kotlin_runtime.rs` (if present) for end-to-end round-trip tests.
+//!
+//! # How it works
+//!
+//! 1. Reflects [`PrimitiveTypes`](common::PrimitiveTypes) into a [`Registry`].
+//! 2. Runs the full [`Installer`](facet_generate::generation::kotlin::Installer)
+//!    pipeline into a temporary directory, producing `.kt` source files and a
+//!    `build.gradle.kts` manifest.
+//! 3. Invokes `gradle --version` as a smoke check for the toolchain.
+//! 4. Invokes `gradle build` and asserts a zero exit code.
+//!
+//! The test is gated on `#[cfg(feature = "kotlin")]` so it only runs when the
+//! Kotlin/Gradle toolchain is available.
+
 #![cfg(feature = "kotlin")]
 
 use std::process::Command;

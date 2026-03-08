@@ -65,7 +65,7 @@
 //!
 //! # Testing
 //!
-//! Tests are organised in three layers, from fast and narrow to slow and broad:
+//! Tests are organised in four layers, from fast and narrow to slow and broad:
 //!
 //! ## Unit tests (snapshot)
 //!
@@ -79,6 +79,20 @@
 //! | Installer | `generation/<lang>/installer/tests.rs` | Generated manifest strings (`.csproj`, `build.gradle.kts`, `package.json`, `Package.swift`). Still pure string assertions — no files written. |
 //!
 //! All three use the [`insta`](https://docs.rs/insta) crate for snapshot assertions.
+//!
+//! ## Cross-language expect-file tests ([`tests`] module, `src/tests/`)
+//!
+//! Each sub-module defines one or more Rust types and invokes the [`test!`] macro, which reflects
+//! the types and runs the full [`CodeGen`](generation::CodeGen) pipeline for every listed language
+//! (e.g. `for kotlin, swift`). The output is compared against checked-in expect files
+//! (`output.kt`, `output.swift`, …) sitting alongside each `mod.rs`, using the
+//! [`expect_test`](https://docs.rs/expect_test) crate. These tests are fast (no compiler
+//! invocation) but exercise the complete generator path — including package declarations, imports,
+//! and multi-type ordering — across multiple languages in a single test case. Every test should
+//! support all languages, except for a few that exercise language-specific features like
+//! `#[facet(swift = "Equatable")]` or `#[facet(kotlin = "Parcelable")]`.
+//!
+//! Gated on `#[cfg(all(test, feature = "generate"))]`.
 //!
 //! ## Compilation tests (`tests/<lang>_generation.rs`)
 //!
