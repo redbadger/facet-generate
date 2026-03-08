@@ -321,20 +321,29 @@ impl RegistryBuilder {
     }
 
     fn is_supported_generic_type(&mut self, shape: &Shape) -> bool {
-        if shape.type_params.is_empty()
-            || shape.type_identifier.starts_with('&')
-            || shape.type_identifier.starts_with('[')
-            || SUPPORTED_GENERIC_TYPES.contains(&shape.type_identifier)
-        {
+        // Return true immediately for non-generic or special cases
+        if shape.type_params.is_empty() {
             return true;
         }
 
-        let current = format!("{:?}", shape.type_params);
-        let previous = self
+        // Skip lifetimes and arrays
+        if shape.type_identifier.starts_with('&') || shape.type_identifier.starts_with('[') {
+            return true;
+        }
+
+        // Accept known generic types unconditionally
+        if SUPPORTED_GENERIC_TYPES.contains(&shape.type_identifier) {
+            return true;
+        }
+
+        // For other generics, verify all type parameters are consistent with previous uses
+        let current_params = format!("{:?}", shape.type_params);
+        let previous_params = self
             .generic_type_params
             .entry(shape.type_identifier.to_string())
-            .or_insert(current.clone());
-        previous == &current
+            .or_insert_with(|| current_params.clone());
+
+        *previous_params == current_params
     }
 
     fn try_format_from_type_system(&mut self, shape: &Shape) -> Result<bool, Error> {
@@ -591,8 +600,8 @@ impl RegistryBuilder {
                 self.pop();
             }
             StructKind::Tuple => {
-                // This handles standalone tuple types, but for tuple fields in structs,
-                // they are handled in the StructKind::Struct case above
+                // Standalone tuple types never appear as StructKind::Tuple in facet's
+                // struct dispatch; they come through as Def::Scalar or Type::Primitive.
             }
         }
 
@@ -647,7 +656,7 @@ impl RegistryBuilder {
 
         if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
             let format = Named {
-                name: field.name.to_string(),
+                name: field_display_name(field),
                 doc: field.into(),
                 value: field_format,
             };
@@ -667,7 +676,7 @@ impl RegistryBuilder {
             ContainerFormat::NewTypeStruct(format, _doc) => **format = value,
             ContainerFormat::TupleStruct(formats, _doc) => formats.push(value),
             ContainerFormat::Struct(nameds, _doc) => nameds.push(Named {
-                name: field.name.to_string(),
+                name: field_display_name(field),
                 doc: field.shape().into(),
                 value,
             }),
@@ -690,7 +699,7 @@ impl RegistryBuilder {
 
             if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                 named_formats.push(Named {
-                    name: field.name.to_string(),
+                    name: field_display_name(field),
                     doc: field.into(),
                     value: option_format,
                 });
@@ -725,7 +734,7 @@ impl RegistryBuilder {
                         Format::Tuple(tuple_formats)
                     };
                     named_formats.push(Named {
-                        name: field.name.to_string(),
+                        name: field_display_name(field),
                         doc: field.into(),
                         value: tuple_format,
                     });
@@ -758,7 +767,7 @@ impl RegistryBuilder {
 
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
-                        name: field.name.to_string(),
+                        name: field_display_name(field),
                         doc: field.into(),
                         value: inner_format,
                     });
@@ -832,7 +841,7 @@ impl RegistryBuilder {
             variants.insert(
                 variant_index,
                 Named {
-                    name: variant.name.to_string(),
+                    name: variant_display_name(variant),
                     doc: variant.into(),
                     value: variant_format,
                 },
@@ -993,7 +1002,7 @@ impl RegistryBuilder {
         shape: &Shape,
     ) -> Result<VariantFormat, Error> {
         let temp = self.push_temporary(
-            variant.name.to_string(),
+            variant_display_name(variant),
             ContainerFormat::Struct(vec![], variant.into()),
             Some(shape),
         );
@@ -1012,7 +1021,7 @@ impl RegistryBuilder {
             if let Some(value) = bytes_attribute_format(field) {
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
-                        name: field.name.to_string(),
+                        name: field_display_name(field),
                         doc: field.into(),
                         value,
                     });
@@ -1043,7 +1052,7 @@ impl RegistryBuilder {
 
                 if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                     named_formats.push(Named {
-                        name: field.name.to_string(),
+                        name: field_display_name(field),
                         doc: field.into(),
                         value: option_format,
                     });
@@ -1077,7 +1086,7 @@ impl RegistryBuilder {
 
             if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
                 named_formats.push(Named {
-                    name: field.name.to_string(),
+                    name: field_display_name(field),
                     doc: field.into(),
                     value,
                 });
@@ -1111,7 +1120,7 @@ impl RegistryBuilder {
         shape: &Shape,
     ) -> Result<VariantFormat, Error> {
         let temp = self.push_temporary(
-            variant.name.to_string(),
+            variant_display_name(variant),
             ContainerFormat::TupleStruct(vec![], variant.into()),
             Some(shape),
         );
@@ -1619,9 +1628,7 @@ fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
                         (true, 64) => Format::I64,
                         (true, 128) => Format::I128,
                         _ => unimplemented!(
-                            "Unsupported integer type: {} bits, signed: {}",
-                            size_bits,
-                            signed
+                            "Unsupported integer type: {size_bits} bits, signed: {signed}"
                         ),
                     }
                 }
@@ -1687,6 +1694,20 @@ fn extract_namespace_from_field_attributes(field: &Field) -> Result<NamespaceAct
         }
     }
     Ok(NamespaceAction::Inherit)
+}
+
+/// Returns the display name for a field, respecting `#[facet(rename = "...")]`.
+///
+/// If the field has a `rename` value, that is used; otherwise falls back to `field.name`.
+fn field_display_name(field: &Field) -> String {
+    field.rename.unwrap_or(field.name).to_string()
+}
+
+/// Returns the display name for a variant, respecting `#[facet(rename = "...")]`.
+///
+/// If the variant has a `rename` value, that is used; otherwise falls back to `variant.name`.
+fn variant_display_name(variant: &facet::Variant) -> String {
+    variant.rename.unwrap_or(variant.name).to_string()
 }
 
 /// Extract a namespace action from a single `fg::namespace` extension attribute.
