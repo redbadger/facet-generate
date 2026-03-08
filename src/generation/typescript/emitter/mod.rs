@@ -10,6 +10,7 @@ use heck::ToUpperCamelCase;
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
+        SERDE_NAMESPACE,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
     },
@@ -50,7 +51,7 @@ impl TypeScript {
 impl Module {
     fn ts_serde_import_path(&self, target: InstallTarget) -> String {
         let serde = target.serde_import_path();
-        if let Some(path) = self.config().external_packages.get("serde") {
+        if let Some(path) = self.config().external_packages.get(SERDE_NAMESPACE) {
             match &path.location {
                 PackageLocation::Path(_) => {
                     let name = &path.for_namespace;

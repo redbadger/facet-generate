@@ -419,4 +419,32 @@ mod tests {
         let expected = format!("{root_package}.{child_package}");
         assert_eq!(&actual, &expected);
     }
+
+    #[test]
+    fn config_builder_populates_external_packages() {
+        let config = Config::builder("MyPackage", "/tmp/out")
+            .reference(ExternalPackage {
+                for_namespace: "serde".to_string(),
+                location: PackageLocation::Path("../Serde".to_string()),
+                module_name: None,
+                version: None,
+            })
+            .reference(ExternalPackage {
+                for_namespace: "other".to_string(),
+                location: PackageLocation::Path("../Other".to_string()),
+                module_name: None,
+                version: None,
+            })
+            .build();
+
+        assert_eq!(config.external_packages.len(), 2);
+        assert_eq!(config.external_packages[0].for_namespace, "serde");
+        assert_eq!(config.external_packages[1].for_namespace, "other");
+    }
+
+    #[test]
+    fn config_builder_defaults_external_packages_to_empty() {
+        let config = Config::builder("MyPackage", "/tmp/out").build();
+        assert!(config.external_packages.is_empty());
+    }
 }

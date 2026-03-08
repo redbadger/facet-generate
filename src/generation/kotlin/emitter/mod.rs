@@ -9,7 +9,8 @@ use indoc::writedoc;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature, PackageLocation,
+        BINCODE_NAMESPACE, CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
+        PackageLocation, SERDE_NAMESPACE,
         indent::{IndentWrite, Newlines},
         module::Module,
     },
@@ -50,11 +51,11 @@ impl Module {
     }
 
     fn bincode_package(&self) -> String {
-        self.get_package_name("bincode")
+        self.get_package_name(BINCODE_NAMESPACE)
     }
 
     fn serde_package(&self) -> String {
-        self.get_package_name("serde")
+        self.get_package_name(SERDE_NAMESPACE)
     }
 }
 

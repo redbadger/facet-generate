@@ -38,6 +38,9 @@ use crate::{
     reflection::format::{ContainerFormat, QualifiedTypeName},
 };
 
+pub(crate) const SERDE_NAMESPACE: &str = "serde";
+pub(crate) const BINCODE_NAMESPACE: &str = "bincode";
+
 pub trait CodeGen<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
 

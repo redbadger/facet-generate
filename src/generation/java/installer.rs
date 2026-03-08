@@ -8,8 +8,8 @@ use include_dir::include_dir;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SourceInstaller,
-        java::CodeGenerator, module,
+        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
+        SourceInstaller, java::CodeGenerator, module,
     },
 };
 
@@ -72,8 +72,9 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Install runtimes if an encoding is configured
-        if !self.encoding.is_none() {
+        // Install runtimes if an encoding is configured,
+        // unless an external package provides them
+        if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
             self.install_serde_runtime()?;
             if let Encoding::Bincode = self.encoding {
                 self.install_bincode_runtime()?;
