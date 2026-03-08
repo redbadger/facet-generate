@@ -1,3 +1,15 @@
+//! Snapshot tests for the Kotlin emitter — **Bincode encoding**.
+//!
+//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Bincode`
+//! so that every generated type includes hand-written `serialize`/`deserialize`
+//! methods plus `bincodeSerialize`/`bincodeDeserialize` convenience wrappers.
+//!
+//! These tests verify the byte-level serialization code that the emitter
+//! produces: field ordering, nested `serialize`/`deserialize` calls for
+//! user-defined types, collection helpers (`serializeList`, `deserializeMap`,
+//! etc.), option encoding (`serializeOptionTag`/`deserializeOptionTag`), and
+//! the `Serializer`/`Deserializer` runtime API surface.
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},

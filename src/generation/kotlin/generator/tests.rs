@@ -1,3 +1,26 @@
+//! Unit tests for [`CodeGenerator::update_qualified_names`].
+//!
+//! The Kotlin generator must rewrite the short, namespace-relative type names
+//! produced by the registry into fully-qualified Kotlin package paths before
+//! emitting code. Getting this wrong means generated `import` statements or
+//! inline type references won't compile.
+//!
+//! These tests build small [`Registry`] values by hand (rather than via the
+//! [`reflect!`] macro) so that namespace and external-package configurations
+//! can be controlled precisely.
+//!
+//! # Coverage
+//!
+//! | Area | What is tested |
+//! |------|----------------|
+//! | Local types | Root-namespace and named-namespace types get the current module name prepended |
+//! | External definitions | Types listed in `external_definitions` are resolved under the module's package path |
+//! | External packages | `PackageLocation::Path` overrides the package prefix; `PackageLocation::Url` falls back to local resolution |
+//! | Priority | External packages take precedence over external definitions for the same namespace |
+//! | Nesting | Qualified-name rewriting recurses into `Option`, `Seq`, and enum-variant payloads |
+//! | Immutability | The original registry is not mutated — a new copy is returned |
+//! | Deserialization | Generated Bincode `deserialize` calls use fully-qualified names for both local and external types |
+
 use super::*;
 use crate::{
     generation::{

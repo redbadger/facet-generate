@@ -1,3 +1,14 @@
+//! Snapshot tests for the Kotlin emitter — **JSON encoding**.
+//!
+//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! so that every generated type carries `kotlinx.serialization` annotations:
+//! `@Serializable`, `@SerialName`, and `@Contextual` where appropriate.
+//!
+//! Unlike Bincode, JSON encoding does not emit hand-written `serialize`/
+//! `deserialize` methods — it relies on the `kotlinx.serialization` compiler
+//! plugin. These tests verify that the correct annotations and serializer
+//! class references are placed on each type and variant.
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},

@@ -1,3 +1,15 @@
+//! Snapshot tests for the Kotlin [`Installer`] — **project scaffolding**.
+//!
+//! These tests verify the `build.gradle.kts` manifest that the installer
+//! generates, without writing anything to disk. They cover:
+//!
+//! - Basic manifest structure: Kotlin JVM and serialization plugins, `group`
+//!   metadata.
+//! - External URL dependencies: Maven-style `implementation` entries with
+//!   version strings, plus the `kotlinx-serialization-json` runtime.
+//! - External path dependencies: local file-system dependencies via
+//!   `files("…")`.
+
 use crate::generation::{ExternalPackage, PackageLocation, kotlin::Installer};
 
 #[test]
