@@ -1,3 +1,31 @@
+//! Type reflection engine — extracts Rust type metadata into a language-neutral [`Registry`].
+//!
+//! Uses the [`facet`] crate's compile-time `Shape` descriptors to walk type graphs recursively.
+//! Each struct or enum becomes a [`ContainerFormat`] entry in the registry. The shape of each
+//! field, variant, or nested value is described by a [`Format`].
+//!
+//! A "format" is an AST node describing a type's serialization shape — how it would be laid out
+//! on the wire. [`ContainerFormat`] describes named, top-level types (unit structs, newtype
+//! structs, structs with fields, and enums with variants). Each container is composed of
+//! [`Format`] nodes, which describe the value types within: primitives, options, sequences,
+//! maps, tuples, and references to other containers via `Format::TypeName`.
+//!
+//! The main entry point is [`RegistryBuilder`], which provides a builder-pattern API:
+//!
+//! ```ignore
+//! let registry = RegistryBuilder::new()
+//!     .add_type::<MyStruct>()?
+//!     .add_type::<MyEnum>()?
+//!     .build()?;
+//! ```
+//!
+//! Key responsibilities:
+//! - Mapping `facet` shapes (structs, enums, primitives, sequences, maps, pointers) to `Format` AST nodes
+//! - Resolving generic types (`Option`, `Vec`, `HashMap`, `Arc`, `Box`, etc.) into their format equivalents
+//! - Handling transparent wrappers and newtypes
+//! - Propagating and resolving namespace annotations via a context stack
+//! - Detecting conflicts (e.g. a generic type used with different type parameters)
+
 pub mod format;
 #[cfg(test)]
 pub mod regression_tests;
@@ -100,6 +128,13 @@ impl NamespaceAction {
     }
 }
 
+/// The bridge between `facet` compile-time type metadata and the [`Registry`] consumed by
+/// code generators.
+///
+/// Types are added with [`add_type`](Self::add_type), which recursively reflects the type and
+/// all types reachable from its fields and variants. The builder tracks which types have already
+/// been processed to avoid duplicates and detects conflicts (e.g. a generic type instantiated
+/// with different type parameters).
 #[derive(Debug, Default)]
 pub struct RegistryBuilder {
     pub registry: Registry,

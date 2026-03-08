@@ -14,6 +14,19 @@ use crate::{
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
+/// The registry of reflected types — a flat map from qualified type names to their container formats.
+///
+/// Built by [`reflection::RegistryBuilder`] (typically via the [`reflect!`] macro) and consumed by
+/// language-specific code generators in [`generation`].
+///
+/// Only named container types (structs and enums) get top-level entries. Primitives, `Option`,
+/// `Vec`, `Map`, etc. are represented inline as [`Format`](reflection::format::Format) variants
+/// within the containers that use them. Cross-type references are expressed as
+/// `Format::TypeName(QualifiedTypeName)` — symbolic lookups back into this same map.
+///
+/// Keys are namespace-qualified, so a type `Foo` in the root namespace and a type `Foo` in
+/// namespace `Bar` are separate entries. For example, in Kotlin these would generate as `Foo`
+/// and `Bar.Foo` respectively.
 pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
 #[macro_export]
@@ -70,6 +83,15 @@ macro_rules! emit_java {
     };
 }
 
+/// Reflects one or more types into a [`Registry`], recursively capturing all reachable types.
+///
+/// This is a convenience wrapper around [`RegistryBuilder`](reflection::RegistryBuilder) —
+/// used directly by the [`emit!`] macro and available for cases where you need the registry
+/// without code generation.
+///
+/// ```ignore
+/// let registry = reflect!(MyStruct, MyEnum)?;
+/// ```
 #[macro_export]
 macro_rules! reflect {
     ($($ty:ident),*) => {

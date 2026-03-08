@@ -1,16 +1,24 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-//! Module defining the Abstract Syntax Tree (AST) of Serde formats.
+//! The format AST — a language-neutral representation of type shapes for code generation.
 //!
-//! Node of the AST are made of the following types:
-//! * `ContainerFormat`: the format of a container (struct or enum),
-//! * `Format`: the format of an unnamed value,
-//! * `Named<Format>`: the format of a field in a struct,
-//! * `VariantFormat`: the format of a variant in a enum,
-//! * `Named<VariantFormat>`: the format of a variant in a enum, together with its name,
-//! * `Variable<Format>`: a variable holding an initially unknown value format,
-//! * `Variable<VariantFormat>`: a variable holding an initially unknown variant format.
+//! The [`RegistryBuilder`](super::RegistryBuilder) populates these nodes by walking `facet`
+//! type metadata; code generators consume them to emit equivalent types in target languages.
+//!
+//! The key types form a hierarchy:
+//!
+//! - [`ContainerFormat`] — a named top-level type: unit struct, newtype, struct with fields,
+//!   or enum with variants. These are the values in the [`Registry`](crate::Registry).
+//! - [`Format`] — the shape of a value: primitives (`Bool`, `U32`, `Str`, ...),
+//!   composites (`Option`, `Seq`, `Map`, `Tuple`), or a reference to another container
+//!   via `TypeName`.
+//! - [`VariantFormat`] — the payload shape of an enum variant: `Unit`, `NewType`, `Tuple`,
+//!   or `Struct`.
+//! - [`Named<T>`] — wraps a `Format` or `VariantFormat` with a name and doc comments,
+//!   used for struct fields and enum variants.
+//! - [`QualifiedTypeName`] — a type name qualified by a [`Namespace`] (root or named),
+//!   used as the registry key.
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(test)]
@@ -29,7 +37,12 @@ use std::{
     rc::Rc,
 };
 
-/// Represents a namespace in the type system.
+/// Controls how types are grouped in generated code.
+///
+/// Types in [`Root`](Namespace::Root) appear at the top level. Types in a
+/// [`Named`](Namespace::Named) namespace are grouped together — how this manifests depends
+/// on the target language (e.g. nested objects in Kotlin, namespaces in C#). Languages
+/// without namespaces (e.g. Swift) flatten everything to the top level.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Namespace {
@@ -48,7 +61,11 @@ impl fmt::Display for Namespace {
     }
 }
 
-/// A qualified type name with namespace information.
+/// The key used to identify types in the [`Registry`](crate::Registry) — a type name
+/// paired with its [`Namespace`].
+///
+/// For example, a type `User` in namespace `Api` would be
+/// `QualifiedTypeName { namespace: Named("Api"), name: "User" }`, displayed as `Api::User`.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq, Hash, PartialOrd, Ord)]
 pub struct QualifiedTypeName {
     /// The namespace containing this type.
@@ -106,6 +123,10 @@ impl QualifiedTypeName {
     }
 }
 
+/// Documentation comments extracted from Rust source types, carried through to code generation.
+///
+/// Each entry is a single line of a doc comment. Code generators use these to emit equivalent
+/// documentation in the target language (e.g. `///` in C#, `/** */` in Kotlin).
 #[derive(Serialize, Deserialize, Default, Debug, Eq, Clone, PartialEq)]
 #[serde(transparent)]
 pub struct Doc(Vec<String>);
@@ -121,7 +142,7 @@ impl Doc {
     }
 
     #[must_use]
-    pub fn comments(&self) -> &Vec<String> {
+    pub fn comments(&self) -> &[String] {
         &self.0
     }
 }
@@ -151,14 +172,27 @@ impl From<&Variant> for Doc {
     }
 }
 
-/// Serde-based serialization format for anonymous "value" types.
+/// The shape of a value type — an AST node describing how a field, variant payload, or nested
+/// value is serialized. Primitives are leaf nodes; composites (`Option`, `Seq`, `Map`, `Tuple`)
+/// contain nested `Format` nodes; and `TypeName` is a reference to a [`ContainerFormat`] in
+/// the [`Registry`](crate::Registry).
+///
+/// `Format` and [`ContainerFormat`] are separate types, not variants of the same enum.
+/// A `ContainerFormat` is a type declaration (a struct or enum definition) that holds `Format`
+/// nodes as its children (field types, variant payloads). A `Format` is a type usage — and
+/// `Format::TypeName` closes the loop by referencing back to a `ContainerFormat` in the registry.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Format {
-    /// A format whose value is initially unknown. Used internally for tracing. Not (de)serializable.
+    /// A placeholder for a format not yet known at construction time. `Format::unknown()` creates
+    /// one of these, and it is also the `Default` value for `Format`. Fields start as variables
+    /// and are filled in as the [`RegistryBuilder`](super::RegistryBuilder) processes each type,
+    /// resolving to a concrete format (e.g. `U32`, `Str`, `TypeName(...)`). Not involved in code
+    /// generation — all variables must be resolved before
+    /// [`RegistryBuilder::build`](super::RegistryBuilder::build) completes.
     Variable(#[serde(with = "not_implemented")] Variable<Format>),
 
-    /// The name of a container.
+    /// A reference to a named container type in the [`Registry`](crate::Registry).
     TypeName(QualifiedTypeName),
 
     // The formats of primitive types
@@ -204,8 +238,11 @@ pub enum Format {
     },
 }
 
-/// Serde-based serialization format for named "container" types.
-/// In Rust, those are enums and structs.
+/// The shape of a named top-level type — a struct or enum that gets its own entry in the
+/// [`Registry`](crate::Registry). Each variant holds the [`Format`] nodes that describe
+/// its fields or inner values, plus a [`Doc`] for documentation comments.
+///
+/// See [`Format`] for how these are referenced from within other containers.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum ContainerFormat {
@@ -223,8 +260,8 @@ pub enum ContainerFormat {
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-/// A named value.
-/// Used for named parameters or variants.
+/// Attaches a name and [`Doc`] comments to a value — used to represent struct fields
+/// (`Named<Format>`) and enum variants (`Named<VariantFormat>`).
 pub struct Named<T> {
     pub name: String,
     pub doc: Doc,
@@ -256,14 +293,22 @@ where
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
-/// A mutable holder for an initially unknown value.
+/// A mutable cell that starts as `None` and is filled in during registry construction.
+/// Used inside [`Format::Variable`] and [`VariantFormat::Variable`] to hold formats
+/// that aren't known yet when the node is first created. The interior mutability
+/// (`Rc<RefCell<...>>`) allows the value to be resolved after the node is already
+/// embedded in a parent container.
 pub struct Variable<T>(Rc<RefCell<Option<T>>>);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
-/// Description of a variant in an enum.
+/// A single variant within a [`ContainerFormat::Enum`] — describes what data the variant carries.
+///
+/// For example, given `enum Msg { Ping, Text(String), Move { x: f32, y: f32 } }`,
+/// `Ping` is `Unit`, `Text` is `NewType(Str)`, and `Move` is `Struct([x: F32, y: F32])`.
 pub enum VariantFormat {
-    /// A variant whose format is initially unknown. Used internally for tracing. Not (de)serializable.
+    /// A placeholder for a variant format not yet known at construction time.
+    /// See [`Format::Variable`] for details.
     Variable(#[serde(with = "not_implemented")] Variable<VariantFormat>),
     /// A variant without parameters, e.g. `A` in `enum X { A }`
     Unit,
@@ -275,7 +320,12 @@ pub enum VariantFormat {
     Struct(Vec<Named<Format>>),
 }
 
-/// Common methods for nodes in the AST of formats.
+/// Recursive traversal and resolution of format AST nodes. Provides immutable and mutable
+/// visiting, variable resolution, and normalization (e.g. collapsing uniform tuples into
+/// `TupleArray`).
+///
+/// Implemented by all AST node types: [`Format`], [`ContainerFormat`], [`VariantFormat`],
+/// [`Named<T>`], and [`Variable<T>`].
 pub trait FormatHolder {
     /// Visit all the formats in `self` in a depth-first way.
     /// Variables are not supported and will cause an error.
