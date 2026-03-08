@@ -1,3 +1,6 @@
+//! Bincode pointer tests — `Box`, `Rc`, `Arc` (transparent), mixed
+//! collections with smart pointers.
+
 #![allow(clippy::too_many_lines)]
 
 use std::collections::{BTreeMap, HashSet};

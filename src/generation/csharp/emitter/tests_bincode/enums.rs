@@ -1,3 +1,7 @@
+//! Bincode enum tests — unit-only enums (`{EnumName}Bincode` static helper)
+//! and mixed-variant enums (`abstract record` hierarchy with `partial record`
+//! overrides).
+
 #![allow(clippy::too_many_lines)]
 
 use facet::Facet;

@@ -1,3 +1,6 @@
+//! Bincode struct tests — unit/newtype/tuple/regular structs with
+//! `ISerializer`/`IDeserializer` methods.
+
 #![allow(clippy::too_many_lines)]
 
 use facet::Facet;

@@ -1,3 +1,23 @@
+//! Snapshot tests for the C# emitter — **no serialization**.
+//!
+//! Every test uses the [`emit!`] macro with [`Encoding::None`], producing
+//! plain MVVM types verified against `insta` inline snapshots.
+//!
+//! # Output shapes
+//!
+//! - `sealed record` — unit structs / empty structs
+//! - `partial class : ObservableObject` — structs with fields
+//! - `public enum` — enums with only unit variants
+//! - `abstract record` + `sealed record` — enums with data variants
+//!
+//! # Coverage
+//!
+//! Structs (unit, newtype, tuple, regular, user-type fields), tuples (2/3/4),
+//! enums (unit, newtype, tuple, struct, mixed), collections (`Vec`, `HashMap`,
+//! `BTreeMap`, `HashSet`, `BTreeSet`, nested generics), optionals, pointers
+//! (`Box`, `Rc`, `Arc`), bytes (`#[facet(bytes)]`), fixed-size arrays, and
+//! external-namespace types.
+
 #![allow(clippy::too_many_lines)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

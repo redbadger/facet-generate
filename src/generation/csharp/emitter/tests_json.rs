@@ -1,3 +1,12 @@
+//! Snapshot tests for the C# emitter — **JSON encoding**.
+//!
+//! Mirrors [`super::tests`] but with [`Encoding::Json`]. Generated types
+//! include `[JsonPropertyName]` attributes on fields,
+//! `[JsonConverter(typeof(JsonStringEnumConverter))]` on unit enums,
+//! `[JsonPolymorphic]`/`[JsonDerivedType]` on variant hierarchies, and
+//! `JsonSerialize`/`JsonDeserialize` convenience methods backed by the
+//! `JsonSerde` static helper.
+
 #![allow(clippy::too_many_lines)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

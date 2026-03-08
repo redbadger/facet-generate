@@ -1,4 +1,44 @@
-use std::collections::BTreeSet;
+//! AST-to-C# source rendering.
+//!
+//! This module implements [`Emitter<CSharp>`](super::super::Emitter) for each
+//! node type in the format AST, turning abstract type descriptions into
+//! idiomatic C# code.
+//!
+//! # Emitter implementations
+//!
+//! | AST node | C# output |
+//! |---|---|
+//! | [`Module`] | `using` directives, file-scoped `namespace` declaration |
+//! | [`Container`] | `sealed record`, `partial class : ObservableObject`, `public enum`, or `abstract record` + `sealed record` variant hierarchy |
+//! | [`Named<Format>`](Named) | `[ObservableProperty]` private field (+ `[JsonPropertyName]` for JSON) |
+//! | [`Format`] | Inline type expression (`int`, `string`, `ObservableCollection<T>`, …) |
+//! | [`Doc`] | `///` XML doc comments |
+//!
+//! # C# type mapping
+//!
+//! The [`Format`] emitter maps Rust/reflection types to C# equivalents:
+//! `I32` → `int`, `I64` → `long`, `U8` → `byte`, `Str` → `string`,
+//! `Bytes` → `byte[]`, `Seq(T)` → `ObservableCollection<T>`,
+//! `Set(T)` → `HashSet<T>`, `Map(K,V)` → `Dictionary<K, V>`,
+//! `Option(T)` → `T?`, tuples → `(T1, T2, …)`, `TupleArray` → `T[]`,
+//! `Unit` → `Unit` (custom readonly record struct).
+//!
+//! # Encoding-dependent output
+//!
+//! The [`CSharp`] language tag carries the active [`Encoding`]. When encoding
+//! is `Json`, types get `System.Text.Json` annotations (`[JsonPropertyName]`,
+//! `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
+//! `JsonSerde` static helper methods. When encoding is `Bincode`, types
+//! implement `IFacetSerializable`/`IFacetDeserializable<T>` interfaces with
+//! hand-written `Serialize`/`Deserialize` methods and convenience
+//! `BincodeSerialize`/`BincodeDeserialize` wrappers. When encoding is `None`,
+//! only plain MVVM type declarations are emitted.
+//!
+//! # No feature helpers
+//!
+//! Unlike Kotlin, Swift, and TypeScript, C# emits inline serialization loops
+//! for collections and optionals — there are no embedded snippet files.
+
 use std::io::{Result, Write};
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
@@ -14,6 +54,11 @@ use crate::{
     },
 };
 
+/// Language tag for C#, carrying the active [`Encoding`].
+///
+/// Passed to every [`Emitter`](super::super::Emitter) implementation so
+/// that encoding-specific code (JSON annotations, Bincode methods) can be
+/// conditionally emitted.
 #[derive(Debug, Clone, Copy)]
 pub struct CSharp {
     pub encoding: Encoding,

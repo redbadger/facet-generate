@@ -1,3 +1,16 @@
+//! Snapshot tests for the C# [`Installer`] — **project scaffolding**.
+//!
+//! # Coverage
+//!
+//! - Basic `.csproj` manifest generation
+//! - External NuGet URL dependencies (`PackageReference`)
+//! - External path dependencies (`ProjectReference`)
+//! - Bincode runtime file installation (serde interfaces, serializer,
+//!   deserializer, error types)
+//! - JSON runtime installation (`JsonSerde.cs`)
+//! - No-encoding skips serde/bincode runtimes
+//! - Core `Unit.cs` always present regardless of encoding
+
 use crate::{
     Registry,
     generation::{Encoding, ExternalPackage, PackageLocation, csharp::Installer},

@@ -1,3 +1,25 @@
+//! Project scaffolding for generated C# code.
+//!
+//! The [`Installer`] writes a complete, ready-to-build C# project:
+//!
+//! 1. **Runtime files** — always installs `Unit.cs` (core), then conditionally
+//!    `ISerializer.cs`/`IDeserializer.cs`/error types (serde),
+//!    `JsonSerde.cs` + `ObservableCollectionJsonConverterFactory` (JSON), or
+//!    `BincodeSerializer.cs`/`BincodeDeserializer.cs`/`IFacetSerializable.cs`/
+//!    `IFacetDeserializable.cs` (Bincode). All placed under `Facet/Runtime/`
+//!    subdirectories.
+//!
+//! 2. **Per-module source files** — splits the registry by namespace and writes
+//!    each to `<dotted-path>/<LeafName>.cs`. C# uses file-scoped `namespace`
+//!    declarations — each namespace becomes a directory matching the dotted
+//!    module path, and cross-namespace references use fully qualified dotted
+//!    names (e.g. `Company.Models.Shared.Child`).
+//!
+//! 3. **`.csproj` manifest** — generates an MSBuild project file targeting
+//!    `net10.0` with `CommunityToolkit.Mvvm` as a base package reference,
+//!    plus NuGet `PackageReference` (URL) or `ProjectReference` (path) for
+//!    external packages.
+
 use std::{
     fmt::Write as _,
     io::Write as _,
@@ -92,6 +114,11 @@ impl Installer {
         Ok(())
     }
 
+    /// Produce the contents of a `.csproj` project file.
+    ///
+    /// The manifest includes a base `CommunityToolkit.Mvvm` NuGet reference,
+    /// plus any external NuGet `PackageReference` (URL) or `ProjectReference`
+    /// (path) entries configured via [`external_packages`](Self::external_packages).
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
         let mut package_references = vec![
@@ -290,6 +317,11 @@ internal sealed class ObservableCollectionJsonConverterFactory : JsonConverterFa
 }
 
 impl SourceInstaller for Installer {
+    /// Generate a single `.cs` source file for one namespace.
+    ///
+    /// The directory path is derived from the dotted module name (dots become
+    /// path separators). External packages are skipped — they are expected to
+    /// be provided by NuGet or project references.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
@@ -485,6 +517,7 @@ public sealed class SerializationError : Exception
         Ok(())
     }
 
+    /// Write the `.csproj` manifest to the output directory.
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
         let manifest = self.make_manifest(package_name);
 

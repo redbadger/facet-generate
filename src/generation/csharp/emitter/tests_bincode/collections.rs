@@ -1,3 +1,6 @@
+//! Bincode collection tests — `ObservableCollection<T>`, `HashSet<T>`,
+//! `Dictionary<K,V>`, fixed-size arrays, nested generics.
+
 #![allow(clippy::too_many_lines)]
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

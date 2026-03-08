@@ -1,3 +1,18 @@
+//! Unit tests for [`CodeGenerator`] — namespace resolution and preamble
+//! generation.
+//!
+//! Tests build small registries by hand to exercise the qualified-name
+//! rewriting rules without depending on snapshot output.
+//!
+//! # Coverage
+//!
+//! - Same-leaf-namespace stripping (`Users` inside `Company.Models.Users` → bare name)
+//! - External namespace rooting under module (`Payments` → `Company.Models.Payments`)
+//! - Root-to-dotted promotion (`Root` inside `Company.Models` → `Named("Company.Models")`)
+//! - Preamble (`using` directives + `namespace` declaration)
+//! - Encoding-specific imports (JSON adds `System.Text.Json.Serialization`,
+//!   Bincode adds `Facet.Runtime.Bincode`)
+
 use super::*;
 use crate::{
     generation::{CodeGeneratorConfig, Encoding},
