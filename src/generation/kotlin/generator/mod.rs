@@ -1,3 +1,8 @@
+//! Top-level orchestrator for Kotlin code generation.
+//!
+//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! producing a single Kotlin source file from a [`Registry`].
+
 use std::io::{Result, Write};
 
 use crate::{
@@ -12,9 +17,11 @@ use crate::{
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
-/// Main configuration object for code-generation in Kotlin
+/// Kotlin code generator — holds a reference to the shared
+/// [`CodeGeneratorConfig`] and implements [`CodeGen`].
 pub struct CodeGenerator<'a> {
-    /// Language-independent configuration
+    /// Language-independent configuration (encoding, module name, external
+    /// packages, etc.).
     pub(crate) config: &'a CodeGeneratorConfig,
 }
 
@@ -39,9 +46,11 @@ impl<'a> CodeGenerator<'a> {
         Self { config }
     }
 
-    /// Output type definitions for `registry`.
+    /// Produce a complete Kotlin source file for the given `registry`.
+    ///
     /// # Errors
-    /// This function may fail if the writer encounters an error while writing the generated code.
+    ///
+    /// Returns an error if the underlying writer fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
 
@@ -65,8 +74,31 @@ impl<'a> CodeGenerator<'a> {
         Ok(())
     }
 
-    /// Updates all `QualifiedTypeName` instances in the registry to use fully qualified paths
-    /// based on the provided configuration for external type references.
+    /// Rewrites every [`QualifiedTypeName`] in the registry to a fully-qualified
+    /// Kotlin package path, returning a new registry.
+    ///
+    /// The registry coming in from reflection uses short, language-agnostic
+    /// names like `Namespace::Named("Other") + "MyType"`. Kotlin needs these
+    /// turned into dot-separated package paths so the emitter can write e.g.
+    /// `com.example.other.Other.MyType` in type references and deserialize
+    /// calls.
+    ///
+    /// # Resolution rules (checked in this order)
+    ///
+    /// 1. **External package with a [`PackageLocation::Path`]** — the
+    ///    configured path replaces the namespace prefix.
+    ///    `Other::MyType` with path `com.acme.other` → `com.acme.other.Other.MyType`
+    ///
+    /// 2. **External definition in a different namespace** — prefixed with
+    ///    the current module name.
+    ///    Module `com.example.main`, namespace `auth` → `com.example.main.auth.User`
+    ///
+    /// 3. **Same namespace as the current module** — collapsed to just the
+    ///    module name (no double-nesting).
+    ///    Module `com.example.other`, namespace `other` → `com.example.other.LocalType`
+    ///
+    /// 4. **[`Namespace::Root`]** — uses the current module name.
+    ///    Module `com.example.service` → `com.example.service.RootType`
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 

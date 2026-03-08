@@ -1,3 +1,23 @@
+//! Project scaffolding — writes a ready-to-build Kotlin project to disk.
+//!
+//! The [`Installer`] is the final stage of the Kotlin generation pipeline.
+//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! the installer is responsible for the surrounding project structure:
+//!
+//! 1. **Runtime files** — copies the serde and/or bincode runtime `.kt`
+//!    sources from `runtime/kotlin/` into the output directory. These provide
+//!    the `Serializer`, `Deserializer`, `BincodeSerializer`, etc. that the
+//!    generated `serialize`/`deserialize` methods call into.
+//!
+//! 2. **Per-namespace source files** — splits the registry by namespace
+//!    (via [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    writing each to its own `.kt` file under the appropriate package
+//!    directory (e.g. `com/example/types/Types.kt`).
+//!
+//! 3. **`build.gradle.kts`** — generates a Gradle build script with the
+//!    correct plugins, dependencies (`kotlinx-serialization-json` for JSON
+//!    encoding, or external package references), and JAR manifest metadata.
+
 use std::{
     io::Write as _,
     path::{Path, PathBuf},
@@ -14,7 +34,10 @@ use crate::{
     },
 };
 
-/// Installer for generated source files in Kotlin.
+/// Writes a complete Kotlin project (source files, runtime, build script)
+/// into an output directory.
+///
+/// Configured via builder methods, then consumed by [`generate`](Self::generate).
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
@@ -96,6 +119,8 @@ impl Installer {
         Ok(())
     }
 
+    /// Recursively copies all files from `source_dir` into
+    /// `install_dir/path`, creating directories as needed.
     fn install_runtime(&self, source_dir: &str, path: &str) -> std::result::Result<(), Error> {
         let target_dir = self.install_dir.join(path);
         std::fs::create_dir_all(&target_dir)?;
@@ -108,6 +133,11 @@ impl Installer {
         Ok(())
     }
 
+    /// Produces the contents of a `build.gradle.kts` file.
+    ///
+    /// Includes `kotlinx-serialization-json` when not using bincode, and adds
+    /// `implementation(files(…))` or `implementation("artifact:version")` for
+    /// each configured external package.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
         // TODO: this should come from somewhere
@@ -188,6 +218,13 @@ impl Installer {
 }
 
 impl SourceInstaller for Installer {
+    /// Generates a single `.kt` source file for one namespace module.
+    ///
+    /// Skips modules whose namespace matches an external package (those types
+    /// are provided by the external dependency, not generated). For the rest,
+    /// converts the dot-separated module name to a directory path, creates it,
+    /// and writes the output of [`CodeGenerator::output`] into a PascalCased
+    /// `.kt` file (e.g. module `com.example.types` → `com/example/types/Types.kt`).
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
@@ -232,8 +269,9 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
+    /// Copies the common serde runtime (`Serializer`, `Deserializer`, etc.)
+    /// from `runtime/kotlin/com/novi/serde/` into the output directory.
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
-        // Install the common serde runtime files needed for bincode
         let runtime_dir =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("runtime/kotlin/com/novi/serde");
 
@@ -244,8 +282,9 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
+    /// Copies the bincode runtime (`BincodeSerializer`, `BincodeDeserializer`)
+    /// from `runtime/kotlin/com/novi/bincode/` into the output directory.
     fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
-        // Install the bincode-specific runtime files
         let runtime_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("runtime/kotlin/com/novi/bincode");
 
