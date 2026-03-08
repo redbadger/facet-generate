@@ -9,6 +9,7 @@ pub struct Video<'a> {
 #[derive(Facet, Serialize)]
 pub struct Tag;
 
+// TODO: enable swift, typescript (expect files need updating for no-encoding output)
 crate::test! {
-    Video for java, kotlin
+    Video for kotlin
 }

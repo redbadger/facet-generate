@@ -20,3 +20,9 @@ pub enum AdvancedColors {
     ArrayReallyCoolType(Vec<ItemDetailsFieldValue>),
     DictionaryReallyCoolType(HashMap<String, ItemDetailsFieldValue>),
 }
+
+// TODO: wire up test! macro for swift, typescript (and kotlin)
+// Existing expect files assume JSON encoding but test! uses no encoding.
+// crate::test! {
+//     ItemDetailsFieldValue, AdvancedColors for kotlin, swift, typescript
+// }
