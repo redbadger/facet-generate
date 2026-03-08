@@ -1,3 +1,19 @@
+//! Unit tests for [`CodeGenerator`] — import generation and qualified-name
+//! resolution.
+//!
+//! Tests build small [`Registry`] values by hand (rather than via the
+//! `reflect!` macro) so that module and external-package configurations can
+//! be controlled precisely.
+//!
+//! # Coverage
+//!
+//! | Area | What is tested |
+//! |------|----------------|
+//! | Serde imports | Bincode encoding triggers `import Serde`; `Encoding::None` does not |
+//! | External definitions | External namespaces appear as `import` statements |
+//! | Encoding config | Encoding propagates through to generated output |
+//! | Feature helpers | Complex types (e.g. `Seq`) trigger trait helper emission when encoding is active |
+
 use std::collections::BTreeMap;
 
 use crate::{

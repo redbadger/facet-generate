@@ -1,3 +1,15 @@
+//! Snapshot tests for the Swift emitter — **JSON encoding**.
+//!
+//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! so that every generated type includes `Hashable` conformance and
+//! `Serializer`/`Deserializer` protocol-based serialization methods plus
+//! `jsonSerialize`/`jsonDeserialize` convenience wrappers.
+//!
+//! Unlike Kotlin's JSON (which uses `kotlinx.serialization` annotations),
+//! Swift JSON uses hand-written `serialize`/`deserialize` methods that call
+//! into the Serde runtime protocols — the same pattern as Bincode, but
+//! targeting the `JsonSerializer`/`JsonDeserializer` implementations.
+
 #![allow(clippy::too_many_lines)]
 
 use std::{

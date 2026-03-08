@@ -1,3 +1,8 @@
+//! Top-level orchestrator for Swift code generation.
+//!
+//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! producing a single Swift source file from a [`Registry`].
+
 use std::io::{Result, Write};
 
 use crate::{
@@ -11,7 +16,10 @@ use crate::{
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
-/// Main configuration object for code-generation in Swift.
+/// Main configuration object for Swift code generation.
+///
+/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGen`] so it can be
+/// used by the installer pipeline.
 pub struct CodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
@@ -38,7 +46,7 @@ impl<'a> CodeGenerator<'a> {
         Self { config }
     }
 
-    /// Output class definitions for `registry`.
+    /// Produce a complete Swift source file for `registry`.
     ///
     /// # Errors
     ///

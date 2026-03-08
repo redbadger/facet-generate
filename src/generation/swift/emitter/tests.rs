@@ -1,5 +1,26 @@
-//! these tests will be updated once the Swift emitter is converted
-//! to use the new Emitter<Language> trait
+//! Snapshot tests for the Swift emitter — **no serialization**.
+//!
+//! Each test defines one or more Rust types annotated with `#[derive(Facet)]`,
+//! runs them through the [`emit!`] macro with `Encoding::None`, and asserts the
+//! generated Swift source against an [`insta`] inline snapshot.
+//!
+//! Because encoding is `None`, the output contains only plain type declarations
+//! (`public struct`, `indirect public enum`) with no `serialize`/`deserialize`
+//! methods and no `Hashable` conformance.
+//!
+//! # Coverage
+//!
+//! | Category | What is tested |
+//! |----------|----------------|
+//! | Structs | Unit structs (with/without fields), newtype wrappers, tuple structs, structs with primitive and user-defined fields |
+//! | Tuples | 2-tuple, 3-tuple, 4-tuple (native Swift tuples) |
+//! | Enums | Unit variants, newtype/tuple variants, struct variants, mixed-variant enums |
+//! | Collections | `Vec`, `HashMap`/`BTreeMap`, `HashSet`/`BTreeSet`, fixed-size arrays |
+//! | Optional | `Option<T>` fields (mapped to `T?`) |
+//! | Pointers | `Box`, `Rc`, `Arc` (all transparent in generated output) |
+//! | Bytes | `#[facet(bytes)]`-annotated `Vec<u8>` and byte slices |
+//! | Modules | Multi-module generation via [`emit_two_modules!`] |
+
 #![allow(clippy::too_many_lines)]
 
 use std::{
