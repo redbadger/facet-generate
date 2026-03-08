@@ -1,3 +1,22 @@
+//! Code generation — transforms a [`Registry`](crate::Registry) into source code for target
+//! languages.
+//!
+//! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`) behind a
+//! feature flag. The generation pipeline has three layers:
+//!
+//! - **Generator** ([`CodeGen`]) — top-level entry point that writes a complete output file
+//!   from a registry.
+//! - **Emitter** ([`Emitter`]) — walks the [`Format`](crate::reflection::format::Format) AST
+//!   inside each [`Container`] and emits the target language equivalent for each node
+//!   (type declarations, fields, serialization logic, etc.).
+//! - **Installer** — (language-specific) scaffolds project files, package manifests, and
+//!   generated source into an output directory.
+//!
+//! Shared infrastructure:
+//! - [`CodeGeneratorConfig`] — configuration (package name, encoding, custom types, etc.)
+//! - [`indent`] — indentation-aware writer
+//! - [`module`] — splits a registry by namespace into separate output modules
+
 /// Utility function to generate indented text
 pub mod indent;
 
@@ -28,10 +47,7 @@ pub mod common;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
-use std::{
-    fmt::{Display, Formatter},
-    io::{Result, Write},
-};
+use std::io::{Result, Write};
 
 pub use config::*;
 use indent::IndentWrite;
@@ -44,6 +60,8 @@ use crate::{
 pub(crate) const SERDE_NAMESPACE: &str = "serde";
 pub(crate) const BINCODE_NAMESPACE: &str = "bincode";
 
+/// Transforms a [`Registry`] into a complete source file. Each target language provides
+/// its own implementation.
 pub trait CodeGen<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
 
@@ -52,32 +70,6 @@ pub trait CodeGen<'a> {
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()>;
-}
-
-pub enum Language {
-    #[deprecated(
-        since = "0.16.0",
-        note = "The Java generator is deprecated. Use Kotlin instead."
-    )]
-    Java,
-    Kotlin,
-    Swift,
-    TypeScript,
-}
-
-#[expect(
-    deprecated,
-    reason = "Display must handle all variants including deprecated Language::Java"
-)]
-impl Display for Language {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Language::Java => write!(f, "Java"),
-            Language::Kotlin => write!(f, "Kotlin"),
-            Language::Swift => write!(f, "Swift"),
-            Language::TypeScript => write!(f, "TypeScript"),
-        }
-    }
 }
 
 pub struct Container<'a> {
@@ -94,7 +86,7 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
     }
 }
 
-pub trait Emitter<Language> {
+pub trait Emitter<L> {
     /// Write the code to the provided `IndentWrite`.
     ///
     /// Note that the `lang` parameter allows the compiler to disambiguate this method
@@ -102,7 +94,7 @@ pub trait Emitter<Language> {
     ///
     /// # Errors
     /// This function may fail if the writer encounters an error while writing the generated code.
-    fn write<W: IndentWrite>(&self, writer: &mut W, lang: Language) -> Result<()>;
+    fn write<W: IndentWrite>(&self, writer: &mut W, lang: L) -> Result<()>;
 }
 
 #[cfg(all(test, feature = "generate"))]

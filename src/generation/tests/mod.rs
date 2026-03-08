@@ -1,10 +1,39 @@
 use std::{
+    fmt::{self, Display, Formatter},
     fs,
     path::{Path, PathBuf},
 };
 
 use expect_test::ExpectFile;
 use ignore::WalkBuilder;
+
+/// Target languages included in snapshot integration tests. Used to loop over languages
+/// in a single test, dispatching to the appropriate installer for each.
+pub enum TargetLanguage {
+    #[deprecated(
+        since = "0.16.0",
+        note = "The Java generator is deprecated. Use Kotlin instead."
+    )]
+    Java,
+    Kotlin,
+    Swift,
+    TypeScript,
+}
+
+#[expect(
+    deprecated,
+    reason = "Display must handle all variants including deprecated TargetLanguage::Java"
+)]
+impl Display for TargetLanguage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            TargetLanguage::Java => write!(f, "Java"),
+            TargetLanguage::Kotlin => write!(f, "Kotlin"),
+            TargetLanguage::Swift => write!(f, "Swift"),
+            TargetLanguage::TypeScript => write!(f, "TypeScript"),
+        }
+    }
+}
 
 #[expect(
     deprecated,

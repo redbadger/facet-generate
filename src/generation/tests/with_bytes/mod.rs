@@ -6,8 +6,8 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, Language, kotlin,
-        tests::{check, read_files_and_create_expect_dirs},
+        Encoding, kotlin,
+        tests::{check, read_files_and_create_expect_dirs, TargetLanguage},
     },
     reflect,
 };
@@ -29,7 +29,7 @@ fn test() {
         .unwrap()
         .join("snapshots");
 
-    for target in [Language::Kotlin] {
+    for target in [TargetLanguage::Kotlin] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
 
@@ -37,7 +37,7 @@ fn test() {
         fs::create_dir_all(&snapshot_dir).unwrap();
 
         match target {
-            Language::Kotlin => {
+            TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
                     .encoding(Encoding::Bincode)
                     .generate(&registry)
