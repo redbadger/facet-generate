@@ -1,3 +1,100 @@
+//! Generates idiomatic source code in Swift, Kotlin, TypeScript, and C# from Rust types
+//! annotated with `#[derive(Facet)]`.
+//!
+//! When Rust is the source of truth for a data model shared across platforms (e.g. a mobile
+//! app talking to a Rust core over FFI), every target language needs matching type definitions
+//! — and, optionally, serialization code to move data across the boundary. Writing these by
+//! hand is tedious and error-prone; this crate automates it.
+//!
+//! Optionally, when an [`Encoding`](generation::Encoding) such as Bincode or JSON is
+//! configured, the generated types include `serialize` / `deserialize` methods and the
+//! appropriate runtime library is installed alongside the generated code.
+//!
+//! # Modules
+//!
+//! - [`reflection`] — walks Rust type metadata (via the [`facet`] crate) and builds a
+//!   language-neutral [`Registry`]: a flat map from qualified type names to their
+//!   [`ContainerFormat`](reflection::format::ContainerFormat) descriptions.
+//! - [`generation`] — transforms a registry into source code for a target language.
+//!   Each language (`kotlin`, `csharp`, `swift`, `typescript`) lives behind a feature flag and
+//!   follows a three-layer pipeline: **Installer** (project scaffolding and manifests) →
+//!   **Generator** (file-level output with imports and namespaces) → **Emitter** (per-type
+//!   code emission).
+//!
+//! # Example
+//!
+//! Define your shared data model in Rust:
+//!
+//! ```rust,ignore
+//! use facet::Facet;
+//!
+//! #[derive(Facet)]
+//! struct HttpResponse {
+//!     status: u16,
+//!     headers: Vec<HttpHeader>,
+//!     #[facet(bytes)]
+//!     body: Vec<u8>,
+//! }
+//!
+//! #[derive(Facet)]
+//! struct HttpHeader {
+//!     name: String,
+//!     value: String,
+//! }
+//! ```
+//!
+//! Build a registry from the types, then generate a complete project for one or more target
+//! languages:
+//!
+//! ```rust,ignore
+//! use facet_generate::{reflection::RegistryBuilder, generation::{Encoding, kotlin, swift}};
+//!
+//! let registry = RegistryBuilder::new()
+//!     .add_type::<HttpResponse>()?
+//!     .build()?;
+//!
+//! // Swift package with Bincode serialization
+//! swift::Installer::new("MyPackage", &out_dir)
+//!     .encoding(Encoding::Bincode)
+//!     .generate(&registry)?;
+//!
+//! // Kotlin package (type definitions only, no serialization)
+//! kotlin::Installer::new("com.example", &out_dir)
+//!     .generate(&registry)?;
+//! ```
+//!
+//! # Testing
+//!
+//! Tests are organised in three layers, from fast and narrow to slow and broad:
+//!
+//! ## Unit tests (snapshot)
+//!
+//! Each language has snapshot-based tests that assert on generated **text** without touching the
+//! filesystem.
+//!
+//! | Layer | Location | What it covers |
+//! |-------|----------|----------------|
+//! | Emitter | `generation/<lang>/emitter/tests.rs` (+ `tests_bincode.rs`, `tests_json.rs`) | Output for individual types — no file headers, no imports. Uses the [`emit!`] macro. |
+//! | Generator | `generation/<lang>/generator/tests.rs` | Full file output including package declarations, imports, and namespace-qualified names. |
+//! | Installer | `generation/<lang>/installer/tests.rs` | Generated manifest strings (`.csproj`, `build.gradle.kts`, `package.json`, `Package.swift`). Still pure string assertions — no files written. |
+//!
+//! All three use the [`insta`](https://docs.rs/insta) crate for snapshot assertions.
+//!
+//! ## Compilation tests (`tests/<lang>_generation.rs`)
+//!
+//! Integration tests that generate code **and** a project scaffold into a temporary directory,
+//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `deno check`).
+//! They verify that the generated code is syntactically and type-correct in the target language.
+//! Each file is feature-gated (e.g. `#![cfg(feature = "kotlin")]`) so tests only run when the
+//! corresponding toolchain is available.
+//!
+//! ## Runtime tests (`tests/<lang>_runtime.rs`)
+//!
+//! End-to-end tests that go one step further: they serialize sample data in Rust (typically with
+//! bincode), generate target-language code that deserializes the same bytes, compile and **run**
+//! the resulting program, and assert that the round-trip is correct. These catch subtle encoding
+//! bugs that snapshot and compilation tests cannot.
+
 pub mod error;
 pub mod generation;
 pub mod reflection;
