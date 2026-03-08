@@ -1,3 +1,13 @@
+//! Splits a [`Registry`] into per-namespace modules for multi-file output.
+//!
+//! Types in the registry are grouped by their [`Namespace`]. Each group
+//! becomes a [`Module`] with its own [`CodeGeneratorConfig`] and sub-registry.
+//! Cross-namespace type references are tracked as external definitions so that
+//! generators can emit the correct import statements.
+//!
+//! The entry point is [`split`], which returns a `BTreeMap<Module, Registry>`
+//! — one entry per namespace, ordered by module name.
+
 use std::{cmp::Ordering, collections::BTreeMap};
 
 use serde::Serialize;
@@ -8,6 +18,11 @@ use crate::{
     reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
+/// A single output module, identified by namespace name and carrying the
+/// [`CodeGeneratorConfig`] for that namespace.
+///
+/// Equality, ordering, and hashing are based on the module name alone, so
+/// modules can be used as `BTreeMap` keys.
 #[derive(Debug, Clone, Serialize)]
 pub struct Module(CodeGeneratorConfig);
 
@@ -49,10 +64,16 @@ impl Ord for Module {
     }
 }
 
-/// Splits a registry by namespace.
+/// Splits a registry into one [`Module`] per namespace.
+///
+/// Types with [`Namespace::Root`] are assigned to the `root` module name.
+/// For each module, any `Format::TypeName` references that point to a
+/// *different* namespace are recorded as external definitions so generators
+/// can emit import statements.
 ///
 /// # Panics
-/// Panics if the registry is invalid.
+///
+/// Panics if the registry contains unresolved format placeholders.
 #[must_use]
 pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
     // First, group types by their target namespace

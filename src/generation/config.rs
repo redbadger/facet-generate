@@ -2,6 +2,32 @@
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+//! Configuration that controls code-generation behaviour independent of the
+//! target language.
+//!
+//! The most important knob is [`Encoding`]: it decides whether generated types
+//! are plain data classes (`None`) or also get `serialize` / `deserialize`
+//! methods (`Json` or `Bincode`). When serialization is enabled, the installer
+//! copies the corresponding runtime support files alongside the generated code.
+//!
+//! Cross-module relationships are handled by [`ExternalDefinitions`] (which
+//! types live in other modules) and [`ExternalPackages`] (where to import them
+//! from), so generators can emit `import` / `using` statements instead of
+//! redeclaring types.
+//!
+//! [`Feature`] flags are discovered automatically by
+//! [`CodeGeneratorConfig::update_from`] scanning the registry — they tell the
+//! installer which container-type helpers (`ListOfT`, `MapOfT`, …) to include.
+//!
+//! There are two configuration levels:
+//!
+//! - [`Config`] / [`ConfigBuilder`] — the public API entry point (package
+//!   name, output directory, encoding, external packages).
+//! - [`CodeGeneratorConfig`] — the internal, per-module config that generators
+//!   and [`Emitter`](super::Emitter) implementations receive. Generators copy
+//!   the [`Encoding`] from here into the language tag so that emitters can
+//!   access it via the `lang` parameter without needing the full config.
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
@@ -40,6 +66,13 @@ pub struct CodeGeneratorConfig {
     pub referenced_namespaces: BTreeSet<String>,
 }
 
+/// The wire format to target when generating serialization code.
+///
+/// - `None` — generate type declarations only, with no serialization support.
+/// - `Json` — generate JSON `serialize` / `deserialize` methods and install
+///   the JSON serde runtime.
+/// - `Bincode` — generate binary `serialize` / `bincodeDeserialize` methods
+///   and install the Bincode runtime.
 #[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
 pub enum Encoding {
     #[default]
@@ -48,6 +81,11 @@ pub enum Encoding {
     Bincode,
 }
 
+/// Container or leaf types in the registry that need a runtime support file
+/// installed alongside the generated code.
+///
+/// Discovered automatically by [`CodeGeneratorConfig::update_from`] and
+/// consumed by [`SourceInstaller`] implementations.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
 pub enum Feature {
     BigInt,
@@ -111,7 +149,13 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
-/// How to copy generated source code and available runtimes for a given language.
+/// Writes generated source code and runtime support files to disk.
+///
+/// Each target language provides its own implementation. The installer is
+/// the third layer of the pipeline — after [`CodeGen`](super::CodeGen)
+/// produces the source text and [`Emitter`](super::Emitter) renders each
+/// AST node, the installer places everything into the output directory and
+/// copies any runtime files required by the chosen [`Encoding`].
 pub trait SourceInstaller {
     /// Create a module exposing the container types contained in the registry.
     fn install_module(
@@ -318,7 +362,10 @@ impl Encoding {
     }
 }
 
-/// Configuration for foreign type generation.
+/// Public API entry point for configuring a generation run.
+///
+/// Use [`Config::builder`] to create one, then pass it to a language-specific
+/// `generate` function.
 #[derive(Default, Builder)]
 #[builder(
     custom_constructor,
@@ -377,6 +424,7 @@ impl ConfigBuilder {
     }
 }
 
+/// Where an external package can be found.
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PackageLocation {
     /// Either a local file path or, for Kotlin, a dot-separated package name.
@@ -385,6 +433,8 @@ pub enum PackageLocation {
     Url(String),
 }
 
+/// A reference to a package that provides types from another namespace,
+/// so the generator can emit the correct import statements.
 #[derive(Debug, Clone, Serialize, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExternalPackage {
     /// The namespace as specified in `#[facet(namespace = "namespace")]`.
