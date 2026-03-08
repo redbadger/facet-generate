@@ -1,3 +1,9 @@
+//! Top-level orchestrator for TypeScript code generation.
+//!
+//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! producing a single TypeScript source file from a [`Registry`]. It carries
+//! the active [`InstallTarget`] (Node or Deno) through to the emitter layer.
+
 use std::io::{Result, Write};
 
 use crate::{
@@ -11,7 +17,10 @@ use crate::{
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
-/// Main configuration object for code-generation in TypeScript.
+/// Main configuration object for TypeScript code generation.
+///
+/// Wraps a [`CodeGeneratorConfig`] and an [`InstallTarget`], and implements
+/// [`CodeGen`] so it can be used by the installer pipeline.
 pub struct CodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
@@ -36,7 +45,7 @@ impl<'a> CodeGenerator<'a> {
         Self { config, target }
     }
 
-    /// Output type definitions for `registry`.
+    /// Produce a complete TypeScript source file for the types in `registry`.
     ///
     /// # Errors
     ///
@@ -59,8 +68,15 @@ impl<'a> CodeGenerator<'a> {
         Ok(())
     }
 
-    /// Updates `QualifiedTypeName` instances so external types include their namespace prefix
-    /// and same-module types are stripped to root (bare name).
+    /// Updates [`QualifiedTypeName`] instances for TypeScript's ES-module
+    /// namespacing:
+    ///
+    /// 1. **Same-module type** — strip namespace to `Root` so it renders as a
+    ///    bare name (e.g. `Child`).
+    /// 2. **External type in different namespace** — keep its `Named` namespace,
+    ///    which renders as `Namespace.Type` (e.g. `Other.Child`) via the
+    ///    wildcard import added by the [`Module`](super::super::module::Module)
+    ///    emitter.
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 

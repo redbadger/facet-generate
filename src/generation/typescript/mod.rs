@@ -1,3 +1,32 @@
+//! TypeScript code generation.
+//!
+//! This module translates a [`Registry`](crate::Registry) of reflected type
+//! definitions into idiomatic TypeScript source code.
+//!
+//! # Submodules (in pipeline order)
+//!
+//! 1. **[`generator`]** — Top-level orchestrator. [`CodeGenerator`] implements
+//!    [`CodeGen`](super::CodeGen) to produce a complete TypeScript source file
+//!    from a registry. It resolves qualified type names against the
+//!    configuration (external packages, namespaces), carries the active
+//!    [`InstallTarget`], and delegates writing to the emitter layer.
+//!
+//! 2. **[`emitter`]** — AST-to-source rendering. Implements
+//!    [`Emitter<TypeScript>`](super::Emitter) for each AST node type
+//!    ([`Module`](super::module::Module), [`Container`](super::Container),
+//!    `Named<Format>`, `Format`, `Doc`). This is where the TypeScript language
+//!    mapping lives: type aliases, `export class` / `export abstract class` +
+//!    variant subclass selection, and `Serializer`/`Deserializer`
+//!    interface-based serialize/deserialize method generation. Feature helpers
+//!    (`ArrayOfT`, `SetOfT`, etc.) are embedded as `include_bytes!` snippets
+//!    and emitted as needed.
+//!
+//! 3. **[`installer`]** — Project scaffolding. [`Installer`] implements
+//!    [`SourceInstaller`](super::SourceInstaller) to write a ready-to-build
+//!    TypeScript project: it copies serde/bincode runtime sources (with
+//!    target-specific variants for Node vs Deno), splits the registry by
+//!    namespace into per-module files, and generates a `package.json` manifest.
+
 pub use generator::CodeGenerator;
 pub use installer::Installer;
 
@@ -7,7 +36,18 @@ mod installer;
 
 use include_dir::{Dir, include_dir};
 
-/// Installation target (node.js or deno)
+/// Installation target — Node.js or Deno.
+///
+/// TypeScript supports two distinct module layouts:
+///
+/// - **Node** — flat `.ts` files with extensionless imports (e.g.
+///   `import … from "./serde"`). Runtime entry points use `index.ts`.
+///   Each namespace becomes a single `<namespace>.ts` file in the output
+///   directory.
+///
+/// - **Deno** — directory structure with `.ts` extensions kept in import
+///   paths (e.g. `import … from "./serde/mod.ts"`). Runtime entry points
+///   use `mod.ts`. Each namespace becomes a `<namespace>/mod.ts` file.
 #[derive(Debug, Clone, Copy)]
 pub enum InstallTarget {
     Node,

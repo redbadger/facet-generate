@@ -1,3 +1,25 @@
+//! Project scaffolding — writes a ready-to-build TypeScript project to disk.
+//!
+//! The [`Installer`] is the final stage of the TypeScript generation pipeline.
+//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! the installer is responsible for the surrounding project structure:
+//!
+//! 1. **Runtime files** — copies the serde and/or bincode runtime `.ts`
+//!    sources into the output directory, adapting file names and import paths
+//!    for the active [`InstallTarget`] (Node: `index.ts` + extensionless
+//!    imports; Deno: `mod.ts` + `.ts` extensions).
+//!
+//! 2. **Per-module source files** — splits the registry by namespace (via
+//!    [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    writing each to its own `.ts` file. TypeScript has no `namespace`
+//!    keyword here — the crate's namespace concept maps to **ES modules**
+//!    (separate `.ts` files), and cross-module type references use
+//!    `import * as Namespace` wildcard imports with `Namespace.Type` syntax.
+//!
+//! 3. **`package.json`** — generates an NPM manifest with dependencies
+//!    (external packages as `file:` paths or versioned registry references)
+//!    and devDependencies (`typescript`).
+
 use std::{
     collections::BTreeMap,
     fs::{File, create_dir_all},
@@ -125,6 +147,12 @@ impl Installer {
         Ok(())
     }
 
+    /// Produce the contents of a `package.json` manifest.
+    ///
+    /// Dependencies are derived from external packages: `Path` locations
+    /// become `file:` references, `Url` locations use the extracted package
+    /// name with an optional version string. `typescript` is always added as
+    /// a devDependency.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> Value {
         let mut manifest = json!({
@@ -179,6 +207,12 @@ impl Installer {
 }
 
 impl SourceInstaller for Installer {
+    /// Generate a single `.ts` source file for one namespace.
+    ///
+    /// For **Node** targets the file is written as `<namespace>.ts` directly
+    /// in the install directory. For **Deno** targets it is written as
+    /// `<namespace>/mod.ts`. Namespaces that correspond to external packages
+    /// are skipped — their types are imported rather than generated.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
@@ -222,6 +256,7 @@ impl SourceInstaller for Installer {
         self.install_runtime(self.target.bincode_runtime(), "bincode")
     }
 
+    /// Write `package.json` to the output directory.
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
         let manifest = self.make_manifest(package_name);
         let manifest = serde_json::to_string_pretty(&manifest)?;

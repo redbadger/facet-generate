@@ -1,3 +1,24 @@
+//! Unit tests for [`CodeGenerator`] — import generation and qualified-name
+//! resolution.
+//!
+//! Tests build small [`Registry`](crate::Registry) values by hand (rather than
+//! via the `reflect!` macro) so that module and external-package configurations
+//! can be controlled precisely.
+//!
+//! # Coverage
+//!
+//! | Area | What is tested |
+//! |------|----------------|
+//! | Same-module stripping | `Named` namespace matching module name → stripped to `Root` (bare name) |
+//! | External namespace | `Named` namespace for a different module → preserved as `Namespace.Type` |
+//! | Root namespace | Already-`Root` names pass through unchanged |
+//! | Nested complex types | `Option<Seq<TypeName>>` — namespace stripping recurses into nested formats |
+//! | Enum variants | Variant payloads containing `TypeName` are updated correctly |
+//! | Immutability | `update_qualified_names` does not mutate the input registry |
+//! | Import generation | Relative (`../namespace`), external package paths, `module_name` sub-paths, URL packages |
+//! | Priority | External packages override relative imports for the same namespace |
+//! | Deserialization | Qualified names appear correctly in `deserialize` call sites |
+
 use std::collections::BTreeMap;
 
 use super::*;
