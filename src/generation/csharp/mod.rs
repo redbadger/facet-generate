@@ -21,8 +21,10 @@
 //!    `abstract record` + `sealed record` variant hierarchies (mixed/data).
 //!    Serialization uses `System.Text.Json` annotations for JSON and
 //!    `IFacetSerializable`/`IFacetDeserializable<T>` interfaces for Bincode.
-//!    Unlike Kotlin/Swift/TypeScript, C# serializes collections inline — there
-//!    are no feature helper snippet files.
+//!    Like Kotlin/Swift/TypeScript, C# uses reusable helper functions for
+//!    serializing container types. C# places these in a shared runtime file
+//!    (`Facet/Runtime/Bincode/FacetHelpers.cs`) rather than per-module snippets,
+//!    since C# `using` directives make a shared namespace globally accessible.
 //!
 //! 3. **[`installer`]** — Project scaffolding. [`Installer`] implements
 //!    [`SourceInstaller`](super::SourceInstaller) to write a ready-to-build

@@ -33,58 +33,18 @@ fn struct_with_vec_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)Items.Count);
-            foreach (var item in Items)
-            {
-                serializer.SerializeStr(item);
-            }
-            serializer.SerializeLen((ulong)Numbers.Count);
-            foreach (var item in Numbers)
-            {
-                serializer.SerializeI32(item);
-            }
-            serializer.SerializeLen((ulong)NestedItems.Count);
-            foreach (var item in NestedItems)
-            {
-                serializer.SerializeLen((ulong)item.Count);
-                foreach (var item in item)
-                {
-                    serializer.SerializeStr(item);
-                }
-            }
+            FacetHelpers.SerializeCollection(Items, serializer, (item, s) => s.SerializeStr(item));
+            FacetHelpers.SerializeCollection(Numbers, serializer, (item, s) => s.SerializeI32(item));
+            FacetHelpers.SerializeCollection(NestedItems, serializer, (item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeStr(item)));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var items_len = deserializer.DeserializeLen();
-            var items = new ObservableCollection<string>();
-            for (ulong items_idx = 0; items_idx < items_len; items_idx++)
-            {
-                var items_item = deserializer.DeserializeStr();
-                items.Add(items_item);
-            }
-            var numbers_len = deserializer.DeserializeLen();
-            var numbers = new ObservableCollection<int>();
-            for (ulong numbers_idx = 0; numbers_idx < numbers_len; numbers_idx++)
-            {
-                var numbers_item = deserializer.DeserializeI32();
-                numbers.Add(numbers_item);
-            }
-            var nestedItems_len = deserializer.DeserializeLen();
-            var nestedItems = new ObservableCollection<ObservableCollection<string>>();
-            for (ulong nestedItems_idx = 0; nestedItems_idx < nestedItems_len; nestedItems_idx++)
-            {
-                var nestedItems_item_len = deserializer.DeserializeLen();
-                var nestedItems_item = new ObservableCollection<string>();
-                for (ulong nestedItems_item_idx = 0; nestedItems_item_idx < nestedItems_item_len; nestedItems_item_idx++)
-                {
-                    var nestedItems_item_item = deserializer.DeserializeStr();
-                    nestedItems_item.Add(nestedItems_item_item);
-                }
-                nestedItems.Add(nestedItems_item);
-            }
+            var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
+            var numbers = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeI32());
+            var nestedItems = FacetHelpers.DeserializeList(deserializer, d => FacetHelpers.DeserializeList(d, d => d.DeserializeStr()));
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 Items = items,
@@ -142,69 +102,18 @@ fn struct_with_option_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            if (OptionalString is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeStr(OptionalString);
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
-            if (OptionalNumber is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeI32(OptionalNumber.Value);
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
-            if (OptionalBool is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeBool(OptionalBool.Value);
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
+            FacetHelpers.SerializeOptionRef(OptionalString, serializer, (item, s) => s.SerializeStr(item));
+            FacetHelpers.SerializeOption(OptionalNumber, serializer, (item, s) => s.SerializeI32(item));
+            FacetHelpers.SerializeOption(OptionalBool, serializer, (item, s) => s.SerializeBool(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            string? optionalString;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalString_value = deserializer.DeserializeStr();
-                optionalString = optionalString_value;
-            }
-            else
-            {
-                optionalString = null;
-            }
-            int? optionalNumber;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalNumber_value = deserializer.DeserializeI32();
-                optionalNumber = optionalNumber_value;
-            }
-            else
-            {
-                optionalNumber = null;
-            }
-            bool? optionalBool;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalBool_value = deserializer.DeserializeBool();
-                optionalBool = optionalBool_value;
-            }
-            else
-            {
-                optionalBool = null;
-            }
+            var optionalString = FacetHelpers.DeserializeOptionRef(deserializer, d => d.DeserializeStr());
+            var optionalNumber = FacetHelpers.DeserializeOption(deserializer, d => d.DeserializeI32());
+            var optionalBool = FacetHelpers.DeserializeOption(deserializer, d => d.DeserializeBool());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 OptionalString = optionalString,
@@ -258,40 +167,16 @@ fn struct_with_hashmap_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)StringToInt.Count);
-            foreach (var entry in StringToInt)
-            {
-                serializer.SerializeStr(entry.Key);
-                serializer.SerializeI32(entry.Value);
-            }
-            serializer.SerializeLen((ulong)IntToBool.Count);
-            foreach (var entry in IntToBool)
-            {
-                serializer.SerializeI32(entry.Key);
-                serializer.SerializeBool(entry.Value);
-            }
+            FacetHelpers.SerializeMap(StringToInt, serializer, (item, s) => s.SerializeStr(item), (item, s) => s.SerializeI32(item));
+            FacetHelpers.SerializeMap(IntToBool, serializer, (item, s) => s.SerializeI32(item), (item, s) => s.SerializeBool(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var stringToInt_len = deserializer.DeserializeLen();
-            var stringToInt = new Dictionary<string, int>();
-            for (ulong stringToInt_idx = 0; stringToInt_idx < stringToInt_len; stringToInt_idx++)
-            {
-                var stringToInt_key = deserializer.DeserializeStr();
-                var stringToInt_val = deserializer.DeserializeI32();
-                stringToInt.Add(stringToInt_key, stringToInt_val);
-            }
-            var intToBool_len = deserializer.DeserializeLen();
-            var intToBool = new Dictionary<int, bool>();
-            for (ulong intToBool_idx = 0; intToBool_idx < intToBool_len; intToBool_idx++)
-            {
-                var intToBool_key = deserializer.DeserializeI32();
-                var intToBool_val = deserializer.DeserializeBool();
-                intToBool.Add(intToBool_key, intToBool_val);
-            }
+            var stringToInt = FacetHelpers.DeserializeMap(deserializer, d => d.DeserializeStr(), d => d.DeserializeI32());
+            var intToBool = FacetHelpers.DeserializeMap(deserializer, d => d.DeserializeI32(), d => d.DeserializeBool());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 StringToInt = stringToInt,
@@ -353,176 +238,22 @@ fn struct_with_nested_generics() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            if (OptionalList is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalList.Count);
-                foreach (var item in OptionalList)
-                {
-                    serializer.SerializeStr(item);
-                }
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
-            serializer.SerializeLen((ulong)ListOfOptionals.Count);
-            foreach (var item in ListOfOptionals)
-            {
-                if (item is not null)
-                {
-                    serializer.SerializeOptionTag(true);
-                    serializer.SerializeI32(item.Value);
-                }
-                else
-                {
-                    serializer.SerializeOptionTag(false);
-                }
-            }
-            serializer.SerializeLen((ulong)MapToList.Count);
-            foreach (var entry in MapToList)
-            {
-                serializer.SerializeStr(entry.Key);
-                serializer.SerializeLen((ulong)entry.Value.Count);
-                foreach (var item in entry.Value)
-                {
-                    serializer.SerializeBool(item);
-                }
-            }
-            if (OptionalMap is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalMap.Count);
-                foreach (var entry in OptionalMap)
-                {
-                    serializer.SerializeStr(entry.Key);
-                    serializer.SerializeI32(entry.Value);
-                }
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
-            serializer.SerializeLen((ulong)Complex.Count);
-            foreach (var item in Complex)
-            {
-                if (item is not null)
-                {
-                    serializer.SerializeOptionTag(true);
-                    serializer.SerializeLen((ulong)item.Count);
-                    foreach (var entry in item)
-                    {
-                        serializer.SerializeStr(entry.Key);
-                        serializer.SerializeLen((ulong)entry.Value.Count);
-                        foreach (var item in entry.Value)
-                        {
-                            serializer.SerializeBool(item);
-                        }
-                    }
-                }
-                else
-                {
-                    serializer.SerializeOptionTag(false);
-                }
-            }
+            FacetHelpers.SerializeOptionRef(OptionalList, serializer, (item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeStr(item)));
+            FacetHelpers.SerializeCollection(ListOfOptionals, serializer, (item, s) => FacetHelpers.SerializeOption(item, s, (item, s) => s.SerializeI32(item)));
+            FacetHelpers.SerializeMap(MapToList, serializer, (item, s) => s.SerializeStr(item), (item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeBool(item)));
+            FacetHelpers.SerializeOptionRef(OptionalMap, serializer, (item, s) => FacetHelpers.SerializeMap(item, s, (item, s) => s.SerializeStr(item), (item, s) => s.SerializeI32(item)));
+            FacetHelpers.SerializeCollection(Complex, serializer, (item, s) => FacetHelpers.SerializeOptionRef(item, s, (item, s) => FacetHelpers.SerializeMap(item, s, (item, s) => s.SerializeStr(item), (item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeBool(item)))));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            ObservableCollection<string>? optionalList;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalList_value_len = deserializer.DeserializeLen();
-                var optionalList_value = new ObservableCollection<string>();
-                for (ulong optionalList_value_idx = 0; optionalList_value_idx < optionalList_value_len; optionalList_value_idx++)
-                {
-                    var optionalList_value_item = deserializer.DeserializeStr();
-                    optionalList_value.Add(optionalList_value_item);
-                }
-                optionalList = optionalList_value;
-            }
-            else
-            {
-                optionalList = null;
-            }
-            var listOfOptionals_len = deserializer.DeserializeLen();
-            var listOfOptionals = new ObservableCollection<int?>();
-            for (ulong listOfOptionals_idx = 0; listOfOptionals_idx < listOfOptionals_len; listOfOptionals_idx++)
-            {
-                int? listOfOptionals_item;
-                if (deserializer.DeserializeOptionTag())
-                {
-                    var listOfOptionals_item_value = deserializer.DeserializeI32();
-                    listOfOptionals_item = listOfOptionals_item_value;
-                }
-                else
-                {
-                    listOfOptionals_item = null;
-                }
-                listOfOptionals.Add(listOfOptionals_item);
-            }
-            var mapToList_len = deserializer.DeserializeLen();
-            var mapToList = new Dictionary<string, ObservableCollection<bool>>();
-            for (ulong mapToList_idx = 0; mapToList_idx < mapToList_len; mapToList_idx++)
-            {
-                var mapToList_key = deserializer.DeserializeStr();
-                var mapToList_val_len = deserializer.DeserializeLen();
-                var mapToList_val = new ObservableCollection<bool>();
-                for (ulong mapToList_val_idx = 0; mapToList_val_idx < mapToList_val_len; mapToList_val_idx++)
-                {
-                    var mapToList_val_item = deserializer.DeserializeBool();
-                    mapToList_val.Add(mapToList_val_item);
-                }
-                mapToList.Add(mapToList_key, mapToList_val);
-            }
-            Dictionary<string, int>? optionalMap;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalMap_value_len = deserializer.DeserializeLen();
-                var optionalMap_value = new Dictionary<string, int>();
-                for (ulong optionalMap_value_idx = 0; optionalMap_value_idx < optionalMap_value_len; optionalMap_value_idx++)
-                {
-                    var optionalMap_value_key = deserializer.DeserializeStr();
-                    var optionalMap_value_val = deserializer.DeserializeI32();
-                    optionalMap_value.Add(optionalMap_value_key, optionalMap_value_val);
-                }
-                optionalMap = optionalMap_value;
-            }
-            else
-            {
-                optionalMap = null;
-            }
-            var complex_len = deserializer.DeserializeLen();
-            var complex = new ObservableCollection<Dictionary<string, ObservableCollection<bool>>?>();
-            for (ulong complex_idx = 0; complex_idx < complex_len; complex_idx++)
-            {
-                Dictionary<string, ObservableCollection<bool>>? complex_item;
-                if (deserializer.DeserializeOptionTag())
-                {
-                    var complex_item_value_len = deserializer.DeserializeLen();
-                    var complex_item_value = new Dictionary<string, ObservableCollection<bool>>();
-                    for (ulong complex_item_value_idx = 0; complex_item_value_idx < complex_item_value_len; complex_item_value_idx++)
-                    {
-                        var complex_item_value_key = deserializer.DeserializeStr();
-                        var complex_item_value_val_len = deserializer.DeserializeLen();
-                        var complex_item_value_val = new ObservableCollection<bool>();
-                        for (ulong complex_item_value_val_idx = 0; complex_item_value_val_idx < complex_item_value_val_len; complex_item_value_val_idx++)
-                        {
-                            var complex_item_value_val_item = deserializer.DeserializeBool();
-                            complex_item_value_val.Add(complex_item_value_val_item);
-                        }
-                        complex_item_value.Add(complex_item_value_key, complex_item_value_val);
-                    }
-                    complex_item = complex_item_value;
-                }
-                else
-                {
-                    complex_item = null;
-                }
-                complex.Add(complex_item);
-            }
+            var optionalList = FacetHelpers.DeserializeOptionRef(deserializer, d => FacetHelpers.DeserializeList(d, d => d.DeserializeStr()));
+            var listOfOptionals = FacetHelpers.DeserializeList(deserializer, d => FacetHelpers.DeserializeOption(d, d => d.DeserializeI32()));
+            var mapToList = FacetHelpers.DeserializeMap(deserializer, d => d.DeserializeStr(), d => FacetHelpers.DeserializeList(d, d => d.DeserializeBool()));
+            var optionalMap = FacetHelpers.DeserializeOptionRef(deserializer, d => FacetHelpers.DeserializeMap(d, d => d.DeserializeStr(), d => d.DeserializeI32()));
+            var complex = FacetHelpers.DeserializeList(deserializer, d => FacetHelpers.DeserializeOptionRef(d, d => FacetHelpers.DeserializeMap(d, d => d.DeserializeStr(), d => FacetHelpers.DeserializeList(d, d => d.DeserializeBool()))));
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 OptionalList = optionalList,
@@ -582,51 +313,18 @@ fn struct_with_array_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)FixedArray.Length);
-            foreach (var item in FixedArray)
-            {
-                serializer.SerializeI32(item);
-            }
-            serializer.SerializeLen((ulong)ByteArray.Length);
-            foreach (var item in ByteArray)
-            {
-                serializer.SerializeU8(item);
-            }
-            serializer.SerializeLen((ulong)StringArray.Length);
-            foreach (var item in StringArray)
-            {
-                serializer.SerializeStr(item);
-            }
+            FacetHelpers.SerializeArray(FixedArray, serializer, (item, s) => s.SerializeI32(item));
+            FacetHelpers.SerializeArray(ByteArray, serializer, (item, s) => s.SerializeU8(item));
+            FacetHelpers.SerializeArray(StringArray, serializer, (item, s) => s.SerializeStr(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var fixedArray_len = deserializer.DeserializeLen();
-            var fixedArray_list = new List<int>();
-            for (ulong i = 0; i < fixedArray_len; i++)
-            {
-                var item = deserializer.DeserializeI32();
-                fixedArray_list.Add(item);
-            }
-            var fixedArray = fixedArray_list.ToArray();
-            var byteArray_len = deserializer.DeserializeLen();
-            var byteArray_list = new List<byte>();
-            for (ulong i = 0; i < byteArray_len; i++)
-            {
-                var item = deserializer.DeserializeU8();
-                byteArray_list.Add(item);
-            }
-            var byteArray = byteArray_list.ToArray();
-            var stringArray_len = deserializer.DeserializeLen();
-            var stringArray_list = new List<string>();
-            for (ulong i = 0; i < stringArray_len; i++)
-            {
-                var item = deserializer.DeserializeStr();
-                stringArray_list.Add(item);
-            }
-            var stringArray = stringArray_list.ToArray();
+            var fixedArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeI32());
+            var byteArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeU8());
+            var stringArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeStr());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 FixedArray = fixedArray,
@@ -680,40 +378,16 @@ fn struct_with_btreemap_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)StringToInt.Count);
-            foreach (var entry in StringToInt)
-            {
-                serializer.SerializeStr(entry.Key);
-                serializer.SerializeI32(entry.Value);
-            }
-            serializer.SerializeLen((ulong)IntToBool.Count);
-            foreach (var entry in IntToBool)
-            {
-                serializer.SerializeI32(entry.Key);
-                serializer.SerializeBool(entry.Value);
-            }
+            FacetHelpers.SerializeMap(StringToInt, serializer, (item, s) => s.SerializeStr(item), (item, s) => s.SerializeI32(item));
+            FacetHelpers.SerializeMap(IntToBool, serializer, (item, s) => s.SerializeI32(item), (item, s) => s.SerializeBool(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var stringToInt_len = deserializer.DeserializeLen();
-            var stringToInt = new Dictionary<string, int>();
-            for (ulong stringToInt_idx = 0; stringToInt_idx < stringToInt_len; stringToInt_idx++)
-            {
-                var stringToInt_key = deserializer.DeserializeStr();
-                var stringToInt_val = deserializer.DeserializeI32();
-                stringToInt.Add(stringToInt_key, stringToInt_val);
-            }
-            var intToBool_len = deserializer.DeserializeLen();
-            var intToBool = new Dictionary<int, bool>();
-            for (ulong intToBool_idx = 0; intToBool_idx < intToBool_len; intToBool_idx++)
-            {
-                var intToBool_key = deserializer.DeserializeI32();
-                var intToBool_val = deserializer.DeserializeBool();
-                intToBool.Add(intToBool_key, intToBool_val);
-            }
+            var stringToInt = FacetHelpers.DeserializeMap(deserializer, d => d.DeserializeStr(), d => d.DeserializeI32());
+            var intToBool = FacetHelpers.DeserializeMap(deserializer, d => d.DeserializeI32(), d => d.DeserializeBool());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 StringToInt = stringToInt,
@@ -766,36 +440,16 @@ fn struct_with_hashset_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)StringSet.Count);
-            foreach (var item in StringSet)
-            {
-                serializer.SerializeStr(item);
-            }
-            serializer.SerializeLen((ulong)IntSet.Count);
-            foreach (var item in IntSet)
-            {
-                serializer.SerializeI32(item);
-            }
+            FacetHelpers.SerializeCollection(StringSet, serializer, (item, s) => s.SerializeStr(item));
+            FacetHelpers.SerializeCollection(IntSet, serializer, (item, s) => s.SerializeI32(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var stringSet_len = deserializer.DeserializeLen();
-            var stringSet = new HashSet<string>();
-            for (ulong stringSet_idx = 0; stringSet_idx < stringSet_len; stringSet_idx++)
-            {
-                var stringSet_item = deserializer.DeserializeStr();
-                stringSet.Add(stringSet_item);
-            }
-            var intSet_len = deserializer.DeserializeLen();
-            var intSet = new HashSet<int>();
-            for (ulong intSet_idx = 0; intSet_idx < intSet_len; intSet_idx++)
-            {
-                var intSet_item = deserializer.DeserializeI32();
-                intSet.Add(intSet_item);
-            }
+            var stringSet = FacetHelpers.DeserializeSet(deserializer, d => d.DeserializeStr());
+            var intSet = FacetHelpers.DeserializeSet(deserializer, d => d.DeserializeI32());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 StringSet = stringSet,
@@ -848,36 +502,16 @@ fn struct_with_btreeset_field() {
         public void Serialize(ISerializer serializer)
         {
             serializer.IncreaseContainerDepth();
-            serializer.SerializeLen((ulong)StringSet.Count);
-            foreach (var item in StringSet)
-            {
-                serializer.SerializeStr(item);
-            }
-            serializer.SerializeLen((ulong)IntSet.Count);
-            foreach (var item in IntSet)
-            {
-                serializer.SerializeI32(item);
-            }
+            FacetHelpers.SerializeCollection(StringSet, serializer, (item, s) => s.SerializeStr(item));
+            FacetHelpers.SerializeCollection(IntSet, serializer, (item, s) => s.SerializeI32(item));
             serializer.DecreaseContainerDepth();
         }
 
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var stringSet_len = deserializer.DeserializeLen();
-            var stringSet = new HashSet<string>();
-            for (ulong stringSet_idx = 0; stringSet_idx < stringSet_len; stringSet_idx++)
-            {
-                var stringSet_item = deserializer.DeserializeStr();
-                stringSet.Add(stringSet_item);
-            }
-            var intSet_len = deserializer.DeserializeLen();
-            var intSet = new HashSet<int>();
-            for (ulong intSet_idx = 0; intSet_idx < intSet_len; intSet_idx++)
-            {
-                var intSet_item = deserializer.DeserializeI32();
-                intSet.Add(intSet_item);
-            }
+            var stringSet = FacetHelpers.DeserializeSet(deserializer, d => d.DeserializeStr());
+            var intSet = FacetHelpers.DeserializeSet(deserializer, d => d.DeserializeI32());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 StringSet = stringSet,
@@ -910,8 +544,8 @@ fn struct_with_btreeset_field() {
     "#);
 }
 
-/// Nullable value types (e.g. `float?` from `Option<f32>`) must be unwrapped
-/// with `.Value` before passing to serializer methods like `SerializeF32`.
+/// Nullable value types (e.g. `float?` from `Option<f32>`) use `FacetHelpers.SerializeOption`
+/// which handles `.Value` unwrapping internally.
 #[test]
 fn option_value_type_needs_dot_value_for_serialize() {
     #[derive(Facet)]
@@ -924,20 +558,20 @@ fn option_value_type_needs_dot_value_for_serialize() {
 
     let actual = emit!(HasOptionals as CSharp with Encoding::Bincode).unwrap();
     assert!(
-        actual.contains("SerializeF32(MaybeFloat.Value)"),
-        "float? must be unwrapped with .Value\n{actual}"
+        actual.contains("FacetHelpers.SerializeOption(MaybeFloat, serializer,"),
+        "float? should use FacetHelpers.SerializeOption\n{actual}"
     );
     assert!(
-        actual.contains("SerializeF64(MaybeDouble.Value)"),
-        "double? must be unwrapped with .Value\n{actual}"
+        actual.contains("FacetHelpers.SerializeOption(MaybeDouble, serializer,"),
+        "double? should use FacetHelpers.SerializeOption\n{actual}"
     );
     assert!(
-        actual.contains("SerializeChar(MaybeChar.Value)"),
-        "char? must be unwrapped with .Value\n{actual}"
+        actual.contains("FacetHelpers.SerializeOption(MaybeChar, serializer,"),
+        "char? should use FacetHelpers.SerializeOption\n{actual}"
     );
     assert!(
-        actual.contains("SerializeI32(MaybeInt.Value)"),
-        "int? must be unwrapped with .Value\n{actual}"
+        actual.contains("FacetHelpers.SerializeOption(MaybeInt, serializer,"),
+        "int? should use FacetHelpers.SerializeOption\n{actual}"
     );
 }
 

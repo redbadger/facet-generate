@@ -514,6 +514,10 @@ public sealed class SerializationError : Exception
             "Facet/Runtime/Bincode/IFacetDeserializable.cs",
             include_str!("runtime/bincode/IFacetDeserializable.cs"),
         )?;
+        self.install_runtime_file(
+            "Facet/Runtime/Bincode/FacetHelpers.cs",
+            include_str!("runtime/bincode/FacetHelpers.cs"),
+        )?;
         Ok(())
     }
 

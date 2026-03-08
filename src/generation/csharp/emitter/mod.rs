@@ -34,10 +34,22 @@
 //! `BincodeSerialize`/`BincodeDeserialize` wrappers. When encoding is `None`,
 //! only plain MVVM type declarations are emitted.
 //!
-//! # No feature helpers
+//! # Feature helpers via `FacetHelpers.cs`
 //!
-//! Unlike Kotlin, Swift, and TypeScript, C# emits inline serialization loops
-//! for collections and optionals — there are no embedded snippet files.
+//! Like Kotlin, Swift, and TypeScript, C# uses reusable helper functions for
+//! serializing/deserializing generic container types (collections, maps,
+//! options, arrays). Instead of per-module snippet files (as the other
+//! languages use), C# places these helpers in a single shared runtime file
+//! (`Facet/Runtime/Bincode/FacetHelpers.cs`). This works because C#
+//! file-scoped namespaces and `using` directives make a helper class in
+//! `Facet.Runtime.Bincode` accessible from any generated namespace without
+//! duplication. The generated code calls helpers with lambdas rather than
+//! emitting inline loops, e.g.:
+//!
+//! ```csharp
+//! FacetHelpers.SerializeCollection(Items, serializer, (item, s) => s.SerializeStr(item));
+//! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
+//! ```
 
 use std::io::{Result, Write};
 
@@ -769,228 +781,319 @@ fn deserializer_variant_body<W: IndentWrite>(
     }
 }
 
+/// Writes a bare serialize expression (no semicolons, no newlines), parameterized
+/// by variable names for the value and serializer.
+///
+/// # Examples
+///
+/// - `I32` with val=`"x"`, ser=`"serializer"` → `serializer.SerializeI32(x)`
+/// - `Seq(I32)` with val=`"x"`, ser=`"serializer"` →
+///   `FacetHelpers.SerializeCollection(x, serializer, (item, s) => s.SerializeI32(item))`
+/// - `Option(F32)` with val=`"x"`, ser=`"s"` →
+///   `FacetHelpers.SerializeOption(x, s, (item, s) => s.SerializeF32(item))`
+///
+/// Tuple is not handled here — callers handle tuples specially since they
+/// expand to multiple statements.
+fn write_serialize_expr<W: Write>(
+    w: &mut W,
+    val: &str,
+    ser: &str,
+    format: &Format,
+) -> Result<()> {
+    match format {
+        Format::Variable(_) => unreachable!("placeholders should not get this far"),
+        Format::TypeName(_) => write!(w, "{val}.Serialize({ser})"),
+        Format::Unit => write!(w, "{ser}.SerializeUnit({val})"),
+        Format::Bool => write!(w, "{ser}.SerializeBool({val})"),
+        Format::I8 => write!(w, "{ser}.SerializeI8({val})"),
+        Format::I16 => write!(w, "{ser}.SerializeI16({val})"),
+        Format::I32 => write!(w, "{ser}.SerializeI32({val})"),
+        Format::I64 => write!(w, "{ser}.SerializeI64({val})"),
+        Format::I128 => write!(w, "{ser}.SerializeI128({val})"),
+        Format::U8 => write!(w, "{ser}.SerializeU8({val})"),
+        Format::U16 => write!(w, "{ser}.SerializeU16({val})"),
+        Format::U32 => write!(w, "{ser}.SerializeU32({val})"),
+        Format::U64 => write!(w, "{ser}.SerializeU64({val})"),
+        Format::U128 => write!(w, "{ser}.SerializeU128({val})"),
+        Format::F32 => write!(w, "{ser}.SerializeF32({val})"),
+        Format::F64 => write!(w, "{ser}.SerializeF64({val})"),
+        Format::Char => write!(w, "{ser}.SerializeChar({val})"),
+        Format::Str => write!(w, "{ser}.SerializeStr({val})"),
+        Format::Bytes => write!(w, "{ser}.SerializeBytes({val})"),
+        Format::Option(inner) => {
+            let helper = option_serialize_helper(inner);
+            write!(w, "FacetHelpers.{helper}({val}, {ser}, ")?;
+            write_serialize_lambda(w, inner)?;
+            write!(w, ")")
+        }
+        Format::Seq(inner) | Format::Set(inner) => {
+            write!(w, "FacetHelpers.SerializeCollection({val}, {ser}, ")?;
+            write_serialize_lambda(w, inner)?;
+            write!(w, ")")
+        }
+        Format::Map { key, value } => {
+            write!(w, "FacetHelpers.SerializeMap({val}, {ser}, ")?;
+            write_serialize_lambda(w, key)?;
+            write!(w, ", ")?;
+            write_serialize_lambda(w, value)?;
+            write!(w, ")")
+        }
+        Format::Tuple(_) => unreachable!("tuples are handled by callers"),
+        Format::TupleArray { content, .. } => {
+            write!(w, "FacetHelpers.SerializeArray({val}, {ser}, ")?;
+            write_serialize_lambda(w, content)?;
+            write!(w, ")")
+        }
+    }
+}
+
+/// Writes a bare deserialize expression (no semicolons, no newlines), parameterized
+/// by the deserializer variable name.
+///
+/// # Examples
+///
+/// - `I32` with de=`"deserializer"` → `deserializer.DeserializeI32()`
+/// - `Seq(I32)` with de=`"deserializer"` →
+///   `FacetHelpers.DeserializeList(deserializer, d => d.DeserializeI32())`
+/// - `TypeName("Foo")` with de=`"d"` → `Foo.Deserialize(d)`
+///
+/// Tuple is not handled here — callers handle tuples specially since they
+/// expand to multiple statements.
+fn write_deserialize_expr<W: Write>(w: &mut W, de: &str, format: &Format) -> Result<()> {
+    match format {
+        Format::Variable(_) => unreachable!("placeholders should not get this far"),
+        Format::TypeName(type_name) => write!(
+            w,
+            "{}.Deserialize({de})",
+            csharp_type(&Format::TypeName(type_name.clone()))
+        ),
+        Format::Unit => write!(w, "{de}.DeserializeUnit()"),
+        Format::Bool => write!(w, "{de}.DeserializeBool()"),
+        Format::I8 => write!(w, "{de}.DeserializeI8()"),
+        Format::I16 => write!(w, "{de}.DeserializeI16()"),
+        Format::I32 => write!(w, "{de}.DeserializeI32()"),
+        Format::I64 => write!(w, "{de}.DeserializeI64()"),
+        Format::I128 => write!(w, "{de}.DeserializeI128()"),
+        Format::U8 => write!(w, "{de}.DeserializeU8()"),
+        Format::U16 => write!(w, "{de}.DeserializeU16()"),
+        Format::U32 => write!(w, "{de}.DeserializeU32()"),
+        Format::U64 => write!(w, "{de}.DeserializeU64()"),
+        Format::U128 => write!(w, "{de}.DeserializeU128()"),
+        Format::F32 => write!(w, "{de}.DeserializeF32()"),
+        Format::F64 => write!(w, "{de}.DeserializeF64()"),
+        Format::Char => write!(w, "{de}.DeserializeChar()"),
+        Format::Str => write!(w, "{de}.DeserializeStr()"),
+        Format::Bytes => write!(w, "{de}.DeserializeBytes()"),
+        Format::Option(inner) => {
+            let helper = option_deserialize_helper(inner);
+            write!(w, "FacetHelpers.{helper}({de}, ")?;
+            write_deserialize_lambda(w, inner)?;
+            write!(w, ")")
+        }
+        Format::Seq(inner) => {
+            write!(w, "FacetHelpers.DeserializeList({de}, ")?;
+            write_deserialize_lambda(w, inner)?;
+            write!(w, ")")
+        }
+        Format::Set(inner) => {
+            write!(w, "FacetHelpers.DeserializeSet({de}, ")?;
+            write_deserialize_lambda(w, inner)?;
+            write!(w, ")")
+        }
+        Format::Map { key, value } => {
+            write!(w, "FacetHelpers.DeserializeMap({de}, ")?;
+            write_deserialize_lambda(w, key)?;
+            write!(w, ", ")?;
+            write_deserialize_lambda(w, value)?;
+            write!(w, ")")
+        }
+        Format::Tuple(_) => unreachable!("tuples are handled by callers"),
+        Format::TupleArray { content, .. } => {
+            write!(w, "FacetHelpers.DeserializeArray({de}, ")?;
+            write_deserialize_lambda(w, content)?;
+            write!(w, ")")
+        }
+    }
+}
+
+/// Writes a top-level serialize statement: `write_serialize_expr(...);\n`.
+///
+/// Tuples are expanded inline — each element becomes its own statement, accessing
+/// `.Item1`, `.Item2`, etc. on the value expression.
+///
+/// # Examples
+///
+/// - `I32` with expr=`"value"` → `serializer.SerializeI32(value);\n`
+/// - `Tuple([I32, Bool])` with expr=`"value"` →
+///   `serializer.SerializeI32(value.Item1);\n`
+///   `serializer.SerializeBool(value.Item2);\n`
 fn write_serialize_value<W: IndentWrite>(
     w: &mut W,
     value_expr: &str,
     format: &Format,
 ) -> Result<()> {
     match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(_) => writeln!(w, "{value_expr}.Serialize(serializer);"),
-        Format::Unit => writeln!(w, "serializer.SerializeUnit({value_expr});"),
-        Format::Bool => writeln!(w, "serializer.SerializeBool({value_expr});"),
-        Format::I8 => writeln!(w, "serializer.SerializeI8({value_expr});"),
-        Format::I16 => writeln!(w, "serializer.SerializeI16({value_expr});"),
-        Format::I32 => writeln!(w, "serializer.SerializeI32({value_expr});"),
-        Format::I64 => writeln!(w, "serializer.SerializeI64({value_expr});"),
-        Format::I128 => writeln!(w, "serializer.SerializeI128({value_expr});"),
-        Format::U8 => writeln!(w, "serializer.SerializeU8({value_expr});"),
-        Format::U16 => writeln!(w, "serializer.SerializeU16({value_expr});"),
-        Format::U32 => writeln!(w, "serializer.SerializeU32({value_expr});"),
-        Format::U64 => writeln!(w, "serializer.SerializeU64({value_expr});"),
-        Format::U128 => writeln!(w, "serializer.SerializeU128({value_expr});"),
-        Format::F32 => writeln!(w, "serializer.SerializeF32({value_expr});"),
-        Format::F64 => writeln!(w, "serializer.SerializeF64({value_expr});"),
-        Format::Char => writeln!(w, "serializer.SerializeChar({value_expr});"),
-        Format::Str => writeln!(w, "serializer.SerializeStr({value_expr});"),
-        Format::Bytes => writeln!(w, "serializer.SerializeBytes({value_expr});"),
-        Format::Option(inner) => {
-            writeln!(w, "if ({value_expr} is not null)")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "serializer.SerializeOptionTag(true);")?;
-                let unwrapped = if is_csharp_value_type(inner) {
-                    format!("{value_expr}.Value")
-                } else {
-                    value_expr.to_string()
-                };
-                write_serialize_value(&mut w, &unwrapped, inner)?;
-            }
-            writeln!(w, "else")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(w, "serializer.SerializeOptionTag(false);")?;
-            }
-            Ok(())
-        }
-        Format::Seq(inner) | Format::Set(inner) => {
-            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Count);")?;
-            writeln!(w, "foreach (var item in {value_expr})")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_serialize_value(&mut w, "item", inner)?;
-            }
-            Ok(())
-        }
-        Format::Map { key, value } => {
-            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Count);")?;
-            writeln!(w, "foreach (var entry in {value_expr})")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_serialize_value(&mut w, "entry.Key", key)?;
-                write_serialize_value(&mut w, "entry.Value", value)?;
-            }
-            Ok(())
-        }
         Format::Tuple(formats) => {
             for (index, inner) in formats.iter().enumerate() {
-                write_serialize_value(w, &format!("{}.Item{}", value_expr, index + 1), inner)?;
+                write_serialize_value(w, &format!("{value_expr}.Item{}", index + 1), inner)?;
             }
             Ok(())
         }
-        Format::TupleArray { content, .. } => {
-            writeln!(w, "serializer.SerializeLen((ulong){value_expr}.Length);")?;
-            writeln!(w, "foreach (var item in {value_expr})")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_serialize_value(&mut w, "item", content)?;
-            }
-            Ok(())
+        _ => {
+            write_serialize_expr(w, value_expr, "serializer", format)?;
+            writeln!(w, ";")
         }
     }
 }
 
+/// Writes a top-level deserialize binding: `var {name} = write_deserialize_expr(...);\n`.
+///
+/// Tuples are expanded — each element is bound to `{name}_item1`, `{name}_item2`, etc.,
+/// then combined into a C# value tuple.
+///
+/// # Examples
+///
+/// - `I32` with var_name=`"x"` → `var x = deserializer.DeserializeI32();\n`
+/// - `Tuple([I32, Bool])` with var_name=`"x"` →
+///   `var x_item1 = deserializer.DeserializeI32();\n`
+///   `var x_item2 = deserializer.DeserializeBool();\n`
+///   `var x = (x_item1, x_item2);\n`
 fn write_deserialize_binding<W: IndentWrite>(
     w: &mut W,
     var_name: &str,
     format: &Format,
 ) -> Result<()> {
     match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(type_name) => {
-            writeln!(
-                w,
-                "var {} = {}.Deserialize(deserializer);",
-                var_name,
-                csharp_type(&Format::TypeName(type_name.clone()))
-            )
-        }
-        Format::Unit => writeln!(w, "var {var_name} = deserializer.DeserializeUnit();"),
-        Format::Bool => writeln!(w, "var {var_name} = deserializer.DeserializeBool();"),
-        Format::I8 => writeln!(w, "var {var_name} = deserializer.DeserializeI8();"),
-        Format::I16 => writeln!(w, "var {var_name} = deserializer.DeserializeI16();"),
-        Format::I32 => writeln!(w, "var {var_name} = deserializer.DeserializeI32();"),
-        Format::I64 => writeln!(w, "var {var_name} = deserializer.DeserializeI64();"),
-        Format::I128 => writeln!(w, "var {var_name} = deserializer.DeserializeI128();"),
-        Format::U8 => writeln!(w, "var {var_name} = deserializer.DeserializeU8();"),
-        Format::U16 => writeln!(w, "var {var_name} = deserializer.DeserializeU16();"),
-        Format::U32 => writeln!(w, "var {var_name} = deserializer.DeserializeU32();"),
-        Format::U64 => writeln!(w, "var {var_name} = deserializer.DeserializeU64();"),
-        Format::U128 => writeln!(w, "var {var_name} = deserializer.DeserializeU128();"),
-        Format::F32 => writeln!(w, "var {var_name} = deserializer.DeserializeF32();"),
-        Format::F64 => writeln!(w, "var {var_name} = deserializer.DeserializeF64();"),
-        Format::Char => writeln!(w, "var {var_name} = deserializer.DeserializeChar();"),
-        Format::Str => writeln!(w, "var {var_name} = deserializer.DeserializeStr();"),
-        Format::Bytes => writeln!(w, "var {var_name} = deserializer.DeserializeBytes();"),
-        Format::Option(inner) => write_deserialize_option(w, var_name, inner),
-        Format::Seq(inner) => {
-            let collection_type = format!("ObservableCollection<{}>", csharp_type(inner));
-            write_deserialize_collection(w, var_name, inner, &collection_type)
-        }
-        Format::Set(inner) => {
-            let collection_type = format!("HashSet<{}>", csharp_type(inner));
-            write_deserialize_collection(w, var_name, inner, &collection_type)
-        }
-        Format::Map { key, value } => write_deserialize_map(w, var_name, key, value),
         Format::Tuple(formats) => {
             for (index, inner) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("{}_item{}", var_name, index + 1), inner)?;
+                write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner)?;
             }
             if formats.is_empty() {
                 writeln!(w, "var {var_name} = new Unit();")
             } else {
                 let values = (0..formats.len())
-                    .map(|i| format!("{}_item{}", var_name, i + 1))
+                    .map(|i| format!("{var_name}_item{}", i + 1))
                     .collect::<Vec<_>>()
                     .join(", ");
                 writeln!(w, "var {var_name} = ({values});")
             }
         }
-        Format::TupleArray { content, .. } => {
-            writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
-            writeln!(
-                w,
-                "var {}_list = new List<{}>();",
-                var_name,
-                csharp_type(content)
-            )?;
-            writeln!(w, "for (ulong i = 0; i < {var_name}_len; i++)")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                write_deserialize_binding(&mut w, "item", content)?;
-                writeln!(w, "{var_name}_list.Add(item);")?;
-            }
-            writeln!(w, "var {var_name} = {var_name}_list.ToArray();")
+        _ => {
+            write!(w, "var {var_name} = ")?;
+            write_deserialize_expr(w, "deserializer", format)?;
+            writeln!(w, ";")
         }
     }
 }
 
-fn write_deserialize_option<W: IndentWrite>(
-    w: &mut W,
-    var_name: &str,
-    inner: &Format,
-) -> Result<()> {
-    let inner_type = csharp_type(inner);
-    writeln!(w, "{inner_type}? {var_name};")?;
-    writeln!(w, "if (deserializer.DeserializeOptionTag())")?;
-    {
-        let mut w = w.block(Newlines::BOTH)?;
-        let temp_name = format!("{var_name}_value");
-        write_deserialize_binding(&mut w, &temp_name, inner)?;
-        writeln!(w, "{var_name} = {temp_name};")?;
+/// Writes a C# serialize lambda: `(item, s) => write_serialize_expr(item, s, ...)`.
+///
+/// For tuples, emits a statement lambda that serializes each element:
+/// `(item, s) => { s.SerializeI32(item.Item1); s.SerializeBool(item.Item2); }`
+///
+/// # Examples
+///
+/// - `I32` → `(item, s) => s.SerializeI32(item)`
+/// - `TypeName("Foo")` → `(item, s) => item.Serialize(s)`
+/// - `Seq(I32)` → `(item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeI32(item))`
+fn write_serialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
+    match format {
+        Format::Tuple(formats) if formats.is_empty() => {
+            write!(w, "(item, s) => s.SerializeUnit(item)")
+        }
+        Format::Tuple(formats) => {
+            write!(w, "(item, s) => {{ ")?;
+            for (index, inner) in formats.iter().enumerate() {
+                write_serialize_tuple_stmts(w, &format!("item.Item{}", index + 1), "s", inner)?;
+            }
+            write!(w, "}}")
+        }
+        _ => {
+            write!(w, "(item, s) => ")?;
+            write_serialize_expr(w, "item", "s", format)
+        }
     }
-    writeln!(w, "else")?;
-    {
-        let mut w = w.block(Newlines::BOTH)?;
-        writeln!(w, "{var_name} = null;")?;
-    }
-    Ok(())
 }
 
-fn write_deserialize_collection<W: IndentWrite>(
-    w: &mut W,
-    var_name: &str,
-    inner: &Format,
-    collection_type: &str,
-) -> Result<()> {
-    let idx = format!("{var_name}_idx");
-    let item = format!("{var_name}_item");
-    writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
-    writeln!(w, "var {var_name} = new {collection_type}();")?;
-    writeln!(w, "for (ulong {idx} = 0; {idx} < {var_name}_len; {idx}++)")?;
-    {
-        let mut w = w.block(Newlines::BOTH)?;
-        write_deserialize_binding(&mut w, &item, inner)?;
-        writeln!(w, "{var_name}.Add({item});")?;
+/// Writes a C# deserialize lambda: `d => write_deserialize_expr(d, ...)`.
+///
+/// For tuples, emits a statement lambda that deserializes each element and returns
+/// a value tuple: `d => { var item1 = d.DeserializeI32(); var item2 = ...; return (item1, item2); }`
+///
+/// # Examples
+///
+/// - `I32` → `d => d.DeserializeI32()`
+/// - `TypeName("Foo")` → `d => Foo.Deserialize(d)`
+/// - `Seq(I32)` → `d => FacetHelpers.DeserializeList(d, d => d.DeserializeI32())`
+fn write_deserialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
+    match format {
+        Format::Tuple(formats) if formats.is_empty() => {
+            write!(w, "d => d.DeserializeUnit()")
+        }
+        Format::Tuple(formats) => {
+            write!(w, "d => {{ ")?;
+            for (index, inner) in formats.iter().enumerate() {
+                write!(w, "var item{} = ", index + 1)?;
+                write_deserialize_expr(w, "d", inner)?;
+                write!(w, "; ")?;
+            }
+            let values = (0..formats.len())
+                .map(|i| format!("item{}", i + 1))
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(w, "return ({values}); }}")
+        }
+        _ => {
+            write!(w, "d => ")?;
+            write_deserialize_expr(w, "d", format)
+        }
     }
-    Ok(())
 }
 
-fn write_deserialize_map<W: IndentWrite>(
+/// Writes inline serialize statements for tuple elements inside a statement lambda,
+/// flattening nested tuples into their constituent parts.
+///
+/// Each non-tuple element becomes `write_serialize_expr(...); `. Nested tuples
+/// are recursively decomposed via `.ItemN` access.
+fn write_serialize_tuple_stmts<W: Write>(
     w: &mut W,
-    var_name: &str,
-    key: &Format,
-    value: &Format,
+    val: &str,
+    ser: &str,
+    format: &Format,
 ) -> Result<()> {
-    let idx = format!("{var_name}_idx");
-    let key_var = format!("{var_name}_key");
-    let val_var = format!("{var_name}_val");
-    writeln!(w, "var {var_name}_len = deserializer.DeserializeLen();")?;
-    writeln!(
-        w,
-        "var {} = new Dictionary<{}, {}>();",
-        var_name,
-        csharp_type(key),
-        csharp_type(value)
-    )?;
-    writeln!(w, "for (ulong {idx} = 0; {idx} < {var_name}_len; {idx}++)")?;
-    {
-        let mut w = w.block(Newlines::BOTH)?;
-        write_deserialize_binding(&mut w, &key_var, key)?;
-        write_deserialize_binding(&mut w, &val_var, value)?;
-        writeln!(w, "{var_name}.Add({key_var}, {val_var});")?;
+    match format {
+        Format::Tuple(formats) => {
+            for (index, inner) in formats.iter().enumerate() {
+                write_serialize_tuple_stmts(
+                    w,
+                    &format!("{val}.Item{}", index + 1),
+                    ser,
+                    inner,
+                )?;
+            }
+            Ok(())
+        }
+        _ => {
+            write_serialize_expr(w, val, ser, format)?;
+            write!(w, "; ")
+        }
     }
-    Ok(())
+}
+
+fn option_serialize_helper(inner: &Format) -> &'static str {
+    if is_csharp_value_type(inner) {
+        "SerializeOption"
+    } else {
+        "SerializeOptionRef"
+    }
+}
+
+fn option_deserialize_helper(inner: &Format) -> &'static str {
+    if is_csharp_value_type(inner) {
+        "DeserializeOption"
+    } else {
+        "DeserializeOptionRef"
+    }
 }
 
 fn csharp_type(format: &Format) -> String {

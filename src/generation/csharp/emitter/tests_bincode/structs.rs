@@ -819,19 +819,7 @@ fn struct_with_bytes_field_and_slice() {
             serializer.SerializeBytes(Data);
             serializer.SerializeStr(Name);
             serializer.SerializeBytes(Header);
-            if (OptionalBytes is not null)
-            {
-                serializer.SerializeOptionTag(true);
-                serializer.SerializeLen((ulong)OptionalBytes.Count);
-                foreach (var item in OptionalBytes)
-                {
-                    serializer.SerializeU8(item);
-                }
-            }
-            else
-            {
-                serializer.SerializeOptionTag(false);
-            }
+            FacetHelpers.SerializeOptionRef(OptionalBytes, serializer, (item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeU8(item)));
             serializer.DecreaseContainerDepth();
         }
 
@@ -841,22 +829,7 @@ fn struct_with_bytes_field_and_slice() {
             var data = deserializer.DeserializeBytes();
             var name = deserializer.DeserializeStr();
             var header = deserializer.DeserializeBytes();
-            ObservableCollection<byte>? optionalBytes;
-            if (deserializer.DeserializeOptionTag())
-            {
-                var optionalBytes_value_len = deserializer.DeserializeLen();
-                var optionalBytes_value = new ObservableCollection<byte>();
-                for (ulong optionalBytes_value_idx = 0; optionalBytes_value_idx < optionalBytes_value_len; optionalBytes_value_idx++)
-                {
-                    var optionalBytes_value_item = deserializer.DeserializeU8();
-                    optionalBytes_value.Add(optionalBytes_value_item);
-                }
-                optionalBytes = optionalBytes_value;
-            }
-            else
-            {
-                optionalBytes = null;
-            }
+            var optionalBytes = FacetHelpers.DeserializeOptionRef(deserializer, d => FacetHelpers.DeserializeList(d, d => d.DeserializeU8()));
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 Data = data,
