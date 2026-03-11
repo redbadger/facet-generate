@@ -134,14 +134,14 @@ impl SourceInstaller for Installer {
 
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime(
-            &include_dir!("runtime/java/com/novi/serde"),
+            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/serde"),
             "com/novi/serde",
         )
     }
 
     fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime(
-            &include_dir!("runtime/java/com/novi/bincode"),
+            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/bincode"),
             "com/novi/bincode",
         )
     }
