@@ -8,11 +8,11 @@ use facet_generate::{
     reflect,
 };
 use serde::{Deserialize, Serialize};
-use tempfile::tempdir;
+use tempfile::{TempDir, tempdir};
 
 pub mod common;
 
-fn dotnet_build(dir: &std::path::Path) {
+fn dotnet_build(dir: &TempDir) {
     let status = Command::new("dotnet")
         .arg("build")
         .current_dir(dir)
@@ -25,7 +25,6 @@ fn dotnet_build(dir: &std::path::Path) {
 fn test_that_csharp_code_compiles_with_bincode() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
-    let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
         .encoding(Encoding::Bincode)
@@ -39,7 +38,6 @@ fn test_that_csharp_code_compiles_with_bincode() {
 fn test_that_csharp_code_compiles_with_json() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
-    let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
         .encoding(Encoding::Json)
@@ -70,7 +68,6 @@ fn test_that_csharp_code_compiles_without_serialization() {
 
     let registry = reflect!(Parent).unwrap();
     let dir = tempdir().unwrap();
-    let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
         .encoding(Encoding::None)
@@ -86,7 +83,6 @@ fn test_that_csharp_code_compiles_with_primitive_types() {
 
     let registry = reflect!(Test).unwrap();
     let dir = tempdir().unwrap();
-    let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
         .generate(&registry)

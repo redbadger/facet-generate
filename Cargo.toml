@@ -34,7 +34,7 @@ ignore = "0.4"
 insta = { version = "1.46.3", features = ["yaml", "json"] }
 maplit = "1.0.2"
 strum = { version = "0.28.0", features = ["derive"] }
-tempfile = "3.26.0"
+tempfile = "3.27.0"
 url = "2.5.8"
 bytes = "1.11"
 
