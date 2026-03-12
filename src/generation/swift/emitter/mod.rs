@@ -167,6 +167,7 @@ impl Emitter<Swift> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
+            ..
         } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => struct_(w, name, &[], doc, lang),

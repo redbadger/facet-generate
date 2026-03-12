@@ -51,7 +51,10 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
+use std::collections::BTreeSet;
 use std::io::{Result, Write};
+
+use crate::Registry;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
@@ -111,25 +114,35 @@ impl Emitter<CSharp> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
+            ..
         } = self;
 
+        let c_style_enums = if lang.encoding == Encoding::Bincode {
+            collect_c_style_enums(self.registry)
+        } else {
+            BTreeSet::new()
+        };
+
         match format {
-            ContainerFormat::UnitStruct(doc) => write_sealed_record(w, name, doc, lang),
+            ContainerFormat::UnitStruct(doc) => {
+                write_sealed_record(w, name, doc, lang, &c_style_enums)
+            }
             ContainerFormat::NewTypeStruct(format, doc) => write_class(
                 w,
                 name,
                 &[Named::new(format, "value".to_string())],
                 doc,
                 lang,
+                &c_style_enums,
             ),
             ContainerFormat::TupleStruct(formats, doc) => {
-                write_class(w, name, &named(formats), doc, lang)
+                write_class(w, name, &named(formats), doc, lang, &c_style_enums)
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    write_sealed_record(w, name, doc, lang)
+                    write_sealed_record(w, name, doc, lang, &c_style_enums)
                 } else {
-                    write_class(w, name, fields, doc, lang)
+                    write_class(w, name, fields, doc, lang, &c_style_enums)
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -140,11 +153,48 @@ impl Emitter<CSharp> for Container<'_> {
                     write_enum(w, name, variants, doc, lang)
                 } else {
                     let variant_list: Vec<_> = variants.values().cloned().collect();
-                    write_variant_record_hierarchy(w, name, &variant_list, doc, lang)
+                    write_variant_record_hierarchy(
+                        w,
+                        name,
+                        &variant_list,
+                        doc,
+                        lang,
+                        &c_style_enums,
+                    )
                 }
             }
         }
     }
+}
+
+/// Scan the registry (if available) and collect the **names** of every enum
+/// whose variants are all [`VariantFormat::Unit`] (C-style enums).
+///
+/// These enums are emitted as plain C# `enum` types rather than class
+/// hierarchies, so their bincode serialization must go through a static
+/// `{Enum}Bincode` helper class instead of instance methods.
+///
+/// We collect bare type names (`String`) rather than full
+/// [`QualifiedTypeName`]s because [`update_qualified_names`] rewrites the
+/// namespace on `Format::TypeName` references without touching registry keys.
+/// Within a single module the bare name is unambiguous (types are grouped by
+/// namespace via [`module::split`]).
+fn collect_c_style_enums(registry: Option<&Registry>) -> BTreeSet<String> {
+    registry.map_or_else(BTreeSet::new, |r| {
+        r.iter()
+            .filter_map(|(name, format)| {
+                if let ContainerFormat::Enum(variants, _) = format {
+                    if variants
+                        .values()
+                        .all(|v| matches!(v.value, VariantFormat::Unit))
+                    {
+                        return Some(name.name.clone());
+                    }
+                }
+                None
+            })
+            .collect()
+    })
 }
 
 impl Emitter<CSharp> for Named<Format> {
@@ -181,6 +231,7 @@ fn write_sealed_record<W: IndentWrite>(
     name: &str,
     doc: &Doc,
     lang: CSharp,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
@@ -211,7 +262,7 @@ fn write_sealed_record<W: IndentWrite>(
             if has_json {
                 writeln!(w)?;
             }
-            write_class_bincode_methods(&mut w, &record_name, &[])?;
+            write_class_bincode_methods(&mut w, &record_name, &[], c_style_enums)?;
         }
     }
 
@@ -224,6 +275,7 @@ fn write_class<W: IndentWrite>(
     fields: &[Named<Format>],
     doc: &Doc,
     lang: CSharp,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
@@ -262,7 +314,7 @@ fn write_class<W: IndentWrite>(
         if !fields.is_empty() || has_json {
             writeln!(w)?;
         }
-        write_class_bincode_methods(&mut w, &class_name, fields)?;
+        write_class_bincode_methods(&mut w, &class_name, fields, c_style_enums)?;
     }
 
     Ok(())
@@ -287,6 +339,7 @@ fn write_class_bincode_methods<W: IndentWrite>(
     w: &mut W,
     class_name: &str,
     fields: &[Named<Format>],
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     writeln!(w, "public void Serialize(ISerializer serializer)")?;
     {
@@ -294,7 +347,7 @@ fn write_class_bincode_methods<W: IndentWrite>(
         writeln!(w, "serializer.IncreaseContainerDepth();")?;
         for field in fields {
             let field_name = field.name.to_upper_camel_case();
-            write_serialize_value(&mut w, &field_name, &field.value)?;
+            write_serialize_value(&mut w, &field_name, &field.value, c_style_enums)?;
         }
         writeln!(w, "serializer.DecreaseContainerDepth();")?;
     }
@@ -309,7 +362,7 @@ fn write_class_bincode_methods<W: IndentWrite>(
         writeln!(w, "deserializer.IncreaseContainerDepth();")?;
         for field in fields {
             let local_name = field.name.to_lower_camel_case();
-            write_deserialize_binding(&mut w, &local_name, &field.value)?;
+            write_deserialize_binding(&mut w, &local_name, &field.value, c_style_enums)?;
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
         if fields.is_empty() {
@@ -511,6 +564,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     variants: &[Named<VariantFormat>],
     doc: &Doc,
     lang: CSharp,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     let base_name = name.to_upper_camel_case();
     let base_interfaces = if lang.encoding == Encoding::Bincode {
@@ -593,7 +647,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
         if lang.encoding == Encoding::Json {
             writeln!(w)?;
         }
-        write_record_bincode_helpers(&mut w, &base_name, variants)?;
+        write_record_bincode_helpers(&mut w, &base_name, variants, c_style_enums)?;
     }
 
     Ok(())
@@ -618,6 +672,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
     w: &mut W,
     base_name: &str,
     variants: &[Named<VariantFormat>],
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     writeln!(w, "public abstract void Serialize(ISerializer serializer);")?;
     writeln!(w)?;
@@ -630,7 +685,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
         )?;
         {
             let mut w = w.block(Newlines::BOTH)?;
-            deserializer_variant_body(&mut w, variant)?;
+            deserializer_variant_body(&mut w, variant, c_style_enums)?;
         }
         writeln!(w)?;
 
@@ -641,7 +696,7 @@ fn write_record_bincode_helpers<W: IndentWrite>(
             let mut w = w.block(Newlines::BOTH)?;
             writeln!(w, "serializer.IncreaseContainerDepth();")?;
             writeln!(w, "serializer.SerializeVariantIndex({index});")?;
-            serializer_variant_body_write(&mut w, variant)?;
+            serializer_variant_body_write(&mut w, variant, c_style_enums)?;
             writeln!(w, "serializer.DecreaseContainerDepth();")?;
         }
         writeln!(w)?;
@@ -712,19 +767,25 @@ fn write_record_bincode_helpers<W: IndentWrite>(
 fn serializer_variant_body_write<W: IndentWrite>(
     w: &mut W,
     variant: &Named<VariantFormat>,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     match &variant.value {
         VariantFormat::Unit => Ok(()),
-        VariantFormat::NewType(format) => write_serialize_value(w, "Value", format),
+        VariantFormat::NewType(format) => write_serialize_value(w, "Value", format, c_style_enums),
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_serialize_value(w, &format!("Field{index}"), format)?;
+                write_serialize_value(w, &format!("Field{index}"), format, c_style_enums)?;
             }
             Ok(())
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_serialize_value(w, &field.name.to_upper_camel_case(), &field.value)?;
+                write_serialize_value(
+                    w,
+                    &field.name.to_upper_camel_case(),
+                    &field.value,
+                    c_style_enums,
+                )?;
             }
             Ok(())
         }
@@ -735,11 +796,12 @@ fn serializer_variant_body_write<W: IndentWrite>(
 fn deserializer_variant_body<W: IndentWrite>(
     w: &mut W,
     variant: &Named<VariantFormat>,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     match &variant.value {
         VariantFormat::Unit => writeln!(w, "return new {}();", variant.name.to_upper_camel_case()),
         VariantFormat::NewType(format) => {
-            write_deserialize_binding(w, "value", format)?;
+            write_deserialize_binding(w, "value", format, c_style_enums)?;
             writeln!(
                 w,
                 "return new {}(value);",
@@ -748,7 +810,7 @@ fn deserializer_variant_body<W: IndentWrite>(
         }
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("field{index}"), format)?;
+                write_deserialize_binding(w, &format!("field{index}"), format, c_style_enums)?;
             }
             let args = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -763,7 +825,12 @@ fn deserializer_variant_body<W: IndentWrite>(
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_deserialize_binding(w, &field.name.to_lower_camel_case(), &field.value)?;
+                write_deserialize_binding(
+                    w,
+                    &field.name.to_lower_camel_case(),
+                    &field.value,
+                    c_style_enums,
+                )?;
             }
             let args = fields
                 .iter()
@@ -794,9 +861,19 @@ fn deserializer_variant_body<W: IndentWrite>(
 ///
 /// Tuple is not handled here — callers handle tuples specially since they
 /// expand to multiple statements.
-fn write_serialize_expr<W: Write>(w: &mut W, val: &str, ser: &str, format: &Format) -> Result<()> {
+fn write_serialize_expr<W: Write>(
+    w: &mut W,
+    val: &str,
+    ser: &str,
+    format: &Format,
+    c_style_enums: &BTreeSet<String>,
+) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
+        Format::TypeName(qtn) if c_style_enums.contains(&qtn.name) => {
+            let type_name = format_qualified_type_name(qtn);
+            write!(w, "{type_name}Bincode.Serialize({val}, {ser})")
+        }
         Format::TypeName(_) => write!(w, "{val}.Serialize({ser})"),
         Format::Unit => write!(w, "{ser}.SerializeUnit({val})"),
         Format::Bool => write!(w, "{ser}.SerializeBool({val})"),
@@ -818,25 +895,25 @@ fn write_serialize_expr<W: Write>(w: &mut W, val: &str, ser: &str, format: &Form
         Format::Option(inner) => {
             let helper = option_serialize_helper(inner);
             write!(w, "FacetHelpers.{helper}({val}, {ser}, ")?;
-            write_serialize_lambda(w, inner)?;
+            write_serialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
         }
         Format::Seq(inner) | Format::Set(inner) => {
             write!(w, "FacetHelpers.SerializeCollection({val}, {ser}, ")?;
-            write_serialize_lambda(w, inner)?;
+            write_serialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
         }
         Format::Map { key, value } => {
             write!(w, "FacetHelpers.SerializeMap({val}, {ser}, ")?;
-            write_serialize_lambda(w, key)?;
+            write_serialize_lambda(w, key, c_style_enums)?;
             write!(w, ", ")?;
-            write_serialize_lambda(w, value)?;
+            write_serialize_lambda(w, value, c_style_enums)?;
             write!(w, ")")
         }
         Format::Tuple(_) => unreachable!("tuples are handled by callers"),
         Format::TupleArray { content, .. } => {
             write!(w, "FacetHelpers.SerializeArray({val}, {ser}, ")?;
-            write_serialize_lambda(w, content)?;
+            write_serialize_lambda(w, content, c_style_enums)?;
             write!(w, ")")
         }
     }
@@ -854,9 +931,18 @@ fn write_serialize_expr<W: Write>(w: &mut W, val: &str, ser: &str, format: &Form
 ///
 /// Tuple is not handled here — callers handle tuples specially since they
 /// expand to multiple statements.
-fn write_deserialize_expr<W: Write>(w: &mut W, de: &str, format: &Format) -> Result<()> {
+fn write_deserialize_expr<W: Write>(
+    w: &mut W,
+    de: &str,
+    format: &Format,
+    c_style_enums: &BTreeSet<String>,
+) -> Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
+        Format::TypeName(qtn) if c_style_enums.contains(&qtn.name) => {
+            let type_name = format_qualified_type_name(qtn);
+            write!(w, "{type_name}Bincode.Deserialize({de})")
+        }
         Format::TypeName(type_name) => write!(
             w,
             "{}.Deserialize({de})",
@@ -882,30 +968,30 @@ fn write_deserialize_expr<W: Write>(w: &mut W, de: &str, format: &Format) -> Res
         Format::Option(inner) => {
             let helper = option_deserialize_helper(inner);
             write!(w, "FacetHelpers.{helper}({de}, ")?;
-            write_deserialize_lambda(w, inner)?;
+            write_deserialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
         }
         Format::Seq(inner) => {
             write!(w, "FacetHelpers.DeserializeList({de}, ")?;
-            write_deserialize_lambda(w, inner)?;
+            write_deserialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
         }
         Format::Set(inner) => {
             write!(w, "FacetHelpers.DeserializeSet({de}, ")?;
-            write_deserialize_lambda(w, inner)?;
+            write_deserialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
         }
         Format::Map { key, value } => {
             write!(w, "FacetHelpers.DeserializeMap({de}, ")?;
-            write_deserialize_lambda(w, key)?;
+            write_deserialize_lambda(w, key, c_style_enums)?;
             write!(w, ", ")?;
-            write_deserialize_lambda(w, value)?;
+            write_deserialize_lambda(w, value, c_style_enums)?;
             write!(w, ")")
         }
         Format::Tuple(_) => unreachable!("tuples are handled by callers"),
         Format::TupleArray { content, .. } => {
             write!(w, "FacetHelpers.DeserializeArray({de}, ")?;
-            write_deserialize_lambda(w, content)?;
+            write_deserialize_lambda(w, content, c_style_enums)?;
             write!(w, ")")
         }
     }
@@ -926,14 +1012,20 @@ fn write_serialize_value<W: IndentWrite>(
     w: &mut W,
     value_expr: &str,
     format: &Format,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_serialize_value(w, &format!("{value_expr}.Item{}", index + 1), inner)?;
+            write_serialize_value(
+                w,
+                &format!("{value_expr}.Item{}", index + 1),
+                inner,
+                c_style_enums,
+            )?;
         }
         Ok(())
     } else {
-        write_serialize_expr(w, value_expr, "serializer", format)?;
+        write_serialize_expr(w, value_expr, "serializer", format, c_style_enums)?;
         writeln!(w, ";")
     }
 }
@@ -954,10 +1046,16 @@ fn write_deserialize_binding<W: IndentWrite>(
     w: &mut W,
     var_name: &str,
     format: &Format,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner)?;
+            write_deserialize_binding(
+                w,
+                &format!("{var_name}_item{}", index + 1),
+                inner,
+                c_style_enums,
+            )?;
         }
         if formats.is_empty() {
             writeln!(w, "var {var_name} = new Unit();")
@@ -970,7 +1068,7 @@ fn write_deserialize_binding<W: IndentWrite>(
         }
     } else {
         write!(w, "var {var_name} = ")?;
-        write_deserialize_expr(w, "deserializer", format)?;
+        write_deserialize_expr(w, "deserializer", format, c_style_enums)?;
         writeln!(w, ";")
     }
 }
@@ -985,7 +1083,11 @@ fn write_deserialize_binding<W: IndentWrite>(
 /// - `I32` → `(item, s) => s.SerializeI32(item)`
 /// - `TypeName("Foo")` → `(item, s) => item.Serialize(s)`
 /// - `Seq(I32)` → `(item, s) => FacetHelpers.SerializeCollection(item, s, (item, s) => s.SerializeI32(item))`
-fn write_serialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
+fn write_serialize_lambda<W: Write>(
+    w: &mut W,
+    format: &Format,
+    c_style_enums: &BTreeSet<String>,
+) -> Result<()> {
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "(item, s) => s.SerializeUnit(item)")
@@ -993,13 +1095,19 @@ fn write_serialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
         Format::Tuple(formats) => {
             write!(w, "(item, s) => {{ ")?;
             for (index, inner) in formats.iter().enumerate() {
-                write_serialize_tuple_stmts(w, &format!("item.Item{}", index + 1), "s", inner)?;
+                write_serialize_tuple_stmts(
+                    w,
+                    &format!("item.Item{}", index + 1),
+                    "s",
+                    inner,
+                    c_style_enums,
+                )?;
             }
             write!(w, "}}")
         }
         _ => {
             write!(w, "(item, s) => ")?;
-            write_serialize_expr(w, "item", "s", format)
+            write_serialize_expr(w, "item", "s", format, c_style_enums)
         }
     }
 }
@@ -1014,7 +1122,11 @@ fn write_serialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
 /// - `I32` → `d => d.DeserializeI32()`
 /// - `TypeName("Foo")` → `d => Foo.Deserialize(d)`
 /// - `Seq(I32)` → `d => FacetHelpers.DeserializeList(d, d => d.DeserializeI32())`
-fn write_deserialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> {
+fn write_deserialize_lambda<W: Write>(
+    w: &mut W,
+    format: &Format,
+    c_style_enums: &BTreeSet<String>,
+) -> Result<()> {
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "d => d.DeserializeUnit()")
@@ -1023,7 +1135,7 @@ fn write_deserialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> 
             write!(w, "d => {{ ")?;
             for (index, inner) in formats.iter().enumerate() {
                 write!(w, "var item{} = ", index + 1)?;
-                write_deserialize_expr(w, "d", inner)?;
+                write_deserialize_expr(w, "d", inner, c_style_enums)?;
                 write!(w, "; ")?;
             }
             let values = (0..formats.len())
@@ -1034,7 +1146,7 @@ fn write_deserialize_lambda<W: Write>(w: &mut W, format: &Format) -> Result<()> 
         }
         _ => {
             write!(w, "d => ")?;
-            write_deserialize_expr(w, "d", format)
+            write_deserialize_expr(w, "d", format, c_style_enums)
         }
     }
 }
@@ -1049,14 +1161,21 @@ fn write_serialize_tuple_stmts<W: Write>(
     val: &str,
     ser: &str,
     format: &Format,
+    c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner)?;
+            write_serialize_tuple_stmts(
+                w,
+                &format!("{val}.Item{}", index + 1),
+                ser,
+                inner,
+                c_style_enums,
+            )?;
         }
         Ok(())
     } else {
-        write_serialize_expr(w, val, ser, format)?;
+        write_serialize_expr(w, val, ser, format, c_style_enums)?;
         write!(w, "; ")
     }
 }

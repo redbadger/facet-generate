@@ -628,7 +628,7 @@ fn c_style_enum_field_uses_static_bincode_helpers() {
         color: Color,
     }
 
-    let actual = emit!(Painted, Color as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(Painted as CSharp with Encoding::Bincode).unwrap();
     assert!(
         actual.contains("ColorBincode.Serialize(Color, serializer)"),
         "c-style enum serialize should dispatch to static helper\n{actual}"

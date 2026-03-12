@@ -78,6 +78,9 @@ pub trait CodeGen<'a> {
 pub struct Container<'a> {
     pub name: &'a QualifiedTypeName,
     pub format: &'a ContainerFormat,
+    /// Optional reference to the full registry, allowing emitters to look up
+    /// cross-type information (e.g. whether a referenced type is a C-style enum).
+    pub registry: Option<&'a Registry>,
 }
 
 impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
@@ -85,6 +88,20 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
         Container {
             name: value.0,
             format: value.1,
+            registry: None,
+        }
+    }
+}
+
+impl<'a> Container<'a> {
+    /// Attach a registry reference so that emitters can resolve cross-type
+    /// information (e.g. whether a [`Format::TypeName`] refers to a C-style
+    /// enum).
+    #[must_use]
+    pub fn with_registry(self, registry: &'a Registry) -> Self {
+        Self {
+            registry: Some(registry),
+            ..self
         }
     }
 }

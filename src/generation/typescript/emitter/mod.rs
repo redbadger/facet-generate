@@ -231,6 +231,7 @@ impl Emitter<TypeScript> for Container<'_> {
         let Container {
             name: qualified_name,
             format,
+            ..
         } = self;
         let name = &qualified_name.name;
 

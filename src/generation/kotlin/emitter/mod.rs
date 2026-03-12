@@ -251,6 +251,7 @@ impl Emitter<Kotlin> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
+            ..
         } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {

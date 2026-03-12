@@ -60,7 +60,11 @@ impl<'a> CodeGenerator<'a> {
         Module::new(&config).write(w, lang)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        for (index, container) in updated_registry.iter().map(Container::from).enumerate() {
+        for (index, container) in updated_registry
+            .iter()
+            .map(|pair| Container::from(pair).with_registry(&updated_registry))
+            .enumerate()
+        {
             if index > 0 {
                 writeln!(w)?;
             }

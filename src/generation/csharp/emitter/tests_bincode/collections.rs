@@ -590,7 +590,7 @@ fn nested_seq_deserialization_uses_unique_variable_names() {
         nested: Vec<Vec<Inner>>,
     }
 
-    let actual = emit!(HasNestedVec, Inner as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(HasNestedVec as CSharp with Encoding::Bincode).unwrap();
     // The inner loop must not reuse `i` or `item` from the outer loop.
     let i_decl_count = actual.matches("ulong i ").count();
     assert!(
