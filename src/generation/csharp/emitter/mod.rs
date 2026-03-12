@@ -989,8 +989,8 @@ fn write_deserialize_expr<W: Write>(
             write!(w, ")")
         }
         Format::Tuple(_) => unreachable!("tuples are handled by callers"),
-        Format::TupleArray { content, .. } => {
-            write!(w, "FacetHelpers.DeserializeArray({de}, ")?;
+        Format::TupleArray { content, size } => {
+            write!(w, "FacetHelpers.DeserializeArray({de}, {size}, ")?;
             write_deserialize_lambda(w, content, c_style_enums)?;
             write!(w, ")")
         }

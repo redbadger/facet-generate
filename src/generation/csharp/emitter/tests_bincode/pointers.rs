@@ -244,7 +244,7 @@ fn struct_with_mixed_collections_and_pointers() {
             var optionalBtree = FacetHelpers.DeserializeOptionRef(deserializer, d => FacetHelpers.DeserializeMap(d, d => d.DeserializeStr(), d => d.DeserializeI32()));
             var boxedVec = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
             var arcOption = FacetHelpers.DeserializeOptionRef(deserializer, d => d.DeserializeStr());
-            var arrayOfBoxes = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeI32());
+            var arrayOfBoxes = FacetHelpers.DeserializeArray(deserializer, 3, d => d.DeserializeI32());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 VecOfSets = vecOfSets,

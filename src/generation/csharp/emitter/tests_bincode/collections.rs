@@ -322,9 +322,9 @@ fn struct_with_array_field() {
         public static MyStruct Deserialize(IDeserializer deserializer)
         {
             deserializer.IncreaseContainerDepth();
-            var fixedArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeI32());
-            var byteArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeU8());
-            var stringArray = FacetHelpers.DeserializeArray(deserializer, d => d.DeserializeStr());
+            var fixedArray = FacetHelpers.DeserializeArray(deserializer, 5, d => d.DeserializeI32());
+            var byteArray = FacetHelpers.DeserializeArray(deserializer, 32, d => d.DeserializeU8());
+            var stringArray = FacetHelpers.DeserializeArray(deserializer, 3, d => d.DeserializeStr());
             deserializer.DecreaseContainerDepth();
             return new MyStruct {
                 FixedArray = fixedArray,

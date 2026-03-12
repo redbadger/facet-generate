@@ -72,22 +72,20 @@ public static class FacetHelpers
 
     public static void SerializeArray<T>(T[] array, ISerializer serializer, Action<T, ISerializer> serializeElement)
     {
-        serializer.SerializeLen((ulong)array.Length);
         foreach (var item in array)
         {
             serializeElement(item, serializer);
         }
     }
 
-    public static T[] DeserializeArray<T>(IDeserializer deserializer, Func<IDeserializer, T> deserializeElement)
+    public static T[] DeserializeArray<T>(IDeserializer deserializer, int size, Func<IDeserializer, T> deserializeElement)
     {
-        var len = deserializer.DeserializeLen();
-        var list = new List<T>();
-        for (ulong i = 0; i < len; i++)
+        var array = new T[size];
+        for (int i = 0; i < size; i++)
         {
-            list.Add(deserializeElement(deserializer));
+            array[i] = deserializeElement(deserializer);
         }
-        return list.ToArray();
+        return array;
     }
 
     public static void SerializeOption<T>(T? value, ISerializer serializer, Action<T, ISerializer> serializeValue) where T : struct
