@@ -1,11 +1,27 @@
+//! Indentation-aware writer used by [`Emitter`](super::Emitter)
+//! implementations to produce correctly indented source code.
+//!
+//! Wrap any [`Write`] in an [`IndentedWriter`] and use [`indent()`] /
+//! [`unindent()`] to change the nesting level — every new line is
+//! automatically prefixed with the right amount of whitespace. For `{ }`
+//! blocks, [`block()`] returns an RAII [`Block`] guard that indents on
+//! creation and writes the closing brace on drop.
+//!
+//! [`indent()`]: IndentWrite::indent
+//! [`unindent()`]: IndentWrite::unindent
+//! [`block()`]: IndentWrite::block
+
 use std::io::{Result, Write};
 
+/// How a single indentation level is represented in the output.
 #[derive(Clone, Copy)]
 pub enum IndentConfig {
     Tab,
     Space(usize),
 }
 
+/// Controls where extra newlines are inserted around a `{ }` block opened
+/// by [`IndentWrite::block`]. See the constants for examples.
 #[derive(Clone, Copy, Default)]
 pub struct Newlines {
     pub after_open: usize,
@@ -13,31 +29,80 @@ pub struct Newlines {
 }
 
 impl Newlines {
-    /// `{...}` — no extra newlines.
+    /// No extra newlines around the braces.
+    ///
+    /// Produces `{<content>}` — rarely used in practice.
     pub const NONE: Self = Self {
         after_open: 0,
         after_close: 0,
     };
 
-    /// `{\n...}` — newline after the opening brace only.
+    /// Newline after the opening brace only.
+    ///
+    /// Produces:
+    /// ```text
+    /// {
+    ///     <content>}
+    /// ```
+    ///
+    /// Good for inline closures / trailing lambdas where more code follows
+    /// the closing brace on the same line, e.g. TypeScript:
+    /// ```text
+    /// serializeArray(value, serializer, (item, serializer) => {
+    ///     serializer.serializeStr(item);
+    /// });
+    /// ```
+    /// or C# object initializers:
+    /// ```text
+    /// return new MyClass {
+    ///     Foo = foo,
+    /// };
+    /// ```
     pub const OPEN: Self = Self {
         after_open: 1,
         after_close: 0,
     };
 
-    /// `{...}\n` — newline after the closing brace only.
+    /// Newline after the closing brace only.
+    ///
+    /// Produces:
+    /// ```text
+    /// {<content>}
+    /// ```
+    ///
+    /// Good for empty or minimal bodies where the opening `{` belongs to
+    /// the preceding declaration, e.g. Kotlin:
+    /// ```text
+    /// data class UnitVariant() {
+    /// }
+    /// ```
     pub const CLOSE: Self = Self {
         after_open: 0,
         after_close: 1,
     };
 
-    /// `{\n...}\n` — newlines after both braces.
+    /// Newlines after both braces — standard block formatting.
+    ///
+    /// Produces:
+    /// ```text
+    /// {
+    ///     <content>
+    /// }
+    /// ```
+    ///
+    /// The most common choice — used for class bodies, function bodies,
+    /// enum declarations, namespace blocks, etc.
     pub const BOTH: Self = Self {
         after_open: 1,
         after_close: 1,
     };
 }
 
+/// Extension of [`Write`] that tracks indentation level.
+///
+/// Call [`indent()`](Self::indent) / [`unindent()`](Self::unindent) to
+/// change nesting depth, or use [`block()`](Self::block) for RAII-managed
+/// `{ }` pairs. The concrete implementation is [`IndentedWriter`].
 pub trait IndentWrite: Write {
     fn indent(&mut self) {}
     fn unindent(&mut self) {}
@@ -105,6 +170,8 @@ impl Drop for Block<'_> {
     }
 }
 
+/// Wraps any [`Write`] and automatically prepends the current indentation
+/// at the start of each new line.
 pub struct IndentedWriter<T> {
     out: T,
     indentation: Vec<u8>,

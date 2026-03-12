@@ -14,6 +14,7 @@ pub struct Person {
     pub location: Location,
 }
 
+// TODO: enable swift, typescript (expect files need updating for no-encoding output)
 crate::test! {
     Person for kotlin
 }

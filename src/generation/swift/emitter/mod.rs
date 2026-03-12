@@ -1,3 +1,57 @@
+//! AST-to-Swift source rendering.
+//!
+//! This module implements [`Emitter<Swift>`](super::super::Emitter) for each
+//! node type in the format AST, turning abstract type descriptions into
+//! idiomatic Swift code.
+//!
+//! # Emitter implementations
+//!
+//! | AST node | Swift output |
+//! |---|---|
+//! | [`Module`] | `import` statements, feature helpers |
+//! | [`Container`] | `public struct` or `indirect public enum` |
+//! | [`Named<Format>`](Named) | `public var` property / `case` declaration |
+//! | [`Format`] | Inline type expression (`Int32`, `[String]`, `Set<T>`, …) |
+//! | [`Doc`] | `///` doc comments (stripped for bincode) |
+//! | `(Named<VariantFormat>, Usage)` | An enum case variant |
+//!
+//! # Swift type mapping
+//!
+//! The [`Format`] emitter maps Rust/reflection types to Swift equivalents —
+//! for example `I32` → `Int32`, `Seq(T)` → `[T]`, `Option(T)` → `T?`,
+//! `Map(K,V)` → `[K: V]`, tuples of size 2/3 → native `(A, B)` (no
+//! serialization) or `TupleN<…>` (with serialization).
+//!
+//! # Encoding-dependent output
+//!
+//! The [`Swift`] language tag carries the active [`Encoding`]. When encoding
+//! is `Json`, types get `Serializer`/`Deserializer` protocol-based
+//! serialization methods plus `jsonSerialize`/`jsonDeserialize` wrappers.
+//! When encoding is `Bincode`, each type gets `serialize`/`deserialize`
+//! methods and `bincodeSerialize`/`bincodeDeserialize` wrappers. When
+//! encoding is `None`, only plain type declarations are emitted.
+//!
+//! # Feature helpers (`features/` directory)
+//!
+//! Swift has `Array`, `Set`, `Dictionary`, and optional types built in, but
+//! the Serde `Serializer`/`Deserializer` runtime only handles primitives and
+//! user-defined types (which get their own `serialize`/`deserialize` methods).
+//! The feature helpers are Swift functions that bridge this gap — they teach
+//! the serde runtime how to length-prefix and iterate over generic containers.
+//!
+//! | Helper | What it provides | When included |
+//! |---|---|---|
+//! | `ListOfT.swift` | `[T]` serialize/deserialize | Bincode + `Seq` type used |
+//! | `SetOfT.swift` | `Set<T>` serialize/deserialize | Bincode + `Set` type used |
+//! | `MapOfT.swift` | `[K:V]` serialize/deserialize | Bincode + `Map` type used |
+//! | `OptionOfT.swift` | `T?` serialize/deserialize | Bincode + `Option` type used |
+//! | `TupleArray.swift` | Fixed-size array support | `TupleArray` type used |
+//!
+//! These `.swift` snippets are embedded at compile time via `include_bytes!`
+//! and written into the file header by the [`Module`] emitter when the
+//! corresponding [`Feature`] flag is active (discovered automatically by
+//! [`CodeGeneratorConfig::update_from`]).
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::BTreeMap,
@@ -24,6 +78,11 @@ const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.swift");
 const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.swift");
 const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 
+/// Language tag for Swift code generation.
+///
+/// Carries the active [`Encoding`] so that each emitter implementation can
+/// decide whether to emit serialization methods, protocol conformances, or
+/// plain type declarations.
 #[derive(Debug, Clone, Copy)]
 pub struct Swift {
     encoding: Encoding,
@@ -35,6 +94,11 @@ impl Swift {
     }
 }
 
+/// Controls how a [`Named<Format>`](Named) is rendered in different contexts.
+///
+/// The same field definition produces different Swift syntax depending on
+/// whether it appears as a property declaration, an initializer parameter,
+/// a serialization call, etc.
 enum Usage {
     Field,
     Parameter,
@@ -103,6 +167,7 @@ impl Emitter<Swift> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
+            ..
         } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => struct_(w, name, &[], doc, lang),
@@ -452,6 +517,10 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
     }
 }
 
+/// Doc-comment emitter. Writes `///` lines for each comment.
+///
+/// Doc comments are **stripped** when encoding is [`Encoding::Bincode`] to
+/// keep the generated output compact.
 impl Emitter<Swift> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
         if lang.encoding.is_bincode() {
@@ -465,6 +534,9 @@ impl Emitter<Swift> for Doc {
     }
 }
 
+/// Emit a `public struct` with `Hashable` conformance (when encoding is
+/// active), a memberwise initializer, and encoding-specific
+/// `serialize`/`deserialize` methods.
 fn struct_<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -611,6 +683,9 @@ fn struct_<W: IndentWrite>(
     Ok(())
 }
 
+/// Emit an `indirect public enum` with `Hashable` conformance (when encoding
+/// is active), case variants, and encoding-specific `serialize`/`deserialize`
+/// methods.
 fn enum_<W: IndentWrite>(
     w: &mut W,
     name: &str,

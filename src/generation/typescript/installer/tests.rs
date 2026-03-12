@@ -1,3 +1,18 @@
+//! Snapshot tests for the TypeScript [`Installer`] — **project scaffolding**.
+//!
+//! These tests verify the `package.json` manifest that the installer
+//! generates, and the file layout produced by `install_module`. They cover:
+//!
+//! - Basic manifest structure: package name, version, devDependencies.
+//! - External URL dependencies: registry package references with version
+//!   strings (including scoped `@org/package` names).
+//! - External path dependencies: local file-system dependencies via
+//!   `file:` paths.
+//! - Serde/bincode runtime installation.
+//! - Multi-module (namespace) scenarios where each namespace becomes a
+//!   separate `.ts` file.
+//! - Node vs Deno target differences in file layout.
+
 use facet::Facet;
 
 use super::Installer;

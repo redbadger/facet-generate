@@ -1,3 +1,15 @@
+//! Snapshot tests for the TypeScript emitter — **JSON encoding**.
+//!
+//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! so that every generated type includes `Serializer`/`Deserializer`
+//! interface-based serialization methods.
+//!
+//! Both JSON and Bincode use the same hand-written `serialize`/`deserialize`
+//! method pattern in TypeScript (unlike Kotlin, where JSON uses
+//! annotation-based `kotlinx.serialization`). The only difference is which
+//! runtime implementation (`JsonSerializer`/`BincodeSerializer`) is provided
+//! at call time.
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},

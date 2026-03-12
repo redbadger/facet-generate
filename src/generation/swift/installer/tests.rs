@@ -1,3 +1,17 @@
+//! Snapshot tests for the Swift [`Installer`] — **project scaffolding**.
+//!
+//! These tests verify the `Package.swift` manifest that the installer
+//! generates, without writing anything to disk. They cover:
+//!
+//! - Basic manifest structure: SPM targets, library products.
+//! - External URL dependencies: remote package references with version
+//!   strings.
+//! - External path dependencies: local file-system dependencies via
+//!   `.package(path: "…")`.
+//! - Serde runtime target registration and dependency edges.
+//! - Multi-module (namespace) scenarios where each namespace becomes a
+//!   separate SPM target.
+
 use facet::Facet;
 
 use crate::{

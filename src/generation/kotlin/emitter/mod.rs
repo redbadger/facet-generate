@@ -1,3 +1,64 @@
+//! AST-to-Kotlin source rendering.
+//!
+//! This module implements [`Emitter<Kotlin>`](super::super::Emitter) for each
+//! node type in the format AST, turning abstract type descriptions into
+//! idiomatic Kotlin code.
+//!
+//! # Emitter implementations
+//!
+//! | AST node | Kotlin output |
+//! |---|---|
+//! | [`Module`] | `package` declaration, `import` statements, feature helpers |
+//! | [`Container`] | `data class`, `data object`, `sealed interface`, or `enum class` |
+//! | [`Named<Format>`](Named) | A single `val` property declaration |
+//! | [`Format`] | An inline type expression (`Int`, `List<String>`, `Pair<A, B>`, …) |
+//! | [`Doc`] | `///` doc comments |
+//! | `(Named<VariantFormat>, VariantContext)` | An enum/sealed-interface variant |
+//!
+//! # Kotlin type mapping
+//!
+//! The [`Format`] emitter maps Rust/reflection types to Kotlin equivalents —
+//! for example `I32` → `Int`, `Seq(T)` → `List<T>`, `Option(T)` → `T?`,
+//! tuples of size 2/3 → `Pair`/`Triple`, and larger tuples to `NTupleN<…>`.
+//!
+//! # Encoding-dependent output
+//!
+//! The [`Kotlin`] language tag carries the active [`Encoding`]. When encoding
+//! is `Json`, types get `@Serializable` / `@SerialName` annotations. When
+//! encoding is `Bincode`, each type gets `serialize` / `deserialize` methods
+//! and convenience `bincodeSerialize` / `bincodeDeserialize` wrappers. When
+//! encoding is `None`, only plain type declarations are emitted.
+//!
+//! # Feature helpers (`features/` directory)
+//!
+//! Kotlin has `List`, `Set`, `Map`, and nullable types built in, but the
+//! bincode `Serializer`/`Deserializer` runtime only handles primitives and
+//! user-defined types (which get their own `serialize`/`deserialize` methods).
+//! The feature helpers are Kotlin extension functions that bridge this gap —
+//! they teach the serde runtime how to length-prefix and iterate over generic
+//! containers.
+//!
+//! For example, the generated code for a `List<Foo>` field calls:
+//! ```kotlin
+//! myList.serialize(serializer) { it.serialize(serializer) }
+//! ```
+//! where `List<T>.serialize` (from `ListOfT.kt`) writes the length, then
+//! delegates each element to the lambda.
+//!
+//! | Helper | What it provides | When included |
+//! |---|---|---|
+//! | `ListOfT.kt` | `List<T>.serialize` / `Deserializer.deserializeListOf` | Bincode + `Seq` type used |
+//! | `SetOfT.kt` | `Set<T>.serialize` / `Deserializer.deserializeSetOf` | Bincode + `Set` type used |
+//! | `MapOfT.kt` | `Map<K,V>.serialize` / `Deserializer.deserializeMapOf` | Bincode + `Map` type used |
+//! | `OptionOfT.kt` | `T?.serializeOptionOf` / `Deserializer.deserializeOptionOf` | Bincode + `Option` type used |
+//! | `BigInt.kt` | `KSerializer<BigInteger>` for kotlinx.serialization | JSON + `I128`/`U128` type used |
+//! | `TupleArray.kt` | `buildList` polyfill for Kotlin < 1.6.0 | `TupleArray` type used (any encoding) |
+//!
+//! These `.kt` snippets are embedded at compile time via `include_bytes!` and
+//! written into the file header by the [`Module`] emitter when the
+//! corresponding [`Feature`] flag is active (discovered automatically by
+//! [`CodeGeneratorConfig::update_from`]).
+
 use std::{
     collections::BTreeMap,
     io::{Result, Write},
@@ -24,6 +85,11 @@ const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
 const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 
+/// Language tag for Kotlin code generation.
+///
+/// Passed as the `L` parameter to every [`Emitter<L>`](super::super::Emitter)
+/// call. Carries the target [`Encoding`] so emitters can conditionally
+/// produce serialization code.
 #[derive(Debug, Clone, Copy)]
 pub struct Kotlin {
     pub encoding: Encoding,
@@ -185,6 +251,7 @@ impl Emitter<Kotlin> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
+            ..
         } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
@@ -258,9 +325,14 @@ impl Emitter<Kotlin> for Doc {
     }
 }
 
+/// Tells a variant emitter whether it is being written inside a
+/// `sealed interface` or an `enum class`, since the Kotlin syntax differs.
 #[derive(Clone)]
 pub enum VariantContext {
+    /// Variant inside a `sealed interface` — carries the interface name and
+    /// the variant's zero-based index (used as the bincode discriminant).
     SealedInterface(String, usize),
+    /// Variant inside an `enum class` (all-unit variants only).
     EnumClass,
 }
 
@@ -479,6 +551,11 @@ impl Emitter<Kotlin> for Format {
     }
 }
 
+/// Emits a Kotlin `data object` — used for unit structs and unit variants.
+///
+/// When `interface` is `Some`, the object implements it (i.e. it is a variant
+/// inside a `sealed interface`). When bincode encoding is active, serialize
+/// and deserialize methods are generated.
 fn data_object<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -537,6 +614,12 @@ fn data_object<W: IndentWrite>(
     Ok(())
 }
 
+/// Emits a Kotlin `data class` — used for structs (with fields), newtype
+/// structs, tuple structs, and non-unit sealed-interface variants.
+///
+/// When `interface` is `Some`, the class implements it. When bincode encoding
+/// is active, `serialize` / `deserialize` methods and a `companion object`
+/// are generated.
 fn data_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -635,6 +718,10 @@ fn data_class<W: IndentWrite>(
     Ok(())
 }
 
+/// Emits a Kotlin `enum class` — used when all variants are unit variants.
+///
+/// For JSON encoding, each variant gets `@SerialName`. For bincode, the
+/// ordinal is used as the variant index.
 fn enum_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -722,6 +809,12 @@ fn enum_class<W: IndentWrite>(
     Ok(())
 }
 
+/// Emits a Kotlin `sealed interface` — used when at least one variant
+/// carries data (newtype, tuple, or struct variant).
+///
+/// Each variant becomes a nested `data class` or `data object` that
+/// implements the interface. For bincode, a `companion object` with
+/// `deserialize` dispatches on the variant index.
 fn sealed_interface<W: IndentWrite>(
     w: &mut W,
     name: &str,

@@ -1,3 +1,58 @@
+//! AST-to-TypeScript source rendering.
+//!
+//! This module implements [`Emitter<TypeScript>`](super::super::Emitter) for
+//! each node type in the format AST, turning abstract type descriptions into
+//! idiomatic TypeScript code.
+//!
+//! # Emitter implementations
+//!
+//! | AST node | TypeScript output |
+//! |---|---|
+//! | [`Module`] | `import` statements, type aliases, feature helpers |
+//! | [`Container`] | `export class` or `export abstract class` + variant subclasses |
+//! | [`Named<Format>`](Named) | `public` property declaration |
+//! | [`Format`] | Inline type expression (`number`, `string`, `Array<T>`, …) |
+//! | [`Doc`] | `///` doc comments |
+//! | `(Named<VariantFormat>, …)` | Enum variant subclass extending the abstract base |
+//!
+//! # TypeScript type mapping
+//!
+//! The [`Format`] emitter maps Rust/reflection types to TypeScript equivalents
+//! via type aliases — for example `I32` → `number` (via `type int32 = number`),
+//! `Str` → `string`, `Seq(T)` → `T[]` (via `type Seq<T> = T[]`),
+//! `Option(T)` → `Optional<T>` (i.e. `T | null`), `Map(K,V)` → `Map<K, V>`,
+//! tuples → `[A, B]` (via `Tuple<[…]>`), fixed-size arrays → `ListTuple<[T]>`.
+//!
+//! # Encoding-dependent output
+//!
+//! The [`TypeScript`] language tag carries the active [`Encoding`] and
+//! [`InstallTarget`]. Both JSON and Bincode use the same
+//! `Serializer`/`Deserializer` interface pattern with hand-written
+//! `serialize`/`deserialize` methods. When encoding is `None`, only plain
+//! type declarations are emitted.
+//!
+//! # Feature helpers (`features/` directory)
+//!
+//! TypeScript has `Array`, `Set`, `Map`, and union types built in, but the
+//! Serde `Serializer`/`Deserializer` runtime only handles primitives and
+//! user-defined types (which get their own `serialize`/`deserialize` methods).
+//! The feature helpers are TypeScript functions that bridge this gap — they
+//! teach the serde runtime how to length-prefix and iterate over generic
+//! containers.
+//!
+//! | Helper | What it provides | When included |
+//! |---|---|---|
+//! | `ArrayOfT.ts` | `serializeArray`/`deserializeArray` | Bincode or JSON + `Seq` type used |
+//! | `SetOfT.ts` | `serializeSet`/`deserializeSet` | Bincode or JSON + `Set` type used |
+//! | `MapOfT.ts` | `serializeMap`/`deserializeMap` | Bincode or JSON + `Map` type used |
+//! | `OptionOfT.ts` | `serializeOption`/`deserializeOption` | Bincode or JSON + `Option` type used |
+//! | `TupleArray.ts` | Fixed-size array support | `TupleArray` type used |
+//!
+//! These `.ts` snippets are embedded at compile time via `include_bytes!`
+//! and written into the file header by the [`Module`] emitter when the
+//! corresponding [`Feature`] flag is active (discovered automatically by
+//! [`CodeGeneratorConfig::update_from`]).
+
 #[cfg(test)]
 use std::collections::BTreeSet;
 use std::{
@@ -26,6 +81,10 @@ const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.ts");
 const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.ts");
 
 /// Language tag for TypeScript code generation.
+///
+/// Carries the active [`Encoding`] (None / Bincode / Json) and
+/// [`InstallTarget`] (Node / Deno) so emitter implementations can adapt
+/// their output accordingly.
 #[derive(Debug, Clone, Copy)]
 pub struct TypeScript {
     pub encoding: Encoding,
@@ -172,6 +231,7 @@ impl Emitter<TypeScript> for Container<'_> {
         let Container {
             name: qualified_name,
             format,
+            ..
         } = self;
         let name = &qualified_name.name;
 

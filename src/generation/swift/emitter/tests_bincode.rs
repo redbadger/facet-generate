@@ -1,5 +1,16 @@
-//! these tests will be updated once the Swift emitter is converted
-//! to use the new Emitter<Language> trait
+//! Snapshot tests for the Swift emitter — **Bincode encoding**.
+//!
+//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Bincode`
+//! so that every generated type includes `Hashable` conformance, hand-written
+//! `serialize`/`deserialize` methods, plus `bincodeSerialize`/`bincodeDeserialize`
+//! convenience wrappers.
+//!
+//! These tests verify the byte-level serialization code that the emitter
+//! produces: field ordering, nested `serialize`/`deserialize` calls for
+//! user-defined types, collection helpers (`serializeArray`, `deserializeMap`,
+//! etc.), option encoding (`serializeOption`/`deserializeOption`), and the
+//! `Serializer`/`Deserializer` protocol API surface.
+
 #![allow(clippy::too_many_lines)]
 
 use std::{

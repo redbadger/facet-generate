@@ -6,8 +6,8 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Language, java, kotlin, swift,
-        tests::{check, read_files_and_create_expect_dirs},
+        java, kotlin, swift,
+        tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
     reflect,
@@ -36,10 +36,10 @@ fn test() {
         .join("snapshots");
 
     for target in [
-        Language::Java,
-        Language::Kotlin,
-        Language::Swift,
-        Language::TypeScript,
+        TargetLanguage::Java,
+        TargetLanguage::Kotlin,
+        TargetLanguage::Swift,
+        TargetLanguage::TypeScript,
     ] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
@@ -48,22 +48,22 @@ fn test() {
         fs::create_dir_all(&snapshot_dir).unwrap();
 
         match target {
-            Language::Java => {
+            TargetLanguage::Java => {
                 java::Installer::new("com.example", tmp_path)
                     .generate(&registry)
                     .unwrap();
             }
-            Language::Kotlin => {
+            TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
                     .generate(&registry)
                     .unwrap();
             }
-            Language::Swift => {
+            TargetLanguage::Swift => {
                 swift::Installer::new("Example", tmp_path)
                     .generate(&registry)
                     .unwrap();
             }
-            Language::TypeScript => {
+            TargetLanguage::TypeScript => {
                 typescript::Installer::new("example", tmp_path, InstallTarget::Node)
                     .generate(&registry)
                     .unwrap();

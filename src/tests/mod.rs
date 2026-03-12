@@ -1,3 +1,24 @@
+//! Cross-language expect-file tests.
+//!
+//! Each sub-module defines one or more Rust types annotated with
+//! `#[derive(Facet)]` and invokes the [`test!`] macro, listing the types and
+//! target languages (e.g. `test! { MyStruct for kotlin, swift }`). The macro
+//! reflects the types, runs the full [`CodeGen`] pipeline for each language,
+//! and compares the output against checked-in expect files (`output.kt`,
+//! `output.swift`, …) sitting next to the `mod.rs`.
+//!
+//! Every test should support **all** languages. A few test cases exercise
+//! language-specific features — for example `#[facet(swift = "Equatable")]` or
+//! `#[facet(kotlin = "Parcelable")]` — and naturally only produce output for
+//! that language. The `facet` attribute accepts any identifier, so the same
+//! mechanism works for all targets (e.g. `#[facet(csharp = "…")]`).
+//!
+//! Expect files are managed by the [`expect_test`](https://docs.rs/expect_test)
+//! crate — running tests with `UPDATE_EXPECT=1` regenerates them.
+//!
+//! This module is gated on `#[cfg(all(test, feature = "generate"))]` (see
+//! `lib.rs`).
+
 #![allow(dead_code)]
 use crate::{Registry, generation::CodeGen};
 use anyhow::Result;

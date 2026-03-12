@@ -1,4 +1,5 @@
 #![cfg(any(
+    feature = "csharp",
     feature = "java",
     feature = "kotlin",
     feature = "swift",

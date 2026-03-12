@@ -1,3 +1,26 @@
+//! Project scaffolding — writes a ready-to-build Swift package to disk.
+//!
+//! The [`Installer`] is the final stage of the Swift generation pipeline.
+//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! the installer is responsible for the surrounding project structure:
+//!
+//! 1. **Runtime files** — copies the Serde runtime `.swift` sources from
+//!    `runtime/swift/` into the output directory. These provide the
+//!    `Serializer`, `Deserializer`, `BincodeSerializer`, etc. that the
+//!    generated `serialize`/`deserialize` methods call into.
+//!
+//! 2. **Per-module source files** — splits the registry by namespace (via
+//!    [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    writing each to its own `.swift` file under
+//!    `Sources/<Module>/<Module>.swift`. Swift has no `namespace` keyword —
+//!    the crate's namespace concept maps directly to **SPM targets**, which
+//!    serve as Swift's module-level namespacing. Cross-module type references
+//!    use `Module.Type` syntax (e.g. `Foo.Tree`).
+//!
+//! 3. **`Package.swift`** — generates an SPM manifest with library products,
+//!    targets (one per namespace plus `Serde` runtime), and dependencies
+//!    (external URL or path packages).
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write as _,
@@ -17,7 +40,8 @@ use crate::{
     },
 };
 
-/// Installer for generated source files in Swift.
+/// Writes a complete Swift package — runtime sources, per-module generated
+/// code, and a `Package.swift` manifest — to the configured output directory.
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
@@ -113,6 +137,11 @@ impl Installer {
         Ok(())
     }
 
+    /// Produce the contents of a `Package.swift` file.
+    ///
+    /// Builds the SPM manifest with targets (one per namespace plus any
+    /// runtime targets), inter-target dependency edges, external package
+    /// dependencies, and a library product exposing the top-level targets.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
         let mut all_targets = self.targets.clone();
@@ -239,6 +268,11 @@ impl Installer {
 }
 
 impl SourceInstaller for Installer {
+    /// Generate a single `.swift` source file for one namespace.
+    ///
+    /// Writes to `Sources/<Module>/<Module>.swift`. Skips namespaces that
+    /// correspond to external packages. Tracks inter-target dependencies
+    /// (external definitions, Serde runtime) for the manifest.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
@@ -277,6 +311,8 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
+    /// Copy the Serde runtime `.swift` sources and register `Serde` as a
+    /// local SPM target so that generated modules can depend on it.
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime(
             &include_dir!("runtime/swift/Sources/Serde"),
@@ -294,6 +330,7 @@ impl SourceInstaller for Installer {
         Ok(())
     }
 
+    /// Write `Package.swift` to the output directory root.
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
         let manifest = self.make_manifest(package_name);
 

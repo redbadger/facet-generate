@@ -1,3 +1,26 @@
+//! Snapshot tests for the Kotlin emitter — **no serialization**.
+//!
+//! Each test defines one or more Rust types annotated with `#[derive(Facet)]`,
+//! runs them through the [`emit!`] macro with `Encoding::None`, and asserts the
+//! generated Kotlin source against an [`insta`] inline snapshot.
+//!
+//! Because encoding is `None`, the output contains only plain type declarations
+//! (`data class`, `data object`, `sealed interface`, `enum class`) with no
+//! `serialize`/`deserialize` methods and no `@Serializable` annotations.
+//!
+//! # Coverage
+//!
+//! | Category | What is tested |
+//! |----------|----------------|
+//! | Structs | Unit structs (with/without fields), newtype wrappers, tuple structs, structs with primitive and user-defined fields |
+//! | Tuples | 2-tuple (`Pair`), 3-tuple (`Triple`), 4-tuple (`NTuple4`) |
+//! | Enums | Unit variants, newtype/tuple variants, struct variants, mixed-variant enums |
+//! | Collections | `Vec`, `HashMap`/`BTreeMap`, `HashSet`/`BTreeSet`, fixed-size arrays |
+//! | Optional | `Option<T>` fields (mapped to `T?`) |
+//! | Pointers | `Box`, `Rc`, `Arc` (all transparent in generated output) |
+//! | Bytes | `#[facet(bytes)]`-annotated `Vec<u8>` and byte slices |
+//! | Namespaces | Multi-module generation via [`emit_two_modules!`] |
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},

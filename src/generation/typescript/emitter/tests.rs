@@ -1,3 +1,26 @@
+//! Snapshot tests for the TypeScript emitter — **no serialization**.
+//!
+//! Each test defines one or more Rust types annotated with `#[derive(Facet)]`,
+//! runs them through the [`emit!`] macro with `Encoding::None`, and asserts the
+//! generated TypeScript source against an [`insta`] inline snapshot.
+//!
+//! Because encoding is `None`, the output contains only plain type declarations
+//! (`export class`, `export abstract class` + variant subclasses) with no
+//! `serialize`/`deserialize` methods.
+//!
+//! # Coverage
+//!
+//! | Category | What is tested |
+//! |----------|----------------|
+//! | Structs | Unit structs (with/without body), newtype wrappers, tuple structs, structs with primitive and user-defined fields |
+//! | Tuples | 2-tuple, 3-tuple, 4-tuple (via `Tuple<[…]>` type alias) |
+//! | Enums | Unit variants, newtype/tuple variants, struct variants, mixed-variant enums |
+//! | Collections | `Vec`, `HashMap`/`BTreeMap`, `HashSet`/`BTreeSet`, fixed-size arrays (`ListTuple`) |
+//! | Optional | `Option<T>` fields (mapped to `Optional<T>`, i.e. `T \| null`) |
+//! | Pointers | `Box`, `Rc`, `Arc` (all transparent in generated output) |
+//! | Bytes | `#[facet(bytes)]` fields (mapped to `Uint8Array` via `bytes` alias) |
+//! | Modules | Cross-namespace references via `import * as Namespace` wildcard imports |
+
 #![allow(clippy::too_many_lines)]
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},

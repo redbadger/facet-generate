@@ -6,10 +6,9 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, Language, PackageLocation, SourceInstaller as _, java, kotlin,
-        module,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, kotlin, module,
         swift::Installer,
-        tests::{check, read_files_and_create_expect_dirs},
+        tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript::{self, InstallTarget},
     },
     reflect,
@@ -39,10 +38,10 @@ fn test() {
         .join("snapshots");
 
     for target in [
-        Language::Java,
-        Language::Kotlin,
-        Language::Swift,
-        Language::TypeScript,
+        TargetLanguage::Java,
+        TargetLanguage::Kotlin,
+        TargetLanguage::Swift,
+        TargetLanguage::TypeScript,
     ] {
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
@@ -52,7 +51,7 @@ fn test() {
 
         #[allow(clippy::match_same_arms)]
         match target {
-            Language::Java => {
+            TargetLanguage::Java => {
                 let package_name = "com.example";
                 let mut installer =
                     java::Installer::new(package_name, tmp_path).external_packages(&[
@@ -73,7 +72,7 @@ fn test() {
                     installer.install_module(&config, registry).unwrap();
                 }
             }
-            Language::Kotlin => {
+            TargetLanguage::Kotlin => {
                 let package_name = "com.example";
                 let mut installer = kotlin::Installer::new(package_name, tmp_path)
                     .external_packages(&[ExternalPackage {
@@ -92,7 +91,7 @@ fn test() {
                     installer.install_module(&config, registry).unwrap();
                 }
             }
-            Language::Swift => {
+            TargetLanguage::Swift => {
                 let package_name = "Example";
                 let mut installer = Installer::new(package_name, tmp_path.join(package_name))
                     .external_packages(&[ExternalPackage {
@@ -112,7 +111,7 @@ fn test() {
                 installer.install_serde_runtime().unwrap();
                 installer.install_manifest(package_name).unwrap();
             }
-            Language::TypeScript => {
+            TargetLanguage::TypeScript => {
                 let package_name = "example";
                 let mut installer = typescript::Installer::new(
                     package_name,

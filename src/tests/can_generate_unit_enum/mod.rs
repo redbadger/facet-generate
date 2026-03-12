@@ -13,6 +13,7 @@ pub enum Colors {
     Green = 2,
 }
 
+// TODO: enable swift, typescript (expect files need updating for no-encoding output)
 crate::test! {
     Colors for kotlin
 }

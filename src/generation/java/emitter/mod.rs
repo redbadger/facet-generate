@@ -4,9 +4,52 @@ use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{common, indent::IndentWrite, java::generator::CodeGenerator},
+    generation::{indent::IndentWrite, java::generator::CodeGenerator},
     reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
+
+fn mangle_type(format: &Format) -> String {
+    use std::string::ToString;
+    match format {
+        Format::TypeName(qualified_name) => qualified_name.format(ToString::to_string, "_"),
+        Format::Unit => "unit".to_string(),
+        Format::Bool => "bool".to_string(),
+        Format::I8 => "i8".to_string(),
+        Format::I16 => "i16".to_string(),
+        Format::I32 => "i32".to_string(),
+        Format::I64 => "i64".to_string(),
+        Format::I128 => "i128".to_string(),
+        Format::U8 => "u8".to_string(),
+        Format::U16 => "u16".to_string(),
+        Format::U32 => "u32".to_string(),
+        Format::U64 => "u64".to_string(),
+        Format::U128 => "u128".to_string(),
+        Format::F32 => "f32".to_string(),
+        Format::F64 => "f64".to_string(),
+        Format::Char => "char".to_string(),
+        Format::Str => "str".to_string(),
+        Format::Bytes => "bytes".to_string(),
+        Format::Option(format) => format!("option_{}", mangle_type(format)),
+        Format::Seq(format) => format!("vector_{}", mangle_type(format)),
+        Format::Set(format) => format!("set_{}", mangle_type(format)),
+        Format::Map { key, value } => {
+            format!("map_{}_to_{}", mangle_type(key), mangle_type(value))
+        }
+        Format::Tuple(formats) => format!(
+            "tuple{}_{}",
+            formats.len(),
+            formats
+                .iter()
+                .map(mangle_type)
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
+        Format::TupleArray { content, size } => {
+            format!("array{}_{}_array", size, mangle_type(content))
+        }
+        Format::Variable(_) => panic!("unexpected value"),
+    }
+}
 
 /// Shared state for the code generation of a Java source file.
 pub(crate) struct JavaEmitter<'a, T> {
@@ -170,7 +213,7 @@ where
             format
                 .visit(&mut |f| {
                     if Self::needs_helper(f) {
-                        subtypes.insert(common::mangle_type(f), f.clone());
+                        subtypes.insert(mangle_type(f), f.clone());
                     }
                     Ok(())
                 })
@@ -222,7 +265,7 @@ where
             _ => format!(
                 "{}.serialize_{}({}, serializer);",
                 self.quote_qualified_name("TraitHelpers"),
-                common::mangle_type(format),
+                mangle_type(format),
                 value
             ),
         }
@@ -256,7 +299,7 @@ where
             _ => format!(
                 "{}.deserialize_{}(deserializer)",
                 self.quote_qualified_name("TraitHelpers"),
-                common::mangle_type(format),
+                mangle_type(format),
             ),
         }
     }
