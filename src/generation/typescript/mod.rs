@@ -65,11 +65,13 @@ impl InstallTarget {
     pub(crate) fn serde_runtime(self) -> &'static Dir<'static> {
         match self {
             Self::Node => {
-                static DIR: Dir<'_> = include_dir!("runtime/typescript-node/serde");
+                static DIR: Dir<'_> =
+                    include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
                 &DIR
             }
             Self::Deno => {
-                static DIR: Dir<'_> = include_dir!("runtime/typescript-deno/serde");
+                static DIR: Dir<'_> =
+                    include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-deno/serde");
                 &DIR
             }
         }
@@ -78,11 +80,13 @@ impl InstallTarget {
     pub(crate) fn bincode_runtime(self) -> &'static Dir<'static> {
         match self {
             Self::Node => {
-                static DIR: Dir<'_> = include_dir!("runtime/typescript-node/bincode");
+                static DIR: Dir<'_> =
+                    include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/bincode");
                 &DIR
             }
             Self::Deno => {
-                static DIR: Dir<'_> = include_dir!("runtime/typescript-deno/bincode");
+                static DIR: Dir<'_> =
+                    include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-deno/bincode");
                 &DIR
             }
         }

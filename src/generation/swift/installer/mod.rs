@@ -315,7 +315,7 @@ impl SourceInstaller for Installer {
     /// local SPM target so that generated modules can depend on it.
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime(
-            &include_dir!("runtime/swift/Sources/Serde"),
+            &include_dir!("$CARGO_MANIFEST_DIR/runtime/swift/Sources/Serde"),
             "Sources/Serde",
         )?;
 
