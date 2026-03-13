@@ -7,7 +7,7 @@ Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet
 ## Usage
 
 ```sh
-cargo add facet facet_generate
+cargo add facet facet-generate
 ```
 
 ```rust
@@ -378,14 +378,14 @@ With `#[facet(transparent)]`, `Inner` is unwrapped and `MyStruct.inner` is gener
 
 ### Bytes
 
-In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `Uint8Array` in TypeScript) for `Vec<u8>` and `&'a [u8]`, use the `#[facet(bytes)]` attribute:
+In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `Uint8Array` in TypeScript) for `Vec<u8>` and `&'a [u8]`, use the `#[facet(fg::bytes)]` attribute:
 
 ```rust
 #[derive(Facet)]
 pub struct HttpResponse {
     pub status: u16,
     pub headers: Vec<HttpHeader>,
-    #[facet(bytes)]
+    #[facet(fg::bytes)]
     pub body: Vec<u8>,
 }
 ```
