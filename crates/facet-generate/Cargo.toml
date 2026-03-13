@@ -1,0 +1,49 @@
+[package]
+name = "facet-generate"
+description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+derive_builder = "0.20"
+facet.workspace = true
+facet-generate-attrs.workspace = true
+heck = "0.5"
+include_dir = { version = "0.7", optional = true }
+indent = "0.1"
+indoc = { version = "2.0", optional = true }
+regex = "1.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+textwrap = "0.16"
+thiserror = "2.0"
+tracing = "0.1"
+
+[dev-dependencies]
+bincode = "=1"
+chrono = "0.4.44"
+difficient = "0.1.0"
+anyhow.workspace = true
+expect-test.workspace = true
+facet = { workspace = true, features = ["chrono", "url", "bytes"] }
+facet-generate-attrs.workspace = true
+ignore = "0.4"
+insta = { version = "1.46.3", features = ["yaml", "json"] }
+maplit = "1.0.2"
+strum = { version = "0.28.0", features = ["derive"] }
+tempfile = "3.27.0"
+url = "2.5.8"
+bytes = "1.11"
+
+[features]
+default = ["generate"]
+generate = ["java", "kotlin", "swift", "typescript", "csharp"]
+java = ["include_dir"]
+kotlin = ["include_dir", "indoc"]
+swift = ["include_dir", "indoc"]
+typescript = ["include_dir", "indoc"]
+csharp = ["indoc"]
