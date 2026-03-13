@@ -15,5 +15,4 @@ rust-version = "1.90"
 anyhow = "1.0.102"
 expect-test = "1.5.1"
 facet = "=0.44"
-facet-generate = { path = "crates/facet-generate", version = "0.16.0" }
 facet-generate-attrs = { path = "crates/facet-generate-attrs", version = "0.16.0" }

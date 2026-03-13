@@ -21,7 +21,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 textwrap = "0.16"
 thiserror = "2.0"
-tracing = "0.1"
 
 [dev-dependencies]
 bincode = "=1"
@@ -30,7 +29,6 @@ difficient = "0.1.0"
 anyhow.workspace = true
 expect-test.workspace = true
 facet = { workspace = true, features = ["chrono", "url", "bytes"] }
-facet-generate-attrs.workspace = true
 ignore = "0.4"
 insta = { version = "1.46.3", features = ["yaml", "json"] }
 maplit = "1.0.2"
