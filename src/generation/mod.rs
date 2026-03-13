@@ -20,7 +20,7 @@
 /// Utility function to generate indented text
 pub mod indent;
 
-/// Modules for code generation that map to Namespaces declared as `#[facet(namespace = "my_namespace")]`
+/// Modules for code generation that map to Namespaces declared as `#[facet(fg::namespace = "my_namespace")]`
 pub mod module;
 
 /// Support for code-generation in C#

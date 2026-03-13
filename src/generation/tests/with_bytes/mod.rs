@@ -4,6 +4,7 @@ use expect_test::expect_file;
 use facet::Facet;
 use tempfile::tempdir;
 
+use crate as fg;
 use crate::{
     generation::{
         Encoding, kotlin,
@@ -16,7 +17,7 @@ use crate::{
 fn test() {
     #[derive(Facet)]
     struct StructWithBytes {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: Vec<u8>,
         name: String,
     }

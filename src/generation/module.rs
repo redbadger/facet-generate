@@ -101,16 +101,14 @@ pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
             let format_clone = format.clone();
             format_clone
                 .visit(&mut |format| {
-                    if let Format::TypeName(qualified_name) = format {
-                        if let Namespace::Named(ns) = &qualified_name.namespace {
-                            // Only consider it external if it's a different namespace
-                            if ns != &namespace_key {
-                                all_external_definitions
-                                    .entry(ns.clone())
-                                    .or_default()
-                                    .push(qualified_name.name.clone());
-                            }
-                        }
+                    if let Format::TypeName(qualified_name) = format
+                        && let Namespace::Named(ns) = &qualified_name.namespace
+                        && ns != &namespace_key
+                    {
+                        all_external_definitions
+                            .entry(ns.clone())
+                            .or_default()
+                            .push(qualified_name.name.clone());
                     }
                     Ok(())
                 })

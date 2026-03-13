@@ -6,6 +6,7 @@
 use facet::Facet;
 
 use super::super::*;
+use crate as fg;
 use crate::emit;
 
 #[test]
@@ -722,10 +723,10 @@ fn struct_with_field_that_is_a_4_tuple() {
 fn struct_with_bytes_field() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: Vec<u8>,
         name: String,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         header: Vec<u8>,
     }
 
@@ -792,10 +793,10 @@ fn struct_with_bytes_field() {
 fn struct_with_bytes_field_and_slice() {
     #[derive(Facet)]
     struct MyStruct<'a> {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         data: &'a [u8],
         name: String,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         header: Vec<u8>,
         optional_bytes: Option<Vec<u8>>,
     }

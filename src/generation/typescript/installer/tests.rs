@@ -15,7 +15,7 @@
 
 use facet::Facet;
 
-use super::Installer;
+use crate as fg;
 use crate::{
     generation::{
         ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
@@ -23,6 +23,8 @@ use crate::{
     },
     reflect,
 };
+
+use super::Installer;
 
 #[test]
 fn simple_manifest() {
@@ -192,7 +194,7 @@ fn manifest_with_serde_module() {
 #[test]
 fn manifest_with_namespaces() {
     #[derive(Facet)]
-    #[facet(namespace = "another_module")]
+    #[facet(fg::namespace = "another_module")]
     struct Child {
         name: String,
     }
@@ -229,7 +231,7 @@ fn manifest_with_namespaces() {
 #[test]
 fn manifest_with_external_namespace_dependencies() {
     #[derive(Facet)]
-    #[facet(namespace = "external_package")]
+    #[facet(fg::namespace = "external_package")]
     struct Child {
         name: String,
     }

@@ -183,13 +183,12 @@ fn collect_c_style_enums(registry: Option<&Registry>) -> BTreeSet<String> {
     registry.map_or_else(BTreeSet::new, |r| {
         r.iter()
             .filter_map(|(name, format)| {
-                if let ContainerFormat::Enum(variants, _) = format {
-                    if variants
+                if let ContainerFormat::Enum(variants, _) = format
+                    && variants
                         .values()
                         .all(|v| matches!(v.value, VariantFormat::Unit))
-                    {
-                        return Some(name.name.clone());
-                    }
+                {
+                    return Some(name.name.clone());
                 }
                 None
             })

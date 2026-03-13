@@ -1,9 +1,10 @@
+use crate as fg;
 use facet::Facet;
 
 #[derive(Facet)]
 pub struct SomeStruct {
-    #[facet(readonly)]
+    #[facet(fg::readonly)]
     field_a: u32,
-    #[facet(readonly)]
+    #[facet(fg::readonly)]
     field_b: Vec<String>,
 }

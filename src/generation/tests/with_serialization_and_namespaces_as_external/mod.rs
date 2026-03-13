@@ -4,6 +4,7 @@ use expect_test::expect_file;
 use facet::Facet;
 use tempfile::tempdir;
 
+use crate as fg;
 use crate::{
     generation::{
         Encoding, ExternalPackage, PackageLocation, java, kotlin, swift,
@@ -16,14 +17,14 @@ use crate::{
 #[test]
 fn test() {
     #[derive(Facet)]
-    #[facet(namespace = "other")]
+    #[facet(fg::namespace = "other")]
     pub struct OtherChild {
         name: String,
     }
 
     #[derive(Facet)]
     #[repr(C)]
-    #[facet(namespace = "other")]
+    #[facet(fg::namespace = "other")]
     #[allow(unused)]
     pub enum OtherParent {
         Child(OtherChild),

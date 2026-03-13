@@ -728,7 +728,7 @@ fn struct_with_vec_of_u8() {
 fn struct_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: Vec<u8>,
     }
 
@@ -746,7 +746,7 @@ fn struct_with_vec_of_u8_to_bytes() {
 #[test]
 fn newtype_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] Vec<u8>);
+    struct MyStruct(#[facet(fg::bytes)] Vec<u8>);
 
     insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @"
     ? namespace: ROOT
@@ -760,7 +760,7 @@ fn newtype_with_vec_of_u8_to_bytes() {
 #[test]
 fn newtype_with_fixed_array_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] [u8; 32]);
+    struct MyStruct(#[facet(fg::bytes)] [u8; 32]);
 
     insta::assert_yaml_snapshot!(reflect!(MyStruct).unwrap(), @"
     ? namespace: ROOT
@@ -775,7 +775,7 @@ fn newtype_with_fixed_array_to_bytes() {
 fn nested_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
-    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    struct MyBytes(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyBytes);
 
@@ -936,7 +936,7 @@ fn nested_unit_enum() {
 fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     #[facet(transparent)]
-    struct MyBytes(#[facet(bytes)] Vec<u8>);
+    struct MyBytes(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyBytes);
 
@@ -951,12 +951,12 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
         },
         VariantC(MyBytes),
         VariantD {
-            #[facet(bytes)]
+            #[facet(fg::bytes)]
             bytes: Vec<u8>,
             array: Vec<u8>,
         },
-        VariantE(#[facet(bytes)] Vec<u8>),
-        VariantF(#[facet(bytes)] Vec<u8>, u32),
+        VariantE(#[facet(fg::bytes)] Vec<u8>),
+        VariantF(#[facet(fg::bytes)] Vec<u8>, u32),
     }
 
     insta::assert_yaml_snapshot!(reflect!(MyEnum).unwrap(), @"
@@ -1086,7 +1086,7 @@ fn nested_enum_newtype_transparent_with_str() {
 #[test]
 fn nested_tuple_struct_with_vec_of_u8_to_bytes() {
     #[derive(Facet)]
-    struct MyStruct(#[facet(bytes)] Vec<u8>);
+    struct MyStruct(#[facet(fg::bytes)] Vec<u8>);
     #[derive(Facet)]
     struct MyWrapper(MyStruct);
 
@@ -1110,7 +1110,7 @@ fn nested_tuple_struct_with_vec_of_u8_to_bytes() {
 fn struct_bytes_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: bytes::Bytes,
     }
 
@@ -1129,7 +1129,7 @@ fn struct_bytes_bytes() {
 fn struct_with_opt_vec_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: Option<Vec<u8>>,
     }
 
@@ -1166,7 +1166,7 @@ fn struct_with_slice_of_u8() {
 fn struct_with_slice_of_u8_to_bytes() {
     #[derive(Facet)]
     struct MyStruct<'a> {
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         a: &'a [u8],
     }
 
@@ -2201,7 +2201,7 @@ fn own_result_enum() {
     struct HttpResponse {
         status: u16,
         headers: Vec<HttpHeader>,
-        #[facet(bytes)]
+        #[facet(fg::bytes)]
         body: Vec<u8>,
     }
 
@@ -2295,7 +2295,7 @@ fn own_result_enum() {
 #[test]
 fn struct_rename() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     struct EffectFfi {
         name: String,
         active: bool,
@@ -2318,9 +2318,8 @@ fn struct_rename() {
 #[test]
 fn enum_rename() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     #[repr(C)]
-    #[allow(unused)]
     enum EffectFfi {
         One,
         Two,
@@ -2345,7 +2344,7 @@ fn enum_rename() {
 #[test]
 fn struct_rename_with_named_type() {
     #[derive(Facet)]
-    #[facet(name = "Effect")]
+    #[facet(rename = "Effect")]
     struct EffectFfi {
         inner: String,
     }
@@ -2374,6 +2373,337 @@ fn struct_rename_with_named_type() {
               - TYPENAME:
                   namespace: ROOT
                   name: Effect
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_rename() {
+    #[derive(Facet)]
+    struct Request {
+        #[facet(rename = "id")]
+        request_id: u32,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_variant_rename() {
+    #[derive(Facet)]
+    #[repr(C)]
+    enum Effect {
+        #[facet(rename = "Id")]
+        RequestId,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Effect).unwrap(), @"
+    ? namespace: ROOT
+      name: Effect
+    : ENUM:
+        - 0:
+            Id:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_rename_with_rename_all() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    struct Request {
+        #[facet(rename = "id")]
+        request_id: u32,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_variant_rename_with_rename_all() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    #[repr(C)]
+    enum Effect {
+        #[facet(rename = "Id")]
+        RequestId,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Effect).unwrap(), @"
+    ? namespace: ROOT
+      name: Effect
+    : ENUM:
+        - 0:
+            Id:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn rename_all() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    struct Request {
+        request_id: u32,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - requestId:
+              - U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn rename_all_enum() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    #[repr(C)]
+    enum Effect {
+        RequestId,
+        SomeOtherVariant,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Effect).unwrap(), @"
+    ? namespace: ROOT
+      name: Effect
+    : ENUM:
+        - 0:
+            requestId:
+              - UNIT
+              - []
+          1:
+            someOtherVariant:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn rename_all_enum_with_variant_rename_override() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    #[repr(C)]
+    enum Effect {
+        #[facet(rename = "ID")]
+        RequestId,
+        SomeOtherVariant,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Effect).unwrap(), @"
+    ? namespace: ROOT
+      name: Effect
+    : ENUM:
+        - 0:
+            ID:
+              - UNIT
+              - []
+          1:
+            someOtherVariant:
+              - UNIT
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_rename_option() {
+    #[derive(Facet)]
+    struct Request {
+        #[facet(rename = "id")]
+        request_id: Option<u32>,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - id:
+              - OPTION: U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_rename_vec() {
+    #[derive(Facet)]
+    struct Request {
+        #[facet(rename = "ids")]
+        request_ids: Vec<u32>,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - ids:
+              - SEQ: U32
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_field_rename_named_type() {
+    #[derive(Facet)]
+    struct Inner {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Outer {
+        #[facet(rename = "data")]
+        inner_data: Inner,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Outer).unwrap(), @"
+    ? namespace: ROOT
+      name: Inner
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace: ROOT
+      name: Outer
+    : STRUCT:
+        - - data:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Inner
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_multiple_field_renames() {
+    #[derive(Facet)]
+    struct Request {
+        #[facet(rename = "request_id")]
+        id: u32,
+        #[facet(rename = "desc")]
+        description: String,
+        unchanged: bool,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Request
+    : STRUCT:
+        - - request_id:
+              - U32
+              - []
+          - desc:
+              - STR
+              - []
+          - unchanged:
+              - BOOL
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn struct_rename_combined_with_field_rename() {
+    #[derive(Facet)]
+    #[facet(rename = "Req")]
+    struct Request {
+        #[facet(rename = "id")]
+        request_id: u32,
+        name: String,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Request).unwrap(), @"
+    ? namespace: ROOT
+      name: Req
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+          - name:
+              - STR
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn enum_struct_variant_field_rename() {
+    #[derive(Facet)]
+    #[repr(C)]
+    enum Message {
+        Info {
+            #[facet(rename = "msg")]
+            #[allow(unused)]
+            message: String,
+        },
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Message).unwrap(), @"
+    ? namespace: ROOT
+      name: Message
+    : ENUM:
+        - 0:
+            Info:
+              - STRUCT:
+                  - msg:
+                      - STR
+                      - []
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn rename_all_multiple_fields() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    struct Config {
+        request_id: u32,
+        user_name: String,
+        is_active: bool,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Config).unwrap(), @"
+    ? namespace: ROOT
+      name: Config
+    : STRUCT:
+        - - requestId:
+              - U32
+              - []
+          - userName:
+              - STR
+              - []
+          - isActive:
+              - BOOL
               - []
         - []
     ");

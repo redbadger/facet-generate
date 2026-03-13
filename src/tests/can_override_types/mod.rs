@@ -6,12 +6,12 @@ use facet::Facet;
 #[derive(Facet)]
 #[facet(rename_all = "camelCase")]
 struct OverrideStruct {
-    // These annotations are intentionally inconsistent across languages
-    #[facet(
-        swift(type = "Int"),
-        typescript(type = "any | undefined"),
-        kotlin(type = "Int")
-    )]
+    // TODO: re-implement language-specific type overrides
+    // #[facet(
+    //     swift(type = "Int"),
+    //     typescript(type = "any | undefined"),
+    //     kotlin(type = "Int")
+    // )]
     field_to_override: String,
 }
 
@@ -23,11 +23,12 @@ enum OverrideEnum {
     TupleVariant(String),
     #[facet(rename_all = "camelCase")]
     AnonymousStructVariant {
-        #[facet(
-            swift(type = "Int"),
-            typescript(type = "any | undefined"),
-            kotlin(type = "Int")
-        )]
+        // TODO: re-implement language-specific type overrides
+        // #[facet(
+        //     swift(type = "Int"),
+        //     typescript(type = "any | undefined"),
+        //     kotlin(type = "Int")
+        // )]
         field_to_override: String,
     },
 }

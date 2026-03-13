@@ -9,11 +9,14 @@ pub enum SomeEnum {
         all: bool,
         #[facet(skip)]
         none: bool,
-        #[facet(swift(skip))]
+        // TODO: #[facet(swift(skip))]
+        #[facet(skip)]
         except_swift: bool,
-        #[facet(kotlin(skip))]
+        // TODO: #[facet(kotlin(skip))]
+        #[facet(skip)]
         except_kotlin: bool,
-        #[facet(typescript(skip))]
+        // TODO: #[facet(typescript(skip))]
+        #[facet(skip)]
         except_ts: bool,
     },
 }

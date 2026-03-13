@@ -12,6 +12,7 @@ cargo add facet facet_generate
 
 ```rust
 use facet::Facet;
+use facet_generate as fg;
 
 #[derive(Facet)]
 #[repr(C)]
@@ -24,7 +25,7 @@ enum HttpResult {
 struct HttpResponse {
     status: u16,
     headers: Vec<HttpHeader>,
-    #[facet(bytes)]
+    #[facet(fg::bytes)]
     body: Vec<u8>,
 }
 
@@ -208,21 +209,21 @@ Types that are explicitly annotated as belonging to a specific namespace are emi
 
 Notes:
 
-* Once a namespace is set (via `#[facet(namespace = "my_ns")]`) either at field-level (call-site) or type-level (called site), it will propagate to child types. The latest namespace is in effect until changed or cancelled. Type-level annotations take priority over field-level annotations.
-* A namespace context can be unset (via `#[facet(namespace = None)]`). This is still an explicit annotation, so it cancels any implicit annotations being carried forwards from higher in the graph. It places the type (and any child types) in the ROOT namespace.
+* Once a namespace is set (via `#[facet(fg::namespace = "my_ns")]`) either at field-level (call-site) or type-level (called site), it will propagate to child types. The latest namespace is in effect until changed or cancelled. Type-level annotations take priority over field-level annotations.
+* A namespace context can be unset (via `#[facet(fg::namespace)]`). This is still an explicit annotation, so it cancels any implicit annotations being carried forwards from higher in the graph. It places the type (and any child types) in the ROOT namespace.
 * Namespaces are propagated through field level references, including via pointers and collections.
 * Any ambiguity (i.e. a type is reached via more than one path, each with a different implicit namespace) will cause the typegen to emit an error, detailing the type involved and the namespaces that clash. The fix is then to either explicitly set (or unset) the type's namespace, or to align the inherited namespaces.
 
 
 ```rust
 #[derive(Facet)]
-#[facet(namespace = "server_sent_events")]
+#[facet(fg::namespace = "server_sent_events")]
 pub struct SseRequest {
     pub url: String,
 }
 
 #[derive(Facet)]
-#[facet(namespace = "server_sent_events")]
+#[facet(fg::namespace = "server_sent_events")]
 #[repr(C)]
 pub enum SseResponse {
     Chunk(Vec<u8>),
@@ -232,16 +233,116 @@ pub enum SseResponse {
 
 ### Renaming
 
-Struct and Enum renaming doesn't use `#[facet(rename = "Effect")]`, as facet doesn't seem to pass it through (yet?). So instead, for now, we use an arbitrary `ShapeAttribute` (`name` instead of `rename`), like this:
+Renaming uses Facet's builtin [`rename`](https://facet.rs/reference/attributes/#field-attributes--rename) and [`rename_all`](https://facet.rs/reference/attributes/#container-attributes--rename-all) attributes.
+
+#### Container rename
+
+Rename a struct or enum in the generated output (the Rust name stays the same):
 
 ```rust
 #[derive(Facet)]
-#[facet(name = "Effect")]
+#[facet(rename = "Effect")]
 struct EffectFfi {
     name: String,
     active: bool,
 }
 ```
+
+This also works on enums:
+
+```rust
+#[derive(Facet)]
+#[facet(rename = "Effect")]
+#[repr(C)]
+enum EffectFfi {
+    One,
+    Two,
+}
+```
+
+When a renamed type is referenced from another struct, the generated code uses
+the new name automatically.
+
+#### Field rename
+
+Rename individual struct fields with `#[facet(rename = "...")]`:
+
+```rust
+#[derive(Facet)]
+struct Request {
+    #[facet(rename = "id")]
+    request_id: u32,
+}
+```
+
+This works for all field types — primitives, `Option<T>`, `Vec<T>`, and
+user-defined types.
+
+#### Enum variant rename
+
+Rename individual enum variants:
+
+```rust
+#[derive(Facet)]
+#[repr(C)]
+enum Effect {
+    #[facet(rename = "Id")]
+    RequestId,
+}
+```
+
+Fields inside struct variants can also be renamed:
+
+```rust
+#[derive(Facet)]
+#[repr(C)]
+enum Message {
+    Info {
+        #[facet(rename = "msg")]
+        message: String,
+    },
+}
+```
+
+#### `rename_all`
+
+Apply a naming convention to all fields in a struct or all variants in an enum:
+
+```rust
+#[derive(Facet)]
+#[facet(rename_all = "camelCase")]
+struct Config {
+    request_id: u32,
+    user_name: String,
+    is_active: bool,
+}
+```
+
+This also works on enums:
+
+```rust
+#[derive(Facet)]
+#[facet(rename_all = "camelCase")]
+#[repr(C)]
+enum Effect {
+    RequestId,       // → requestId
+    SomeOtherVariant, // → someOtherVariant
+}
+```
+
+A per-field or per-variant `rename` always takes priority over `rename_all`:
+
+```rust
+#[derive(Facet)]
+#[facet(rename_all = "camelCase")]
+struct Request {
+    #[facet(rename = "id")]  // "id", not "requestId"
+    request_id: u32,
+}
+```
+
+Container-level `rename` and field/variant-level `rename` (or `rename_all`) can
+be combined freely.
 
 ### Skipping struct fields or enum variants
 

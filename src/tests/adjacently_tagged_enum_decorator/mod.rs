@@ -10,7 +10,7 @@ pub enum BestHockeyTeams {
     Lies(String),
 }
 #[derive(Facet)]
-#[facet(swift = "Equatable")]
+// TODO: implement language-specific annotations: #[facet(swift = "Equatable")]
 #[facet(tag = "type", content = "content")]
 #[repr(C)]
 pub enum BestHockeyTeams1 {
@@ -19,7 +19,7 @@ pub enum BestHockeyTeams1 {
 }
 
 #[derive(Facet)]
-#[facet(swift = "Equatable, Codable, Comparable, Hashable")]
+// TODO: implement language-specific annotations: #[facet(swift = "Equatable, Codable, Comparable, Hashable")]
 #[facet(tag = "type", content = "content")]
 #[repr(C)]
 pub enum BestHockeyTeams2 {
@@ -28,7 +28,7 @@ pub enum BestHockeyTeams2 {
 }
 
 #[derive(Facet)]
-#[facet(kotlin = "idk")]
+// TODO: implement language-specific annotations: #[facet(kotlin = "idk")]
 #[facet(tag = "type", content = "content")]
 #[repr(C)]
 pub enum BestHockeyTeams3 {
@@ -37,7 +37,7 @@ pub enum BestHockeyTeams3 {
 }
 
 #[derive(Facet)]
-#[facet(swift = "Equatable", swift = "Hashable")]
+// TODO: implement language-specific annotations: #[facet(swift = "Equatable", swift = "Hashable")]
 #[facet(tag = "type", content = "content")]
 #[repr(C)]
 pub enum BestHockeyTeams4 {

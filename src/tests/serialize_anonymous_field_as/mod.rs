@@ -1,4 +1,4 @@
-#![expect(unused)]
+use crate as fg;
 
 use facet::Facet;
 use serde::Serialize;
@@ -8,7 +8,7 @@ use serde::Serialize;
 #[repr(C)]
 pub enum SomeEnum {
     /// The associated String contains some opaque context
-    Context(#[facet(serialized_as = "String")] SomeOtherType),
+    Context(#[facet(fg::serialized_as = "String")] SomeOtherType),
     Other(i32),
 }
 
