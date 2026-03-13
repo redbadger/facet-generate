@@ -6,22 +6,21 @@ All notable changes to this project will be documented in this file.
 
 ## [0.16.0] - 2026-03-13
 
-This is a major release with several breaking changes, including a crate rename, a new simplified public API, and an upgrade to facet v0.44. It also introduces C# code generation (still experimental) and deprecates Java in favour of Kotlin.
+This is a major release with several breaking changes, including a new simplified public API, and an upgrade to facet v0.44. It also introduces C# code generation (still experimental), deprecates Java in favor of Kotlin and removes BCS support.
 
 ### 💥 Breaking Changes
 
-- **Crate renamed** from `facet_generate` to `facet-generate`, with `facet-generate-attrs` re-exported
 - **Upgraded to facet v0.44** — this changes the underlying reflection framework
 - **New simplified public API** — the API surface has been streamlined for ease of use
 - **Removed BCS (Binary Canonical Serialization) support**
 
 ### 🚀 Features
 
-- feat(csharp): Support experimental C# type generation (#73)
-- feat(typescript): Refactor TypeScript generator to multi-target architecture with `Module::write` (#67)
+- feat(csharp): Support experimental C# type generation [#73](https://github.com/redbadger/facet-generate/pull/73)
+- feat(typescript): Refactor TypeScript generator to multi-target architecture with `Module::write` [#67](https://github.com/redbadger/facet-generate/pull/67)
 - feat: Support `rename` and `rename_all` attributes for containers and fields
-- feat(java): Deprecated Java code generation now that Kotlin is available (#69)
-- feat: Crates moved into a workspace structure (`crates/facet-generate`, `crates/facet-generate-attrs`)
+- feat(java): Deprecated Java code generation now that Kotlin is available [#69](https://github.com/redbadger/facet-generate/pull/69)
+- feat: Crates moved into a workspace structure (`crates/facet_generate`, `crates/facet-generate-attrs`)
 
 ### 🐛 Bug Fixes
 

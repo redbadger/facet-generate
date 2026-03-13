@@ -13,6 +13,7 @@ build:
 clean:
     @echo '{{ style("command") }}clean:{{ NORMAL }}'
     cargo clean
+    rm -rf crates/facet_generate/runtime/swift/.build
 
 # runs tests
 test:

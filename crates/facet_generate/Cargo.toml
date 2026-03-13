@@ -1,5 +1,5 @@
 [package]
-name = "facet-generate"
+name = "facet_generate"
 description = "Generate Swift, Kotlin and TypeScript from types annotated with `#[derive(Facet)]`"
 version.workspace = true
 authors.workspace = true

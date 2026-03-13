@@ -1,4 +1,4 @@
-# `facet-generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet-generate.svg)](https://crates.io/crates/facet-generate) [![Docs](https://img.shields.io/badge/docs.rs-facet-generate-green)](https://docs.rs/facet-generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
+# `facet_generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, and TypeScript. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
@@ -7,7 +7,7 @@ Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet
 ## Usage
 
 ```sh
-cargo add facet facet-generate
+cargo add facet facet_generate
 ```
 
 ```rust
@@ -201,7 +201,7 @@ export class HttpHeader {
 
 ### Namespaces
 
-Types that are explicitly annotated as belonging to a specific namespace are emitted as separate modules. These can be within the same package, or in a separate package if specified in the config during type generation (using [`ExternalPackage`](https://docs.rs/facet-generate/latest/facet-generate/generation/struct.ExternalPackage.html)).
+Types that are explicitly annotated as belonging to a specific namespace are emitted as separate modules. These can be within the same package, or in a separate package if specified in the config during type generation (using [`ExternalPackage`](https://docs.rs/facet_generate/latest/facet_generate/generation/struct.ExternalPackage.html)).
 
 * In Swift, namespaces become a separate target in the current package
 * In Kotlin, they are emitted as a child namespace of the package's namespace

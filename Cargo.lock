@@ -354,36 +354,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "facet-generate"
-version = "0.16.0"
-dependencies = [
- "anyhow",
- "bincode",
- "bytes",
- "chrono",
- "derive_builder",
- "difficient",
- "expect-test",
- "facet",
- "facet-generate-attrs",
- "heck",
- "ignore",
- "include_dir",
- "indent",
- "indoc",
- "insta",
- "maplit",
- "regex",
- "serde",
- "serde_json",
- "strum",
- "tempfile",
- "textwrap",
- "thiserror 2.0.18",
- "url",
-]
-
-[[package]]
 name = "facet-generate-attrs"
 version = "0.16.0"
 dependencies = [
@@ -433,6 +403,36 @@ dependencies = [
  "quote",
  "strsim",
  "unsynn",
+]
+
+[[package]]
+name = "facet_generate"
+version = "0.16.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "bytes",
+ "chrono",
+ "derive_builder",
+ "difficient",
+ "expect-test",
+ "facet",
+ "facet-generate-attrs",
+ "heck",
+ "ignore",
+ "include_dir",
+ "indent",
+ "indoc",
+ "insta",
+ "maplit",
+ "regex",
+ "serde",
+ "serde_json",
+ "strum",
+ "tempfile",
+ "textwrap",
+ "thiserror 2.0.18",
+ "url",
 ]
 
 [[package]]
