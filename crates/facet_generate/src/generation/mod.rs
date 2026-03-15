@@ -1,4 +1,4 @@
-//! Code generation — transforms a [`Registry`](crate::Registry) into source code for target
+//! Code generation — transforms a [`Registry`] into source code for target
 //! languages.
 //!
 //! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`) behind a
@@ -95,7 +95,7 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 
 impl<'a> Container<'a> {
     /// Attach a registry reference so that emitters can resolve cross-type
-    /// information (e.g. whether a [`Format::TypeName`] refers to a C-style
+    /// information (e.g. whether a [`Format::TypeName`](crate::reflection::format::Format::TypeName) refers to a C-style
     /// enum).
     #[must_use]
     pub fn with_registry(self, registry: &'a Registry) -> Self {

@@ -18,7 +18,7 @@
 //! | Collections | `Vec`, `HashMap`/`BTreeMap`, `HashSet`/`BTreeSet`, fixed-size arrays (`ListTuple`) |
 //! | Optional | `Option<T>` fields (mapped to `Optional<T>`, i.e. `T \| null`) |
 //! | Pointers | `Box`, `Rc`, `Arc` (all transparent in generated output) |
-//! | Bytes | `#[facet(bytes)]` fields (mapped to `Uint8Array` via `bytes` alias) |
+//! | Bytes | `#[facet(fg::bytes)]` fields (mapped to `Uint8Array` via `bytes` alias) |
 //! | Modules | Cross-namespace references via `import * as Namespace` wildcard imports |
 
 #![allow(clippy::too_many_lines)]

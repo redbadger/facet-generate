@@ -12,7 +12,9 @@ pub enum Error {
     UnsupportedGenericType(String),
     #[error("unsupported layout: {0}")]
     LayoutUnsized(String),
-    #[error("bad attribute format: use `#[namespace = \"my_namespace\"]` or `#[namespace = None]`")]
+    #[error(
+        r#"bad attribute format: use `#[facet(fg::namespace = "my_ns")]` or `#[facet(fg::namespace)]`"#
+    )]
     InvalidNamespaceFormat,
     #[error("invalid namespace identifier")]
     InvalidNamespaceIdentifier,

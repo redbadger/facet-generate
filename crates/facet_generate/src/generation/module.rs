@@ -1,11 +1,11 @@
 //! Splits a [`Registry`] into per-namespace modules for multi-file output.
 //!
-//! Types in the registry are grouped by their [`Namespace`]. Each group
-//! becomes a [`Module`] with its own [`CodeGeneratorConfig`] and sub-registry.
+//! Types in the registry are grouped by their [`Namespace`](crate::reflection::format::Namespace). Each group
+//! becomes a [`Module`](crate::generation::module::Module) with its own [`CodeGeneratorConfig`] and sub-registry.
 //! Cross-namespace type references are tracked as external definitions so that
 //! generators can emit the correct import statements.
 //!
-//! The entry point is [`split`], which returns a `BTreeMap<Module, Registry>`
+//! The entry point is [`split`](crate::generation::module::split), which returns a `BTreeMap<Module, Registry>`
 //! — one entry per namespace, ordered by module name.
 
 use std::{cmp::Ordering, collections::BTreeMap};

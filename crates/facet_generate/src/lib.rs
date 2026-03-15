@@ -14,25 +14,42 @@
 //!
 //! - [`reflection`] — walks Rust type metadata (via the [`facet`] crate) and builds a
 //!   language-neutral [`Registry`]: a flat map from qualified type names to their
-//!   [`ContainerFormat`](reflection::format::ContainerFormat) descriptions.
+//!   [`ContainerFormat`] descriptions.
 //! - [`generation`] — transforms a registry into source code for a target language.
 //!   Each language (`kotlin`, `csharp`, `swift`, `typescript`) lives behind a feature flag and
 //!   follows a three-layer pipeline: **Installer** (project scaffolding and manifests) →
 //!   **Generator** (file-level output with imports and namespaces) → **Emitter** (per-type
 //!   code emission).
 //!
-//! # Example
+//! # Getting Started
 //!
-//! Define your shared data model in Rust:
+//! Add the crates to your project:
+//!
+//! ```sh
+//! cargo add facet facet_generate
+//! ```
+//!
+//! ## 1. Annotate your types
+//!
+//! Derive [`facet::Facet`] on every type you want to share across language boundaries.
+//! Aliasing this crate as `fg` keeps attribute paths short:
 //!
 //! ```rust,ignore
 //! use facet::Facet;
+//! use facet_generate as fg;
+//!
+//! #[derive(Facet)]
+//! #[repr(C)]
+//! enum HttpResult {
+//!     Ok(HttpResponse),
+//!     Err(HttpError),
+//! }
 //!
 //! #[derive(Facet)]
 //! struct HttpResponse {
 //!     status: u16,
 //!     headers: Vec<HttpHeader>,
-//!     #[facet(bytes)]
+//!     #[facet(fg::bytes)]          // Vec<u8> → native byte-array type
 //!     body: Vec<u8>,
 //! }
 //!
@@ -43,29 +60,64 @@
 //! }
 //! ```
 //!
-//! Build a registry from the types, then generate a complete project for one or more target
-//! languages:
+//! You only need to register **root types** — all referenced types are collected transitively.
+//!
+//! ## 2. Build a [`Registry`]
 //!
 //! ```rust,ignore
-//! use facet_generate::{reflection::RegistryBuilder, generation::{Encoding, kotlin, swift}};
+//! use facet_generate::reflection::RegistryBuilder;
 //!
 //! let registry = RegistryBuilder::new()
-//!     .add_type::<HttpResponse>()?
+//!     .add_type::<HttpResult>()?
 //!     .build()?;
+//! ```
+//!
+//! ## 3. Generate code
+//!
+//! Pass the [`Registry`] to a language-specific installer, optionally configure an
+//! [`Encoding`](generation::Encoding), and call `generate()`:
+//!
+//! ```rust,ignore
+//! use facet_generate::generation::{self, Encoding};
+//! use generation::{kotlin, swift, typescript};
+//! use generation::typescript::InstallTarget;
 //!
 //! // Swift package with Bincode serialization
 //! swift::Installer::new("MyPackage", &out_dir)
 //!     .encoding(Encoding::Bincode)
 //!     .generate(&registry)?;
 //!
-//! // Kotlin package (type definitions only, no serialization)
+//! // Kotlin package with Bincode serialization
 //! kotlin::Installer::new("com.example", &out_dir)
+//!     .encoding(Encoding::Bincode)
+//!     .generate(&registry)?;
+//!
+//! // TypeScript (Node) with Bincode serialization
+//! typescript::Installer::new("my-package", &out_dir, InstallTarget::Node)
+//!     .encoding(Encoding::Bincode)
 //!     .generate(&registry)?;
 //! ```
 //!
+//! Each installer writes a ready-to-build project to `out_dir` — type definitions plus,
+//! when encoding is configured, the appropriate serialization runtime. Omit
+//! `.encoding(...)` to generate plain type definitions without any serialization code.
+//!
+//! ## Key attributes
+//!
+//! | Attribute | Effect |
+//! |---|---|
+//! | `#[facet(fg::bytes)]` | Emit `Vec<u8>` / `&[u8]` as a native byte-array type (`[UInt8]`, `ByteArray`, `Uint8Array`) |
+//! | `#[facet(fg::namespace = "ns")]` | Group a type, transitively, into a named namespace, emitted as a separate module |
+//! | `#[facet(fg::namespace)]` | Group a type, transitively, into the ROOT namespace |
+//! | `#[facet(rename = "Name")]` | Override the generated name of a type, field, or variant |
+//! | `#[facet(rename_all = "camelCase")]` | Apply a naming convention across all fields or variants. Options are `PascalCase`, `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case`, `SCREAMING-KEBAB-CASE` |
+//! | `#[facet(skip)]` | Exclude a field or variant from the generated output |
+//! | `#[facet(opaque)]` | Do not descend into the field's type |
+//! | `#[facet(transparent)]` | Unwrap a newtype wrapper in the generated output |
+//!
 //! # Testing
 //!
-//! Tests are organised in four layers, from fast and narrow to slow and broad:
+//! Tests are organized in four layers, from fast and narrow to slow and broad:
 //!
 //! ## Unit tests (snapshot)
 //!
@@ -74,15 +126,15 @@
 //!
 //! | Layer | Location | What it covers |
 //! |-------|----------|----------------|
-//! | Emitter | `generation/<lang>/emitter/tests.rs` (+ `tests_bincode.rs`, `tests_json.rs`) | Output for individual types — no file headers, no imports. Uses the [`emit!`] macro. |
+//! | Emitter | `generation/<lang>/emitter/tests.rs` (+ `tests_bincode.rs`, `tests_json.rs`) | Output for individual types — no file headers, no imports. Uses the `emit` macro. |
 //! | Generator | `generation/<lang>/generator/tests.rs` | Full file output including package declarations, imports, and namespace-qualified names. |
 //! | Installer | `generation/<lang>/installer/tests.rs` | Generated manifest strings (`.csproj`, `build.gradle.kts`, `package.json`, `Package.swift`). Still pure string assertions — no files written. |
 //!
 //! All three use the [`insta`](https://docs.rs/insta) crate for snapshot assertions.
 //!
-//! ## Cross-language expect-file tests ([`tests`] module, `src/tests/`)
+//! ## Cross-language expect-file tests (`tests` module, `src/tests/`)
 //!
-//! Each sub-module defines one or more Rust types and invokes the [`test!`] macro, which reflects
+//! Each sub-module defines one or more Rust types and invokes the `test!` macro, which reflects
 //! the types and runs the full [`CodeGen`](generation::CodeGen) pipeline for every listed language
 //! (e.g. `for kotlin, swift`). The output is compared against checked-in expect files
 //! (`output.kt`, `output.swift`, …) sitting alongside each `mod.rs`, using the
@@ -138,7 +190,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 /// Only named container types (structs and enums) get top-level entries. Primitives, `Option`,
 /// `Vec`, `Map`, etc. are represented inline as [`Format`](reflection::format::Format) variants
 /// within the containers that use them. Cross-type references are expressed as
-/// `Format::TypeName(QualifiedTypeName)` — symbolic lookups back into this same map.
+/// `Format::TypeName(QualifiedTypeName)` — symbolic look-ups back into this same map.
 ///
 /// Keys are namespace-qualified, so a type `Foo` in the root namespace and a type `Foo` in
 /// namespace `Bar` are separate entries. For example, in Kotlin these would generate as `Foo`
@@ -216,7 +268,7 @@ macro_rules! emit_java {
 /// Reflects one or more types into a [`Registry`], recursively capturing all reachable types.
 ///
 /// This is a convenience wrapper around [`RegistryBuilder`](reflection::RegistryBuilder) —
-/// used directly by the [`emit!`] macro and available for cases where you need the registry
+/// used directly by the `emit!` macro and available for cases where you need the registry
 /// without code generation.
 ///
 /// ```ignore
