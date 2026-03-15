@@ -39,8 +39,14 @@ check:
 # local development: fix, check, build, test with snapshot review
 dev: fix check build test-review
 
+# builds documentation and fails on warnings
+docs:
+    @echo '{{ style("command") }}docs:{{ NORMAL }}'
+    cargo rustdoc --all-features -p facet-generate-attrs -- -D warnings
+    cargo rustdoc --all-features -p facet_generate -- -D warnings
+
 # CI pipeline: check, build, test (matches .github/workflows/build.yaml)
-ci: check build test
+ci: check docs build test
 
 update-rust-deps:
     @echo '{{ style("command") }}update-rust-deps:{{ NORMAL }}'

@@ -89,6 +89,7 @@ pub struct Swift {
 }
 
 impl Swift {
+    #[must_use]
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }

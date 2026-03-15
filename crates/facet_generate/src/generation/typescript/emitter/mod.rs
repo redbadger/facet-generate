@@ -92,6 +92,7 @@ pub struct TypeScript {
 }
 
 impl TypeScript {
+    #[must_use]
     pub fn new(encoding: Encoding) -> Self {
         Self {
             encoding,

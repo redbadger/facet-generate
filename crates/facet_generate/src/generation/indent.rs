@@ -1,15 +1,15 @@
-//! Indentation-aware writer used by [`Emitter`](super::Emitter)
+//! Indentation-aware writer used by [`Emitter`](crate::generation::Emitter)
 //! implementations to produce correctly indented source code.
 //!
-//! Wrap any [`Write`] in an [`IndentedWriter`] and use [`indent()`] /
+//! Wrap any [`Write`] in an [`IndentedWriter`](crate::generation::indent::IndentedWriter) and use [`indent()`] /
 //! [`unindent()`] to change the nesting level — every new line is
 //! automatically prefixed with the right amount of whitespace. For `{ }`
-//! blocks, [`block()`] returns an RAII [`Block`] guard that indents on
+//! blocks, [`block()`] returns an RAII [`Block`](crate::generation::indent::Block) guard that indents on
 //! creation and writes the closing brace on drop.
 //!
-//! [`indent()`]: IndentWrite::indent
-//! [`unindent()`]: IndentWrite::unindent
-//! [`block()`]: IndentWrite::block
+//! [`indent()`]: crate::generation::indent::IndentWrite::indent
+//! [`unindent()`]: crate::generation::indent::IndentWrite::unindent
+//! [`block()`]: crate::generation::indent::IndentWrite::block
 
 use std::io::{Result, Write};
 

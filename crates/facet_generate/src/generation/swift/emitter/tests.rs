@@ -18,7 +18,7 @@
 //! | Collections | `Vec`, `HashMap`/`BTreeMap`, `HashSet`/`BTreeSet`, fixed-size arrays |
 //! | Optional | `Option<T>` fields (mapped to `T?`) |
 //! | Pointers | `Box`, `Rc`, `Arc` (all transparent in generated output) |
-//! | Bytes | `#[facet(bytes)]`-annotated `Vec<u8>` and byte slices |
+//! | Bytes | `#[facet(fg::bytes)]`-annotated `Vec<u8>` and byte slices |
 //! | Modules | Multi-module generation via [`emit_two_modules!`] |
 
 #![allow(clippy::too_many_lines)]

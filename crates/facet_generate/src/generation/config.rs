@@ -114,11 +114,11 @@ impl Encoding {
     }
 }
 
-/// Track type definitions provided by other modules (key = <module>, value = <type names>).
+/// Track type definitions provided by other modules (key = `module`, value = `type names`).
 pub type ExternalDefinitions =
     BTreeMap</* module */ String, /* type names */ Vec<String>>;
 
-/// Track locations for imports of external packages (key = <module>, value = <import from>).
+/// Track locations for imports of external packages (key = `module`, value = `import from`).
 pub type ExternalPackages =
     BTreeMap</* module */ String, /* import from */ ExternalPackage>;
 
