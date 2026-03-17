@@ -14,9 +14,16 @@ use tempfile::{TempDir, tempdir};
 pub mod common;
 
 fn dotnet_build(dir: &TempDir) {
+    // Each test gets its own TMPDIR so that parallel `dotnet` invocations
+    // don't race on the shared-memory mutex directory (/tmp/.dotnet/shm/)
+    // that the .NET NuGet migration runner creates on Linux.
+    let private_tmp = dir.path().join(".tmp");
+    std::fs::create_dir_all(&private_tmp).unwrap();
+
     let status = Command::new("dotnet")
         .arg("build")
         .current_dir(dir)
+        .env("TMPDIR", &private_tmp)
         .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
         .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
         .env("DOTNET_NOLOGO", "1")
