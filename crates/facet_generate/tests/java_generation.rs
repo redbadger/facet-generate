@@ -15,7 +15,7 @@ fn test_that_java_code_compiles_with_config(
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let generator = java::CodeGenerator::new(config);
+    let generator = java::JavaCodeGenerator::new(config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
@@ -91,7 +91,7 @@ fn test_java_code_with_external_definitions() {
     let config = CodeGeneratorConfig::new("testing".to_string())
         .with_external_definitions(definitions)
         .with_encoding(Encoding::Bincode);
-    let generator = java::CodeGenerator::new(&config);
+    let generator = java::JavaCodeGenerator::new(&config);
 
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)

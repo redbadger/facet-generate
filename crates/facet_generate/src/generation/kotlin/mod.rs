@@ -6,8 +6,8 @@
 //!
 //! # Submodules (in pipeline order)
 //!
-//! 1. **generator** — Top-level orchestrator. [`CodeGenerator`](crate::generation::kotlin::CodeGenerator) implements
-//!    [`CodeGen`](crate::generation::CodeGen) to produce a complete Kotlin source file from a
+//! 1. **generator** — Top-level orchestrator. [`KotlinCodeGenerator`](crate::generation::kotlin::KotlinCodeGenerator) implements
+//!    [`CodeGenerator`](crate::generation::CodeGenerator) to produce a complete Kotlin source file from a
 //!    registry. It resolves qualified type names against the configuration
 //!    (external packages, namespaces) and then delegates writing to the emitter
 //!    layer.
@@ -32,5 +32,5 @@ mod generator;
 mod installer;
 
 pub use emitter::Kotlin;
-pub use generator::CodeGenerator;
+pub use generator::KotlinCodeGenerator;
 pub use installer::Installer;

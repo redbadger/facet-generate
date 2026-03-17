@@ -1,6 +1,6 @@
 //! Top-level orchestrator for TypeScript code generation.
 //!
-//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! [`TypeScriptCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single TypeScript source file from a [`Registry`]. It carries
 //! the active [`InstallTarget`] (Node or Deno) through to the emitter layer.
 
@@ -9,7 +9,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
         typescript::{InstallTarget, emitter::TypeScript},
@@ -20,17 +20,17 @@ use crate::{
 /// Main configuration object for TypeScript code generation.
 ///
 /// Wraps a [`CodeGeneratorConfig`] and an [`InstallTarget`], and implements
-/// [`CodeGen`] so it can be used by the installer pipeline.
-pub struct CodeGenerator<'a> {
+/// [`CodeGenerator`] so it can be used by the installer pipeline.
+pub struct TypeScriptCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Installation target (Node or Deno).
     pub(crate) target: InstallTarget,
 }
 
-impl<'a> CodeGen<'a> for CodeGenerator<'a> {
+impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CodeGenerator::new(config, InstallTarget::Node)
+        TypeScriptCodeGenerator::new(config, InstallTarget::Node)
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -38,7 +38,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     }
 }
 
-impl<'a> CodeGenerator<'a> {
+impl<'a> TypeScriptCodeGenerator<'a> {
     /// Create a TypeScript code generator for the given config.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig, target: InstallTarget) -> Self {

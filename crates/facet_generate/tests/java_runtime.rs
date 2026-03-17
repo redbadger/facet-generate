@@ -15,7 +15,7 @@ fn test_java_bincode_runtime_on_simple_data() {
     let dir = tempdir().unwrap();
 
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    let generator = java::CodeGenerator::new(&config);
+    let generator = java::JavaCodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
@@ -115,7 +115,7 @@ fn test_java_bincode_runtime_on_supported_types() {
     let dir = tempdir().unwrap();
 
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    let generator = java::CodeGenerator::new(&config);
+    let generator = java::JavaCodeGenerator::new(&config);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();

@@ -1,7 +1,7 @@
 //! Project scaffolding — writes a ready-to-build TypeScript project to disk.
 //!
 //! The [`Installer`] is the final stage of the TypeScript generation pipeline.
-//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! While [`TypeScriptCodeGenerator`] produces the *contents* of a single source file,
 //! the installer is responsible for the surrounding project structure:
 //!
 //! 1. **Runtime files** — copies the serde and/or bincode runtime `.ts`
@@ -10,7 +10,7 @@
 //!    imports; Deno: `mod.ts` + `.ts` extensions).
 //!
 //! 2. **Per-module source files** — splits the registry by namespace (via
-//!    [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    [`module::split`]) and calls [`TypeScriptCodeGenerator`] once per namespace,
 //!    writing each to its own `.ts` file. TypeScript has no `namespace`
 //!    keyword here — the crate's namespace concept maps to **ES modules**
 //!    (separate `.ts` files), and cross-module type references use
@@ -34,7 +34,7 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller, module,
-        typescript::{CodeGenerator, InstallTarget},
+        typescript::{InstallTarget, TypeScriptCodeGenerator},
     },
 };
 
@@ -242,7 +242,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = CodeGenerator::new(&updated_config, self.target);
+        let generator = TypeScriptCodeGenerator::new(&updated_config, self.target);
         generator.output(&mut file, registry)?;
 
         Ok(())

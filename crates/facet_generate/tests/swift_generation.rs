@@ -13,7 +13,7 @@ use facet_generate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding,
-        swift::{CodeGenerator, normalize_path},
+        swift::{SwiftCodeGenerator, normalize_path},
     },
     reflect,
 };
@@ -96,7 +96,7 @@ let package = Package(
     let source_path = dir.path().join("Sources/Testing/Testing.swift");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = CodeGenerator::new(config);
+    let generator = SwiftCodeGenerator::new(config);
     generator.output(&mut source, registry).unwrap();
 
     // Disable the index store: it's not needed for compilation checks, and on
@@ -167,7 +167,7 @@ fn test_swift_code_with_external_definitions() {
     definitions.insert("foo".to_string(), vec!["Tree".to_string()]);
     let config =
         CodeGeneratorConfig::new("Testing".to_string()).with_external_definitions(definitions);
-    let generator = CodeGenerator::new(&config);
+    let generator = SwiftCodeGenerator::new(&config);
     generator.output(&mut source, &registry).unwrap();
 
     // References were updated.

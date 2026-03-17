@@ -1,4 +1,4 @@
-//! Unit tests for [`CodeGenerator::update_qualified_names`].
+//! Unit tests for [`KotlinKotlinCodeGenerator::update_qualified_names`].
 //!
 //! The Kotlin generator must rewrite the short, namespace-relative type names
 //! produced by the registry into fully-qualified Kotlin package paths before
@@ -84,7 +84,7 @@ fn test_update_qualified_names_no_external_definitions() {
     let config = create_test_config("com.example", BTreeMap::new());
     let original_registry = create_test_registry_with_struct_field(Namespace::Root, "LocalType");
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -114,7 +114,7 @@ fn test_update_qualified_names_external_type() {
         "ExternalType",
     );
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -144,7 +144,7 @@ fn test_update_qualified_names_same_namespace_type() {
         "LocalTypeInOtherModule",
     );
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -169,7 +169,7 @@ fn test_update_qualified_names_root_namespace() {
     let config = create_test_config("com.example.service", BTreeMap::new());
     let original_registry = create_test_registry_with_struct_field(Namespace::Root, "RootType");
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -220,7 +220,7 @@ fn test_update_qualified_names_multiple_external_namespaces() {
     let struct_qualified_name = QualifiedTypeName::root("TestStruct".to_string());
     registry.insert(struct_qualified_name, struct_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Check both field types
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -261,7 +261,7 @@ fn test_update_qualified_names_non_external_named_namespace() {
         "LocalNamedType",
     );
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -295,7 +295,8 @@ fn test_update_qualified_names_immutability() {
     // Keep a copy of the original to compare
     let original_copy = original_registry.clone();
 
-    let _updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let _updated_registry =
+        KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Original registry should be unchanged
     assert_eq!(original_registry, original_copy);
@@ -344,7 +345,7 @@ fn test_update_qualified_names_nested_complex_types() {
     let struct_qualified_name = QualifiedTypeName::root("Container".to_string());
     registry.insert(struct_qualified_name, struct_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Navigate through the nested structure to check the inner type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -398,7 +399,7 @@ fn test_update_qualified_names_enum_variants() {
     let enum_qualified_name = QualifiedTypeName::root("Event".to_string());
     registry.insert(enum_qualified_name, enum_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Check the enum variant type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -440,7 +441,7 @@ fn test_update_qualified_names_external_package_path() {
     let original_registry =
         create_test_registry_with_struct_field(Namespace::Named("Other".to_string()), "Other");
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -527,7 +528,7 @@ fn test_update_qualified_names_user_example_scenario() {
         QualifiedTypeName::namespaced("App".to_string(), "ViewModel".to_string());
     registry.insert(view_model_qualified_name, struct_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Check the field types
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -590,7 +591,7 @@ fn test_update_qualified_names_external_package_url_ignored() {
         "RemoteType",
     );
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -632,7 +633,7 @@ fn test_update_qualified_names_external_package_priority() {
     let original_registry =
         create_test_registry_with_struct_field(Namespace::Named("Shared".to_string()), "Type");
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -700,7 +701,7 @@ fn test_update_qualified_names_multiple_external_packages() {
     let struct_qualified_name = QualifiedTypeName::root("TestStruct".to_string());
     registry.insert(struct_qualified_name, struct_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Check both field types
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -752,7 +753,7 @@ fn test_update_qualified_names_fallback_to_external_definitions() {
     let original_registry =
         create_test_registry_with_struct_field(Namespace::Named("Legacy".to_string()), "OldType");
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &original_registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &original_registry);
 
     // Find the struct container and check its field type
     let (_, container) = updated_registry.iter().next().unwrap();
@@ -778,7 +779,7 @@ fn test_deserialization_uses_fully_qualified_names() {
         generation::{
             CodeGeneratorConfig, Encoding,
             config::{ExternalPackage, PackageLocation},
-            kotlin::CodeGenerator,
+            kotlin::KotlinCodeGenerator,
         },
         reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
     };
@@ -835,7 +836,7 @@ fn test_deserialization_uses_fully_qualified_names() {
     registry.insert(struct_qualified_name, struct_container);
 
     // Generate the Kotlin code
-    let code_generator = CodeGenerator::new(&config);
+    let code_generator = KotlinCodeGenerator::new(&config);
     let mut output = Vec::new();
     code_generator.output(&mut output, &registry).unwrap();
     let generated_code = String::from_utf8(output).unwrap();
@@ -906,7 +907,7 @@ fn test_update_qualified_names_mixed_external_and_local() {
     let struct_qualified_name = QualifiedTypeName::root("TestStruct".to_string());
     registry.insert(struct_qualified_name, struct_container);
 
-    let updated_registry = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated_registry = KotlinCodeGenerator::update_qualified_names(&config, &registry);
 
     // Check all field types
     let (_, container) = updated_registry.iter().next().unwrap();

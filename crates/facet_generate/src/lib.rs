@@ -135,7 +135,7 @@
 //! ## Cross-language expect-file tests (`tests` module, `src/tests/`)
 //!
 //! Each sub-module defines one or more Rust types and invokes the `test!` macro, which reflects
-//! the types and runs the full [`CodeGen`](generation::CodeGen) pipeline for every listed language
+//! the types and runs the full [`CodeGenerator`](generation::CodeGenerator) pipeline for every listed language
 //! (e.g. `for kotlin, swift`). The output is compared against checked-in expect files
 //! (`output.kt`, `output.swift`, …) sitting alongside each `mod.rs`, using the
 //! [`expect_test`](https://docs.rs/expect_test) crate. These tests are fast (no compiler
@@ -247,7 +247,7 @@ macro_rules! emit_java {
             let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
                 .with_encoding($encoding);
-            let generator = $crate::generation::java::CodeGenerator::new(&config);
+            let generator = $crate::generation::java::JavaCodeGenerator::new(&config);
             let mut emitter = $crate::generation::java::emitter::JavaEmitter {
                 out: w,
                 generator: &generator,
@@ -290,7 +290,7 @@ macro_rules! reflect {
 /// Test-only macro for multi-namespace generation tests.
 ///
 /// Reflects `$facet`, splits the resulting registry by namespace (expecting
-/// exactly two namespaces), and runs the full [`CodeGen`](generation::CodeGen)
+/// exactly two namespaces), and runs the full [`CodeGenerator`](generation::CodeGenerator)
 /// pipeline for each. Returns `(String, String)` — the generated source for
 /// the non-root module and the root module, sorted alphabetically by module
 /// name.
@@ -302,11 +302,14 @@ macro_rules! reflect {
 #[macro_export]
 macro_rules! emit_two_modules {
     ($generator:ty, $facet:ident, $root:expr) => {{
-        use $crate::generation::CodeGen;
+        use $crate::generation::CodeGenerator;
         use $crate::generation::module::{self, Module};
         use $crate::{Registry, reflect};
 
-        fn emit_module<'a, G: CodeGen<'a>>(module: &'a Module, registry: &Registry) -> String {
+        fn emit_module<'a, G: CodeGenerator<'a>>(
+            module: &'a Module,
+            registry: &Registry,
+        ) -> String {
             let mut out = Vec::new();
             let mut generator = G::new(module.config());
             generator.write_output(&mut out, registry).unwrap();

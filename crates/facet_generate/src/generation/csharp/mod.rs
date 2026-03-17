@@ -6,8 +6,8 @@
 //!
 //! # Submodules (in pipeline order)
 //!
-//! 1. **generator** — Top-level orchestrator. [`CodeGenerator`](crate::generation::csharp::CodeGenerator) implements
-//!    [`CodeGen`](crate::generation::CodeGen) to produce a complete C# source file from a
+//! 1. **generator** — Top-level orchestrator. [`CSharpCodeGenerator`](crate::generation::csharp::CSharpCodeGenerator) implements
+//!    [`CodeGenerator`](crate::generation::CodeGenerator) to produce a complete C# source file from a
 //!    registry. It resolves qualified type names using the dotted namespace
 //!    convention (e.g. `Company.Models.Shared.Child`) and then delegates
 //!    writing to the emitter layer.
@@ -38,5 +38,5 @@ mod generator;
 mod installer;
 
 pub use emitter::CSharp;
-pub use generator::CodeGenerator;
+pub use generator::CSharpCodeGenerator;
 pub use installer::Installer;

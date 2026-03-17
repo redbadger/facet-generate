@@ -32,7 +32,7 @@ use crate as fg;
 use facet::Facet;
 
 use super::*;
-use crate::{emit, emit_two_modules, generation::kotlin::CodeGenerator};
+use crate::{emit, emit_two_modules, generation::kotlin::KotlinCodeGenerator};
 
 #[test]
 fn unit_struct_1() {
@@ -742,7 +742,7 @@ fn type_in_root_and_named_namespace() {
         other_child: other::Child,
     }
 
-    let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
+    let (other, root) = emit_two_modules!(KotlinCodeGenerator, Parent, "root");
     insta::assert_snapshot!(other, @"
     package other
 

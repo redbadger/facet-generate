@@ -4,7 +4,7 @@ use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
-    generation::{indent::IndentWrite, java::generator::CodeGenerator},
+    generation::{indent::IndentWrite, java::generator::JavaCodeGenerator},
     reflection::format::{ContainerFormat, Format, FormatHolder as _, Named, VariantFormat},
 };
 
@@ -56,7 +56,7 @@ pub(crate) struct JavaEmitter<'a, T> {
     /// Writer.
     pub(crate) out: T,
     /// Generator.
-    pub(crate) generator: &'a CodeGenerator<'a>,
+    pub(crate) generator: &'a JavaCodeGenerator<'a>,
     #[allow(clippy::doc_markdown)]
     /// Current namespace (e.g. vec!["com", "my_org", "my_package", "MyClass"])
     pub(crate) current_namespace: Vec<String>,

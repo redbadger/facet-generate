@@ -3,7 +3,7 @@
 //! Each sub-module defines one or more Rust types annotated with
 //! `#[derive(Facet)]` and invokes the [`test!`] macro, listing the types and
 //! target languages (e.g. `test! { MyStruct for kotlin, swift }`). The macro
-//! reflects the types, runs the full [`CodeGen`] pipeline for each language,
+//! reflects the types, runs the full [`CodeGenerator`] pipeline for each language,
 //! and compares the output against checked-in expect files (`output.kt`,
 //! `output.swift`, …) sitting next to the `mod.rs`.
 //!
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use expect_test::ExpectFile;
 
-use crate::{Registry, generation::CodeGen};
+use crate::{Registry, generation::CodeGenerator};
 
 mod adjacently_tagged_enum_decorator;
 mod anonymous_struct_with_rename;
@@ -125,7 +125,11 @@ pub fn source_dir_from_file(file: &str) -> PathBuf {
         .to_path_buf()
 }
 
-fn check<'a, L: CodeGen<'a>>(registry: &Registry, mut lang: L, expect: &ExpectFile) -> Result<()> {
+fn check<'a, L: CodeGenerator<'a>>(
+    registry: &Registry,
+    mut lang: L,
+    expect: &ExpectFile,
+) -> Result<()> {
     let mut output: Vec<u8> = Vec::new();
 
     lang.write_output(&mut output, registry)?;
@@ -153,7 +157,7 @@ macro_rules! test {
             use anyhow::Result;
             use expect_test::expect_file;
             use $crate::{
-                generation::{CodeGen, CodeGeneratorConfig},
+                generation::{CodeGenerator, CodeGeneratorConfig},
                 reflection::RegistryBuilder,
             };
             use $crate::generation::{$($language),*};
@@ -172,7 +176,7 @@ macro_rules! test {
                 .unwrap();
             let package_name = test!(@package $language).to_string();
             let cfg = CodeGeneratorConfig::new(package_name);
-            let generator = <$language::CodeGenerator as CodeGen>::new(&cfg);
+            let generator = <test!(@gen $language) as CodeGenerator>::new(&cfg);
             let expect = expect_file!(test!(@out $language));
 
             check(&registry, generator, &expect)?;
@@ -195,4 +199,9 @@ macro_rules! test {
     (@out kotlin) => { "output.kt" };
     (@out swift) => { "output.swift" };
     (@out typescript) => { "output.ts" };
+
+    (@gen java) => { java::JavaCodeGenerator };
+    (@gen kotlin) => { kotlin::KotlinCodeGenerator };
+    (@gen swift) => { swift::SwiftCodeGenerator };
+    (@gen typescript) => { typescript::TypeScriptCodeGenerator };
 }

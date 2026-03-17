@@ -32,7 +32,7 @@ use crate as fg;
 use facet::Facet;
 
 use super::*;
-use crate::{emit, emit_two_modules, generation::typescript::CodeGenerator};
+use crate::{emit, emit_two_modules, generation::typescript::TypeScriptCodeGenerator};
 
 #[test]
 fn test_format_type_aliases() {
@@ -844,7 +844,7 @@ fn type_in_root_and_named_namespace() {
         other_child: other::Child,
     }
 
-    let (other, root) = emit_two_modules!(CodeGenerator, Parent, "root");
+    let (other, root) = emit_two_modules!(TypeScriptCodeGenerator, Parent, "root");
     insta::assert_snapshot!(other, @"
     type int32 = number;
 
