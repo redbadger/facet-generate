@@ -29,6 +29,9 @@ fn dotnet_run(dir: &std::path::Path) {
     let output = Command::new("dotnet")
         .arg("run")
         .current_dir(dir)
+        .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
+        .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+        .env("DOTNET_NOLOGO", "1")
         .output()
         .unwrap();
     assert!(

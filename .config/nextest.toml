@@ -1,6 +1,21 @@
+# On Linux, parallel `dotnet` invocations race on creating a named mutex
+# (NuGet-Migrations) under /tmp/.dotnet/shm/, causing intermittent EEXIST/ENOENT
+# failures. Serializing dotnet-invoking tests avoids this while keeping everything
+# else fully parallel.
+[test-groups]
+dotnet = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(csharp_generation) | test(csharp_runtime)'
+test-group = 'dotnet'
+
 [profile.ci]
 # Print out output for failing tests as soon as they fail, and also at the end
 # of the run (for easy scrollability).
 failure-output = "immediate-final"
 # Do not cancel the test run on the first failure.
 fail-fast = false
+
+[[profile.ci.overrides]]
+filter = 'test(csharp_generation) | test(csharp_runtime)'
+test-group = 'dotnet'
