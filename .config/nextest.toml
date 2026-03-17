@@ -6,7 +6,7 @@
 dotnet = { max-threads = 1 }
 
 [[profile.default.overrides]]
-filter = 'test(csharp_generation) | test(csharp_runtime)'
+filter = 'binary(~csharp)'
 test-group = 'dotnet'
 
 [profile.ci]
@@ -17,5 +17,5 @@ failure-output = "immediate-final"
 fail-fast = false
 
 [[profile.ci.overrides]]
-filter = 'test(csharp_generation) | test(csharp_runtime)'
+filter = 'binary(~csharp)'
 test-group = 'dotnet'
