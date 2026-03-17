@@ -17,6 +17,9 @@ fn dotnet_build(dir: &TempDir) {
     let status = Command::new("dotnet")
         .arg("build")
         .current_dir(dir)
+        .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
+        .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+        .env("DOTNET_NOLOGO", "1")
         .status()
         .unwrap();
     assert!(status.success(), "dotnet build failed");
