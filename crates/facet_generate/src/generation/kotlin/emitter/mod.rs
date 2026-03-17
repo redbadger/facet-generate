@@ -96,6 +96,7 @@ pub struct Kotlin {
 }
 
 impl Kotlin {
+    #[must_use]
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }

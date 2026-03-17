@@ -42,6 +42,9 @@ jobs:
       - name: Check (fmt + clippy)
         run: just check
 
+      - name: Docs
+        run: just docs
+
       - name: Build
         run: just build
 
