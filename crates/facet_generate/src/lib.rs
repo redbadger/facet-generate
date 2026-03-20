@@ -215,6 +215,7 @@ macro_rules! emit {
     ($($ty:ident),* as $language:ident with $encoding:path) => {
         || -> anyhow::Result<String> {
             use $crate::generation::{
+                CodeGeneratorConfig,
                 Container,
                 indent::{IndentConfig, IndentedWriter},
             };
@@ -222,7 +223,8 @@ macro_rules! emit {
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*)?;
-            let lang = $language::new($encoding, vec![], &registry);
+            let config = CodeGeneratorConfig::new(String::new()).with_encoding($encoding);
+            let lang = $language::new(&config, &registry);
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;

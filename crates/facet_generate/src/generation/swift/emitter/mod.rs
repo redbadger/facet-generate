@@ -127,16 +127,12 @@ pub struct Swift {
 impl Swift {
     /// Create a Swift language tag with computed type sets.
     #[must_use]
-    pub fn new(
-        encoding: Encoding,
-        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
-        registry: &Registry,
-    ) -> Self {
+    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
         Self {
-            encoding,
+            encoding: config.encoding,
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
-            plugins,
+            plugins: vec![],
         }
     }
 

@@ -684,6 +684,39 @@ impl Format {
     pub fn unknown() -> Self {
         Self::Variable(Variable::new(None))
     }
+
+    /// Whether this format is a native/primitive type (not a container or
+    /// reference).
+    #[must_use]
+    pub(crate) fn is_native(&self) -> bool {
+        matches!(
+            self,
+            Format::Unit
+                | Format::Bool
+                | Format::I8
+                | Format::I16
+                | Format::I32
+                | Format::I64
+                | Format::I128
+                | Format::U8
+                | Format::U16
+                | Format::U32
+                | Format::U64
+                | Format::U128
+                | Format::F32
+                | Format::F64
+                | Format::Char
+                | Format::Str
+                | Format::Bytes
+        )
+    }
+
+    /// Whether this format is a leaf type — either a native primitive or a
+    /// named type reference.
+    #[must_use]
+    pub(crate) fn is_leaf(&self) -> bool {
+        self.is_native() || matches!(self, Format::TypeName(..))
+    }
 }
 
 impl VariantFormat {

@@ -95,25 +95,21 @@ pub struct CSharp {
 
 impl CSharp {
     #[must_use]
-    /// Create a [`CSharp`] language tag for the given encoding, plugins and registry.
+    /// Create a [`CSharp`] language tag for the given config and registry.
     ///
     /// When encoding is `Bincode`, scans the registry to precompute the set
     /// of C-style enums (all-unit-variant enums) needed for correct
     /// serialization dispatch.
-    pub fn new(
-        encoding: Encoding,
-        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
-        registry: &Registry,
-    ) -> Self {
-        let c_style_enums = if encoding == Encoding::Bincode {
+    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
+        let c_style_enums = if config.encoding == Encoding::Bincode {
             collect_c_style_enums(registry)
         } else {
             BTreeSet::new()
         };
         Self {
-            encoding,
+            encoding: config.encoding,
             c_style_enums,
-            plugins,
+            plugins: vec![],
         }
     }
 

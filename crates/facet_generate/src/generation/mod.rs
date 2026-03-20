@@ -31,6 +31,10 @@ pub mod plugin;
 /// through the plugin trait. Will eventually move to a separate crate.
 pub(crate) mod bincode;
 
+/// Internal JSON plugin — provides JSON-specific imports, annotations, and
+/// helpers through the plugin trait. Will eventually move to a separate crate.
+pub(crate) mod json;
+
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
 pub mod csharp;
@@ -132,7 +136,7 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 ///
 /// ```rust,ignore
 /// let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
-/// let lang = CSharp::new(Encoding::Json);
+/// let lang = CSharp::new(&config, &registry);
 ///
 /// Module::new(&config).write(w, &lang)?;       // header
 /// for container in containers {

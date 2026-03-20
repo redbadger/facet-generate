@@ -62,7 +62,7 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::new(config.encoding, vec![], registry);
+        let lang = Swift::new(&config, registry);
 
         Module::new(&config).write(w, &lang)?;
 

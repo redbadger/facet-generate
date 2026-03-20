@@ -91,12 +91,11 @@ pub struct TypeScript {
 
 impl TypeScript {
     #[must_use]
-    pub fn new(
-        encoding: Encoding,
-        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
-        _registry: &crate::Registry,
-    ) -> Self {
-        Self { encoding, plugins }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
+        Self {
+            encoding: config.encoding,
+            plugins: vec![],
+        }
     }
 
     /// Access the plugin list.

@@ -67,20 +67,20 @@ use std::{
 };
 
 use heck::ToLowerCamelCase;
-use indoc::writedoc;
 
 use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
+        bincode::BincodePlugin,
         indent::{IndentWrite, Newlines},
+        json::JsonPlugin,
         module::Module,
-        plugin::EmitterPlugin,
+        plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
-const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
 const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 
 /// Language tag for Kotlin code generation.
@@ -95,14 +95,24 @@ pub struct Kotlin {
 }
 
 impl Kotlin {
-    /// Create a Kotlin language tag with encoding, plugins and registry.
+    /// Create a Kotlin language tag, building the appropriate plugins for the
+    /// encoding specified in `config`.
+    ///
+    /// - [`Encoding::Json`] → includes `JsonPlugin`
+    /// - [`Encoding::Bincode`] → includes `BincodePlugin` (resolves package
+    ///   names from `config.external_packages`)
+    /// - [`Encoding::None`] → no plugins
     #[must_use]
-    pub fn new(
-        encoding: Encoding,
-        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
-        _registry: &Registry,
-    ) -> Self {
-        Self { encoding, plugins }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
+            Encoding::Bincode => vec![Arc::new(BincodePlugin::from_config(config))],
+            Encoding::Json => vec![Arc::new(JsonPlugin::new())],
+            Encoding::None => vec![],
+        };
+        Self {
+            encoding: config.encoding,
+            plugins,
+        }
     }
 
     /// Access the plugin list.
@@ -116,7 +126,6 @@ impl Emitter<Kotlin> for Module {
     fn write<W: Write>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
-            encoding,
             features,
             ..
         } = self.config();
@@ -127,14 +136,7 @@ impl Emitter<Kotlin> for Module {
         // --- Imports ---
         // Language-level imports that are NOT driven by plugins stay here.
         // Bincode imports are now provided by BincodePlugin::imports().
-        let mut imports = match encoding {
-            Encoding::Json => vec![
-                "import kotlinx.serialization.Serializable".to_string(),
-                "import kotlinx.serialization.SerialName".to_string(),
-            ],
-            // Bincode imports come from the plugin — see BincodePlugin::imports()
-            Encoding::Bincode | Encoding::None => vec![],
-        };
+        let mut imports: Vec<String> = vec![];
 
         // --- Feature-driven imports (non-plugin) ---
         let mut features_out = vec![];
@@ -144,25 +146,9 @@ impl Emitter<Kotlin> for Module {
                     // BigInteger import is needed regardless of encoding
                     // (JVM-only — kept for backward compat).
                     imports.push("import java.math.BigInteger".to_string());
-                    // JSON-specific BigInt imports and helper stay here
-                    // (will move to a JSON plugin in Phase 3).
-                    if encoding == &Encoding::Json {
-                        imports.extend([
-                            "import kotlinx.serialization.KSerializer".to_string(),
-                            "import kotlinx.serialization.descriptors.PrimitiveKind".to_string(),
-                            "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor"
-                                .to_string(),
-                            "import kotlinx.serialization.encoding.Decoder".to_string(),
-                            "import kotlinx.serialization.encoding.Encoder".to_string(),
-                            "import kotlinx.serialization.json.JsonDecoder".to_string(),
-                            "import kotlinx.serialization.json.JsonEncoder".to_string(),
-                            "import kotlinx.serialization.json.JsonUnquotedLiteral".to_string(),
-                            "import kotlinx.serialization.json.jsonPrimitive".to_string(),
-                        ]);
-                        features_out.write_all(FEATURE_BIGINT)?;
-                        writeln!(features_out)?;
-                    }
-                    // Bincode BigInt imports (Int128) come from BincodePlugin::imports()
+                    // JSON-specific BigInt imports and helper are provided by
+                    // JsonPlugin::imports() / module_helpers().
+                    // Bincode BigInt imports (Int128) come from BincodePlugin::imports().
                 }
                 Feature::TupleArray => {
                     // TupleArray is encoding-independent — stays in the emitter.
@@ -249,9 +235,9 @@ impl Emitter<Kotlin> for Container<'_> {
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));
 
                 if all_unit_variants {
-                    enum_class(w, name, variants, doc, lang)?;
+                    enum_class(w, name, variants, doc, lang, self)?;
                 } else {
-                    sealed_interface(w, name, &variant_list, doc, lang)?;
+                    sealed_interface(w, name, &variant_list, doc, lang, self)?;
                 }
             }
         }
@@ -384,42 +370,6 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     }
 }
 
-impl Format {
-    fn is_native(&self) -> bool {
-        match self {
-            Format::Unit
-            | Format::Bool
-            | Format::I8
-            | Format::I16
-            | Format::I32
-            | Format::I64
-            | Format::I128
-            | Format::U8
-            | Format::U16
-            | Format::U32
-            | Format::U64
-            | Format::U128
-            | Format::F32
-            | Format::F64
-            | Format::Char
-            | Format::Str
-            | Format::Bytes => true,
-            Format::Variable(..)
-            | Format::TypeName(..)
-            | Format::Option(..)
-            | Format::Seq(..)
-            | Format::Set(..)
-            | Format::Map { .. }
-            | Format::Tuple(..)
-            | Format::TupleArray { .. } => false,
-        }
-    }
-
-    fn is_leaf(&self) -> bool {
-        self.is_native() || matches!(self, Format::TypeName(..))
-    }
-}
-
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
@@ -517,8 +467,8 @@ impl Emitter<Kotlin> for Format {
 /// Emits a Kotlin `data object` — used for unit structs and unit variants.
 ///
 /// When `interface` is `Some`, the object implements it (i.e. it is a variant
-/// inside a `sealed interface`). When bincode encoding is active, serialize
-/// and deserialize methods are generated.
+/// inside a `sealed interface`). Encoding-specific body code (e.g. serialize /
+/// deserialize methods) is delegated to plugins via the `type_body` hook.
 fn data_object<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -529,10 +479,7 @@ fn data_object<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_json() {
-        writeln!(w, "@Serializable")?;
-        writeln!(w, r#"@SerialName("{name}")"#)?;
-    }
+    write_plugin_annotations(w, name, lang)?;
 
     write!(w, "data object {name}")?;
 
@@ -540,38 +487,30 @@ fn data_object<W: IndentWrite>(
         write!(w, ": {interface}")?;
     }
 
-    if lang.encoding.is_bincode() {
-        write!(w, " ")?;
-        let mut w = w.block(Newlines::BOTH)?;
-        if variant_index.is_some() {
-            write!(w, "override ")?;
-        }
-        write!(w, "fun serialize(serializer: Serializer) ")?;
-        if let Some(index) = variant_index {
-            let mut w = w.block(Newlines::BOTH)?;
-            push_serializer(&mut w)?;
-            writeln!(w, "serializer.serialize_variant_index({index})")?;
-            pop_serializer(&mut w)?;
+    // Plugin type body
+    {
+        let temp_name = QualifiedTypeName::root(name.to_string());
+        let temp_format = ContainerFormat::UnitStruct(Doc::default());
+        let temp_container = Container {
+            name: &temp_name,
+            format: &temp_format,
+        };
+        let variant_format = VariantFormat::Unit;
+        let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
+            EmitContext::for_variant(
+                &temp_container,
+                VariantInfo {
+                    name,
+                    index,
+                    format: &variant_format,
+                    fields: &[],
+                    parent_name,
+                },
+            )
         } else {
-            let _ = w.block(Newlines::CLOSE)?;
-        }
-        writeln!(w)?;
-
-        if variant_index.is_none() {
-            write_bincode_serialize(&mut w)?;
-            writeln!(w)?;
-        }
-        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "return {name}")?;
-        }
-        if variant_index.is_none() {
-            writeln!(w)?;
-            write_bincode_deserialize(&mut w, name)?;
-        }
-    } else {
-        writeln!(w)?;
+            EmitContext::top_level(&temp_container)
+        };
+        write_plugin_body(w, lang, &ctx)?;
     }
 
     Ok(())
@@ -580,9 +519,9 @@ fn data_object<W: IndentWrite>(
 /// Emits a Kotlin `data class` — used for structs (with fields), newtype
 /// structs, tuple structs, and non-unit sealed-interface variants.
 ///
-/// When `interface` is `Some`, the class implements it. When bincode encoding
-/// is active, `serialize` / `deserialize` methods and a `companion object`
-/// are generated.
+/// When `interface` is `Some`, the class implements it. Encoding-specific
+/// body code (e.g. serialize / deserialize methods) is delegated to plugins
+/// via the `type_body` hook.
 fn data_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -594,10 +533,7 @@ fn data_class<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_json() {
-        writeln!(w, "@Serializable")?;
-        writeln!(w, r#"@SerialName("{name}")"#)?;
-    }
+    write_plugin_annotations(w, name, lang)?;
 
     writeln!(w, "data class {name}(")?;
 
@@ -613,69 +549,30 @@ fn data_class<W: IndentWrite>(
         write!(w, " : {interface}")?;
     }
 
-    if lang.encoding.is_bincode() {
-        write!(w, " ")?;
-
-        let mut w = w.block(Newlines::BOTH)?;
-        if variant_index.is_some() {
-            write!(w, "override ")?;
-        }
-        write!(w, "fun serialize(serializer: Serializer) ")?;
-        if fields.is_empty() {
-            let _ = w.block(Newlines::CLOSE)?;
+    // Plugin type body
+    {
+        let temp_name = QualifiedTypeName::root(name.to_string());
+        let temp_format = ContainerFormat::Struct(fields.to_vec(), Doc::default());
+        let temp_container = Container {
+            name: &temp_name,
+            format: &temp_format,
+        };
+        let variant_format = VariantFormat::Struct(fields.to_vec());
+        let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
+            EmitContext::for_variant(
+                &temp_container,
+                VariantInfo {
+                    name,
+                    index,
+                    format: &variant_format,
+                    fields,
+                    parent_name,
+                },
+            )
         } else {
-            let mut w = w.block(Newlines::BOTH)?;
-            push_serializer(&mut w)?;
-            if let Some(index) = variant_index {
-                writeln!(w, "serializer.serialize_variant_index({index})")?;
-            }
-            for field in fields {
-                write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
-            }
-            pop_serializer(&mut w)?;
-        }
-        writeln!(w)?;
-
-        if variant_index.is_none() {
-            write_bincode_serialize(&mut w)?;
-            writeln!(w)?;
-        }
-        write!(w, "companion object ")?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                if fields.is_empty() {
-                    writeln!(w, "return {name}()")?;
-                } else {
-                    push_deserializer(&mut w)?;
-                    for field in fields {
-                        write_deserialize(
-                            &mut w,
-                            Some(&field.name.to_lower_camel_case()),
-                            &field.value,
-                            true,
-                        )?;
-                    }
-                    pop_deserializer(&mut w)?;
-                    write!(w, "return {name}(")?;
-                    for (i, field) in fields.iter().enumerate() {
-                        if i > 0 {
-                            write!(w, ", ")?;
-                        }
-                        write!(w, "{}", field.name.to_lower_camel_case())?;
-                    }
-                    writeln!(w, ")")?;
-                }
-            }
-            if variant_index.is_none() {
-                writeln!(w)?;
-                write_bincode_deserialize(&mut w, name)?;
-            }
-        }
-    } else {
-        writeln!(w)?;
+            EmitContext::top_level(&temp_container)
+        };
+        write_plugin_body(w, lang, &ctx)?;
     }
 
     Ok(())
@@ -683,21 +580,19 @@ fn data_class<W: IndentWrite>(
 
 /// Emits a Kotlin `enum class` — used when all variants are unit variants.
 ///
-/// For JSON encoding, each variant gets `@SerialName`. For bincode, the
-/// ordinal is used as the variant index.
+/// Encoding-specific annotations (e.g. `@SerialName` for JSON) are handled
+/// by the variant emitter; type-body code is delegated to plugins.
 fn enum_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
     lang: &Kotlin,
+    container: &Container,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_json() {
-        writeln!(w, "@Serializable")?;
-        writeln!(w, r#"@SerialName("{name}")"#)?;
-    }
+    write_plugin_annotations(w, name, lang)?;
 
     write!(w, "enum class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
@@ -711,62 +606,12 @@ fn enum_class<W: IndentWrite>(
     }
     writeln!(w, ";")?;
 
-    match lang.encoding {
-        Encoding::Json => {
-            writeln!(w)?;
-            writedoc!(
-                w,
-                "
-                val serialName: String
-                    get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
-                "
-            )?;
+    // Plugin type body (e.g. JSON serialName accessor)
+    {
+        let ctx = EmitContext::top_level(container);
+        for plugin in lang.plugins() {
+            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
-        Encoding::Bincode => {
-            writeln!(w)?;
-            write!(w, "fun serialize(serializer: Serializer) ")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_serializer(&mut w)?;
-                writeln!(w, "serializer.serialize_variant_index(ordinal)")?;
-                pop_serializer(&mut w)?;
-            }
-            writeln!(w)?;
-
-            write_bincode_serialize(&mut w)?;
-            writeln!(w)?;
-
-            write!(w, "companion object ")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-
-                writeln!(w, "@Throws(DeserializationError::class)")?;
-                write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    push_deserializer(&mut w)?;
-                    writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
-                    pop_deserializer(&mut w)?;
-                    write!(w, "return when (index) ")?;
-                    {
-                        let mut w = w.block(Newlines::BOTH)?;
-                        for (i, variant) in variants {
-                            write!(w, "{i} -> ")?;
-                            (&variant.without_docs(), &VariantContext::EnumClass)
-                                .write(&mut w, lang)?;
-                            writeln!(w)?;
-                        }
-                        writeln!(
-                            w,
-                            r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
-                        )?;
-                    }
-                }
-                writeln!(w)?;
-                write_bincode_deserialize(&mut w, name)?;
-            }
-        }
-        Encoding::None => (),
     }
 
     Ok(())
@@ -776,29 +621,29 @@ fn enum_class<W: IndentWrite>(
 /// carries data (newtype, tuple, or struct variant).
 ///
 /// Each variant becomes a nested `data class` or `data object` that
-/// implements the interface. For bincode, a `companion object` with
-/// `deserialize` dispatches on the variant index.
+/// implements the interface. Encoding-specific body code (preamble and
+/// companion objects) is delegated to plugins.
 fn sealed_interface<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &[Named<VariantFormat>],
     doc: &Doc,
     lang: &Kotlin,
+    container: &Container,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_json() {
-        writeln!(w, "@Serializable")?;
-        writeln!(w, r#"@SerialName("{name}")"#)?;
-    }
+    write_plugin_annotations(w, name, lang)?;
+
     write!(w, "sealed interface {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
-    if lang.encoding.is_bincode() {
-        writeln!(w, "fun serialize(serializer: Serializer)")?;
-        writeln!(w)?;
-        write_bincode_serialize(&mut w)?;
-        writeln!(w)?;
+    // Plugin type body preamble (before variants)
+    {
+        let ctx = EmitContext::top_level(container);
+        for plugin in lang.plugins() {
+            plugin.type_body_preamble(&mut w as &mut dyn IndentWrite, &ctx)?;
+        }
     }
 
     for (index, variant) in variants.iter().enumerate() {
@@ -809,33 +654,53 @@ fn sealed_interface<W: IndentWrite>(
         (variant, &ctx).write(&mut w, lang)?;
     }
 
-    if lang.encoding.is_bincode() {
-        writeln!(w)?;
-        write!(w, "companion object ")?;
-        let mut w = w.block(Newlines::BOTH)?;
-        writeln!(w, "@Throws(DeserializationError::class)")?;
-        write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
-        {
-            let mut w = w.block(Newlines::BOTH)?;
-            writeln!(w, "val index = deserializer.deserialize_variant_index()")?;
-            write!(w, "return when (index) ")?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                for (i, variant) in variants.iter().enumerate() {
-                    let name = &variant.name;
-                    writeln!(w, "{i} -> {name}.deserialize(deserializer)")?;
-                }
-                writeln!(
-                    w,
-                    r#"else -> throw DeserializationError("Unknown variant index for {name}: $index")"#
-                )?;
-            }
+    // Plugin type body (after variants)
+    {
+        let ctx = EmitContext::top_level(container);
+        for plugin in lang.plugins() {
+            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
-
-        writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
     }
 
+    Ok(())
+}
+
+/// Run plugin type-body hooks, opening a `{ }` block if any plugin needs one.
+/// If no plugin needs a body, emits a plain newline instead.
+fn write_plugin_body<W: IndentWrite>(w: &mut W, lang: &Kotlin, ctx: &EmitContext) -> Result<()> {
+    let needs_body = lang.plugins().iter().any(|p| p.has_type_body(ctx));
+    if needs_body {
+        write!(w, " ")?;
+        let mut w = w.block(Newlines::BOTH)?;
+        for plugin in lang.plugins() {
+            plugin.type_body(&mut w as &mut dyn IndentWrite, ctx)?;
+        }
+    } else {
+        writeln!(w)?;
+    }
+    Ok(())
+}
+
+/// Emits plugin type annotations (e.g. `@Serializable`, `@SerialName`) for a
+/// named type. Creates a temporary [`Container`] so that the plugin
+/// [`EmitContext`] can be constructed without threading the real container
+/// through every helper function.
+fn write_plugin_annotations<W: IndentWrite>(w: &mut W, name: &str, lang: &Kotlin) -> Result<()> {
+    if lang.plugins().is_empty() {
+        return Ok(());
+    }
+    let temp_name = QualifiedTypeName::root(name.to_string());
+    let temp_format = ContainerFormat::UnitStruct(Doc::default());
+    let temp_container = Container {
+        name: &temp_name,
+        format: &temp_format,
+    };
+    let ctx = EmitContext::top_level(&temp_container);
+    for plugin in lang.plugins() {
+        for annotation in plugin.type_annotations(&ctx) {
+            writeln!(w, "{annotation}")?;
+        }
+    }
     Ok(())
 }
 
@@ -845,348 +710,6 @@ fn named<Format: Clone>(formats: &[Format]) -> Vec<Named<Format>> {
         .enumerate()
         .map(|(i, f)| Named::new(f, format!("field{i}")))
         .collect()
-}
-
-fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
-    writedoc!(
-        w,
-        r"
-        fun bincodeSerialize(): ByteArray {{
-            val serializer = BincodeSerializer()
-            serialize(serializer)
-            return serializer.get_bytes()
-        }}
-        "
-    )
-}
-
-fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
-    writedoc!(
-        w,
-        r#"
-        @Throws(DeserializationError::class)
-        fun bincodeDeserialize(input: ByteArray?): {name} {{
-            if (input == null) {{
-                throw DeserializationError("Cannot deserialize null array")
-            }}
-            val deserializer = BincodeDeserializer(input)
-            val value = deserialize(deserializer)
-            if (deserializer.get_buffer_offset() < input.size) {{
-                throw DeserializationError("Some input bytes were not read")
-            }}
-            return value
-        }}
-        "#
-    )
-}
-
-fn write_serialize<W: IndentWrite>(
-    w: &mut W,
-    field_name: &str,
-    format: &Format,
-    level: usize,
-) -> Result<()> {
-    match format {
-        Format::Unit => writeln!(w, "serializer.serialize_unit({field_name})"),
-        Format::Bool => writeln!(w, "serializer.serialize_bool({field_name})"),
-        Format::I8 => writeln!(w, "serializer.serialize_i8({field_name})"),
-        Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
-        Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
-        Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
-        // For unsigned types, use Kotlin's native unsigned types directly.
-        // No @Unsigned annotations needed - Kotlin has first-class UByte, UShort, UInt, ULong.
-        Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
-        Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
-        Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
-        Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
-        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
-        Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
-        Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
-        Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
-        Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
-        // Use direct byte array - no Bytes wrapper needed for KMP compatibility
-        Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
-
-        // Container types - these generate method calls with lambdas
-        Format::Option(inner_format) => {
-            write!(w, "{field_name}.serializeOptionOf(serializer) ")?;
-            write_serialize_lambda(w, inner_format, level)?;
-            Ok(())
-        }
-
-        Format::Seq(inner_format) | Format::Set(inner_format) => {
-            write!(w, "{field_name}.serialize(serializer) ")?;
-            write_serialize_lambda(w, inner_format, level)?;
-            Ok(())
-        }
-
-        Format::Map { key, value } => {
-            write!(w, "{field_name}.serialize(serializer) ")?;
-            write_map_serialize_lambda(w, key, value, level)?;
-            Ok(())
-        }
-
-        Format::TypeName(..) | Format::TupleArray { .. } => {
-            writeln!(w, "{field_name}.serialize(serializer)")
-        }
-
-        Format::Tuple(formats) => {
-            // Kotlin's Pair/Triple don't have serialize methods, so we need to serialize inline
-            let len = formats.len();
-            match len {
-                0 => writeln!(w, "serializer.serialize_unit({field_name})"),
-                1 => write_serialize(w, field_name, &formats[0], level),
-                2 => {
-                    // Pair<A, B> - serialize first and second
-                    write_serialize(w, &format!("{field_name}.first"), &formats[0], level)?;
-                    write_serialize(w, &format!("{field_name}.second"), &formats[1], level)
-                }
-                3 => {
-                    // Triple<A, B, C> - serialize first, second, third
-                    write_serialize(w, &format!("{field_name}.first"), &formats[0], level)?;
-                    write_serialize(w, &format!("{field_name}.second"), &formats[1], level)?;
-                    write_serialize(w, &format!("{field_name}.third"), &formats[2], level)
-                }
-                _ => {
-                    // NTupleN - use component accessors
-                    for (i, format) in formats.iter().enumerate() {
-                        write_serialize(
-                            w,
-                            &format!("{field_name}.component{}()", i + 1),
-                            format,
-                            level,
-                        )?;
-                    }
-                    Ok(())
-                }
-            }
-        }
-        Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-    }
-}
-
-fn write_serialize_lambda<W: IndentWrite>(w: &mut W, format: &Format, level: usize) -> Result<()> {
-    if format.is_leaf() {
-        let mut w = w.block(Newlines::BOTH)?;
-        write_serialize(&mut w, "it", format, level + 1)
-    } else {
-        let param_name = format!("level{}", level + 1);
-        let mut w = w.block(Newlines::CLOSE)?;
-        writeln!(w, " {param_name} ->")?;
-        write_serialize(&mut w, &param_name, format, level + 1)
-    }
-}
-
-fn write_map_serialize_lambda<W: IndentWrite>(
-    w: &mut W,
-    key_format: &Format,
-    value_format: &Format,
-    level: usize,
-) -> Result<()> {
-    let mut w = w.block(Newlines::CLOSE)?;
-    writeln!(w, " key, value ->")?;
-
-    // For key, just call write_serialize directly - it handles all format types
-    write_serialize(&mut w, "key", key_format, level + 1)?;
-
-    // For value, just call write_serialize directly - it handles all format types
-    write_serialize(&mut w, "value", value_format, level + 1)
-}
-
-#[allow(clippy::too_many_lines)]
-fn write_deserialize<W: IndentWrite>(
-    w: &mut W,
-    field_name: Option<&str>,
-    format: &Format,
-    newline: bool,
-) -> Result<()> {
-    let mut indented = false;
-    if let Some(field_name) = field_name {
-        write!(w, "val {field_name} =")?;
-        if matches!(
-            format,
-            Format::Seq(..) | Format::Option(..) | Format::Set(..) | Format::Map { .. }
-        ) {
-            writeln!(w)?;
-            w.indent();
-            indented = true;
-        } else {
-            write!(w, " ")?;
-        }
-    }
-    match format {
-        Format::TypeName(qualified_name) => {
-            let fully_qualified_name = qualified_name.format(ToString::to_string, ".");
-            write!(w, "{fully_qualified_name}.deserialize(deserializer)")
-        }
-        Format::Unit => write!(w, "deserializer.deserialize_unit()"),
-        Format::Bool => write!(w, "deserializer.deserialize_bool()"),
-        Format::I8 => write!(w, "deserializer.deserialize_i8()"),
-        Format::I16 => write!(w, "deserializer.deserialize_i16()"),
-        Format::I32 => write!(w, "deserializer.deserialize_i32()"),
-        Format::I64 => write!(w, "deserializer.deserialize_i64()"),
-        Format::I128 => write!(w, "deserializer.deserialize_i128()"),
-        // KMP serde returns native unsigned types directly - no conversion needed
-        Format::U8 => write!(w, "deserializer.deserialize_u8()"),
-        Format::U16 => write!(w, "deserializer.deserialize_u16()"),
-        Format::U32 => write!(w, "deserializer.deserialize_u32()"),
-        Format::U64 => write!(w, "deserializer.deserialize_u64()"),
-        Format::U128 => write!(w, "deserializer.deserialize_u128()"),
-        Format::F32 => write!(w, "deserializer.deserialize_f32()"),
-        Format::F64 => write!(w, "deserializer.deserialize_f64()"),
-        Format::Char => write!(w, "deserializer.deserialize_char()"),
-        Format::Str => write!(w, "deserializer.deserialize_str()"),
-        // Return byte array directly - no Bytes wrapper for KMP compatibility
-        Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
-        Format::Seq(format) => {
-            write!(w, "deserializer.deserializeListOf ")?;
-            write_deserialize_lambda(w, format)
-        }
-        Format::Option(format) => {
-            write!(w, "deserializer.deserializeOptionOf ")?;
-            write_deserialize_lambda(w, format)
-        }
-        Format::Set(format) => {
-            write!(w, "deserializer.deserializeSetOf ")?;
-            write_deserialize_lambda(w, format)
-        }
-        Format::Map { key, value } => {
-            write!(w, "deserializer.deserializeMapOf ")?;
-            write_map_deserialize_lambda(w, key, value)
-        }
-        Format::Tuple(formats) => {
-            let len = formats.len();
-            match len {
-                0 => {
-                    write!(w, "deserializer.deserialize_unit()")?;
-                    return Ok(());
-                }
-                1 => {
-                    push_deserializer(w)?;
-                    write_deserialize(w, Some("value"), &formats[0], true)?;
-                    pop_deserializer(w)?;
-                    return Ok(());
-                }
-                2 => {
-                    // Pair<A, B> - deserialize inline and construct Pair
-                    write!(w, "run ")?;
-                    let mut w = w.block(Newlines::BOTH)?;
-                    write!(w, "val first = ")?;
-                    write_deserialize(&mut w, None, &formats[0], true)?;
-                    write!(w, "val second = ")?;
-                    write_deserialize(&mut w, None, &formats[1], true)?;
-                    writeln!(w, "Pair(first, second)")?;
-                }
-                3 => {
-                    // Triple<A, B, C> - deserialize inline and construct Triple
-                    write!(w, "run ")?;
-                    let mut w = w.block(Newlines::BOTH)?;
-                    write!(w, "val first = ")?;
-                    write_deserialize(&mut w, None, &formats[0], true)?;
-                    write!(w, "val second = ")?;
-                    write_deserialize(&mut w, None, &formats[1], true)?;
-                    write!(w, "val third = ")?;
-                    write_deserialize(&mut w, None, &formats[2], true)?;
-                    writeln!(w, "Triple(first, second, third)")?;
-                }
-                _ => {
-                    // NTupleN - deserialize and construct
-                    let typename = format!("NTuple{len}");
-                    write!(w, "run ")?;
-                    let mut w = w.block(Newlines::BOTH)?;
-                    for (i, format) in formats.iter().enumerate() {
-                        write!(w, "val v{i} = ")?;
-                        write_deserialize(&mut w, None, format, true)?;
-                    }
-                    write!(w, "{typename}(")?;
-                    for i in 0..len {
-                        if i > 0 {
-                            write!(w, ", ")?;
-                        }
-                        write!(w, "v{i}")?;
-                    }
-                    writeln!(w, ")")?;
-                }
-            }
-            Ok(())
-        }
-        Format::TupleArray { content, size } => {
-            write!(w, "buildList({size}) {{ repeat({size}) {{ add(")?;
-            write_deserialize(w, None, content, false)?;
-            write!(w, ") }} }}")
-        }
-        Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-    }?;
-
-    if newline
-        && !matches!(
-            format,
-            Format::Seq(..)
-                | Format::Option(..)
-                | Format::Set(..)
-                | Format::Map { .. }
-                | Format::Tuple(..)
-        )
-    {
-        writeln!(w)?;
-    }
-
-    if indented {
-        w.unindent();
-    }
-
-    Ok(())
-}
-
-fn write_deserialize_lambda<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
-    let mut w = w.block(Newlines::BOTH)?;
-    write_deserialize(&mut w, None, format, true)
-}
-
-fn write_map_deserialize_lambda<W: IndentWrite>(
-    w: &mut W,
-    key_format: &Format,
-    value_format: &Format,
-) -> Result<()> {
-    let mut w = w.block(Newlines::BOTH)?;
-    write!(w, "val key =")?;
-    if key_format.is_leaf() {
-        write!(w, " ")?;
-        write_deserialize(&mut w, None, key_format, true)?;
-    } else {
-        writeln!(w)?;
-        w.indent();
-        write_deserialize(&mut w, None, key_format, true)?;
-        w.unindent();
-    }
-    write!(w, "val value =")?;
-    if value_format.is_leaf() {
-        write!(w, " ")?;
-        write_deserialize(&mut w, None, value_format, true)?;
-    } else {
-        writeln!(w)?;
-        w.indent();
-        write_deserialize(&mut w, None, value_format, true)?;
-        w.unindent();
-    }
-    writeln!(w, "Pair(key, value)")
-}
-
-fn push_serializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "serializer.increase_container_depth()")
-}
-
-fn pop_serializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "serializer.decrease_container_depth()")
-}
-
-fn push_deserializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "deserializer.increase_container_depth()")
-}
-
-fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "deserializer.decrease_container_depth()")
 }
 
 #[cfg(test)]

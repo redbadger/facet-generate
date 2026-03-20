@@ -95,6 +95,38 @@ impl<'a> EmitContext<'a> {
             None => &self.container.name.name,
         }
     }
+
+    /// Return the normalized fields for the current entity.
+    ///
+    /// This handles the different representations in the AST:
+    ///
+    /// - **Variant**: returns `variant.fields` directly (the caller already
+    ///   normalized newtype → `[Named("value")]` etc.).
+    /// - **`Struct`**: returns the struct's named fields.
+    /// - **`NewTypeStruct`**: returns a single field named `"value"`.
+    /// - **`TupleStruct`**: returns fields named `"field0"`, `"field1"`, …
+    /// - **`UnitStruct`** / **`Enum`**: returns an empty slice.
+    #[must_use]
+    pub fn fields(&self) -> Vec<Named<Format>> {
+        use crate::reflection::format::ContainerFormat;
+
+        if let Some(v) = &self.variant {
+            return v.fields.to_vec();
+        }
+
+        match self.container.format {
+            ContainerFormat::UnitStruct(_) | ContainerFormat::Enum(_, _) => vec![],
+            ContainerFormat::NewTypeStruct(format, _) => {
+                vec![Named::new(format, "value".to_string())]
+            }
+            ContainerFormat::TupleStruct(formats, _) => formats
+                .iter()
+                .enumerate()
+                .map(|(i, f)| Named::new(f, format!("field{i}")))
+                .collect(),
+            ContainerFormat::Struct(fields, _) => fields.clone(),
+        }
+    }
 }
 
 /// Details about the enum / sealed-interface variant currently being emitted.
