@@ -216,15 +216,13 @@ macro_rules! emit {
         || -> anyhow::Result<String> {
             use $crate::generation::{
                 Container,
-                config::CodeGeneratorConfig,
                 indent::{IndentConfig, IndentedWriter},
             };
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*)?;
-            let config = CodeGeneratorConfig::new("testing".to_string());
-            let lang = $language::for_encoding($encoding, &registry, &config);
+            let lang = $language::new($encoding, vec![], &registry);
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;

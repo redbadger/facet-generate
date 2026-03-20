@@ -57,6 +57,7 @@ use std::collections::BTreeSet;
 use std::{
     collections::BTreeMap,
     io::{Result, Write},
+    sync::Arc,
 };
 
 use heck::ToUpperCamelCase;
@@ -67,6 +68,7 @@ use crate::{
         SERDE_NAMESPACE,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
+        plugin::EmitterPlugin,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
@@ -84,26 +86,22 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.ts");
 #[derive(Debug, Clone)]
 pub struct TypeScript {
     pub encoding: Encoding,
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl TypeScript {
     #[must_use]
-    pub fn new(encoding: Encoding) -> Self {
-        Self { encoding }
+    pub fn new(
+        encoding: Encoding,
+        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
+        _registry: &crate::Registry,
+    ) -> Self {
+        Self { encoding, plugins }
     }
 
-    /// Create a [`TypeScript`] language tag for the given encoding and registry.
-    ///
-    /// Currently delegates to [`new`](Self::new) — the registry is not used
-    /// for TypeScript generation but the method signature mirrors `Swift::for_encoding`
-    /// so that the `emit!` test macro can call a uniform constructor.
-    #[must_use]
-    pub fn for_encoding(
-        encoding: Encoding,
-        _registry: &crate::Registry,
-        _config: &CodeGeneratorConfig,
-    ) -> Self {
-        Self::new(encoding)
+    /// Access the plugin list.
+    pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
+        &self.plugins
     }
 }
 
@@ -330,11 +328,11 @@ impl Emitter<TypeScript> for Named<Format> {
 }
 
 /// Render a type expression to a string.
-fn quote_type(format: &Format) -> String {
+fn quote_type(format: &Format, lang: &TypeScript) -> String {
     let mut buf = Vec::new();
     let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(0));
     format
-        .write(&mut w, &TypeScript::new(Encoding::None))
+        .write(&mut w, lang)
         .expect("writing to Vec should not fail");
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
 }
@@ -498,6 +496,7 @@ fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
     format: &Format,
+    lang: &TypeScript,
 ) -> Result<()> {
     match format {
         // Primitive and named types - single expression
@@ -525,7 +524,7 @@ fn write_deserialize<W: IndentWrite>(
             }
             {
                 let mut w = w.block(Newlines::OPEN)?;
-                write_deserialize(&mut w, None, inner)?;
+                write_deserialize(&mut w, None, inner, lang)?;
             }
             writeln!(w, ");")
         }
@@ -544,7 +543,7 @@ fn write_deserialize<W: IndentWrite>(
             }
             {
                 let mut w = w.block(Newlines::OPEN)?;
-                write_deserialize(&mut w, None, inner)?;
+                write_deserialize(&mut w, None, inner, lang)?;
             }
             writeln!(w, ");")
         }
@@ -560,7 +559,7 @@ fn write_deserialize<W: IndentWrite>(
             }
             {
                 let mut w = w.block(Newlines::OPEN)?;
-                write_deserialize(&mut w, None, inner)?;
+                write_deserialize(&mut w, None, inner, lang)?;
             }
             writeln!(w, ");")
         }
@@ -581,14 +580,14 @@ fn write_deserialize<W: IndentWrite>(
                     let key_expr = deserialize_primitive_expr(key);
                     writeln!(w, "const key = {key_expr};")?;
                 } else {
-                    write_deserialize(&mut w, Some("key"), key)?;
+                    write_deserialize(&mut w, Some("key"), key, lang)?;
                 }
                 // Value deserialization
                 if is_primitive_or_named(value) {
                     let value_expr = deserialize_primitive_expr(value);
                     writeln!(w, "const value = {value_expr};")?;
                 } else {
-                    write_deserialize(&mut w, Some("value"), value)?;
+                    write_deserialize(&mut w, Some("value"), value, lang)?;
                 }
                 writeln!(w, "return [key, value];")?;
             }
@@ -598,7 +597,7 @@ fn write_deserialize<W: IndentWrite>(
         Format::Tuple(formats) => {
             // Deserialize each element into a temp variable, then build the tuple array
             for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f)?;
+                write_deserialize(w, Some(&format!("field{i}")), f, lang)?;
             }
             let fields = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -606,7 +605,7 @@ fn write_deserialize<W: IndentWrite>(
                 .join(", ");
             let type_str = formats
                 .iter()
-                .map(quote_type)
+                .map(|f| quote_type(f, lang))
                 .collect::<Vec<_>>()
                 .join(", ");
             if let Some(name) = field_name {
@@ -630,7 +629,7 @@ fn write_deserialize<W: IndentWrite>(
             }
             {
                 let mut w = w.block(Newlines::OPEN)?;
-                write_deserialize(&mut w, Some("item"), content)?;
+                write_deserialize(&mut w, Some("item"), content, lang)?;
                 writeln!(w, "return [item];")?;
             }
             writeln!(w, ");")
@@ -664,7 +663,7 @@ fn output_struct_or_variant<W: IndentWrite>(
     let args: Vec<String> = fields
         .iter()
         .map(|f| {
-            let type_str = quote_type(&f.value);
+            let type_str = quote_type(&f.value, lang);
             format!("public {}: {}", &f.name, type_str)
         })
         .collect();
@@ -701,7 +700,7 @@ fn output_struct_or_variant<W: IndentWrite>(
         {
             let mut w = w.block(Newlines::BOTH)?;
             for field in fields {
-                write_deserialize(&mut w, Some(&field.name), &field.value)?;
+                write_deserialize(&mut w, Some(&field.name), &field.value, lang)?;
             }
             writeln!(
                 w,

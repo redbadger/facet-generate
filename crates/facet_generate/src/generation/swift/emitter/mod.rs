@@ -61,6 +61,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     io::{self, Result, Write},
+    sync::Arc,
 };
 
 use heck::ToLowerCamelCase as _;
@@ -69,10 +70,13 @@ use indoc::{formatdoc, writedoc};
 use heck::ToUpperCamelCase as _;
 
 use crate::{
+    Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
         indent::{IndentWrite, Newlines},
         module::Module,
+        plugin::EmitterPlugin,
+        swift::generator::{compute_equatable_types, compute_hashable_types},
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -104,6 +108,10 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// > that receive the registry via `EmitContext.container.registry` at emission
 /// > time. `for_encoding` will then simply install the appropriate plugins and
 /// > the precomputed sets will be removed.
+///
+/// Carries the active [`Encoding`] so that each emitter implementation can
+/// decide whether to emit serialization methods, protocol conformances, or
+/// plain type declarations.
 #[derive(Debug, Clone)]
 pub struct Swift {
     pub(crate) encoding: Encoding,
@@ -114,6 +122,7 @@ pub struct Swift {
     /// `Equatable` conformance.
     /// Empty → no same-module type is known to be equatable (conservative).
     pub(crate) equatable_types: BTreeSet<String>,
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl Swift {
@@ -123,12 +132,23 @@ impl Swift {
     /// [`Registry`](crate::Registry) is available so that `hashable_types` and
     /// `equatable_types` are computed correctly.
     #[must_use]
-    pub fn new(encoding: Encoding) -> Self {
+    pub fn new(
+        encoding: Encoding,
+        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
+        registry: &Registry,
+    ) -> Self {
         Self {
             encoding,
-            hashable_types: BTreeSet::new(),
-            equatable_types: BTreeSet::new(),
+            hashable_types: compute_hashable_types(registry),
+            equatable_types: compute_equatable_types(registry),
+            plugins,
         }
+    }
+
+    /// Access the plugin list.
+    #[must_use]
+    pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
+        &self.plugins
     }
 }
 

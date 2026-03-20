@@ -56,7 +56,7 @@ impl<'a> CSharpCodeGenerator<'a> {
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = CSharp::for_encoding(config.encoding, &updated_registry, &config);
+        let lang = CSharp::new(config.encoding, vec![], &updated_registry);
 
         Module::new(&config).write(w, &lang)?;
 

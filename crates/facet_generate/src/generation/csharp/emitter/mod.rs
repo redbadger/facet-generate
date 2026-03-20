@@ -53,6 +53,7 @@
 
 use std::collections::BTreeSet;
 use std::io::{Result, Write};
+use std::sync::Arc;
 
 use crate::Registry;
 
@@ -63,6 +64,7 @@ use crate::{
         CodeGeneratorConfig, Container, Emitter, Encoding,
         indent::{IndentWrite, Newlines},
         module::Module,
+        plugin::EmitterPlugin,
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -86,27 +88,22 @@ pub struct CSharp {
     /// Empty when encoding is not `Bincode` (the set is only needed for
     /// bincode serialization dispatch).
     pub(crate) c_style_enums: BTreeSet<String>,
+
+    /// Plugins to apply during code generation.
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl CSharp {
     #[must_use]
-    pub fn new(encoding: Encoding) -> Self {
-        Self {
-            encoding,
-            c_style_enums: BTreeSet::new(),
-        }
-    }
-
-    /// Create a [`CSharp`] language tag for the given encoding and registry.
+    /// Create a [`CSharp`] language tag for the given encoding, plugins and registry.
     ///
     /// When encoding is `Bincode`, scans the registry to precompute the set
     /// of C-style enums (all-unit-variant enums) needed for correct
     /// serialization dispatch.
-    #[must_use]
-    pub fn for_encoding(
+    pub fn new(
         encoding: Encoding,
-        registry: &crate::Registry,
-        _config: &CodeGeneratorConfig,
+        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
+        registry: &Registry,
     ) -> Self {
         let c_style_enums = if encoding == Encoding::Bincode {
             collect_c_style_enums(registry)
@@ -116,7 +113,13 @@ impl CSharp {
         Self {
             encoding,
             c_style_enums,
+            plugins,
         }
+    }
+
+    /// Access the plugin list.
+    pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
+        &self.plugins
     }
 }
 

@@ -11,7 +11,7 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
         swift::emitter::Swift,
@@ -62,7 +62,7 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::for_encoding(config.encoding, registry, &config);
+        let lang = Swift::new(config.encoding, vec![], registry);
 
         Module::new(&config).write(w, &lang)?;
 
@@ -100,35 +100,6 @@ impl<'a> SwiftCodeGenerator<'a> {
         }
 
         updated_registry
-    }
-}
-
-/// Extends [`Swift`] with the standard constructor that computes type sets
-/// from a registry.
-///
-/// This is the standard constructor whenever a registry is available. The
-/// precomputed `Swift::hashable_types` and `Swift::equatable_types` sets
-/// are derived here using a monotone fixed-point pass over the registry.
-///
-/// > **Future direction** — when the plugin branch is merged this method will
-/// > install `EmitterPlugin` implementations instead of precomputing sets, and
-/// > the `registry` parameter will be dropped in favor of per-container
-/// > registry access via `EmitContext`.
-impl Swift {
-    /// Create a [`Swift`] language tag with type sets computed from `registry`.
-    ///
-    /// Prefer this over [`Swift::new`] whenever a registry is available.
-    #[must_use]
-    pub fn for_encoding(
-        encoding: Encoding,
-        registry: &Registry,
-        _config: &CodeGeneratorConfig,
-    ) -> Self {
-        Self {
-            encoding,
-            hashable_types: compute_hashable_types(registry),
-            equatable_types: compute_equatable_types(registry),
-        }
     }
 }
 

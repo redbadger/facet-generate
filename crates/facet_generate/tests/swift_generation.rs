@@ -238,7 +238,7 @@ fn set_of_tuple_errors() {
     };
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(Encoding::Bincode);
+    let lang = Swift::new(Encoding::Bincode, vec![], &registry);
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
@@ -270,7 +270,7 @@ fn map_with_tuple_key_errors() {
     };
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(Encoding::Bincode);
+    let lang = Swift::new(Encoding::Bincode, vec![], &registry);
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {

@@ -16,12 +16,16 @@
 //! - [`CodeGeneratorConfig`] — configuration (package name, encoding, custom types, etc.)
 //! - [`indent`] — indentation-aware writer
 //! - [`module`] — splits a registry by namespace into separate output modules
+//! - [`plugin`] — extension point trait for injecting additional code into the pipeline
 
 /// Utility function to generate indented text
 pub mod indent;
 
 /// Modules for code generation that map to Namespaces declared as `#[facet(fg::namespace = "my_namespace")]`
 pub mod module;
+
+/// Plugin infrastructure for extending code generation.
+pub mod plugin;
 
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
@@ -88,7 +92,7 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 /// Emits target-language source code for a single AST node.
 ///
 /// `Emitter` is the core abstraction of the code-generation pipeline. Each target
-/// language defines a zero-sized (or near-zero-sized) **language tag** type — e.g.
+/// language defines a **language tag** type — e.g.
 /// [`csharp::CSharp`], [`kotlin::Kotlin`], [`swift::Swift`], [`typescript::TypeScript`]
 /// — and then provides `Emitter<L>` implementations for the AST node types that
 /// need to be rendered in that language.
@@ -101,8 +105,10 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 ///    `Named<Format>`) can implement `Emitter<L>` once per language, and the compiler
 ///    resolves the correct implementation from the tag alone.
 /// 2. **Configuration** — Language tags carry per-invocation settings such as the
-///    target [`Encoding`] (None / Json / Bincode), so implementations
-///    can conditionally emit serialization methods.
+///    target [`Encoding`] (None / Json / Bincode) and a list of
+///    [`EmitterPlugin`](plugin::EmitterPlugin)s, so implementations can
+///    conditionally emit serialization methods and delegate to plugins at
+///    well-defined extension points.
 ///
 /// # Typical implementors
 ///
@@ -123,17 +129,20 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 /// let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
 /// let lang = CSharp::new(Encoding::Json);
 ///
-/// Module::new(&config).write(w, lang)?;       // header
+/// Module::new(&config).write(w, &lang)?;       // header
 /// for container in containers {
-///     container.write(w, lang)?;               // each type
+///     container.write(w, &lang)?;               // each type
 /// }
 /// ```
 pub trait Emitter<L> {
     /// Write the code for this node to the provided [`IndentWrite`].
     ///
     /// `lang` selects the target language **and** carries configuration (e.g.
-    /// encoding). When a type implements `Emitter` for multiple languages the
-    /// compiler uses `lang` to disambiguate.
+    /// encoding, plugins). When a type implements `Emitter` for multiple
+    /// languages the compiler uses `lang` to disambiguate.
+    ///
+    /// The language tag is passed by shared reference so that it can be
+    /// forwarded to sub-emitters without requiring `Clone` or `Copy`.
     ///
     /// # Errors
     ///

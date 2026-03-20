@@ -63,17 +63,20 @@ use std::{
     collections::BTreeMap,
     io::{Result, Write},
     string::ToString,
+    sync::Arc,
 };
 
 use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use crate::{
+    Registry,
     generation::{
         BINCODE_NAMESPACE, CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
         PackageLocation, SERDE_NAMESPACE,
         indent::{IndentWrite, Newlines},
         module::Module,
+        plugin::EmitterPlugin,
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -93,26 +96,24 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 #[derive(Debug, Clone)]
 pub struct Kotlin {
     pub encoding: Encoding,
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl Kotlin {
+    /// Create a Kotlin language tag with encoding, plugins and registry.
     #[must_use]
-    pub fn new(encoding: Encoding) -> Self {
-        Self { encoding }
+    pub fn new(
+        encoding: Encoding,
+        plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
+        _registry: &Registry,
+    ) -> Self {
+        Self { encoding, plugins }
     }
 
-    /// Create a [`Kotlin`] language tag for the given encoding and registry.
-    ///
-    /// Currently delegates to [`new`](Self::new) — the registry is not used
-    /// for Kotlin generation but the method signature mirrors `Swift::for_encoding`
-    /// so that the `emit!` test macro can call a uniform constructor.
+    /// Access the plugin list.
     #[must_use]
-    pub fn for_encoding(
-        encoding: Encoding,
-        _registry: &crate::Registry,
-        _config: &CodeGeneratorConfig,
-    ) -> Self {
-        Self::new(encoding)
+    pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
+        &self.plugins
     }
 }
 
