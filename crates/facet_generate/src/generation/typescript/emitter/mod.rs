@@ -100,6 +100,7 @@ impl TypeScript {
     }
 
     /// Access the plugin list.
+    #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
     }

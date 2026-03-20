@@ -23,6 +23,8 @@
 //! | `imports` | Module header | `import kotlinx.serialization.*` |
 //! | `type_annotations` | Before a type declaration | `@Serializable` |
 //! | `type_conformances` | After the type name | `: KeyPathMutable<Foo>` |
+//! | `has_type_body` | Before deciding to open `{ }` | tell emitter a body is needed |
+//! | `type_body_preamble` | Start of type body, before variants | abstract method declarations |
 //! | `type_body` | Inside the type body, after fields | `fun patching(...)` |
 //! | `after_type` | After the closing brace of a type | extension methods |
 //! | `module_helpers` | After imports, before types | feature helper snippets |
@@ -31,9 +33,94 @@
 //! | `manifest_dependencies` | When writing the build manifest | `kotlinx-serialization-json` |
 
 use std::io;
+use std::sync::Arc;
 
 use super::{CodeGeneratorConfig, Container, indent::IndentWrite};
-use crate::reflection::format::{Format, Named};
+use crate::reflection::format::{Format, Named, VariantFormat};
+
+// ---------------------------------------------------------------------------
+// Context types passed to plugin methods
+// ---------------------------------------------------------------------------
+
+/// Full context for a plugin extension-point invocation.
+///
+/// Wraps the [`Container`] (the top-level type being emitted) together with
+/// optional [`VariantInfo`] when the call site is inside a sealed-interface /
+/// enum variant rather than a top-level type.
+#[derive(Debug, Clone)]
+pub struct EmitContext<'a> {
+    /// The top-level container (struct or enum) being emitted.
+    pub container: &'a Container<'a>,
+
+    /// When the current emission site is a variant inside an enum /
+    /// sealed interface, this carries the variant-specific details.
+    /// `None` for top-level types.
+    pub variant: Option<VariantInfo<'a>>,
+}
+
+impl<'a> EmitContext<'a> {
+    /// Create a context for a top-level type (no variant).
+    #[must_use]
+    pub fn top_level(container: &'a Container<'a>) -> Self {
+        Self {
+            container,
+            variant: None,
+        }
+    }
+
+    /// Create a context for a variant inside a sealed interface / enum.
+    #[must_use]
+    pub fn for_variant(container: &'a Container<'a>, variant: VariantInfo<'a>) -> Self {
+        Self {
+            container,
+            variant: Some(variant),
+        }
+    }
+
+    /// Whether this context represents a variant (as opposed to a top-level
+    /// type).
+    #[must_use]
+    pub fn is_variant(&self) -> bool {
+        self.variant.is_some()
+    }
+
+    /// Convenience: the simple name of the entity being emitted.
+    ///
+    /// For top-level types this is the container name; for variants it is the
+    /// variant name.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match &self.variant {
+            Some(v) => v.name,
+            None => &self.container.name.name,
+        }
+    }
+}
+
+/// Details about the enum / sealed-interface variant currently being emitted.
+#[derive(Debug, Clone)]
+pub struct VariantInfo<'a> {
+    /// The variant's own name (e.g. `"Ok"`, `"Err"`).
+    pub name: &'a str,
+
+    /// Zero-based discriminant index used for binary serialization.
+    pub index: usize,
+
+    /// The variant's payload format.
+    pub format: &'a VariantFormat,
+
+    /// The fields of the variant (empty for unit / newtype variants encoded
+    /// as a single `value` field — the caller normalizes this before
+    /// constructing the info).
+    pub fields: &'a [Named<Format>],
+
+    /// The name of the parent sealed interface / enum that owns this variant.
+    pub parent_name: &'a str,
+}
+
+// ---------------------------------------------------------------------------
+// The plugin trait
+// ---------------------------------------------------------------------------
 
 /// A plugin that injects additional code at well-defined extension points
 /// in the code-generation pipeline.
@@ -55,15 +142,18 @@ use crate::reflection::format::{Format, Named};
 /// `Arc<dyn EmitterPlugin<L>>` so that heterogeneous plugins can coexist in
 /// the same list and the list is cheaply cloneable.
 ///
-/// The [`type_body`](Self::type_body) and [`after_type`](Self::after_type)
-/// methods receive `&mut dyn IndentWrite` (a trait object) rather than a
-/// generic `W: IndentWrite`, which preserves object safety. Plugins can call
+/// The writer-accepting methods receive `&mut dyn IndentWrite` (a trait
+/// object) rather than a generic `W: IndentWrite`, which preserves object
+/// safety. Plugins can call
 /// [`indent()`](IndentWrite::indent) / [`unindent()`](IndentWrite::unindent)
-/// and all [`Write`](io::Write) methods on this object. The RAII
+/// and all [`Write`](io::Write) methods on this object. For `{ }` block
+/// scoping, use the free function
+/// [`with_block()`](super::indent::with_block) (the RAII
 /// [`block()`](IndentWrite::block) helper requires `Self: Sized` and is
-/// therefore unavailable on `dyn IndentWrite` — use manual `write!("{{")`
-/// + `indent()` / `unindent()` + `write!("}}") ` instead.
+/// therefore unavailable on `dyn IndentWrite`).
 pub trait EmitterPlugin<L>: std::fmt::Debug {
+    // ----- module-level hooks -----
+
     /// Extra import statements to include in the module header.
     ///
     /// Called once per module, before any types are emitted. The returned
@@ -79,6 +169,25 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         vec![]
     }
 
+    /// Module-level helper code to emit after imports but before any type
+    /// declarations.
+    ///
+    /// Use this for feature helper snippets (e.g. `ListOfT.kt`),
+    /// type aliases, or other module-scoped declarations that types depend on.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the helper code fails.
+    fn module_helpers(
+        &self,
+        _w: &mut dyn IndentWrite,
+        _config: &CodeGeneratorConfig,
+    ) -> io::Result<()> {
+        Ok(())
+    }
+
+    // ----- type-level hooks -----
+
     /// Annotations to emit immediately before a type declaration.
     ///
     /// Each string is written on its own line above the `data class` /
@@ -89,7 +198,7 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// ```text
     /// vec!["@Serializable".into(), r#"@SerialName("Foo")"#.into()]
     /// ```
-    fn type_annotations(&self, _container: &Container) -> Vec<String> {
+    fn type_annotations(&self, _ctx: &EmitContext) -> Vec<String> {
         vec![]
     }
 
@@ -104,18 +213,52 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// ```text
     /// vec!["KeyPathMutable<Foo>".into(), "Serializable".into()]
     /// ```
-    fn type_conformances(&self, _container: &Container) -> Vec<String> {
+    fn type_conformances(&self, _ctx: &EmitContext) -> Vec<String> {
         vec![]
     }
 
-    /// Extra code to emit inside the type body, after all fields have been
-    /// written but before the closing brace.
+    /// Whether this plugin needs a type body block `{ … }` for the given
+    /// context.
+    ///
+    /// Emitters call this (across all plugins) to decide whether to open a
+    /// `{ }` block after a type declaration. If **any** plugin returns
+    /// `true`, the block is opened and [`type_body_preamble`](Self::type_body_preamble) /
+    /// [`type_body`](Self::type_body) will be called inside it.
+    ///
+    /// The default returns `false`.
+    fn has_type_body(&self, _ctx: &EmitContext) -> bool {
+        false
+    }
+
+    /// Code at the very start of the type body, before any fields or
+    /// variants are written.
+    ///
+    /// In Kotlin sealed interfaces this is where abstract method
+    /// declarations (e.g. `fun serialize(serializer: Serializer)`) and
+    /// convenience wrappers (e.g. `bincodeSerialize()`) go.
+    ///
+    /// Only called when [`has_type_body`](Self::has_type_body) returned
+    /// `true` for at least one plugin.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the preamble code fails.
+    fn type_body_preamble(&self, _w: &mut dyn IndentWrite, _ctx: &EmitContext) -> io::Result<()> {
+        Ok(())
+    }
+
+    /// Extra code to emit inside the type body, after all fields / variants
+    /// have been written but before the closing brace.
     ///
     /// Use this for methods, companion objects, nested types, etc.
     ///
     /// The writer is already indented to the correct level inside the type
     /// body.
-    fn type_body(&self, _w: &mut dyn IndentWrite, _container: &Container) -> io::Result<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the body code fails.
+    fn type_body(&self, _w: &mut dyn IndentWrite, _ctx: &EmitContext) -> io::Result<()> {
         Ok(())
     }
 
@@ -123,26 +266,19 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     ///
     /// Use this for extension methods, free functions, or companion
     /// declarations that must appear outside the type.
-    fn after_type(&self, _w: &mut dyn IndentWrite, _container: &Container) -> io::Result<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the after-type code fails.
+    fn after_type(&self, _w: &mut dyn IndentWrite, _ctx: &EmitContext) -> io::Result<()> {
         Ok(())
     }
 
-    /// Module-level helper code to emit after imports but before any type
-    /// declarations.
-    ///
-    /// Use this for feature helper snippets (e.g. `ListOfT.kt`),
-    /// type aliases, or other module-scoped declarations that types depend on.
-    fn module_helpers(
-        &self,
-        _w: &mut dyn IndentWrite,
-        _config: &CodeGeneratorConfig,
-    ) -> io::Result<()> {
-        Ok(())
-    }
+    // ----- field-level hooks -----
 
     /// Annotations to emit before an individual field declaration.
     ///
-    /// Called once per field in a struct or data class. The `container`
+    /// Called once per field in a struct or data class. The `ctx`
     /// parameter provides context about the enclosing type.
     ///
     /// # Examples
@@ -150,9 +286,11 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// ```text
     /// vec![r#"@SerialName("myField")"#.into()]
     /// ```
-    fn field_annotations(&self, _field: &Named<Format>, _container: &Container) -> Vec<String> {
+    fn field_annotations(&self, _field: &Named<Format>, _ctx: &EmitContext) -> Vec<String> {
         vec![]
     }
+
+    // ----- installation hooks -----
 
     /// Runtime support files to install alongside the generated code.
     ///
@@ -178,6 +316,10 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     }
 }
 
+// ---------------------------------------------------------------------------
+// RuntimeFile
+// ---------------------------------------------------------------------------
+
 /// A file to be written into the output directory during installation.
 ///
 /// Returned by [`EmitterPlugin::runtime_files`].
@@ -193,27 +335,30 @@ pub struct RuntimeFile {
     pub contents: Vec<u8>,
 }
 
-/// Helper to invoke a plugin method that returns `Vec<String>` across all
-/// plugins in a list and collect the results into a single `Vec`.
+// ---------------------------------------------------------------------------
+// Helpers for calling plugin lists
+// ---------------------------------------------------------------------------
+
+/// Invoke a string-returning plugin method across all plugins and collect
+/// the results into a single `Vec`.
 ///
-/// This avoids repetitive `iter().flat_map().collect()` at every call site.
-pub fn collect_from_plugins<L, F>(
-    plugins: &[std::sync::Arc<dyn EmitterPlugin<L>>],
-    f: F,
-) -> Vec<String>
+/// Avoids repetitive `iter().flat_map().collect()` at every call site.
+pub fn collect_from_plugins<L, F>(plugins: &[Arc<dyn EmitterPlugin<L>>], f: F) -> Vec<String>
 where
     F: Fn(&dyn EmitterPlugin<L>) -> Vec<String>,
 {
     plugins.iter().flat_map(|p| f(p.as_ref())).collect()
 }
 
-/// Helper to invoke a plugin method that writes to a writer across all
-/// plugins in a list.
+/// Invoke a writer-accepting plugin method across all plugins in order.
 ///
-/// Calls each plugin's method in order. Returns the first error encountered,
-/// if any.
+/// Returns the first error encountered, if any.
+///
+/// # Errors
+///
+/// Returns an error if any plugin fails to write.
 pub fn write_from_plugins<L, F>(
-    plugins: &[std::sync::Arc<dyn EmitterPlugin<L>>],
+    plugins: &[Arc<dyn EmitterPlugin<L>>],
     w: &mut dyn IndentWrite,
     f: F,
 ) -> io::Result<()>
@@ -224,4 +369,12 @@ where
         f(plugin.as_ref(), w)?;
     }
     Ok(())
+}
+
+/// Check whether *any* plugin in the list returns `true` for a predicate.
+pub fn any_plugin<L, F>(plugins: &[Arc<dyn EmitterPlugin<L>>], f: F) -> bool
+where
+    F: Fn(&dyn EmitterPlugin<L>) -> bool,
+{
+    plugins.iter().any(|p| f(p.as_ref()))
 }

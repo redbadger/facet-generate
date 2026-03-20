@@ -252,6 +252,50 @@ impl<T: Write> Write for IndentedWriter<T> {
     }
 }
 
+/// Creates a `{ }` block scope on a `dyn IndentWrite` writer.
+///
+/// This is the dynamic-dispatch equivalent of [`IndentWrite::block`].
+/// Because `block()` requires `Self: Sized` (it stores `&mut dyn IndentWrite`
+/// internally), it cannot be called through a trait object. This free function
+/// fills that gap — it writes the opening brace, bumps indentation, invokes
+/// the closure, then restores indentation and writes the closing brace.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use facet_generate::generation::indent::{with_block, Newlines};
+///
+/// fn emit(w: &mut dyn IndentWrite) -> std::io::Result<()> {
+///     write!(w, "fun serialize() ")?;
+///     with_block(w, Newlines::BOTH, |w| {
+///         writeln!(w, "// body")?;
+///         Ok(())
+///     })
+/// }
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if writing the opening brace, invoking the closure, or
+/// writing the closing brace fails.
+pub fn with_block<F>(w: &mut dyn IndentWrite, newlines: Newlines, f: F) -> Result<()>
+where
+    F: FnOnce(&mut dyn IndentWrite) -> Result<()>,
+{
+    write!(w, "{{")?;
+    for _ in 0..newlines.after_open {
+        writeln!(w)?;
+    }
+    w.indent();
+    let result = f(w);
+    w.unindent();
+    write!(w, "}}")?;
+    for _ in 0..newlines.after_close {
+        writeln!(w)?;
+    }
+    result
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

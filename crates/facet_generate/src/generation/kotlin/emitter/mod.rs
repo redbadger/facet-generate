@@ -72,8 +72,7 @@ use indoc::writedoc;
 use crate::{
     Registry,
     generation::{
-        BINCODE_NAMESPACE, CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
-        PackageLocation, SERDE_NAMESPACE,
+        CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
         indent::{IndentWrite, Newlines},
         module::Module,
         plugin::EmitterPlugin,
@@ -82,10 +81,6 @@ use crate::{
 };
 
 const FEATURE_BIGINT: &[u8] = include_bytes!("features/BigInt.kt");
-const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.kt");
-const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.kt");
-const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.kt");
-const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.kt");
 const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 
 /// Language tag for Kotlin code generation.
@@ -117,33 +112,8 @@ impl Kotlin {
     }
 }
 
-impl Module {
-    fn get_package_name(&self, namespace: &str) -> String {
-        let external_packages = &self.config().external_packages;
-        external_packages
-            .get(namespace)
-            .and_then(|pkg| {
-                if let PackageLocation::Path(path) = &pkg.location {
-                    Some(path.clone())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| format!("com.novi.{namespace}"))
-    }
-
-    fn bincode_package(&self) -> String {
-        self.get_package_name(BINCODE_NAMESPACE)
-    }
-
-    fn serde_package(&self) -> String {
-        self.get_package_name(SERDE_NAMESPACE)
-    }
-}
-
 impl Emitter<Kotlin> for Module {
-    #[allow(clippy::too_many_lines)]
-    fn write<W: Write>(&self, w: &mut W, _lang: &Kotlin) -> Result<()> {
+    fn write<W: Write>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
             encoding,
@@ -154,91 +124,68 @@ impl Emitter<Kotlin> for Module {
         writeln!(w, "package {module_name}")?;
         writeln!(w)?;
 
-        // For bincode encoding, we use imports that are compatible with Kotlin Multiplatform.
-        // The serde types (Serializer, Deserializer, etc.) use the package from the
-        // external_packages configuration for the "serde" namespace.
+        // --- Imports ---
+        // Language-level imports that are NOT driven by plugins stay here.
+        // Bincode imports are now provided by BincodePlugin::imports().
         let mut imports = match encoding {
             Encoding::Json => vec![
                 "import kotlinx.serialization.Serializable".to_string(),
                 "import kotlinx.serialization.SerialName".to_string(),
             ],
-            Encoding::Bincode => {
-                let bincode_package = self.bincode_package();
-                let serde_package = self.serde_package();
-
-                vec![
-                    format!("import {bincode_package}.BincodeDeserializer"),
-                    format!("import {bincode_package}.BincodeSerializer"),
-                    format!("import {serde_package}.DeserializationError"),
-                    format!("import {serde_package}.Deserializer"),
-                    format!("import {serde_package}.Serializer"),
-                ]
-            }
-            Encoding::None => vec![],
+            // Bincode imports come from the plugin — see BincodePlugin::imports()
+            Encoding::Bincode | Encoding::None => vec![],
         };
 
+        // --- Feature-driven imports (non-plugin) ---
         let mut features_out = vec![];
         for feature in features {
             match feature {
-                Feature::Bytes => {
-                    if encoding == &Encoding::Bincode {
-                        imports.push(format!("import {}.Bytes", self.serde_package()));
-                    }
-                }
                 Feature::BigInt => {
-                    // Note: BigInteger is JVM-only. For KMP, you'd need a multiplatform BigInt library.
-                    // This is kept for backward compatibility with JVM-only projects.
+                    // BigInteger import is needed regardless of encoding
+                    // (JVM-only — kept for backward compat).
                     imports.push("import java.math.BigInteger".to_string());
-                    match encoding {
-                        Encoding::Json => {
-                            imports.extend([
-                                "import kotlinx.serialization.KSerializer".to_string(),
-                                "import kotlinx.serialization.descriptors.PrimitiveKind".to_string(),
-                                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor".to_string(),
-                                "import kotlinx.serialization.encoding.Decoder".to_string(),
-                                "import kotlinx.serialization.encoding.Encoder".to_string(),
-                                "import kotlinx.serialization.json.JsonDecoder".to_string(),
-                                "import kotlinx.serialization.json.JsonEncoder".to_string(),
-                                "import kotlinx.serialization.json.JsonUnquotedLiteral".to_string(),
-                                "import kotlinx.serialization.json.jsonPrimitive".to_string(),
-                            ]);
-                            features_out.write_all(FEATURE_BIGINT)?;
-                            writeln!(features_out)?;
-                        }
-                        Encoding::Bincode => {
-                            imports.push(format!("import {}.Int128", self.serde_package()));
-                        }
-                        Encoding::None => (),
-                    }
-                }
-                Feature::ListOfT => {
-                    if encoding == &Encoding::Bincode {
-                        features_out.write_all(FEATURE_LIST_OF_T)?;
+                    // JSON-specific BigInt imports and helper stay here
+                    // (will move to a JSON plugin in Phase 3).
+                    if encoding == &Encoding::Json {
+                        imports.extend([
+                            "import kotlinx.serialization.KSerializer".to_string(),
+                            "import kotlinx.serialization.descriptors.PrimitiveKind".to_string(),
+                            "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor"
+                                .to_string(),
+                            "import kotlinx.serialization.encoding.Decoder".to_string(),
+                            "import kotlinx.serialization.encoding.Encoder".to_string(),
+                            "import kotlinx.serialization.json.JsonDecoder".to_string(),
+                            "import kotlinx.serialization.json.JsonEncoder".to_string(),
+                            "import kotlinx.serialization.json.JsonUnquotedLiteral".to_string(),
+                            "import kotlinx.serialization.json.jsonPrimitive".to_string(),
+                        ]);
+                        features_out.write_all(FEATURE_BIGINT)?;
                         writeln!(features_out)?;
                     }
-                }
-                Feature::OptionOfT => {
-                    if encoding == &Encoding::Bincode {
-                        features_out.write_all(FEATURE_OPTION_OF_T)?;
-                        writeln!(features_out)?;
-                    }
-                }
-                Feature::SetOfT => {
-                    if encoding == &Encoding::Bincode {
-                        features_out.write_all(FEATURE_SET_OF_T)?;
-                        writeln!(features_out)?;
-                    }
-                }
-                Feature::MapOfT => {
-                    if encoding == &Encoding::Bincode {
-                        features_out.write_all(FEATURE_MAP_OF_T)?;
-                        writeln!(features_out)?;
-                    }
+                    // Bincode BigInt imports (Int128) come from BincodePlugin::imports()
                 }
                 Feature::TupleArray => {
+                    // TupleArray is encoding-independent — stays in the emitter.
                     features_out.write_all(FEATURE_TUPLE_ARRAY)?;
                     writeln!(features_out)?;
                 }
+                // Bincode feature helpers (ListOfT, SetOfT, MapOfT, OptionOfT, Bytes)
+                // are now provided by BincodePlugin::module_helpers() / imports().
+                _ => {}
+            }
+        }
+
+        // --- Plugin imports ---
+        for plugin in lang.plugins() {
+            imports.extend(plugin.imports(self.config()));
+        }
+
+        // --- Plugin module helpers ---
+        {
+            use crate::generation::indent::{IndentConfig, IndentedWriter};
+            let mut fw = IndentedWriter::new(&mut features_out, IndentConfig::Space(4));
+            for plugin in lang.plugins() {
+                plugin.module_helpers(&mut fw, self.config())?;
             }
         }
 

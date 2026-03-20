@@ -27,6 +27,10 @@ pub mod module;
 /// Plugin infrastructure for extending code generation.
 pub mod plugin;
 
+/// Internal bincode plugin — provides bincode-specific imports and helpers
+/// through the plugin trait. Will eventually move to a separate crate.
+pub(crate) mod bincode;
+
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
 pub mod csharp;
@@ -75,6 +79,7 @@ pub trait CodeGenerator<'a> {
 
 /// A borrowed view of a single type definition (struct or enum) from the
 /// [`Registry`], ready to be passed to [`Emitter::write`].
+#[derive(Debug)]
 pub struct Container<'a> {
     pub name: &'a QualifiedTypeName,
     pub format: &'a ContainerFormat,

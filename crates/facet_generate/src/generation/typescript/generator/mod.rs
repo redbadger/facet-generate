@@ -54,7 +54,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = TypeScript::new(config.encoding, vec![], &registry);
+        let lang = TypeScript::new(config.encoding, vec![], registry);
 
         Module::new(&config).write(w, &lang)?;
 

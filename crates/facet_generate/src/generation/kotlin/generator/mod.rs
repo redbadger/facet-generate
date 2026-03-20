@@ -4,15 +4,18 @@
 //! producing a single Kotlin source file from a [`Registry`].
 
 use std::io::{Result, Write};
+use std::sync::Arc;
 
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
+        bincode::BincodePlugin,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
         kotlin::emitter::Kotlin,
         module::Module,
+        plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -57,7 +60,12 @@ impl<'a> KotlinCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Kotlin::new(config.encoding, vec![], &registry);
+        let mut plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>> = vec![];
+
+        if config.encoding == Encoding::Bincode {
+            plugins.push(Arc::new(BincodePlugin::from_config(&config)));
+        }
+        let lang = Kotlin::new(config.encoding, plugins, registry);
 
         Module::new(&config).write(w, &lang)?;
 

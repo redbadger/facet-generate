@@ -99,9 +99,8 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// and the `for_encoding` constructor.
 ///
 /// An empty set means "no same-module type is known to be hashable/equatable"
-/// (conservative). Use [`for_encoding`](Self::for_encoding) rather than
-/// [`new`](Self::new) whenever a [`Registry`](crate::Registry) is available so
-/// that the sets are computed correctly.
+/// (conservative). Use [`new`](Self::new) and supply a [`Registry`](crate::Registry)
+/// so that the sets are computed correctly.
 ///
 /// > **Future direction** — when the plugin branch is merged, `hashable_types`
 /// > and `equatable_types` will be replaced by `EmitterPlugin` implementations
@@ -126,11 +125,7 @@ pub struct Swift {
 }
 
 impl Swift {
-    /// Create a Swift language tag with **empty** type sets.
-    ///
-    /// Prefer [`for_encoding`](Self::for_encoding) when a
-    /// [`Registry`](crate::Registry) is available so that `hashable_types` and
-    /// `equatable_types` are computed correctly.
+    /// Create a Swift language tag with computed type sets.
     #[must_use]
     pub fn new(
         encoding: Encoding,
