@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig,
+        CodeGenerator, CodeGeneratorConfig,
         indent::{IndentConfig, IndentedWriter},
         java::emitter::JavaEmitter,
     },
@@ -15,7 +15,7 @@ use crate::{
     since = "0.16.0",
     note = "The Java generator is deprecated. Use the Kotlin generator instead."
 )]
-pub struct CodeGenerator<'a> {
+pub struct JavaCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
@@ -23,9 +23,9 @@ pub struct CodeGenerator<'a> {
     pub(crate) external_qualified_names: HashMap<String, String>,
 }
 
-impl<'a> CodeGen<'a> for CodeGenerator<'a> {
+impl<'a> CodeGenerator<'a> for JavaCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CodeGenerator::new(config)
+        JavaCodeGenerator::new(config)
     }
 
     fn write_output<W: std::io::Write>(
@@ -61,7 +61,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     }
 }
 
-impl<'a> CodeGenerator<'a> {
+impl<'a> JavaCodeGenerator<'a> {
     /// Create a Java code generator for the given config.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {

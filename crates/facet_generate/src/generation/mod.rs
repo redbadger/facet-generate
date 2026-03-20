@@ -4,7 +4,7 @@
 //! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`) behind a
 //! feature flag. The generation pipeline has three layers:
 //!
-//! - **Generator** ([`CodeGen`]) — top-level entry point that writes a complete output file
+//! - **Generator** ([`CodeGenerator`]) — top-level entry point that writes a complete output file
 //!   from a registry.
 //! - **Emitter** ([`Emitter`]) — walks the [`Format`](crate::reflection::format::Format) AST
 //!   inside each [`Container`] and emits the target language equivalent for each node
@@ -57,13 +57,9 @@ use crate::{
 pub(crate) const SERDE_NAMESPACE: &str = "serde";
 pub(crate) const BINCODE_NAMESPACE: &str = "bincode";
 
-// TODO: Consider renaming `CodeGen` → `CodeGenerator` and the per-language
-// `CodeGenerator` structs → `KotlinCodeGenerator`, `CSharpCodeGenerator`, etc.
-// The current names are confusing: the trait sounds like a utility and the
-// struct sounds like the trait.
 /// Transforms a [`Registry`] into a complete source file. Each target language provides
 /// its own implementation.
-pub trait CodeGen<'a> {
+pub trait CodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self;
 
     /// Generate code for the given [`Registry`] and write it to the provided `writer`.
@@ -137,7 +133,7 @@ impl<'a> Container<'a> {
 ///
 /// # Usage
 ///
-/// Generators ([`CodeGen`] implementations) create an [`IndentedWriter`](indent::IndentedWriter),
+/// Generators ([`CodeGenerator`] implementations) create an [`IndentedWriter`](indent::IndentedWriter),
 /// construct the language tag, and then call `write` on each node in sequence:
 ///
 /// ```rust,ignore

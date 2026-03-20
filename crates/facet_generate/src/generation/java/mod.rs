@@ -10,5 +10,5 @@ mod emitter;
 mod generator;
 mod installer;
 
-pub use generator::CodeGenerator;
+pub use generator::JavaCodeGenerator;
 pub use installer::Installer;

@@ -1,4 +1,4 @@
-//! Unit tests for [`CodeGenerator`] — import generation and qualified-name
+//! Unit tests for [`SwiftCodeGenerator`] — import generation and qualified-name
 //! resolution.
 //!
 //! Tests build small [`Registry`] values by hand (rather than via the
@@ -24,7 +24,7 @@ use crate::{
 use super::*;
 
 fn generate(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = CodeGenerator::new(config);
+    let generator = SwiftCodeGenerator::new(config);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()

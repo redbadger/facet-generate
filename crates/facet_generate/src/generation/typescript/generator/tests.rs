@@ -1,4 +1,4 @@
-//! Unit tests for [`CodeGenerator`] — import generation and qualified-name
+//! Unit tests for [`TypeScriptCodeGenerator`] — import generation and qualified-name
 //! resolution.
 //!
 //! Tests build small [`Registry`](crate::Registry) values by hand (rather than
@@ -74,7 +74,7 @@ fn first_field_type(registry: &Registry) -> &Format {
 }
 
 fn render_output(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = CodeGenerator::new(config, InstallTarget::Node);
+    let generator = TypeScriptCodeGenerator::new(config, InstallTarget::Node);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -88,7 +88,7 @@ fn update_qualified_names_strips_same_module_namespace() {
         "Child".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -105,7 +105,7 @@ fn update_qualified_names_keeps_external_namespace() {
         "Child".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -121,7 +121,7 @@ fn update_qualified_names_root_namespace_is_unchanged() {
         "Child".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -138,7 +138,7 @@ fn update_qualified_names_non_external_named_namespace_is_preserved() {
         "OldType".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -156,7 +156,7 @@ fn update_qualified_names_does_not_mutate_input_registry() {
     )));
     let original = registry.clone();
 
-    let _updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let _updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
     assert_eq!(registry, original);
 }
 
@@ -168,7 +168,7 @@ fn update_qualified_names_nested_complex_types() {
     )))));
     let registry = registry_with_struct_field(field_type);
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::Option(inner) = first_field_type(&updated) else {
         panic!("expected option");
@@ -202,7 +202,7 @@ fn update_qualified_names_enum_variants() {
         ContainerFormat::Enum(variants, Doc::new()),
     );
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
     let (_, container) = updated.iter().next().unwrap();
     let ContainerFormat::Enum(variants, _) = container else {
         panic!("expected enum");

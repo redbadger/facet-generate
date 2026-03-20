@@ -5,8 +5,8 @@
 //!
 //! # Submodules (in pipeline order)
 //!
-//! 1. **`generator`** — Top-level orchestrator. [`CodeGenerator`](crate::generation::swift::CodeGenerator) implements
-//!    [`CodeGen`](crate::generation::CodeGen) to produce a complete Swift source file from a
+//! 1. **`generator`** — Top-level orchestrator. [`SwiftCodeGenerator`](crate::generation::swift::SwiftCodeGenerator) implements
+//!    [`CodeGenerator`](crate::generation::CodeGenerator) to produce a complete Swift source file from a
 //!    registry. It resolves qualified type names against the configuration
 //!    (external packages, namespaces) and then delegates writing to the emitter
 //!    layer.
@@ -33,7 +33,7 @@ mod installer;
 mod package;
 
 pub use emitter::Swift;
-pub use generator::CodeGenerator;
+pub use generator::SwiftCodeGenerator;
 pub use installer::Installer;
 
 /// Normalize a path string for use in Swift string literals.

@@ -1,7 +1,7 @@
 //! Project scaffolding — writes a ready-to-build Kotlin project to disk.
 //!
 //! The [`Installer`] is the final stage of the Kotlin generation pipeline.
-//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! While [`KotlinCodeGenerator`] produces the *contents* of a single source file,
 //! the installer is responsible for the surrounding project structure:
 //!
 //! 1. **Runtime files** — copies the serde and/or bincode runtime `.kt`
@@ -10,7 +10,7 @@
 //!    generated `serialize`/`deserialize` methods call into.
 //!
 //! 2. **Per-namespace source files** — splits the registry by namespace
-//!    (via [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    (via [`module::split`]) and calls [`KotlinCodeGenerator`] once per namespace,
 //!    writing each to its own `.kt` file under the appropriate package
 //!    directory (e.g. `com/example/types/Types.kt`).
 //!
@@ -30,7 +30,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SERDE_NAMESPACE, SourceInstaller, kotlin::CodeGenerator, module,
+        SERDE_NAMESPACE, SourceInstaller, kotlin::KotlinCodeGenerator, module,
     },
 };
 
@@ -223,7 +223,7 @@ impl SourceInstaller for Installer {
     /// Skips modules whose namespace matches an external package (those types
     /// are provided by the external dependency, not generated). For the rest,
     /// converts the dot-separated module name to a directory path, creates it,
-    /// and writes the output of [`CodeGenerator::output`] into a `PascalCased`
+    /// and writes the output of [`KotlinCodeGenerator::output`] into a `PascalCased`
     /// `.kt` file (e.g. module `com.example.types` → `com/example/types/Types.kt`).
     fn install_module(
         &mut self,
@@ -263,7 +263,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = CodeGenerator::new(&updated_config);
+        let generator = KotlinCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
         Ok(())

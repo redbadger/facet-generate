@@ -152,7 +152,7 @@ pub enum Error {
 /// Writes generated source code and runtime support files to disk.
 ///
 /// Each target language provides its own implementation. The installer is
-/// the third layer of the pipeline — after [`CodeGen`](super::CodeGen)
+/// the third layer of the pipeline — after [`CodeGenerator`](super::CodeGenerator)
 /// produces the source text and [`Emitter`](super::Emitter) renders each
 /// AST node, the installer places everything into the output directory and
 /// copies any runtime files required by the chosen [`Encoding`].

@@ -34,7 +34,7 @@ fn test_typescript_code_compiles_with_config(
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::CodeGenerator::new(config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(config, InstallTarget::Deno);
     generator.output(&mut source, &registry).unwrap();
 
     assert_deno_info(&source_path);
@@ -116,7 +116,7 @@ fn test_typescript_code_compiles_with_comments() {
     let source_file = source_path.join("test.ts");
     let mut file = File::create(&source_file).unwrap();
 
-    let generator = typescript::CodeGenerator::new(&config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(&config, InstallTarget::Deno);
     generator.output(&mut file, &registry).unwrap();
     assert_deno_info(&source_file);
 

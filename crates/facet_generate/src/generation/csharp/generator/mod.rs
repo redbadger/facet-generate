@@ -1,6 +1,6 @@
 //! Top-level orchestrator for C# code generation.
 //!
-//! [`CodeGenerator`] implements [`CodeGen`](super::super::CodeGen) to produce a
+//! [`CSharpCodeGenerator`] implements [`CodeGenerator`](super::super::CodeGenerator) to produce a
 //! complete C# source file from a [`Registry`](crate::Registry). It resolves
 //! qualified type names using the dotted-namespace convention, then delegates
 //! AST-to-source rendering to the [emitter](super::emitter) layer.
@@ -10,7 +10,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         csharp::emitter::CSharp,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
@@ -20,16 +20,16 @@ use crate::{
 
 /// Main configuration object for C# code generation.
 ///
-/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGen`] to provide the
+/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGenerator`] to provide the
 /// entry point for producing C# source from a registry.
-pub struct CodeGenerator<'a> {
+pub struct CSharpCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
 }
 
-impl<'a> CodeGen<'a> for CodeGenerator<'a> {
+impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CodeGenerator::new(config)
+        CSharpCodeGenerator::new(config)
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -37,7 +37,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     }
 }
 
-impl<'a> CodeGenerator<'a> {
+impl<'a> CSharpCodeGenerator<'a> {
     /// Create a C# code generator for the given config.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {

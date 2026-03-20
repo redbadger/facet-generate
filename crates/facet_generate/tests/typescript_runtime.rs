@@ -34,7 +34,7 @@ import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/mod.ts";
     .unwrap();
 
     let config = CodeGeneratorConfig::new("main".to_string()).with_encoding(Encoding::Bincode);
-    let generator = typescript::CodeGenerator::new(&config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(&config, InstallTarget::Deno);
     generator.output(&mut source, &registry).unwrap();
 
     let reference = bincode::serialize(&Test {

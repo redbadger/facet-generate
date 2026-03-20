@@ -1,4 +1,4 @@
-//! Unit tests for [`CodeGenerator`] — namespace resolution and preamble
+//! Unit tests for [`CSharpCodeGenerator`] — namespace resolution and preamble
 //! generation.
 //!
 //! Tests build small registries by hand to exercise the qualified-name
@@ -42,7 +42,7 @@ fn first_field_type(registry: &Registry) -> &Format {
 }
 
 fn render_output(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = CodeGenerator::new(config);
+    let generator = CSharpCodeGenerator::new(config);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -56,7 +56,7 @@ fn update_qualified_names_strips_same_leaf_namespace() {
         "UserSummary".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -73,7 +73,7 @@ fn update_qualified_names_roots_external_namespace_under_module() {
         "Invoice".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -92,7 +92,7 @@ fn update_qualified_names_roots_root_namespace_for_dotted_module() {
         "User".to_string(),
     )));
 
-    let updated = CodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");

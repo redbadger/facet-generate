@@ -33,7 +33,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SourceInstaller, csharp::CodeGenerator, module,
+        SourceInstaller, csharp::CSharpCodeGenerator, module,
     },
 };
 
@@ -349,7 +349,7 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = CodeGenerator::new(&updated_config);
+        let generator = CSharpCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
         Ok(())

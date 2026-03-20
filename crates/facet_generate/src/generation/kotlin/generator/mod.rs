@@ -1,6 +1,6 @@
 //! Top-level orchestrator for Kotlin code generation.
 //!
-//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! [`KotlinCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single Kotlin source file from a [`Registry`].
 
 use std::io::{Result, Write};
@@ -8,7 +8,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         config::PackageLocation,
         indent::{IndentConfig, IndentedWriter},
         kotlin::emitter::Kotlin,
@@ -18,16 +18,16 @@ use crate::{
 };
 
 /// Kotlin code generator — holds a reference to the shared
-/// [`CodeGeneratorConfig`] and implements [`CodeGen`].
-pub struct CodeGenerator<'a> {
+/// [`CodeGeneratorConfig`] and implements [`CodeGenerator`].
+pub struct KotlinCodeGenerator<'a> {
     /// Language-independent configuration (encoding, module name, external
     /// packages, etc.).
     pub(crate) config: &'a CodeGeneratorConfig,
 }
 
-impl<'a> CodeGen<'a> for CodeGenerator<'a> {
+impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CodeGenerator::new(config)
+        KotlinCodeGenerator::new(config)
     }
 
     fn write_output<W: std::io::Write>(
@@ -39,7 +39,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     }
 }
 
-impl<'a> CodeGenerator<'a> {
+impl<'a> KotlinCodeGenerator<'a> {
     /// Create a Kotlin code generator for the given config
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {

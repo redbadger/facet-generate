@@ -1,7 +1,7 @@
 //! Project scaffolding — writes a ready-to-build Swift package to disk.
 //!
 //! The [`Installer`] is the final stage of the Swift generation pipeline.
-//! While [`CodeGenerator`] produces the *contents* of a single source file,
+//! While [`SwiftCodeGenerator`] produces the *contents* of a single source file,
 //! the installer is responsible for the surrounding project structure:
 //!
 //! 1. **Runtime files** — copies the Serde runtime `.swift` sources from
@@ -10,7 +10,7 @@
 //!    generated `serialize`/`deserialize` methods call into.
 //!
 //! 2. **Per-module source files** — splits the registry by namespace (via
-//!    [`module::split`]) and calls [`CodeGenerator`] once per namespace,
+//!    [`module::split`]) and calls [`SwiftCodeGenerator`] once per namespace,
 //!    writing each to its own `.swift` file under
 //!    `Sources/<Module>/<Module>.swift`. Swift has no `namespace` keyword —
 //!    the crate's namespace concept maps directly to **SPM targets**, which
@@ -36,7 +36,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
-        SourceInstaller, module, swift::generator::CodeGenerator,
+        SourceInstaller, module, swift::generator::SwiftCodeGenerator,
     },
 };
 
@@ -305,7 +305,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = CodeGenerator::new(&updated_config);
+        let generator = SwiftCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
         Ok(())

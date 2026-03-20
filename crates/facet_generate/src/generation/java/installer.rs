@@ -9,7 +9,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
-        SourceInstaller, java::CodeGenerator, module,
+        SourceInstaller, java::JavaCodeGenerator, module,
     },
 };
 
@@ -128,7 +128,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = CodeGenerator::new(&updated_config);
+        let generator = JavaCodeGenerator::new(&updated_config);
         generator.write_source_files(self.install_dir.clone(), registry)?;
         Ok(())
     }

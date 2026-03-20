@@ -1,6 +1,6 @@
 //! Top-level orchestrator for Swift code generation.
 //!
-//! [`CodeGenerator`] implements [`CodeGen`] and is the entry point for
+//! [`SwiftCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single Swift source file from a [`Registry`].
 
 use std::io::{Result, Write};
@@ -8,7 +8,7 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGen, CodeGeneratorConfig, Container, Emitter,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
         swift::emitter::Swift,
@@ -18,16 +18,16 @@ use crate::{
 
 /// Main configuration object for Swift code generation.
 ///
-/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGen`] so it can be
+/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGenerator`] so it can be
 /// used by the installer pipeline.
-pub struct CodeGenerator<'a> {
+pub struct SwiftCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
 }
 
-impl<'a> CodeGen<'a> for CodeGenerator<'a> {
+impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CodeGenerator::new(config)
+        SwiftCodeGenerator::new(config)
     }
 
     fn write_output<W: std::io::Write>(
@@ -39,7 +39,7 @@ impl<'a> CodeGen<'a> for CodeGenerator<'a> {
     }
 }
 
-impl<'a> CodeGenerator<'a> {
+impl<'a> SwiftCodeGenerator<'a> {
     /// Create a Swift code generator for the given config.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {

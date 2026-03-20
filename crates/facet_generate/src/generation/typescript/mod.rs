@@ -5,8 +5,8 @@
 //!
 //! # Submodules (in pipeline order)
 //!
-//! 1. **generator** — Top-level orchestrator. [`CodeGenerator`](crate::generation::typescript::CodeGenerator) implements
-//!    [`CodeGen`](crate::generation::CodeGen) to produce a complete TypeScript source file
+//! 1. **generator** — Top-level orchestrator. [`TypeScriptCodeGenerator`](crate::generation::typescript::TypeScriptCodeGenerator) implements
+//!    [`CodeGenerator`](crate::generation::CodeGenerator) to produce a complete TypeScript source file
 //!    from a registry. It resolves qualified type names against the
 //!    configuration (external packages, namespaces), carries the active
 //!    [`InstallTarget`](crate::generation::typescript::InstallTarget), and delegates writing to the emitter layer.
@@ -28,7 +28,7 @@
 //!    namespace into per-module files, and generates a `package.json` manifest.
 
 pub use emitter::TypeScript;
-pub use generator::CodeGenerator;
+pub use generator::TypeScriptCodeGenerator;
 pub use installer::Installer;
 
 mod emitter;
