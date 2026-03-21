@@ -15,12 +15,6 @@
 //! | `type_annotations` | `@Serializable`, `@SerialName("…")` above each type |
 //! | `type_body` | `val serialName` accessor in all-unit enum classes |
 //!
-//! # What still lives in the per-language emitters
-//!
-//! Variant-level inline `@SerialName("…")` annotations in enum classes are
-//! emitted by the Kotlin emitter directly because they appear *inline* with
-//! the variant name rather than on a separate line — a pattern that doesn't
-//! map cleanly to the current `type_annotations` hook.
 
 #[cfg(feature = "kotlin")]
 pub mod kotlin;

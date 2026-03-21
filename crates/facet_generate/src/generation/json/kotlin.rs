@@ -77,6 +77,21 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
         ]
     }
 
+    /// `@SerialName("…")` inline annotation for each all-unit enum class
+    /// variant.
+    ///
+    /// Emitted on the same line as the uppercased variant name, e.g.:
+    ///
+    /// ```text
+    /// @SerialName("Variant1") VARIANT1,
+    /// ```
+    ///
+    /// This preserves the original Rust variant name as the serialized tag,
+    /// while Kotlin's convention uppercases the entry identifier.
+    fn enum_variant_annotations(&self, name: &str) -> Vec<String> {
+        vec![format!(r#"@SerialName("{name}")"#)]
+    }
+
     /// For all-unit enum classes, emits the `serialName` computed property
     /// that extracts the `@SerialName` annotation value at runtime.
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {

@@ -23,11 +23,16 @@
 //!
 //! # Encoding-dependent output
 //!
-//! The [`Kotlin`] language tag carries the active [`Encoding`]. When encoding
-//! is `Json`, types get `@Serializable` / `@SerialName` annotations. When
-//! encoding is `Bincode`, each type gets `serialize` / `deserialize` methods
-//! and convenience `bincodeSerialize` / `bincodeDeserialize` wrappers. When
-//! encoding is `None`, only plain type declarations are emitted.
+//! The [`Kotlin`] language tag carries the active [`Encoding`] and a list of
+//! [`EmitterPlugin`]s. All encoding-specific behaviour is delegated to those
+//! plugins — the emitter itself contains no encoding checks. For example:
+//!
+//! - `JsonPlugin` supplies `@Serializable` / `@SerialName` type annotations
+//!   and inline `@SerialName` annotations for all-unit enum class variants.
+//! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
+//!   convenience `bincodeSerialize` / `bincodeDeserialize` wrappers.
+//! - With no plugins (`Encoding::None`), only plain type declarations are
+//!   emitted.
 //!
 //! # Feature helpers (`features/` directory)
 //!
@@ -306,10 +311,16 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
             (VariantFormat::Unit, VariantContext::EnumClass) => {
                 doc.write(w, lang)?;
                 let name_upper = name.to_uppercase();
-                if lang.encoding.is_json() {
-                    write!(w, r#"@SerialName("{name}") {name_upper}"#)?;
-                } else {
+                let prefix_parts: Vec<String> = lang
+                    .plugins()
+                    .iter()
+                    .flat_map(|p| p.enum_variant_annotations(name))
+                    .collect();
+                if prefix_parts.is_empty() {
                     write!(w, "{name_upper}")?;
+                } else {
+                    let prefix = prefix_parts.join(" ");
+                    write!(w, "{prefix} {name_upper}")?;
                 }
             }
             (

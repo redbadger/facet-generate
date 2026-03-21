@@ -322,6 +322,28 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         vec![]
     }
 
+    /// Inline annotations to prepend to an `enum class` variant declaration.
+    ///
+    /// Called for each all-unit variant inside an `enum class`. Unlike
+    /// [`type_annotations`](Self::type_annotations), these are rendered on
+    /// the **same line** as the uppercased variant name, e.g.:
+    ///
+    /// ```text
+    /// @SerialName("Variant1") VARIANT1,
+    /// ```
+    ///
+    /// The returned strings are space-joined and written immediately before
+    /// the variant name, with a trailing space separator.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// vec![r#"@SerialName("Variant1")"#.into()]
+    /// ```
+    fn enum_variant_annotations(&self, _name: &str) -> Vec<String> {
+        vec![]
+    }
+
     // ----- installation hooks -----
 
     /// Runtime support files to install alongside the generated code.
