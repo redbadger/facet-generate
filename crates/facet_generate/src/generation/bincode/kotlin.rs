@@ -17,7 +17,7 @@ use indoc::writedoc;
 
 use crate::generation::{
     CodeGeneratorConfig, Feature,
-    indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
+    indent::{IndentWrite, IndentedWriter, Newlines},
     kotlin::Kotlin,
     plugin::{EmitContext, EmitterPlugin},
 };
@@ -722,15 +722,14 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
 
             if !all_unit {
                 // Sealed interface preamble
-                let mut buf = Vec::new();
                 {
-                    let mut iw = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+                    let config = w.config();
+                    let mut iw = IndentedWriter::new(&mut *w, config);
                     writeln!(iw, "fun serialize(serializer: Serializer)")?;
                     writeln!(iw)?;
                     write_bincode_serialize(&mut iw)?;
                     writeln!(iw)?;
                 }
-                w.write_all(&buf)?;
             }
         }
 
@@ -764,16 +763,15 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         if let Some(variant_info) = &ctx.variant {
             let variant_index = variant_info.index;
 
-            let mut buf = Vec::new();
             {
-                let mut iw = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+                let config = w.config();
+                let mut iw = IndentedWriter::new(&mut *w, config);
                 if fields.is_empty() {
                     write_data_object_variant(&mut iw, name, variant_index)?;
                 } else {
                     write_data_class_variant(&mut iw, name, &fields, variant_index)?;
                 }
             }
-            w.write_all(&buf)?;
             return Ok(());
         }
 
@@ -783,30 +781,28 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 .values()
                 .all(|v| matches!(v.value, VariantFormat::Unit));
 
-            let mut buf = Vec::new();
             {
-                let mut iw = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+                let config = w.config();
+                let mut iw = IndentedWriter::new(&mut *w, config);
                 if all_unit {
                     write_enum_class_body(&mut iw, name, variants)?;
                 } else {
                     write_sealed_interface_body(&mut iw, name, variants)?;
                 }
             }
-            w.write_all(&buf)?;
             return Ok(());
         }
 
         // ---- Non-enum containers (data object / data class) ----
-        let mut buf = Vec::new();
         {
-            let mut iw = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let config = w.config();
+            let mut iw = IndentedWriter::new(&mut *w, config);
             if fields.is_empty() {
                 write_data_object_top_level(&mut iw, name)?;
             } else {
                 write_data_class_top_level(&mut iw, name, &fields)?;
             }
         }
-        w.write_all(&buf)?;
 
         Ok(())
     }
@@ -816,7 +812,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
 mod tests {
     use super::*;
     use crate::generation::CodeGeneratorConfig;
-    use crate::generation::indent::{IndentConfig, IndentedWriter};
+    use crate::generation::indent::IndentedWriter;
     use std::collections::BTreeSet;
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
@@ -864,7 +860,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin.module_helpers(&mut w, &cfg).unwrap();
         }
 
@@ -921,7 +917,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin
                 .type_body_preamble(&mut w as &mut dyn IndentWrite, &ctx)
                 .unwrap();
@@ -960,7 +956,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin
                 .type_body_preamble(&mut w as &mut dyn IndentWrite, &ctx)
                 .unwrap();
@@ -987,7 +983,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin
                 .type_body(&mut w as &mut dyn IndentWrite, &ctx)
                 .unwrap();
@@ -1021,7 +1017,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin
                 .type_body(&mut w as &mut dyn IndentWrite, &ctx)
                 .unwrap();
@@ -1064,7 +1060,7 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin
                 .type_body(&mut w as &mut dyn IndentWrite, &ctx)
                 .unwrap();

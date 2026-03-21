@@ -3,9 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig,
-        indent::{IndentConfig, IndentedWriter},
-        java::emitter::JavaEmitter,
+        CodeGenerator, CodeGeneratorConfig, indent::IndentedWriter, java::emitter::JavaEmitter,
     },
     reflection::format::ContainerFormat,
 };
@@ -41,7 +39,7 @@ impl<'a> CodeGenerator<'a> for JavaCodeGenerator<'a> {
             .collect::<Vec<_>>();
 
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(writer, IndentConfig::Space(4)),
+            out: IndentedWriter::new(writer, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),
@@ -130,7 +128,7 @@ impl<'a> JavaCodeGenerator<'a> {
     ) -> std::io::Result<()> {
         let mut file = std::fs::File::create(dir_path.join(name.to_string() + ".java"))?;
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
+            out: IndentedWriter::new(&mut file, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),
@@ -148,7 +146,7 @@ impl<'a> JavaCodeGenerator<'a> {
     ) -> std::io::Result<()> {
         let mut file = std::fs::File::create(dir_path.join("TraitHelpers.java"))?;
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
+            out: IndentedWriter::new(&mut file, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),

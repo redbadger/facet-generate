@@ -146,8 +146,8 @@ mod tests {
 
         let mut buf = Vec::new();
         {
-            use crate::generation::indent::{IndentConfig, IndentedWriter};
-            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            use crate::generation::indent::IndentedWriter;
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
             plugin.module_helpers(&mut w, &cfg).unwrap();
         }
 

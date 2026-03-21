@@ -10,10 +10,8 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        csharp::emitter::CSharp,
-        indent::{IndentConfig, IndentedWriter},
-        module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
+        indent::IndentedWriter, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -50,7 +48,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);

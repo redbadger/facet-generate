@@ -11,10 +11,8 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        indent::{IndentConfig, IndentedWriter},
-        module::Module,
-        swift::emitter::Swift,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
+        module::Module, swift::emitter::Swift,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
@@ -57,7 +55,7 @@ impl<'a> SwiftCodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);

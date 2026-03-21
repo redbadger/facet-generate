@@ -9,10 +9,8 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        indent::{IndentConfig, IndentedWriter},
-        module::Module,
-        typescript::emitter::TypeScript,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
+        module::Module, typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -49,7 +47,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);

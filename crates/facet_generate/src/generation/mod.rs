@@ -135,7 +135,7 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 /// construct the language tag, and then call `write` on each node in sequence:
 ///
 /// ```rust,ignore
-/// let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+/// let w = &mut IndentedWriter::new(out, config.indent);
 /// let lang = CSharp::new(&config, &registry);
 ///
 /// Module::new(&config).write(w, &lang)?;       // header

@@ -39,11 +39,12 @@ use thiserror::Error;
 
 use crate::{
     Registry,
+    generation::indent::IndentConfig,
     reflection::format::{Format, FormatHolder, Namespace},
 };
 
 /// Code generation options meant to be supported by all languages.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 #[expect(
     deprecated,
     reason = "CodeGeneratorConfig still contains the deprecated CustomCode field for backwards compatibility"
@@ -58,6 +59,12 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
+    /// The indentation style used when writing generated source code.
+    ///
+    /// Defaults to `IndentConfig::Space(4)`. Pass a custom value via
+    /// [`with_indent`](Self::with_indent) if a different style is required
+    /// (e.g. tabs, or a different space width).
+    pub indent: IndentConfig,
     /// Which primitive/leaf format types are used in the registry.
     /// Populated by `update_from`. Used by TypeScript to emit type aliases.
     pub used_format_types: BTreeSet<String>,
@@ -195,6 +202,7 @@ impl CodeGeneratorConfig {
             features: BTreeSet::new(),
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
+            indent: IndentConfig::Space(4),
         }
     }
 
@@ -218,6 +226,13 @@ impl CodeGeneratorConfig {
     #[must_use]
     pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Which indentation style to use when writing generated source code.
+    #[must_use]
+    pub const fn with_indent(mut self, indent: IndentConfig) -> Self {
+        self.indent = indent;
         self
     }
 

@@ -6,11 +6,8 @@
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        config::PackageLocation,
-        indent::{IndentConfig, IndentedWriter},
-        kotlin::emitter::Kotlin,
-        module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, config::PackageLocation,
+        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -51,7 +48,7 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///
     /// Returns an error if the underlying writer fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);

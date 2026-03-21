@@ -123,7 +123,7 @@ impl Kotlin {
 }
 
 impl Emitter<Kotlin> for Module {
-    fn write<W: Write>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
             features,
@@ -168,8 +168,7 @@ impl Emitter<Kotlin> for Module {
 
         // --- Plugin module helpers ---
         {
-            use crate::generation::indent::{IndentConfig, IndentedWriter};
-            let mut fw = IndentedWriter::new(&mut features_out, IndentConfig::Space(4));
+            let mut fw = w.child(&mut features_out);
             for plugin in lang.plugins() {
                 plugin.module_helpers(&mut fw, self.config())?;
             }

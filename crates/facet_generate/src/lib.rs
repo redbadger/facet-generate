@@ -214,17 +214,13 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 macro_rules! emit {
     ($($ty:ident),* as $language:ident with $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::{
-                CodeGeneratorConfig,
-                Container,
-                indent::{IndentConfig, IndentedWriter},
-            };
+            use $crate::generation::{Container, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
-            let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
+            let cfg = CodeGeneratorConfig::new("test".to_string()).with_encoding($encoding);
+            let mut w = IndentedWriter::new(&mut out, cfg.indent);
             let registry = $crate::reflect!($($ty),*)?;
-            let config = CodeGeneratorConfig::new(String::new()).with_encoding($encoding);
-            let lang = $language::new(&config, &registry);
+            let lang = $language::new(&cfg, &registry);
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;
@@ -247,11 +243,11 @@ macro_rules! emit_java {
     ($($ty:ident),* as $encoding:path) => {
         #[allow(deprecated)]
         || -> anyhow::Result<String> {
-            use $crate::generation::{Encoding, indent::{IndentConfig, IndentedWriter}};
+            use $crate::generation::{Encoding, indent::IndentedWriter};
             let mut out = Vec::new();
-            let w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
                 .with_encoding($encoding);
+            let w = IndentedWriter::new(&mut out, config.indent);
             let generator = $crate::generation::java::JavaCodeGenerator::new(&config);
             let mut emitter = $crate::generation::java::emitter::JavaEmitter {
                 out: w,
