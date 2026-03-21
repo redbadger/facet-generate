@@ -35,6 +35,8 @@ fn unit_struct_1() {
     let actual = emit!(UnitStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line 1
+    /// line 2
     public struct UnitStruct: Hashable {
 
         public init() {
@@ -79,6 +81,8 @@ fn unit_struct_2() {
     let actual = emit!(UnitStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line 1
+    /// line 2
     public struct UnitStruct: Hashable {
 
         public init() {
@@ -123,6 +127,8 @@ fn newtype_struct() {
     let actual = emit!(NewType as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line 1
+    /// line 2
     public struct NewType: Hashable {
         public var value: String
 
@@ -171,6 +177,8 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line 1
+    /// line 2
     public struct TupleStruct: Hashable {
         public var field0: String
         public var field1: Int32
@@ -242,8 +250,12 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line 1
+    /// line 2
     public struct StructWithFields {
+        /// unit type
         public var unit: Void
+        /// boolean
         public var bool: Bool
         public var i8: Int8
         public var i16: Int16
@@ -714,9 +726,14 @@ fn enum_with_unit_variants() {
     let actual = emit!(EnumWithUnitVariants as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// line one
+    /// line two
     indirect public enum EnumWithUnitVariants: Hashable {
+        /// variant one
         case variant1
+        /// variant two
         case variant2
+        /// variant three
         case variant3
 
         public func serialize<S: Serializer>(serializer: S) throws {

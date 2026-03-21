@@ -764,13 +764,8 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
 
 /// Doc-comment emitter. Writes `///` lines for each comment.
 ///
-/// Doc comments are **stripped** when encoding is [`Encoding::Bincode`] to
-/// keep the generated output compact.
 impl Emitter<Swift> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
-        if lang.encoding.is_bincode() {
-            return Ok(());
-        }
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
