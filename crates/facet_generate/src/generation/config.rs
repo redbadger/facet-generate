@@ -100,17 +100,17 @@ pub enum Feature {
 impl Encoding {
     #[must_use]
     pub fn is_none(self) -> bool {
-        self == Encoding::None
+        self == Self::None
     }
 
     #[must_use]
     pub fn is_json(self) -> bool {
-        self == Encoding::Json
+        self == Self::Json
     }
 
     #[must_use]
     pub fn is_bincode(self) -> bool {
-        self == Encoding::Bincode
+        self == Self::Bincode
     }
 }
 
@@ -216,7 +216,7 @@ impl CodeGeneratorConfig {
 
     /// Which encoding to use.
     #[must_use]
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
     }
@@ -257,7 +257,7 @@ impl CodeGeneratorConfig {
 
     /// Generate a package manifest file for the target language.
     #[must_use]
-    pub fn with_package_manifest(mut self, package_manifest: bool) -> Self {
+    pub const fn with_package_manifest(mut self, package_manifest: bool) -> Self {
         self.package_manifest = package_manifest;
         self
     }
@@ -352,11 +352,11 @@ impl CodeGeneratorConfig {
 
 impl Encoding {
     #[must_use]
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            Encoding::None => "none",
-            Encoding::Json => "json",
-            Encoding::Bincode => "bincode",
+            Self::None => "none",
+            Self::Json => "json",
+            Self::Bincode => "bincode",
         }
     }
 }
@@ -403,13 +403,13 @@ impl Config {
 
 impl ConfigBuilder {
     #[must_use]
-    pub fn encoding(&mut self, encoding: Encoding) -> &mut Self {
+    pub const fn encoding(&mut self, encoding: Encoding) -> &mut Self {
         self.encoding = Some(encoding);
         self
     }
 
     #[must_use]
-    pub fn add_extensions(&mut self) -> &mut Self {
+    pub const fn add_extensions(&mut self) -> &mut Self {
         self.add_extensions = Some(true);
         self
     }

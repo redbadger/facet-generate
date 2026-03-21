@@ -61,7 +61,7 @@ pub struct EmitContext<'a> {
 impl<'a> EmitContext<'a> {
     /// Create a context for a top-level type (no variant).
     #[must_use]
-    pub fn top_level(container: &'a Container<'a>) -> Self {
+    pub const fn top_level(container: &'a Container<'a>) -> Self {
         Self {
             container,
             variant: None,
@@ -70,7 +70,7 @@ impl<'a> EmitContext<'a> {
 
     /// Create a context for a variant inside a sealed interface / enum.
     #[must_use]
-    pub fn for_variant(container: &'a Container<'a>, variant: VariantInfo<'a>) -> Self {
+    pub const fn for_variant(container: &'a Container<'a>, variant: VariantInfo<'a>) -> Self {
         Self {
             container,
             variant: Some(variant),
@@ -80,7 +80,7 @@ impl<'a> EmitContext<'a> {
     /// Whether this context represents a variant (as opposed to a top-level
     /// type).
     #[must_use]
-    pub fn is_variant(&self) -> bool {
+    pub const fn is_variant(&self) -> bool {
         self.variant.is_some()
     }
 

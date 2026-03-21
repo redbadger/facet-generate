@@ -53,7 +53,7 @@ impl Installer {
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
     pub fn new(package_name: &str, install_dir: impl AsRef<Path>) -> Self {
-        Installer {
+        Self {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
@@ -63,7 +63,7 @@ impl Installer {
 
     /// Set the encoding for serialization/deserialization.
     #[must_use]
-    pub fn encoding(mut self, encoding: Encoding) -> Self {
+    pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
     }
@@ -344,7 +344,7 @@ impl SourceInstaller for Installer {
             .module_name()
             .rsplit('.')
             .next()
-            .unwrap_or(config.module_name())
+            .unwrap_or_else(|| config.module_name())
             .to_upper_camel_case();
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;

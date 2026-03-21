@@ -29,11 +29,11 @@ pub struct Module(CodeGeneratorConfig);
 impl Module {
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig) -> Self {
-        Module(config.clone())
+        Self(config.clone())
     }
 
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.0
     }
 }

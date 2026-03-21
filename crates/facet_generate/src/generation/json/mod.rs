@@ -23,7 +23,7 @@
 //! map cleanly to the current `type_annotations` hook.
 
 #[cfg(feature = "kotlin")]
-pub(crate) mod kotlin;
+pub mod kotlin;
 
 /// JSON serialization plugin.
 ///
@@ -39,7 +39,7 @@ pub struct JsonPlugin;
 impl JsonPlugin {
     /// Create a new `JsonPlugin`.
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }

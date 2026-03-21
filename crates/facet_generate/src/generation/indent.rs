@@ -180,7 +180,7 @@ pub struct IndentedWriter<T> {
 }
 
 impl<T> IndentedWriter<T> {
-    pub fn new(out: T, config: IndentConfig) -> Self {
+    pub const fn new(out: T, config: IndentConfig) -> Self {
         Self {
             out,
             indentation: Vec::new(),
@@ -221,11 +221,10 @@ impl<T: Write> Write for IndentedWriter<T> {
 
         while !buf.is_empty() {
             let (before_newline, has_newline, after_newline) =
-                if let Some(idx) = buf.iter().position(|&b| b == b'\n') {
-                    (&buf[..idx], true, &buf[idx + 1..])
-                } else {
-                    (buf, false, &buf[buf.len()..])
-                };
+                buf.iter().position(|&b| b == b'\n').map_or_else(
+                    || (buf, false, &buf[buf.len()..]),
+                    |idx| (&buf[..idx], true, &buf[idx + 1..]),
+                );
 
             if self.at_beginning_of_line && !before_newline.is_empty() {
                 self.out.write_all(&self.indentation)?;

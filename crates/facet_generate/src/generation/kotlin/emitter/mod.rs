@@ -373,52 +373,52 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
-            Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-            Format::TypeName(qualified_type_name) => {
+            Self::Variable(_variable) => unreachable!("placeholders should not get this far"),
+            Self::TypeName(qualified_type_name) => {
                 write!(
                     w,
                     "{ty}",
                     ty = qualified_type_name.format(ToString::to_string, ".")
                 )
             }
-            Format::Unit => write!(w, "Unit"),
-            Format::Bool => write!(w, "Boolean"),
-            Format::I8 => write!(w, "Byte"),
-            Format::I16 => write!(w, "Short"),
-            Format::I32 => write!(w, "Int"),
-            Format::I64 => write!(w, "Long"),
-            Format::U8 => write!(w, "UByte"),
-            Format::U16 => write!(w, "UShort"),
-            Format::U32 => write!(w, "UInt"),
-            Format::U64 => write!(w, "ULong"),
-            Format::I128 | Format::U128 => write!(w, "BigInteger"),
-            Format::F32 => write!(w, "Float"),
-            Format::F64 => write!(w, "Double"),
-            Format::Char | Format::Str => write!(w, "String"),
-            Format::Bytes => write!(w, "Bytes"),
+            Self::Unit => write!(w, "Unit"),
+            Self::Bool => write!(w, "Boolean"),
+            Self::I8 => write!(w, "Byte"),
+            Self::I16 => write!(w, "Short"),
+            Self::I32 => write!(w, "Int"),
+            Self::I64 => write!(w, "Long"),
+            Self::U8 => write!(w, "UByte"),
+            Self::U16 => write!(w, "UShort"),
+            Self::U32 => write!(w, "UInt"),
+            Self::U64 => write!(w, "ULong"),
+            Self::I128 | Self::U128 => write!(w, "BigInteger"),
+            Self::F32 => write!(w, "Float"),
+            Self::F64 => write!(w, "Double"),
+            Self::Char | Self::Str => write!(w, "String"),
+            Self::Bytes => write!(w, "Bytes"),
 
-            Format::Option(format) => {
+            Self::Option(format) => {
                 format.write(w, lang)?;
                 write!(w, "?")
             }
-            Format::Seq(format) => {
+            Self::Seq(format) => {
                 write!(w, "List<")?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Set(format) => {
+            Self::Set(format) => {
                 write!(w, "Set<")?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Map { key, value } => {
+            Self::Map { key, value } => {
                 write!(w, "Map<")?;
                 key.write(w, lang)?;
                 write!(w, ", ")?;
                 value.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Tuple(formats) => {
+            Self::Tuple(formats) => {
                 let len = formats.len();
                 match len {
                     0 => write!(w, "Unit"),
@@ -455,7 +455,7 @@ impl Emitter<Kotlin> for Format {
                     }
                 }
             }
-            Format::TupleArray { content, size: _ } => {
+            Self::TupleArray { content, size: _ } => {
                 write!(w, "List<")?;
                 content.write(w, lang)?;
                 write!(w, ">")

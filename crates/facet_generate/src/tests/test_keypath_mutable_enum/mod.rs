@@ -1,3 +1,7 @@
+#![allow(
+    clippy::derive_partial_eq_without_eq,
+    reason = "Diffable should probably be fixed upstream"
+)]
 use difficient::Diffable;
 use facet::Facet;
 

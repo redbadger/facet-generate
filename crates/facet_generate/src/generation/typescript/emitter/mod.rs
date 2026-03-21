@@ -258,49 +258,49 @@ impl Emitter<TypeScript> for Container<'_> {
 impl Emitter<TypeScript> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         match self {
-            Format::TypeName(type_) => {
+            Self::TypeName(type_) => {
                 write!(
                     w,
                     "{}",
                     type_.format(ToUpperCamelCase::to_upper_camel_case, ".")
                 )
             }
-            Format::Unit => write!(w, "unit"),
-            Format::Bool => write!(w, "bool"),
-            Format::I8 => write!(w, "int8"),
-            Format::I16 => write!(w, "int16"),
-            Format::I32 => write!(w, "int32"),
-            Format::I64 => write!(w, "int64"),
-            Format::I128 => write!(w, "int128"),
-            Format::U8 => write!(w, "uint8"),
-            Format::U16 => write!(w, "uint16"),
-            Format::U32 => write!(w, "uint32"),
-            Format::U64 => write!(w, "uint64"),
-            Format::U128 => write!(w, "uint128"),
-            Format::F32 => write!(w, "float32"),
-            Format::F64 => write!(w, "float64"),
-            Format::Char => write!(w, "char"),
-            Format::Str => write!(w, "str"),
-            Format::Bytes => write!(w, "bytes"),
+            Self::Unit => write!(w, "unit"),
+            Self::Bool => write!(w, "bool"),
+            Self::I8 => write!(w, "int8"),
+            Self::I16 => write!(w, "int16"),
+            Self::I32 => write!(w, "int32"),
+            Self::I64 => write!(w, "int64"),
+            Self::I128 => write!(w, "int128"),
+            Self::U8 => write!(w, "uint8"),
+            Self::U16 => write!(w, "uint16"),
+            Self::U32 => write!(w, "uint32"),
+            Self::U64 => write!(w, "uint64"),
+            Self::U128 => write!(w, "uint128"),
+            Self::F32 => write!(w, "float32"),
+            Self::F64 => write!(w, "float64"),
+            Self::Char => write!(w, "char"),
+            Self::Str => write!(w, "str"),
+            Self::Bytes => write!(w, "bytes"),
 
-            Format::Option(format) => {
+            Self::Option(format) => {
                 write!(w, "Optional<")?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Seq(format) | Format::Set(format) => {
+            Self::Seq(format) | Self::Set(format) => {
                 write!(w, "Seq<")?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Map { key, value } => {
+            Self::Map { key, value } => {
                 write!(w, "Map<")?;
                 key.write(w, lang)?;
                 write!(w, ",")?;
                 value.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Tuple(formats) => {
+            Self::Tuple(formats) => {
                 write!(w, "Tuple<[")?;
                 for (i, f) in formats.iter().enumerate() {
                     if i > 0 {
@@ -310,12 +310,12 @@ impl Emitter<TypeScript> for Format {
                 }
                 write!(w, "]>")
             }
-            Format::TupleArray { content, .. } => {
+            Self::TupleArray { content, .. } => {
                 write!(w, "ListTuple<[")?;
                 content.write(w, lang)?;
                 write!(w, "]>")
             }
-            Format::Variable(_) => panic!("unexpected value"),
+            Self::Variable(_) => panic!("unexpected value"),
         }
     }
 }
@@ -462,7 +462,7 @@ fn deserialize_primitive_expr(format: &Format) -> String {
 }
 
 /// Returns true if the format is a primitive type or a named type (not a container).
-fn is_primitive_or_named(format: &Format) -> bool {
+const fn is_primitive_or_named(format: &Format) -> bool {
     matches!(
         format,
         Format::TypeName(_)

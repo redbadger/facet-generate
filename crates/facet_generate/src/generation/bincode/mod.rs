@@ -21,7 +21,7 @@
 //! Migrating this code is planned for a future phase.
 
 #[cfg(feature = "kotlin")]
-pub(crate) mod kotlin;
+pub mod kotlin;
 
 use super::CodeGeneratorConfig;
 

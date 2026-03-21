@@ -47,7 +47,7 @@ impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
 impl<'a> SwiftCodeGenerator<'a> {
     /// Create a Swift code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
     }
 

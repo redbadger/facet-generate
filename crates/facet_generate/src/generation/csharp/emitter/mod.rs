@@ -1200,7 +1200,7 @@ fn write_serialize_tuple_stmts<W: Write>(
     }
 }
 
-fn option_serialize_helper(inner: &Format) -> &'static str {
+const fn option_serialize_helper(inner: &Format) -> &'static str {
     if is_csharp_value_type(inner) {
         "SerializeOption"
     } else {
@@ -1208,7 +1208,7 @@ fn option_serialize_helper(inner: &Format) -> &'static str {
     }
 }
 
-fn option_deserialize_helper(inner: &Format) -> &'static str {
+const fn option_deserialize_helper(inner: &Format) -> &'static str {
     if is_csharp_value_type(inner) {
         "DeserializeOption"
     } else {
@@ -1279,7 +1279,7 @@ fn namespace_name(namespace: &str) -> String {
         .join(".")
 }
 
-fn is_csharp_value_type(format: &Format) -> bool {
+const fn is_csharp_value_type(format: &Format) -> bool {
     matches!(
         format,
         Format::Unit

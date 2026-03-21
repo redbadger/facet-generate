@@ -41,7 +41,7 @@ impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
 impl<'a> KotlinCodeGenerator<'a> {
     /// Create a Kotlin code generator for the given config
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
     }
 
@@ -131,7 +131,7 @@ impl<'a> KotlinCodeGenerator<'a> {
                                 let current_leaf_namespace = config
                                     .module_name()
                                     .rsplit_once('.')
-                                    .map_or(config.module_name(), |(_, leaf)| leaf);
+                                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
 
                                 if config.external_definitions.contains_key(&namespace)
                                     && namespace != current_leaf_namespace

@@ -432,8 +432,8 @@ impl Emitter<Swift> for Container<'_> {
 impl Emitter<Swift> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         match &self {
-            Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
-            Format::TypeName(qualified_type_name) => {
+            Self::Variable(_variable) => unreachable!("placeholders should not get this far"),
+            Self::TypeName(qualified_type_name) => {
                 write!(
                     w,
                     "{ty}",
@@ -441,30 +441,30 @@ impl Emitter<Swift> for Format {
                         .format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".")
                 )
             }
-            Format::Unit => write!(w, "Void"),
-            Format::Bool => write!(w, "Bool"),
-            Format::I8 => write!(w, "Int8"),
-            Format::I16 => write!(w, "Int16"),
-            Format::I32 => write!(w, "Int32"),
-            Format::I64 => write!(w, "Int64"),
-            Format::I128 => write!(w, "Int128"),
-            Format::U8 => write!(w, "UInt8"),
-            Format::U16 => write!(w, "UInt16"),
-            Format::U32 => write!(w, "UInt32"),
-            Format::U64 => write!(w, "UInt64"),
-            Format::U128 => write!(w, "UInt128"),
-            Format::F32 => write!(w, "Float"),
-            Format::F64 => write!(w, "Double"),
-            Format::Char => write!(w, "Character"),
-            Format::Str => write!(w, "String"),
-            Format::Bytes => write!(w, "[UInt8]"),
+            Self::Unit => write!(w, "Void"),
+            Self::Bool => write!(w, "Bool"),
+            Self::I8 => write!(w, "Int8"),
+            Self::I16 => write!(w, "Int16"),
+            Self::I32 => write!(w, "Int32"),
+            Self::I64 => write!(w, "Int64"),
+            Self::I128 => write!(w, "Int128"),
+            Self::U8 => write!(w, "UInt8"),
+            Self::U16 => write!(w, "UInt16"),
+            Self::U32 => write!(w, "UInt32"),
+            Self::U64 => write!(w, "UInt64"),
+            Self::U128 => write!(w, "UInt128"),
+            Self::F32 => write!(w, "Float"),
+            Self::F64 => write!(w, "Double"),
+            Self::Char => write!(w, "Character"),
+            Self::Str => write!(w, "String"),
+            Self::Bytes => write!(w, "[UInt8]"),
 
-            Format::Option(format) => {
+            Self::Option(format) => {
                 format.write(w, lang)?;
                 write!(w, "?")
             }
-            Format::Seq(format)
-            | Format::TupleArray {
+            Self::Seq(format)
+            | Self::TupleArray {
                 content: format,
                 size: _,
             } => {
@@ -472,7 +472,7 @@ impl Emitter<Swift> for Format {
                 format.write(w, lang)?;
                 write!(w, "]")
             }
-            Format::Set(format) => {
+            Self::Set(format) => {
                 if !is_hashable(format, lang) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -486,7 +486,7 @@ impl Emitter<Swift> for Format {
                 format.write(w, lang)?;
                 write!(w, ">")
             }
-            Format::Map { key, value } => {
+            Self::Map { key, value } => {
                 if !is_hashable(key, lang) {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -502,7 +502,7 @@ impl Emitter<Swift> for Format {
                 value.write(w, lang)?;
                 write!(w, "]")
             }
-            Format::Tuple(formats) => {
+            Self::Tuple(formats) => {
                 let len = formats.len();
                 if len == 1 {
                     // A single-element tuple is just the element itself

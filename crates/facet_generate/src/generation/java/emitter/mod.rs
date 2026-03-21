@@ -52,7 +52,7 @@ fn mangle_type(format: &Format) -> String {
 }
 
 /// Shared state for the code generation of a Java source file.
-pub(crate) struct JavaEmitter<'a, T> {
+pub struct JavaEmitter<'a, T> {
     /// Writer.
     pub(crate) out: T,
     /// Generator.
@@ -230,7 +230,7 @@ where
         writeln!(self.out, "}}\n")
     }
 
-    fn needs_helper(format: &Format) -> bool {
+    const fn needs_helper(format: &Format) -> bool {
         matches!(
             format,
             Format::Option(_)
@@ -552,14 +552,13 @@ return obj;
     ) -> std::io::Result<()> {
         // Beginning of class
         writeln!(self.out)?;
+        self.output_comment(name)?;
         if let Some(base) = variant_base {
-            self.output_comment(name)?;
             writeln!(
                 self.out,
                 "public static final class {name} extends {base} {{"
             )?;
         } else {
-            self.output_comment(name)?;
             writeln!(self.out, "public final class {name} {{")?;
         }
         let reserved_names = &["Builder"];
