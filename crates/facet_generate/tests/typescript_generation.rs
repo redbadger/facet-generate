@@ -5,97 +5,40 @@
 pub mod common;
 
 use facet::Facet;
-use facet_generate::generation::{
-    CodeGeneratorConfig, Encoding, SourceInstaller,
-    typescript::{self, InstallTarget},
-};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
 use facet_generate::reflection::RegistryBuilder;
-use regex::Regex;
 use serde_json::Value;
-use std::{
-    collections::BTreeMap,
-    fs::File,
-    path::Path,
-    process::{Command, Stdio},
-};
+use std::{collections::BTreeMap, fs::File, path::Path};
 use tempfile::tempdir;
 
-fn test_typescript_code_compiles_with_config(
+fn test_typescript_code_generates_with_config(
     dir_path: &Path,
     config: &CodeGeneratorConfig,
 ) -> std::path::PathBuf {
     let registry = common::get_registry();
-    make_output_file(dir_path);
+    std::fs::create_dir_all(dir_path.join("testing")).unwrap_or(());
 
-    let mut installer = typescript::Installer::new("testing", dir_path, InstallTarget::Deno);
+    let mut installer = typescript::Installer::new("testing", dir_path);
     installer.install_serde_runtime().unwrap();
-    assert_deno_info(dir_path.join("serde/mod.ts").as_path());
 
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::TypeScriptCodeGenerator::new(config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(config);
     generator.output(&mut source, &registry).unwrap();
 
-    assert_deno_info(&source_path);
     dir_path.join("testing")
 }
 
-fn assert_deno_info(ts_path: &Path) {
-    let output = Command::new("deno")
-        .arg("info")
-        .arg(ts_path)
-        .stderr(Stdio::inherit())
-        .output()
-        .expect("deno info failed, is deno installed? brew install deno");
-    assert!(output.status.success());
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(
-        !is_error_output(stdout.as_str()),
-        "deno info detected an error\n{stdout}"
-    );
-}
-
-fn is_error_output(output: &str) -> bool {
-    let re = Regex::new(r"\berror\b").unwrap();
-    re.is_match(output)
-}
-
-fn make_output_file(dir: &Path) {
-    std::fs::create_dir_all(dir.join("testing")).unwrap_or(());
-}
-
 #[test]
-fn test_is_error_output() {
-    let table = vec![
-        (
-            "file:///var/folders/l0/x592_pjj18n6r2m0nqn05vmc0000gn/T/.tmp5NPlE2/serde/mod.ts (176B)",
-            false,
-        ),
-        (
-            "https://deno.land/std@0.85.0/node/_errors.ts (60.89KB)",
-            false,
-        ),
-        (
-            "file:///var/folders/l0/x592_pjj18n6r2m0nqn05vmc0000gn/T/.tmpG1an6c/something/noSerializer.ts (error)",
-            true,
-        ),
-    ];
-
-    for (input, expectation) in table {
-        assert_eq!(is_error_output(input), expectation);
-    }
-}
-
-#[test]
-fn test_typescript_code_compiles_with_bincode() {
+fn test_typescript_code_generates_with_bincode() {
     let dir = tempdir().unwrap();
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    test_typescript_code_compiles_with_config(dir.path(), &config);
+    test_typescript_code_generates_with_config(dir.path(), &config);
 }
 
 #[test]
-fn test_typescript_code_compiles_with_comments() {
+fn test_typescript_code_generates_with_comments() {
     /// Some
     /// comments
     #[derive(Facet)]
@@ -116,9 +59,8 @@ fn test_typescript_code_compiles_with_comments() {
     let source_file = source_path.join("test.ts");
     let mut file = File::create(&source_file).unwrap();
 
-    let generator = typescript::TypeScriptCodeGenerator::new(&config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(&config);
     generator.output(&mut file, &registry).unwrap();
-    assert_deno_info(&source_file);
 
     let content = std::fs::read_to_string(&source_file).unwrap();
     assert!(
@@ -128,13 +70,13 @@ fn test_typescript_code_compiles_with_comments() {
 }
 
 #[test]
-fn test_typescript_code_compiles_with_external_definitions() {
+fn test_typescript_code_generates_with_external_definitions() {
     let dir = tempdir().unwrap();
 
     // create external definition
     std::fs::create_dir_all(dir.path().join("external")).unwrap_or(());
     std::fs::write(
-        dir.path().join("external/mod.ts"),
+        dir.path().join("external/index.ts"),
         "export const CustomType = 5;",
     )
     .unwrap();
@@ -144,15 +86,14 @@ fn test_typescript_code_compiles_with_external_definitions() {
     let config = CodeGeneratorConfig::new("testing".to_string())
         .with_external_definitions(external_definitions);
 
-    test_typescript_code_compiles_with_config(dir.path(), &config);
+    test_typescript_code_generates_with_config(dir.path(), &config);
 }
 
 #[test]
 fn test_typescript_manifest_generation() {
     let dir = tempdir().unwrap();
 
-    let installer =
-        typescript::Installer::new("my-typescript-package", dir.path(), InstallTarget::Deno);
+    let installer = typescript::Installer::new("my-typescript-package", dir.path());
     installer.install_manifest("my-typescript-package").unwrap();
 
     // Check that package.json was created
@@ -169,67 +110,40 @@ fn test_typescript_manifest_generation() {
 }
 
 #[test]
-fn test_typescript_code_generation_without_extensions() {
+fn test_typescript_code_generation_file_layout() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
     let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
 
-    let mut installer = typescript::Installer::new("testing", dir.path(), InstallTarget::Node);
+    let mut installer = typescript::Installer::new("testing", dir.path());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();
 
-    // Check that the generated module file is index.ts instead of mod.ts
+    // Module is written as a flat .ts file (Node convention)
     let module_path = dir.path().join("testing.ts");
     assert!(module_path.exists());
 
-    // Check that the generated content doesn't have .ts extensions in imports
+    // Generated content uses extensionless serde import (Node convention)
     let content = std::fs::read_to_string(&module_path).unwrap();
     assert!(content.contains(r#"from "./serde""#));
     assert!(!content.contains(r#"from "./serde/mod.ts""#));
 
-    // Check that runtime files were transformed
+    // Runtime entry point is index.ts (Node convention)
     let serde_index = dir.path().join("serde").join("index.ts");
     assert!(serde_index.exists());
 
+    // Runtime imports have .ts extensions stripped
     let serde_content = std::fs::read_to_string(&serde_index).unwrap();
     assert!(serde_content.contains("from \"./types\""));
     assert!(!serde_content.contains("from \"./types.ts\""));
 
-    // Check that other serde files were also transformed
+    // Other serde files also have .ts stripped
     let binary_deserializer = dir.path().join("serde").join("binaryDeserializer.ts");
     assert!(binary_deserializer.exists());
 
     let binary_deserializer_content = std::fs::read_to_string(&binary_deserializer).unwrap();
     assert!(binary_deserializer_content.contains("from \"./deserializer\""));
     assert!(!binary_deserializer_content.contains("from \"./deserializer.ts\""));
-}
-
-#[test]
-fn test_typescript_code_generation_with_extensions() {
-    let dir = tempdir().unwrap();
-    let registry = common::get_registry();
-
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-
-    let mut installer = typescript::Installer::new("testing", dir.path(), InstallTarget::Deno);
-    installer.install_module(&config, &registry).unwrap();
-    installer.install_serde_runtime().unwrap();
-    installer.install_bincode_runtime().unwrap();
-
-    // Check that the generated module file is mod.ts
-    let module_path = dir.path().join("testing").join("mod.ts");
-    assert!(module_path.exists());
-
-    // Check that the generated content has .ts extensions in imports
-    let content = std::fs::read_to_string(&module_path).unwrap();
-    assert!(content.contains(r#"from "./serde/mod.ts""#));
-
-    // Check that runtime files kept original structure
-    let serde_mod = dir.path().join("serde").join("mod.ts");
-    assert!(serde_mod.exists());
-
-    let serde_content = std::fs::read_to_string(&serde_mod).unwrap();
-    assert!(serde_content.contains("from \"./types.ts\""));
 }

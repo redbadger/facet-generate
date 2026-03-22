@@ -74,7 +74,7 @@ fn first_field_type(registry: &Registry) -> &Format {
 }
 
 fn render_output(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = TypeScriptCodeGenerator::new(config, InstallTarget::Node);
+    let generator = TypeScriptCodeGenerator::new(config);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()

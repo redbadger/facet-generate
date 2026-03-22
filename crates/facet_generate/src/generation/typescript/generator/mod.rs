@@ -2,7 +2,7 @@
 //!
 //! [`TypeScriptCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single TypeScript source file from a [`Registry`]. It carries
-//! the active [`InstallTarget`] (Node or Deno) through to the emitter layer.
+//! It delegates writing to the emitter layer.
 
 use std::io::{Result, Write};
 
@@ -12,25 +12,23 @@ use crate::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         indent::{IndentConfig, IndentedWriter},
         module::Module,
-        typescript::{InstallTarget, emitter::TypeScript},
+        typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
 
 /// Main configuration object for TypeScript code generation.
 ///
-/// Wraps a [`CodeGeneratorConfig`] and an [`InstallTarget`], and implements
-/// [`CodeGenerator`] so it can be used by the installer pipeline.
+/// Wraps a [`CodeGeneratorConfig`] and implements [`CodeGenerator`] so it
+/// can be used by the installer pipeline.
 pub struct TypeScriptCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
-    /// Installation target (Node or Deno).
-    pub(crate) target: InstallTarget,
 }
 
 impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        TypeScriptCodeGenerator::new(config, InstallTarget::Node)
+        TypeScriptCodeGenerator::new(config)
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -41,8 +39,8 @@ impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
 impl<'a> TypeScriptCodeGenerator<'a> {
     /// Create a TypeScript code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig, target: InstallTarget) -> Self {
-        Self { config, target }
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
+        Self { config }
     }
 
     /// Produce a complete TypeScript source file for the types in `registry`.
@@ -56,7 +54,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = TypeScript::new(config.encoding).with_target(self.target);
+        let lang = TypeScript::new(config.encoding);
 
         Module::new(&config).write(w, &lang)?;
 

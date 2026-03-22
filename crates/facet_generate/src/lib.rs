@@ -149,7 +149,7 @@
 //! ## Compilation tests (`tests/<lang>_generation.rs`)
 //!
 //! Integration tests that generate code **and** a project scaffold into a temporary directory,
-//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `deno check`).
+//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `tsc`).
 //! They verify that the generated code is syntactically and type-correct in the target language.
 //! Each file is feature-gated (e.g. `#![cfg(feature = "kotlin")]`) so tests only run when the
 //! corresponding toolchain is available.
@@ -214,12 +214,17 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 macro_rules! emit {
     ($($ty:ident),* as $language:ident with $encoding:path) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::{Container, indent::{IndentConfig, IndentedWriter}};
+            use $crate::generation::{
+                Container,
+                config::CodeGeneratorConfig,
+                indent::{IndentConfig, IndentedWriter},
+            };
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*)?;
-            let lang = $language::for_encoding($encoding, &registry);
+            let config = CodeGeneratorConfig::new("testing".to_string());
+            let lang = $language::for_encoding($encoding, &registry, &config);
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;

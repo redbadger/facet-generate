@@ -65,7 +65,7 @@ jobs:
           java-version: "21"
           cache: "gradle"
 
-      - name: Setup Additional Languages for codegen tests (deno)
+      - name: Setup Additional Languages for codegen tests (deno — TypeScript test runner)
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x

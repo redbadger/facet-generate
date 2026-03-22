@@ -25,11 +25,10 @@
 //!
 //! # Encoding-dependent output
 //!
-//! The [`TypeScript`] language tag carries the active [`Encoding`] and
-//! [`InstallTarget`]. Both JSON and Bincode use the same
-//! `Serializer`/`Deserializer` interface pattern with hand-written
-//! `serialize`/`deserialize` methods. When encoding is `None`, only plain
-//! type declarations are emitted.
+//! The [`TypeScript`] language tag carries the active [`Encoding`]. Both JSON
+//! and Bincode use the same `Serializer`/`Deserializer` interface pattern with
+//! hand-written `serialize`/`deserialize` methods. When encoding is `None`,
+//! only plain type declarations are emitted.
 //!
 //! # Feature helpers (`features/` directory)
 //!
@@ -72,8 +71,6 @@ use crate::{
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
 
-use super::InstallTarget;
-
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ArrayOfT.ts");
 const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.ts");
 const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.ts");
@@ -82,29 +79,17 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.ts");
 
 /// Language tag for TypeScript code generation.
 ///
-/// Carries the active [`Encoding`] (None / Bincode / Json) and
-/// [`InstallTarget`] (Node / Deno) so emitter implementations can adapt
-/// their output accordingly.
+/// Carries the active [`Encoding`] (None / Bincode / Json) so emitter
+/// implementations can adapt their output accordingly.
 #[derive(Debug, Clone)]
 pub struct TypeScript {
     pub encoding: Encoding,
-    pub target: InstallTarget,
 }
 
 impl TypeScript {
     #[must_use]
     pub fn new(encoding: Encoding) -> Self {
-        Self {
-            encoding,
-            target: InstallTarget::Node,
-        }
-    }
-
-    /// Which `InstallTarget` to use (Node or Deno)
-    #[must_use]
-    pub fn with_target(mut self, target: InstallTarget) -> Self {
-        self.target = target;
-        self
+        Self { encoding }
     }
 
     /// Create a [`TypeScript`] language tag for the given encoding and registry.
@@ -113,52 +98,52 @@ impl TypeScript {
     /// for TypeScript generation but the method signature mirrors `Swift::for_encoding`
     /// so that the `emit!` test macro can call a uniform constructor.
     #[must_use]
-    pub fn for_encoding(encoding: Encoding, _registry: &crate::Registry) -> Self {
+    pub fn for_encoding(
+        encoding: Encoding,
+        _registry: &crate::Registry,
+        _config: &CodeGeneratorConfig,
+    ) -> Self {
         Self::new(encoding)
     }
 }
 
 impl Module {
-    fn ts_serde_import_path(&self, target: InstallTarget) -> String {
-        let serde = target.serde_import_path();
-        if let Some(path) = self.config().external_packages.get(SERDE_NAMESPACE) {
-            match &path.location {
-                PackageLocation::Path(_) => {
-                    let name = &path.for_namespace;
-                    if let Some(mod_name) = &path.module_name {
-                        format!("{name}/{mod_name}")
-                    } else {
-                        name.clone()
+    fn ts_serde_import_path(&self) -> String {
+        self.config()
+            .external_packages
+            .get(SERDE_NAMESPACE)
+            .map_or_else(
+                || "./serde".to_string(),
+                |path| match &path.location {
+                    PackageLocation::Path(_) => {
+                        let name = &path.for_namespace;
+                        path.module_name
+                            .as_ref()
+                            .map_or_else(|| name.clone(), |mod_name| format!("{name}/{mod_name}"))
                     }
-                }
-                PackageLocation::Url(_) => path.for_namespace.clone(),
-            }
-        } else {
-            format!("./{serde}")
-        }
+                    PackageLocation::Url(_) => path.for_namespace.clone(),
+                },
+            )
     }
 
     fn ts_namespace_import_path(&self, namespace: &str) -> String {
-        if let Some(path) = self.config().external_packages.get(namespace) {
-            match &path.location {
+        self.config().external_packages.get(namespace).map_or_else(
+            || format!("../{namespace}"),
+            |path| match &path.location {
                 PackageLocation::Path(_) => {
                     let name = &path.for_namespace;
-                    if let Some(mod_name) = &path.module_name {
-                        format!("{name}/{mod_name}")
-                    } else {
-                        name.clone()
-                    }
+                    path.module_name
+                        .as_ref()
+                        .map_or_else(|| name.clone(), |mod_name| format!("{name}/{mod_name}"))
                 }
                 PackageLocation::Url(_) => path.for_namespace.clone(),
-            }
-        } else {
-            format!("../{namespace}")
-        }
+            },
+        )
     }
 }
 
 impl Emitter<TypeScript> for Module {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &TypeScript) -> Result<()> {
         let CodeGeneratorConfig {
             encoding,
             features,
@@ -168,7 +153,7 @@ impl Emitter<TypeScript> for Module {
         } = self.config();
 
         if self.config().has_encoding() {
-            let import_path = self.ts_serde_import_path(lang.target);
+            let import_path = self.ts_serde_import_path();
             writeln!(
                 w,
                 r#"import {{ Serializer, Deserializer }} from "{import_path}";"#

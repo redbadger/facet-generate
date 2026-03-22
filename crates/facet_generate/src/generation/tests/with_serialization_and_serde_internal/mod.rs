@@ -8,7 +8,7 @@ use crate::{
     generation::{
         Encoding, java, kotlin, swift,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
-        typescript::{self, InstallTarget},
+        typescript,
     },
     reflect, source_dir,
 };
@@ -63,7 +63,7 @@ fn test() {
                     .unwrap();
             }
             TargetLanguage::TypeScript => {
-                typescript::Installer::new("example", tmp_path, InstallTarget::Node)
+                typescript::Installer::new("example", tmp_path)
                     .encoding(Encoding::Bincode)
                     .generate(&registry)
                     .unwrap();

@@ -6,8 +6,8 @@
 //!
 //! 1. **Runtime files** — copies the serde and/or bincode runtime `.ts`
 //!    sources into the output directory, adapting file names and import paths
-//!    for the active [`InstallTarget`] (Node: `index.ts` + extensionless
-//!    imports; Deno: `mod.ts` + `.ts` extensions).
+//!    using extensionless imports (`index.ts` entry points, `.ts` stripped
+//!    from import paths).
 //!
 //! 2. **Per-module source files** — splits the registry by namespace (via
 //!    [`module::split`]) and calls [`TypeScriptCodeGenerator`] once per namespace,
@@ -33,8 +33,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SERDE_NAMESPACE, SourceInstaller, module,
-        typescript::{InstallTarget, TypeScriptCodeGenerator},
+        SERDE_NAMESPACE, SourceInstaller, module, typescript::TypeScriptCodeGenerator,
     },
 };
 
@@ -43,38 +42,30 @@ use crate::{
 /// # Examples
 ///
 /// ```rust
-/// use facet_generate::generation::typescript::{self, InstallTarget};
+/// use facet_generate::generation::typescript;
 ///
 /// let output_dir = std::path::PathBuf::from("output");
-///
-/// // For Deno (with .ts extensions)
-/// let installer = typescript::Installer::new("my-package", &output_dir, InstallTarget::Deno);
-///
-/// // For React/Node.js (extensionless imports)
-/// let installer = typescript::Installer::new("my-package", &output_dir, InstallTarget::Node);
+/// let installer = typescript::Installer::new("my-package", &output_dir);
 /// ```
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    target: InstallTarget,
     encoding: Encoding,
 }
 
 impl Installer {
-    /// Create a new installer for the given package name, output directory, and
-    /// target platform.
+    /// Create a new installer for the given package name and output directory.
     ///
     /// Use the builder methods [`encoding`](Self::encoding) and
     /// [`external_packages`](Self::external_packages) to configure, then call
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
-    pub fn new(package_name: &str, install_dir: impl AsRef<Path>, target: InstallTarget) -> Self {
-        Installer {
+    pub fn new(package_name: &str, install_dir: impl AsRef<Path>) -> Self {
+        Self {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
-            target,
             encoding: Encoding::default(),
         }
     }
@@ -137,12 +128,9 @@ impl Installer {
         let dir_path = self.install_dir.join(path);
         create_dir_all(&dir_path)?;
         for entry in source_dir.files() {
-            let original_name = entry.path().to_string_lossy();
-            let file_name = self.target.transform_runtime_filename(&original_name);
-            let content_str = std::str::from_utf8(entry.contents())?;
-            let content = self.target.transform_import_path(content_str);
-            let mut file = File::create(dir_path.join(file_name))?;
-            file.write_all(content.as_bytes())?;
+            let file_name = entry.path().to_string_lossy();
+            let mut file = File::create(dir_path.join(file_name.as_ref()))?;
+            file.write_all(entry.contents())?;
         }
         Ok(())
     }
@@ -209,10 +197,9 @@ impl Installer {
 impl SourceInstaller for Installer {
     /// Generate a single `.ts` source file for one namespace.
     ///
-    /// For **Node** targets the file is written as `<namespace>.ts` directly
-    /// in the install directory. For **Deno** targets it is written as
-    /// `<namespace>/mod.ts`. Namespaces that correspond to external packages
-    /// are skipped — their types are imported rather than generated.
+    /// The file is written as `<namespace>.ts` directly in the install
+    /// directory. Namespaces that correspond to external packages are skipped
+    /// — their types are imported rather than generated.
     fn install_module(
         &mut self,
         config: &CodeGeneratorConfig,
@@ -222,38 +209,31 @@ impl SourceInstaller for Installer {
         if skip_module {
             return Ok(());
         }
-        let file_name = match self.target {
-            InstallTarget::Node => {
-                create_dir_all(&self.install_dir)?;
-
-                let module_name = config.module_name();
-                self.install_dir.join(format!("{module_name}.ts"))
-            }
-            InstallTarget::Deno => {
-                let dir_path = self.install_dir.join(&config.module_name);
-                create_dir_all(&dir_path)?;
-
-                dir_path.join("mod.ts")
-            }
-        };
+        create_dir_all(&self.install_dir)?;
+        let module_name = config.module_name();
+        let file_name = self.install_dir.join(format!("{module_name}.ts"));
         let mut file = File::create(file_name)?;
 
         // Update config with external packages from installer
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = TypeScriptCodeGenerator::new(&updated_config, self.target);
+        let generator = TypeScriptCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
         Ok(())
     }
 
     fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        self.install_runtime(self.target.serde_runtime(), "serde")
+        static SERDE_DIR: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
+        self.install_runtime(&SERDE_DIR, "serde")
     }
 
     fn install_bincode_runtime(&self) -> Result<(), Error> {
-        self.install_runtime(self.target.bincode_runtime(), "bincode")
+        static BINCODE_DIR: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/bincode");
+        self.install_runtime(&BINCODE_DIR, "bincode")
     }
 
     /// Write `package.json` to the output directory.

@@ -9,7 +9,7 @@ use crate::{
         Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, kotlin, module,
         swift::Installer,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
-        typescript::{self, InstallTarget},
+        typescript,
     },
     reflect, source_dir,
 };
@@ -109,17 +109,14 @@ fn test() {
             }
             TargetLanguage::TypeScript => {
                 let package_name = "example";
-                let mut installer = typescript::Installer::new(
-                    package_name,
-                    tmp_path.join(package_name),
-                    InstallTarget::Node,
-                )
-                .external_packages(&[ExternalPackage {
-                    for_namespace: "serde".to_string(),
-                    location: PackageLocation::Path("../serde".to_string()),
-                    module_name: None,
-                    version: None,
-                }]);
+                let mut installer =
+                    typescript::Installer::new(package_name, tmp_path.join(package_name))
+                        .external_packages(&[ExternalPackage {
+                            for_namespace: "serde".to_string(),
+                            location: PackageLocation::Path("../serde".to_string()),
+                            module_name: None,
+                            version: None,
+                        }]);
 
                 for (module, registry) in &module::split(package_name, &registry) {
                     let config = module.config().clone().with_encoding(Encoding::Bincode);
@@ -128,11 +125,8 @@ fn test() {
                 installer.install_manifest(package_name).unwrap();
 
                 let package_name = "serde";
-                let mut installer = typescript::Installer::new(
-                    package_name,
-                    tmp_path.join(package_name),
-                    InstallTarget::Node,
-                );
+                let mut installer =
+                    typescript::Installer::new(package_name, tmp_path.join(package_name));
                 installer.install_serde_runtime().unwrap();
                 installer.install_manifest(package_name).unwrap();
             }

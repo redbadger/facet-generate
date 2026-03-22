@@ -107,7 +107,11 @@ impl Kotlin {
     /// for Kotlin generation but the method signature mirrors `Swift::for_encoding`
     /// so that the `emit!` test macro can call a uniform constructor.
     #[must_use]
-    pub fn for_encoding(encoding: Encoding, _registry: &crate::Registry) -> Self {
+    pub fn for_encoding(
+        encoding: Encoding,
+        _registry: &crate::Registry,
+        _config: &CodeGeneratorConfig,
+    ) -> Self {
         Self::new(encoding)
     }
 }

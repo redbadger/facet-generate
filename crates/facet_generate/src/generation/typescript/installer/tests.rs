@@ -11,16 +11,12 @@
 //! - Serde/bincode runtime installation.
 //! - Multi-module (namespace) scenarios where each namespace becomes a
 //!   separate `.ts` file.
-//! - Node vs Deno target differences in file layout.
 
 use facet::Facet;
 
 use crate as fg;
 use crate::{
-    generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
-        typescript::InstallTarget,
-    },
+    generation::{ExternalPackage, PackageLocation, SourceInstaller as _, module::split},
     reflect,
 };
 
@@ -31,7 +27,7 @@ fn simple_manifest() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
+    let installer = Installer::new(package_name, install_dir.path());
 
     let manifest = installer.make_manifest(package_name);
 
@@ -66,8 +62,8 @@ fn manifest_with_dependencies() {
         },
     ];
 
-    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
-        .external_packages(&external_pkgs);
+    let installer =
+        Installer::new(package_name, install_dir.path()).external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
 
@@ -98,8 +94,8 @@ fn manifest_with_local_dependencies() {
         version: None,
     }];
 
-    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
-        .external_packages(&external_pkgs);
+    let installer =
+        Installer::new(package_name, install_dir.path()).external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
@@ -137,8 +133,8 @@ fn manifest_with_mixed_dependencies() {
         },
     ];
 
-    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
-        .external_packages(&external_pkgs);
+    let installer =
+        Installer::new(package_name, install_dir.path()).external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
@@ -169,7 +165,7 @@ fn manifest_with_serde_module() {
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
+    let mut installer = Installer::new(package_name, install_dir.path());
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -208,7 +204,7 @@ fn manifest_with_namespaces() {
 
     let package_name = "my-package";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node);
+    let mut installer = Installer::new(package_name, install_dir.path());
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -253,8 +249,8 @@ fn manifest_with_external_namespace_dependencies() {
         version: Some("^1.0.0".to_string()),
     }];
 
-    let mut installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
-        .external_packages(&external_pkgs);
+    let mut installer =
+        Installer::new(package_name, install_dir.path()).external_packages(&external_pkgs);
 
     for (module, registry) in split(package_name, &registry) {
         installer
@@ -289,8 +285,8 @@ fn manifest_with_scoped_package() {
         version: Some("^20.0.0".to_string()),
     }];
 
-    let installer = Installer::new(package_name, install_dir.path(), InstallTarget::Node)
-        .external_packages(&external_pkgs);
+    let installer =
+        Installer::new(package_name, install_dir.path()).external_packages(&external_pkgs);
 
     let manifest = installer.make_manifest(package_name);
     insta::assert_json_snapshot!(manifest, @r#"
