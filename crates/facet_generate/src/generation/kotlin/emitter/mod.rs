@@ -90,7 +90,7 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
 /// Passed as the `L` parameter to every [`Emitter<L>`](super::super::Emitter)
 /// call. Carries the target [`Encoding`] so emitters can conditionally
 /// produce serialization code.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Kotlin {
     pub encoding: Encoding,
 }
@@ -128,7 +128,7 @@ impl Module {
 
 impl Emitter<Kotlin> for Module {
     #[allow(clippy::too_many_lines)]
-    fn write<W: Write>(&self, w: &mut W, _lang: Kotlin) -> Result<()> {
+    fn write<W: Write>(&self, w: &mut W, _lang: &Kotlin) -> Result<()> {
         let CodeGeneratorConfig {
             module_name,
             encoding,
@@ -248,7 +248,7 @@ impl Emitter<Kotlin> for Module {
 }
 
 impl Emitter<Kotlin> for Container<'_> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
@@ -299,7 +299,7 @@ impl Emitter<Kotlin> for Container<'_> {
 }
 
 impl Emitter<Kotlin> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         self.doc.write(w, lang)?;
 
         let name = &self.name.to_lower_camel_case();
@@ -317,7 +317,7 @@ impl Emitter<Kotlin> for Named<Format> {
 }
 
 impl Emitter<Kotlin> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W, _lang: Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Kotlin) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -339,7 +339,7 @@ pub enum VariantContext {
 
 impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     #[allow(clippy::too_many_lines)]
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let (
             Named {
                 name,
@@ -459,7 +459,7 @@ impl Format {
 }
 
 impl Emitter<Kotlin> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Kotlin) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -562,7 +562,7 @@ fn data_object<W: IndentWrite>(
     name: &str,
     interface: Option<&str>,
     doc: &Doc,
-    lang: Kotlin,
+    lang: &Kotlin,
     variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w, lang)?;
@@ -627,7 +627,7 @@ fn data_class<W: IndentWrite>(
     interface: Option<&str>,
     fields: &[Named<Format>],
     doc: &Doc,
-    lang: Kotlin,
+    lang: &Kotlin,
     variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w, lang)?;
@@ -728,7 +728,7 @@ fn enum_class<W: IndentWrite>(
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
-    lang: Kotlin,
+    lang: &Kotlin,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
@@ -821,7 +821,7 @@ fn sealed_interface<W: IndentWrite>(
     name: &str,
     variants: &[Named<VariantFormat>],
     doc: &Doc,
-    lang: Kotlin,
+    lang: &Kotlin,
 ) -> Result<()> {
     doc.write(w, lang)?;
 

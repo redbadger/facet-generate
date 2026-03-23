@@ -59,12 +59,12 @@ impl<'a> SwiftCodeGenerator<'a> {
 
         let lang = Swift::new(config.encoding);
 
-        Module::new(&config).write(w, lang)?;
+        Module::new(&config).write(w, &lang)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         for container in updated_registry.iter().map(Container::from) {
             writeln!(w)?;
-            container.write(w, lang)?;
+            container.write(w, &lang)?;
         }
 
         Ok(())

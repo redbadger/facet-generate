@@ -222,7 +222,7 @@ macro_rules! emit {
             for container in registry.iter().map(|pair| Container::from(pair).with_registry(&registry)) {
                 writeln!(&mut w)?;
                 let lang = $language::new($encoding);
-                container.write(&mut w, lang)?;
+                container.write(&mut w, &lang)?;
             }
             let out = String::from_utf8(out)?;
 

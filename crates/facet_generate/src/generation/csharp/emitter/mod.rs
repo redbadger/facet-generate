@@ -74,7 +74,7 @@ use crate::{
 /// Passed to every [`Emitter`](super::super::Emitter) implementation so
 /// that encoding-specific code (JSON annotations, Bincode methods) can be
 /// conditionally emitted.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct CSharp {
     pub encoding: Encoding,
 }
@@ -87,7 +87,7 @@ impl CSharp {
 }
 
 impl Emitter<CSharp> for Module {
-    fn write<W: Write>(&self, w: &mut W, lang: CSharp) -> Result<()> {
+    fn write<W: Write>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();
         writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
         writeln!(w, "using Facet.Runtime.Serde;")?;
@@ -110,7 +110,7 @@ impl Emitter<CSharp> for Module {
 }
 
 impl Emitter<CSharp> for Container<'_> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: CSharp) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
@@ -197,7 +197,7 @@ fn collect_c_style_enums(registry: Option<&Registry>) -> BTreeSet<String> {
 }
 
 impl Emitter<CSharp> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: CSharp) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         self.doc.write(w, lang)?;
         if lang.encoding == Encoding::Json {
             writeln!(
@@ -217,7 +217,7 @@ impl Emitter<CSharp> for Named<Format> {
 }
 
 impl Emitter<CSharp> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W, _lang: CSharp) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &CSharp) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -229,7 +229,7 @@ fn write_sealed_record<W: IndentWrite>(
     w: &mut W,
     name: &str,
     doc: &Doc,
-    lang: CSharp,
+    lang: &CSharp,
     c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     doc.write(w, lang)?;
@@ -273,7 +273,7 @@ fn write_class<W: IndentWrite>(
     name: &str,
     fields: &[Named<Format>],
     doc: &Doc,
-    lang: CSharp,
+    lang: &CSharp,
     c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     doc.write(w, lang)?;
@@ -425,7 +425,7 @@ fn write_enum<W: IndentWrite>(
     name: &str,
     variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
-    lang: CSharp,
+    lang: &CSharp,
 ) -> Result<()> {
     let enum_name = name.to_upper_camel_case();
 
@@ -562,7 +562,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     name: &str,
     variants: &[Named<VariantFormat>],
     doc: &Doc,
-    lang: CSharp,
+    lang: &CSharp,
     c_style_enums: &BTreeSet<String>,
 ) -> Result<()> {
     let base_name = name.to_upper_camel_case();

@@ -83,7 +83,7 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// Carries the active [`Encoding`] so that each emitter implementation can
 /// decide whether to emit serialization methods, protocol conformances, or
 /// plain type declarations.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Swift {
     encoding: Encoding,
 }
@@ -110,7 +110,7 @@ enum Usage {
 }
 
 impl Emitter<Swift> for Module {
-    fn write<W: IndentWrite>(&self, w: &mut W, _lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
         let CodeGeneratorConfig {
             encoding, features, ..
         } = self.config();
@@ -164,7 +164,7 @@ impl Emitter<Swift> for Module {
 }
 
 impl Emitter<Swift> for Container<'_> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
@@ -192,7 +192,7 @@ impl Emitter<Swift> for Container<'_> {
 }
 
 impl Emitter<Swift> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         match &self {
             Format::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Format::TypeName(qualified_type_name) => {
@@ -285,7 +285,7 @@ impl Emitter<Swift> for Format {
 }
 
 impl Emitter<Swift> for (&Named<Format>, Usage) {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let (Named { name, doc, value }, usage) = self;
         let name = &name.to_lower_camel_case();
 
@@ -362,7 +362,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
 }
 
 impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let (
             Named {
                 name,
@@ -524,7 +524,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
 /// Doc comments are **stripped** when encoding is [`Encoding::Bincode`] to
 /// keep the generated output compact.
 impl Emitter<Swift> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: Swift) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         if lang.encoding.is_bincode() {
             return Ok(());
         }
@@ -544,7 +544,7 @@ fn struct_<W: IndentWrite>(
     name: &str,
     fields: &[&Named<Format>],
     doc: &Doc,
-    lang: Swift,
+    lang: &Swift,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
@@ -693,7 +693,7 @@ fn enum_<W: IndentWrite>(
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
-    lang: Swift,
+    lang: &Swift,
 ) -> Result<()> {
     doc.write(w, lang)?;
 

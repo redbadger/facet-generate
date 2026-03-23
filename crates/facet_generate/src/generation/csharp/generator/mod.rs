@@ -57,7 +57,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         let lang = CSharp::new(config.encoding);
 
-        Module::new(&config).write(w, lang)?;
+        Module::new(&config).write(w, &lang)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         for (index, container) in updated_registry
@@ -68,7 +68,7 @@ impl<'a> CSharpCodeGenerator<'a> {
             if index > 0 {
                 writeln!(w)?;
             }
-            container.write(w, lang)?;
+            container.write(w, &lang)?;
         }
 
         Ok(())

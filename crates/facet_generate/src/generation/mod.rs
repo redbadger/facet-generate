@@ -155,7 +155,7 @@ pub trait Emitter<L> {
     /// # Errors
     ///
     /// Returns an error if the underlying writer fails.
-    fn write<W: IndentWrite>(&self, writer: &mut W, lang: L) -> Result<()>;
+    fn write<W: IndentWrite>(&self, writer: &mut W, lang: &L) -> Result<()>;
 }
 
 #[cfg(all(test, feature = "generate"))]
