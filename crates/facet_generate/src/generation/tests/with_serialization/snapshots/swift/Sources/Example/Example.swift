@@ -131,7 +131,7 @@ public struct Child: Hashable {
     }
 }
 
-public struct MyStruct {
+public struct MyStruct: Equatable {
     public var stringToInt: [String: Int32]
     public var mapToList: [String: [Int32]]
     public var optionOfVecOfSet: [Set<String>]?

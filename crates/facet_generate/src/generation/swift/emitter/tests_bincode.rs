@@ -242,7 +242,7 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct StructWithFields {
+    public struct StructWithFields: Equatable {
         public var unit: Void
         public var bool: Bool
         public var i8: Int8
@@ -531,7 +531,7 @@ fn struct_with_field_that_is_a_2_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var one: (String, Int32)
 
         public init(one: (String, Int32)) {
@@ -568,6 +568,10 @@ fn struct_with_field_that_is_a_2_tuple() {
             }
             return obj
         }
+
+        public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
+            return lhs.one == rhs.one
+        }
     }
     "#);
 }
@@ -582,7 +586,7 @@ fn struct_with_field_that_is_a_3_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var one: (String, Int32, UInt16)
 
         public init(one: (String, Int32, UInt16)) {
@@ -621,6 +625,10 @@ fn struct_with_field_that_is_a_3_tuple() {
             }
             return obj
         }
+
+        public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
+            return lhs.one == rhs.one
+        }
     }
     "#);
 }
@@ -638,7 +646,7 @@ fn struct_with_field_that_is_a_4_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var one: (String, Int32, UInt16, Float)
 
         public init(one: (String, Int32, UInt16, Float)) {
@@ -678,6 +686,10 @@ fn struct_with_field_that_is_a_4_tuple() {
                 throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
             }
             return obj
+        }
+
+        public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
+            return lhs.one == rhs.one
         }
     }
     "#);
@@ -1292,7 +1304,7 @@ fn struct_with_hashmap_field() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1362,7 +1374,7 @@ fn struct_with_nested_generics() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var optionalList: [String]?
         public var listOfOptionals: [Int32?]
         public var mapToList: [String: [Bool]]
@@ -1555,7 +1567,7 @@ fn struct_with_btreemap_field() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1912,7 +1924,7 @@ fn struct_with_mixed_collections_and_pointers() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct {
+    public struct MyStruct: Equatable {
         public var vecOfSets: [Set<String>]
         public var optionalBtree: [String: Int32]?
         public var boxedVec: [String]

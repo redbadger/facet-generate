@@ -219,9 +219,9 @@ macro_rules! emit {
             let mut out = Vec::new();
             let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
             let registry = $crate::reflect!($($ty),*)?;
+            let lang = $language::for_encoding($encoding, &registry);
             for container in registry.iter().map(|pair| Container::from(pair).with_registry(&registry)) {
                 writeln!(&mut w)?;
-                let lang = $language::new($encoding);
                 container.write(&mut w, &lang)?;
             }
             let out = String::from_utf8(out)?;

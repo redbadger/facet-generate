@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, clippy::unsafe_derive_deserialize)]
 #![cfg(feature = "swift")]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
@@ -49,10 +49,11 @@ pub enum SwiftSerdeData {
     TreeWithMutualRecursion(Tree<Box<SwiftSerdeData>>),
     TupleArray([u32; 3]),
     UnitVector(Vec<()>),
+    SimpleList(SwiftSimpleList),
     EmptyStructVariant {},
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::struct_field_names)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SwiftPrimitiveTypes {
     f_bool: bool,
@@ -71,7 +72,7 @@ pub struct SwiftPrimitiveTypes {
     f_char: Option<char>,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::struct_field_names)]
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SwiftOtherTypes {
     f_string: String,
@@ -112,6 +113,10 @@ pub enum SwiftList<T> {
     Empty,
     Node(T, Box<SwiftList<T>>),
 }
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftSimpleList(pub Option<Box<SwiftSimpleList>>);
 
 /// Registry used for Swift compilation tests.
 ///
