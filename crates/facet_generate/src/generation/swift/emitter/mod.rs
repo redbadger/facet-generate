@@ -88,8 +88,8 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// Language tag for Swift code generation.
 ///
 /// Carries the active [`Encoding`] and the sets of type names (within the
-/// current module) that are known to be able to synthesise [`Hashable`] and
-/// [`Equatable`] conformance respectively. Both sets are computed by a
+/// current module) that are known to be able to synthesize `Hashable` and
+/// `Equatable` conformance respectively. Both sets are computed by a
 /// preprocessing pass — see
 /// [`SwiftCodeGenerator`](crate::generation::swift::generator::SwiftCodeGenerator)
 /// and the `for_encoding` constructor.
@@ -100,17 +100,17 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// that the sets are computed correctly.
 ///
 /// > **Future direction** — when the plugin branch is merged, `hashable_types`
-/// > and `equatable_types` will be replaced by [`EmitterPlugin`] implementations
+/// > and `equatable_types` will be replaced by `EmitterPlugin` implementations
 /// > that receive the registry via `EmitContext.container.registry` at emission
 /// > time. `for_encoding` will then simply install the appropriate plugins and
 /// > the precomputed sets will be removed.
 #[derive(Debug, Clone)]
 pub struct Swift {
     pub(crate) encoding: Encoding,
-    /// Type names (root-namespace) that can synthesise `Hashable` conformance.
+    /// Type names (root-namespace) that can synthesize `Hashable` conformance.
     /// Empty → no same-module type is known to be hashable (conservative).
     pub(crate) hashable_types: BTreeSet<String>,
-    /// Type names (root-namespace) that can synthesise or manually implement
+    /// Type names (root-namespace) that can synthesize or manually implement
     /// `Equatable` conformance.
     /// Empty → no same-module type is known to be equatable (conservative).
     pub(crate) equatable_types: BTreeSet<String>,
@@ -151,7 +151,7 @@ impl Swift {
 pub(crate) fn is_hashable(format: &Format, lang: &Swift) -> bool {
     match format {
         Format::Variable(_)
-        | Format::Unit  // Void is not Hashable
+        | Format::Unit  // Void does not conform to Hashable in Swift
         | Format::Map { .. } => false, // [K: V] is never Hashable
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.hashable_types.contains(&qtn.name),
@@ -244,11 +244,10 @@ fn needs_indirect(format: &Format, struct_name: &str) -> bool {
 // Equatable helpers
 // ---------------------------------------------------------------------------
 
-/// Returns `true` if Swift can **auto-synthesise** `Equatable` for a field
+/// Returns `true` if Swift can **auto-synthesize** `Equatable` for a field
 /// of this format type.
 ///
-/// Differs from [`is_hashable`] in three important ways:
-/// - `Unit` (Void) → `true` — Swift's `()` IS `Equatable`.
+/// Differs from [`is_hashable`] in two ways:
 /// - `Map { .. }` → `true` when key and value are equatable — `[K:V]` IS `Equatable`.
 /// - `TypeName(Namespace::Root)` → looked up in [`Swift::equatable_types`] (or assumed
 ///   equatable when the set is absent); `Namespace::Named` types are external and assumed
@@ -258,15 +257,15 @@ fn needs_indirect(format: &Format, struct_name: &str) -> bool {
 /// because tuples do not conform to the `Equatable` *protocol* in Swift.
 fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
     match format {
-        Format::Variable(_) => false,
         // Look up same-module types in the equatable set; external types are assumed equatable.
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.equatable_types.contains(&qtn.name),
             Namespace::Named(_) => true, // external — assume equatable
         },
-        // Void (= Swift's ()) IS Equatable.
-        Format::Unit
-        | Format::Bool
+        // Void does not conform to Equatable in Swift — a stored property of
+        // type Void prevents both Hashable and Equatable auto-synthesis.
+        Format::Variable(_) | Format::Unit => false,
+        Format::Bool
         | Format::I8
         | Format::I16
         | Format::I32

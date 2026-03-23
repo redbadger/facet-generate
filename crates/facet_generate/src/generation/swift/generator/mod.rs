@@ -17,7 +17,7 @@ use crate::{
         swift::emitter::Swift,
     },
     reflection::format::{
-        ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
+        ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
     },
 };
 
@@ -107,12 +107,12 @@ impl<'a> SwiftCodeGenerator<'a> {
 /// from a registry.
 ///
 /// This is the standard constructor whenever a registry is available. The
-/// precomputed [`Swift::hashable_types`] and [`Swift::equatable_types`] sets
+/// precomputed `Swift::hashable_types` and `Swift::equatable_types` sets
 /// are derived here using a monotone fixed-point pass over the registry.
 ///
 /// > **Future direction** — when the plugin branch is merged this method will
 /// > install `EmitterPlugin` implementations instead of precomputing sets, and
-/// > the `registry` parameter will be dropped in favour of per-container
+/// > the `registry` parameter will be dropped in favor of per-container
 /// > registry access via `EmitContext`.
 impl Swift {
     /// Create a [`Swift`] language tag with type sets computed from `registry`.
@@ -128,7 +128,7 @@ impl Swift {
     }
 }
 
-/// Computes the set of type names (within this module) that can synthesise
+/// Computes the set of type names (within this module) that can synthesize
 /// Swift `Hashable` conformance.
 ///
 /// Uses a monotone fixed-point iteration: on each pass a type is added to
@@ -245,7 +245,9 @@ fn fmt_can_be_hashable(
         | Format::TupleArray { content: inner, .. } => {
             fmt_can_be_hashable(inner, known, local_names)
         }
-        Format::Variable(_) | Format::Unit | Format::Map { .. } => false, // [K: V] is never Hashable
+        Format::Variable(_)
+        | Format::Unit  // Void does not conform to Hashable in Swift
+        | Format::Map { .. } => false, // [K: V] is never Hashable
         // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
         Format::Tuple(formats) => {
             formats.len() == 1 && fmt_can_be_hashable(&formats[0], known, local_names)
@@ -253,7 +255,7 @@ fn fmt_can_be_hashable(
     }
 }
 
-/// Computes the set of type names (within this module) that can synthesise
+/// Computes the set of type names (within this module) that can synthesize
 /// Swift `Equatable` conformance.
 ///
 /// Uses a monotone fixed-point iteration: on each pass a type is added to
@@ -343,7 +345,6 @@ fn fmt_can_be_equatable(
     local_names: &BTreeSet<String>,
 ) -> bool {
     match format {
-        Format::Variable(_) => false,
         Format::TypeName(qtn) => {
             if local_names.contains(&qtn.name) {
                 // Same-module type: only equatable if already proven so.
@@ -353,8 +354,10 @@ fn fmt_can_be_equatable(
                 true
             }
         }
-        Format::Unit
-        | Format::Bool
+        // Void does not conform to Equatable in Swift — a stored property of
+        // type Void prevents Equatable auto-synthesis.
+        Format::Variable(_) | Format::Unit => false,
+        Format::Bool
         | Format::I8
         | Format::I16
         | Format::I32
@@ -369,7 +372,7 @@ fn fmt_can_be_equatable(
         | Format::F64
         | Format::Char
         | Format::Str
-        | Format::Bytes => true, // Void IS Equatable in Swift
+        | Format::Bytes => true,
         Format::Option(inner)
         | Format::Set(inner)
         | Format::Seq(inner)

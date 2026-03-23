@@ -242,7 +242,7 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct StructWithFields: Equatable {
+    public struct StructWithFields {
         public var unit: Void
         public var bool: Bool
         public var i8: Int8

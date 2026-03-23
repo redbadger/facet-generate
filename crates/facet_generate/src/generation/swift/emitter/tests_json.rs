@@ -249,7 +249,7 @@ fn struct_with_fields_of_primitive_types() {
 
     /// line 1
     /// line 2
-    public struct StructWithFields: Equatable {
+    public struct StructWithFields {
         /// unit type
         public var unit: Void
         /// boolean

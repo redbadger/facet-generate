@@ -12,8 +12,8 @@ use facet_generate as fg;
 use facet_generate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding,
-        swift::{SwiftCodeGenerator, normalize_path},
+        CodeGeneratorConfig, Encoding, SourceInstaller,
+        swift::{Installer as SwiftInstaller, SwiftCodeGenerator, normalize_path},
     },
     reflect,
 };
@@ -326,6 +326,199 @@ fn test_that_swift_code_compiles_without_serialization() {
 fn test_that_swift_code_compiles_with_bincode() {
     let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
     test_that_swift_code_compiles_with_config(&config);
+}
+
+// ---------------------------------------------------------------------------
+// Conformance compile-and-run tests
+//
+// Each test generates Swift code with Bincode encoding, adds a `main.swift`
+// that exercises the declared conformance (`: Hashable` or `: Equatable`),
+// and asserts that `swift run` succeeds — proving both that the conformance
+// synthesizes correctly and that it behaves correctly at runtime.
+// ---------------------------------------------------------------------------
+
+/// Build and run a Swift package that exercises a generated conformance.
+///
+/// * Installs the Serde runtime and generated code for `registry` into a
+///   temp directory.
+/// * Writes `main_swift` as `Sources/main/main.swift`.
+/// * Writes a `Package.swift` with `Serde`, `Testing`, and `main` targets.
+/// * Asserts that `swift run` exits successfully.
+fn assert_swift_conformance_runs(registry: &Registry, main_swift: &str) {
+    let dir = tempdir().unwrap();
+    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
+
+    let mut installer = SwiftInstaller::new(&config.module_name, dir.path());
+    installer.install_module(&config, registry).unwrap();
+    installer.install_serde_runtime().unwrap();
+
+    std::fs::create_dir_all(dir.path().join("Sources/main")).unwrap();
+    let mut main = File::create(dir.path().join("Sources/main/main.swift")).unwrap();
+    main.write_all(main_swift.as_bytes()).unwrap();
+
+    // Write a Package.swift that exposes Serde and Testing as library
+    // targets and main as an executable.
+    let mut pkg = File::create(dir.path().join("Package.swift")).unwrap();
+    write!(
+        pkg,
+        r#"// swift-tools-version:5.3
+import PackageDescription
+
+let package = Package(
+    name: "Testing",
+    targets: [
+        .target(
+            name: "Serde",
+            dependencies: []),
+        .target(
+            name: "Testing",
+            dependencies: ["Serde"]),
+        .target(
+            name: "main",
+            dependencies: ["Serde", "Testing"]),
+    ]
+)
+"#
+    )
+    .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["run", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// A struct with only primitive (non-`Void`) fields gets `: Hashable` and can
+/// therefore be inserted into a `Set` and used as a `Dictionary` key.
+///
+/// Note: `Void` (`()`) does **not** conform to `Hashable` or `Equatable` in
+/// Swift, so structs with a `unit: ()` field receive no protocol conformance.
+/// This test uses only genuinely `Hashable` field types to prove the end-to-end
+/// path: field-type analysis → `: Hashable` declaration → Swift synthesis →
+/// runtime use in `Set` and `Dictionary`.
+#[test]
+fn test_hashable_conformance_simple_struct() {
+    #[derive(Facet)]
+    struct SimpleStruct {
+        name: String,
+        value: i32,
+    }
+
+    let registry = reflect!(SimpleStruct).unwrap();
+    assert_swift_conformance_runs(
+        &registry,
+        r#"
+import Serde
+import Testing
+
+let a = SimpleStruct(name: "hello", value: 42)
+let b = SimpleStruct(name: "hello", value: 42)
+let c = SimpleStruct(name: "world", value: 0)
+
+// Hashable: usable as a Set element.
+var s: Set<SimpleStruct> = []
+s.insert(a)
+assert(s.contains(b), "identical SimpleStruct values should be found in Set")
+assert(!s.contains(c), "different SimpleStruct value should not be in Set")
+
+// Hashable: usable as a Dictionary key.
+let d: [SimpleStruct: String] = [a: "value"]
+assert(d[b] == "value", "SimpleStruct should be usable as Dictionary key")
+"#,
+    );
+}
+
+/// A struct whose fields are all `Hashable` except for a `[K: V]` Dictionary
+/// field should receive `: Equatable` via **auto-synthesis** — `Dictionary`
+/// is `Equatable` but not `Hashable` in Swift.
+///
+/// Proved by comparing instances with `==` and `!=`.
+#[test]
+fn test_equatable_auto_synthesis_with_dict_field() {
+    #[derive(Facet)]
+    struct DictField {
+        data: BTreeMap<String, i32>,
+    }
+
+    let registry = reflect!(DictField).unwrap();
+    assert_swift_conformance_runs(
+        &registry,
+        r#"
+import Serde
+import Testing
+
+let a = DictField(data: ["key": 1])
+let b = DictField(data: ["key": 1])
+let c = DictField(data: ["other": 2])
+
+assert(a == b, "DictField with equal contents should compare equal")
+assert(a != c, "DictField with different contents should compare unequal")
+"#,
+    );
+}
+
+/// A struct with a tuple field gets `: Equatable` with a **manual**
+/// `static func ==`, because native Swift tuples do not conform to the
+/// `Equatable` protocol (though `==` works on them as a built-in operator).
+///
+/// Proved by comparing instances with `==` and `!=`.
+#[test]
+fn test_equatable_manual_eq_with_tuple_field() {
+    #[derive(Facet)]
+    struct TupleField {
+        pair: (String, i32),
+    }
+
+    let registry = reflect!(TupleField).unwrap();
+    assert_swift_conformance_runs(
+        &registry,
+        r#"
+import Serde
+import Testing
+
+let a = TupleField(pair: ("hello", 42))
+let b = TupleField(pair: ("hello", 42))
+let c = TupleField(pair: ("world", 0))
+
+assert(a == b, "TupleField with equal tuple should compare equal")
+assert(a != c, "TupleField with different tuple should compare unequal")
+"#,
+    );
+}
+
+/// A struct with a deeply nested `Option<BTreeMap<String, Vec<bool>>>` field
+/// gets `: Equatable` via **auto-synthesis**, proving that the Swift compiler
+/// can synthesize `Equatable` through arbitrarily nested `Dictionary`
+/// containers (`[K: V]: Equatable when K: Equatable, V: Equatable`).
+///
+/// Proved by comparing `nil`, matching, and differing instances.
+#[test]
+fn test_equatable_auto_synthesis_with_nested_generics() {
+    #[derive(Facet)]
+    struct NestedDict {
+        data: Option<BTreeMap<String, Vec<bool>>>,
+    }
+
+    let registry = reflect!(NestedDict).unwrap();
+    assert_swift_conformance_runs(
+        &registry,
+        r#"
+import Serde
+import Testing
+
+let empty  = NestedDict(data: nil)
+let some1  = NestedDict(data: ["key": [true, false]])
+let some2  = NestedDict(data: ["key": [true, false]])
+let some3  = NestedDict(data: ["other": []])
+
+assert(empty == empty, "nil nested-dict should equal itself")
+assert(some1 == some2, "nested-dicts with equal contents should compare equal")
+assert(some1 != some3, "nested-dicts with different contents should compare unequal")
+assert(empty != some1, "nil should not equal Some(_)")
+"#,
+    );
 }
 
 #[test]

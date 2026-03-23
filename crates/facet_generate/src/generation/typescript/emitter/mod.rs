@@ -110,7 +110,7 @@ impl TypeScript {
     /// Create a [`TypeScript`] language tag for the given encoding and registry.
     ///
     /// Currently delegates to [`new`](Self::new) — the registry is not used
-    /// for TypeScript generation but the method signature mirrors [`Swift::for_encoding`]
+    /// for TypeScript generation but the method signature mirrors `Swift::for_encoding`
     /// so that the `emit!` test macro can call a uniform constructor.
     #[must_use]
     pub fn for_encoding(encoding: Encoding, _registry: &crate::Registry) -> Self {
