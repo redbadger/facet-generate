@@ -240,10 +240,7 @@ fn set_of_tuple_errors() {
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
-        for container in registry
-            .iter()
-            .map(|pair| Container::from(pair).with_registry(&registry))
-        {
+        for container in registry.iter().map(Container::from) {
             use facet_generate::generation::Emitter as _;
             container.write(&mut w, &lang)?;
         }
@@ -275,10 +272,7 @@ fn map_with_tuple_key_errors() {
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
-        for container in registry
-            .iter()
-            .map(|pair| Container::from(pair).with_registry(&registry))
-        {
+        for container in registry.iter().map(Container::from) {
             use facet_generate::generation::Emitter as _;
             container.write(&mut w, &lang)?;
         }

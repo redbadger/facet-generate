@@ -69,7 +69,8 @@ use crate::{
     },
 };
 
-/// Language tag for C#, carrying the active [`Encoding`].
+/// Language tag for C#, carrying the active [`Encoding`] and precomputed
+/// cross-type information from the registry.
 ///
 /// Passed to every [`Emitter`](super::super::Emitter) implementation so
 /// that encoding-specific code (JSON annotations, Bincode methods) can be
@@ -77,22 +78,41 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct CSharp {
     pub encoding: Encoding,
+    /// Names of enums whose variants are all [`VariantFormat::Unit`] (C-style
+    /// enums). These are emitted as plain C# `enum` types rather than class
+    /// hierarchies, so their bincode serialization must go through a static
+    /// `{Enum}Bincode` helper class instead of instance methods.
+    ///
+    /// Empty when encoding is not `Bincode` (the set is only needed for
+    /// bincode serialization dispatch).
+    pub(crate) c_style_enums: BTreeSet<String>,
 }
 
 impl CSharp {
     #[must_use]
     pub fn new(encoding: Encoding) -> Self {
-        Self { encoding }
+        Self {
+            encoding,
+            c_style_enums: BTreeSet::new(),
+        }
     }
 
     /// Create a [`CSharp`] language tag for the given encoding and registry.
     ///
-    /// Currently delegates to [`new`](Self::new) — the registry is not used
-    /// for C# generation but the method signature mirrors `Swift::for_encoding`
-    /// so that the `emit!` test macro can call a uniform constructor.
+    /// When encoding is `Bincode`, scans the registry to precompute the set
+    /// of C-style enums (all-unit-variant enums) needed for correct
+    /// serialization dispatch.
     #[must_use]
-    pub fn for_encoding(encoding: Encoding, _registry: &crate::Registry) -> Self {
-        Self::new(encoding)
+    pub fn for_encoding(encoding: Encoding, registry: &crate::Registry) -> Self {
+        let c_style_enums = if encoding == Encoding::Bincode {
+            collect_c_style_enums(registry)
+        } else {
+            BTreeSet::new()
+        };
+        Self {
+            encoding,
+            c_style_enums,
+        }
     }
 }
 
@@ -124,18 +144,13 @@ impl Emitter<CSharp> for Container<'_> {
         let Container {
             name: QualifiedTypeName { namespace: _, name },
             format,
-            ..
         } = self;
 
-        let c_style_enums = if lang.encoding == Encoding::Bincode {
-            collect_c_style_enums(self.registry)
-        } else {
-            BTreeSet::new()
-        };
+        let c_style_enums = &lang.c_style_enums;
 
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                write_sealed_record(w, name, doc, lang, &c_style_enums)
+                write_sealed_record(w, name, doc, lang, c_style_enums)
             }
             ContainerFormat::NewTypeStruct(format, doc) => write_class(
                 w,
@@ -143,16 +158,16 @@ impl Emitter<CSharp> for Container<'_> {
                 &[Named::new(format, "value".to_string())],
                 doc,
                 lang,
-                &c_style_enums,
+                c_style_enums,
             ),
             ContainerFormat::TupleStruct(formats, doc) => {
-                write_class(w, name, &named(formats), doc, lang, &c_style_enums)
+                write_class(w, name, &named(formats), doc, lang, c_style_enums)
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    write_sealed_record(w, name, doc, lang, &c_style_enums)
+                    write_sealed_record(w, name, doc, lang, c_style_enums)
                 } else {
-                    write_class(w, name, fields, doc, lang, &c_style_enums)
+                    write_class(w, name, fields, doc, lang, c_style_enums)
                 }
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -163,14 +178,7 @@ impl Emitter<CSharp> for Container<'_> {
                     write_enum(w, name, variants, doc, lang)
                 } else {
                     let variant_list: Vec<_> = variants.values().cloned().collect();
-                    write_variant_record_hierarchy(
-                        w,
-                        name,
-                        &variant_list,
-                        doc,
-                        lang,
-                        &c_style_enums,
-                    )
+                    write_variant_record_hierarchy(w, name, &variant_list, doc, lang, c_style_enums)
                 }
             }
         }
@@ -189,21 +197,20 @@ impl Emitter<CSharp> for Container<'_> {
 /// namespace on `Format::TypeName` references without touching registry keys.
 /// Within a single module the bare name is unambiguous (types are grouped by
 /// namespace via [`module::split`]).
-fn collect_c_style_enums(registry: Option<&Registry>) -> BTreeSet<String> {
-    registry.map_or_else(BTreeSet::new, |r| {
-        r.iter()
-            .filter_map(|(name, format)| {
-                if let ContainerFormat::Enum(variants, _) = format
-                    && variants
-                        .values()
-                        .all(|v| matches!(v.value, VariantFormat::Unit))
-                {
-                    return Some(name.name.clone());
-                }
-                None
-            })
-            .collect()
-    })
+fn collect_c_style_enums(registry: &Registry) -> BTreeSet<String> {
+    registry
+        .iter()
+        .filter_map(|(name, format)| {
+            if let ContainerFormat::Enum(variants, _) = format
+                && variants
+                    .values()
+                    .all(|v| matches!(v.value, VariantFormat::Unit))
+            {
+                return Some(name.name.clone());
+            }
+            None
+        })
+        .collect()
 }
 
 impl Emitter<CSharp> for Named<Format> {

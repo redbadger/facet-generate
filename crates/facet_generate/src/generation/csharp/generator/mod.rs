@@ -55,16 +55,12 @@ impl<'a> CSharpCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = CSharp::new(config.encoding);
+        let updated_registry = Self::update_qualified_names(&config, registry);
+        let lang = CSharp::for_encoding(config.encoding, &updated_registry);
 
         Module::new(&config).write(w, &lang)?;
 
-        let updated_registry = Self::update_qualified_names(&config, registry);
-        for (index, container) in updated_registry
-            .iter()
-            .map(|pair| Container::from(pair).with_registry(&updated_registry))
-            .enumerate()
-        {
+        for (index, container) in updated_registry.iter().map(Container::from).enumerate() {
             if index > 0 {
                 writeln!(w)?;
             }
