@@ -28,7 +28,6 @@ public protocol Deserializer {
     func deserialize_variant_index() throws -> UInt32
     func deserialize_option_tag() throws -> Bool
     func get_buffer_offset() -> Int
-    func check_that_key_slices_are_increasing(key1: Slice, key2: Slice) throws
     func increase_container_depth() throws
     func decrease_container_depth() throws
 }

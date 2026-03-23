@@ -83,12 +83,13 @@ catch {{}}
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
     write!(
         file,
-        r#"// swift-tools-version:5.3
+        r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "Serde",
@@ -169,12 +170,13 @@ for input in positive_inputs {{
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
     write!(
         file,
-        r#"// swift-tools-version:5.3
+        r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "Serde",

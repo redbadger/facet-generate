@@ -81,20 +81,20 @@ class SerdeTests: XCTestCase {
     func testSerializeU128() throws {
         let serializer = BincodeSerializer()
         XCTAssertNoThrow(
-            try serializer.serialize_u128(value: UInt128(high: UInt64.max, low: UInt64.max)))
+            try serializer.serialize_u128(value: UInt128.max))
         XCTAssertEqual(
             serializer.get_bytes(),
             [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255],
             "the array should be same")
 
         let serializer2 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer2.serialize_u128(value: UInt128(high: 0, low: 1)))
+        XCTAssertNoThrow(try serializer2.serialize_u128(value: 1))
         XCTAssertEqual(
             serializer2.get_bytes(), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             "the array should be same")
 
         let serializer3 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer3.serialize_u128(value: UInt128(high: 0, low: 0)))
+        XCTAssertNoThrow(try serializer3.serialize_u128(value: 0))
         XCTAssertEqual(
             serializer3.get_bytes(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             "the array should be same")
@@ -102,28 +102,28 @@ class SerdeTests: XCTestCase {
 
     func testSerializeI128() throws {
         let serializer = BincodeSerializer()
-        XCTAssertNoThrow(try serializer.serialize_i128(value: Int128(high: -1, low: UInt64.max)))
+        XCTAssertNoThrow(try serializer.serialize_i128(value: -1))
         XCTAssertEqual(
             serializer.get_bytes(),
             [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255],
             "the array should be same")
 
         let serializer2 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer2.serialize_i128(value: Int128(high: 0, low: 1)))
+        XCTAssertNoThrow(try serializer2.serialize_i128(value: 1))
         XCTAssertEqual(
             serializer2.get_bytes(), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             "the array should be same")
 
         let serializer3 = BincodeSerializer()
         XCTAssertNoThrow(
-            try serializer3.serialize_i128(value: Int128(high: Int64.max, low: UInt64.max)))
+            try serializer3.serialize_i128(value: Int128.max))
         XCTAssertEqual(
             serializer3.get_bytes(),
             [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127],
             "the array should be same")
 
         let serializer4 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer4.serialize_i128(value: Int128(high: Int64.min, low: 0)))
+        XCTAssertNoThrow(try serializer4.serialize_i128(value: Int128.min))
         XCTAssertEqual(
             serializer4.get_bytes(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80],
             "the array should be same")

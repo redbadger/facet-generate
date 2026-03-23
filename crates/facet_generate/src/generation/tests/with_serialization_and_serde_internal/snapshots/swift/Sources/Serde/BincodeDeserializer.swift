@@ -31,7 +31,4 @@ public class BincodeDeserializer: BinaryDeserializer {
         return try deserialize_u32()
     }
 
-    override public func check_that_key_slices_are_increasing(key1 _: Slice, key2 _: Slice) throws {
-        // Nothing to do
-    }
 }

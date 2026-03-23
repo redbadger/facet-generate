@@ -150,12 +150,13 @@ fn test_that_swift_code_compiles_with_config_and_registry(
     if config.has_encoding() {
         write!(
             file,
-            r#"// swift-tools-version:5.3
+            r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     products: [
         .library(
             name: "Testing",
@@ -177,12 +178,13 @@ let package = Package(
     } else {
         write!(
             file,
-            r#"// swift-tools-version:5.3
+            r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     products: [
         .library(
             name: "Testing",
@@ -355,11 +357,12 @@ fn assert_swift_conformance_runs(registry: &Registry, main_swift: &str) {
     let mut pkg = File::create(dir.path().join("Package.swift")).unwrap();
     write!(
         pkg,
-        r#"// swift-tools-version:5.3
+        r#"// swift-tools-version:6.0
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "Serde",

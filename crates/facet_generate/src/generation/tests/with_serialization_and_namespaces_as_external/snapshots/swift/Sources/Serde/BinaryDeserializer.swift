@@ -117,9 +117,13 @@ public class BinaryDeserializer: Deserializer {
     }
 
     public func deserialize_u128() throws -> UInt128 {
+        // Use unsafeBitCast to avoid requiring BinaryInteger conformance,
+        // which is gated behind macOS 15 / iOS 18.
+        // Bincode encodes as [low 8 bytes][high 8 bytes] (little-endian),
+        // matching the in-memory layout of UInt128 on ARM64.
         let low = try deserialize_u64()
         let high = try deserialize_u64()
-        return UInt128(high: high, low: low)
+        return unsafeBitCast((low, high), to: UInt128.self)
     }
 
     public func deserialize_i8() throws -> Int8 {
@@ -139,9 +143,14 @@ public class BinaryDeserializer: Deserializer {
     }
 
     public func deserialize_i128() throws -> Int128 {
+        // Use unsafeBitCast to avoid requiring BinaryInteger conformance,
+        // which is gated behind macOS 15 / iOS 18.
+        // Bincode encodes as [low 8 bytes][high 8 bytes] (little-endian),
+        // matching the in-memory layout of Int128 on ARM64.
+        // Read both halves as UInt64 bit patterns; the cast reinterprets them.
         let low = try deserialize_u64()
-        let high = try deserialize_i64()
-        return Int128(high: high, low: low)
+        let high = try deserialize_u64()
+        return unsafeBitCast((low, high), to: Int128.self)
     }
 
     public func deserialize_option_tag() throws -> Bool {
@@ -159,7 +168,4 @@ public class BinaryDeserializer: Deserializer {
         return location
     }
 
-    public func check_that_key_slices_are_increasing(key1 _: Slice, key2 _: Slice) throws {
-        assertionFailure("Not implemented")
-    }
 }
