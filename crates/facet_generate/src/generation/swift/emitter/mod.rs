@@ -314,7 +314,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_serializer(w)?;
-                    let formats = named(formats, "");
+                    let formats = named(formats, "field");
                     for format in formats {
                         (
                             &format,
@@ -344,7 +344,8 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                         )
                             .write(w, lang)?;
                     }
-                    write!(w, "let {name} = (")?;
+                    let len = formats.len();
+                    write!(w, "let {name} = Tuple{len}(")?;
                     for (i, format) in formats.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
