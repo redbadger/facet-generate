@@ -10,7 +10,7 @@ public protocol Deserializer {
     func deserialize_str() throws -> String
     func deserialize_bytes() throws -> [UInt8]
     func deserialize_bool() throws -> Bool
-    func deserialize_unit() throws -> Unit
+    func deserialize_unit() throws
     func deserialize_char() throws -> Character
     func deserialize_f32() throws -> Float
     func deserialize_f64() throws -> Double

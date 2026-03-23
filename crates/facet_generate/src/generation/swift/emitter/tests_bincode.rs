@@ -124,7 +124,7 @@ fn newtype_struct() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct NewType: Hashable {
-        @Indirect public var value: String
+        public var value: String
 
         public init(value: String) {
             self.value = value
@@ -172,8 +172,8 @@ fn tuple_struct() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct TupleStruct: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
+        public var field0: String
+        public var field1: Int32
 
         public init(field0: String, field1: Int32) {
             self.field0 = field0
@@ -242,25 +242,25 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct StructWithFields: Hashable {
-        @Indirect public var unit: Unit
-        @Indirect public var bool: Bool
-        @Indirect public var i8: Int8
-        @Indirect public var i16: Int16
-        @Indirect public var i32: Int32
-        @Indirect public var i64: Int64
-        @Indirect public var i128: Int128
-        @Indirect public var u8: UInt8
-        @Indirect public var u16: UInt16
-        @Indirect public var u32: UInt32
-        @Indirect public var u64: UInt64
-        @Indirect public var u128: UInt128
-        @Indirect public var f32: Float
-        @Indirect public var f64: Double
-        @Indirect public var char: Character
-        @Indirect public var string: String
+    public struct StructWithFields {
+        public var unit: Void
+        public var bool: Bool
+        public var i8: Int8
+        public var i16: Int16
+        public var i32: Int32
+        public var i64: Int64
+        public var i128: Int128
+        public var u8: UInt8
+        public var u16: UInt16
+        public var u32: UInt32
+        public var u64: UInt64
+        public var u128: UInt128
+        public var f32: Float
+        public var f64: Double
+        public var char: Character
+        public var string: String
 
-        public init(unit: Unit, bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: Int128, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: UInt128, f32: Float, f64: Double, char: Character, string: String) {
+        public init(unit: Void, bool: Bool, i8: Int8, i16: Int16, i32: Int32, i64: Int64, i128: Int128, u8: UInt8, u16: UInt16, u32: UInt32, u64: UInt64, u128: UInt128, f32: Float, f64: Double, char: Character, string: String) {
             self.unit = unit
             self.bool = bool
             self.i8 = i8
@@ -364,7 +364,7 @@ fn struct_with_fields_of_user_types() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct Inner1: Hashable {
-        @Indirect public var field1: String
+        public var field1: String
 
         public init(field1: String) {
             self.field1 = field1
@@ -400,7 +400,7 @@ fn struct_with_fields_of_user_types() {
     }
 
     public struct Inner2: Hashable {
-        @Indirect public var value: String
+        public var value: String
 
         public init(value: String) {
             self.value = value
@@ -436,8 +436,8 @@ fn struct_with_fields_of_user_types() {
     }
 
     public struct Inner3: Hashable {
-        @Indirect public var field0: String
-        @Indirect public var field1: Int32
+        public var field0: String
+        public var field1: Int32
 
         public init(field0: String, field1: Int32) {
             self.field0 = field0
@@ -476,9 +476,9 @@ fn struct_with_fields_of_user_types() {
     }
 
     public struct Outer: Hashable {
-        @Indirect public var one: Inner1
-        @Indirect public var two: Inner2
-        @Indirect public var three: Inner3
+        public var one: Inner1
+        public var two: Inner2
+        public var three: Inner3
 
         public init(one: Inner1, two: Inner2, three: Inner3) {
             self.one = one
@@ -531,17 +531,17 @@ fn struct_with_field_that_is_a_2_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple2<String, Int32>
+    public struct MyStruct {
+        public var one: (String, Int32)
 
-        public init(one: Tuple2<String, Int32>) {
+        public init(one: (String, Int32)) {
             self.one = one
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.one.field0)
-            try serializer.serialize_i32(value: self.one.field1)
+            try serializer.serialize_str(value: self.one.0)
+            try serializer.serialize_i32(value: self.one.1)
             try serializer.decrease_container_depth()
         }
 
@@ -555,7 +555,7 @@ fn struct_with_field_that_is_a_2_tuple() {
             try deserializer.increase_container_depth()
             let oneField0 = try deserializer.deserialize_str()
             let oneField1 = try deserializer.deserialize_i32()
-            let one = Tuple2(oneField0, oneField1)
+            let one = (oneField0, oneField1)
             try deserializer.decrease_container_depth()
             return MyStruct(one: one)
         }
@@ -582,18 +582,18 @@ fn struct_with_field_that_is_a_3_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple3<String, Int32, UInt16>
+    public struct MyStruct {
+        public var one: (String, Int32, UInt16)
 
-        public init(one: Tuple3<String, Int32, UInt16>) {
+        public init(one: (String, Int32, UInt16)) {
             self.one = one
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.one.field0)
-            try serializer.serialize_i32(value: self.one.field1)
-            try serializer.serialize_u16(value: self.one.field2)
+            try serializer.serialize_str(value: self.one.0)
+            try serializer.serialize_i32(value: self.one.1)
+            try serializer.serialize_u16(value: self.one.2)
             try serializer.decrease_container_depth()
         }
 
@@ -608,7 +608,7 @@ fn struct_with_field_that_is_a_3_tuple() {
             let oneField0 = try deserializer.deserialize_str()
             let oneField1 = try deserializer.deserialize_i32()
             let oneField2 = try deserializer.deserialize_u16()
-            let one = Tuple3(oneField0, oneField1, oneField2)
+            let one = (oneField0, oneField1, oneField2)
             try deserializer.decrease_container_depth()
             return MyStruct(one: one)
         }
@@ -638,19 +638,19 @@ fn struct_with_field_that_is_a_4_tuple() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var one: Tuple4<String, Int32, UInt16, Float>
+    public struct MyStruct {
+        public var one: (String, Int32, UInt16, Float)
 
-        public init(one: Tuple4<String, Int32, UInt16, Float>) {
+        public init(one: (String, Int32, UInt16, Float)) {
             self.one = one
         }
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.one.field0)
-            try serializer.serialize_i32(value: self.one.field1)
-            try serializer.serialize_u16(value: self.one.field2)
-            try serializer.serialize_f32(value: self.one.field3)
+            try serializer.serialize_str(value: self.one.0)
+            try serializer.serialize_i32(value: self.one.1)
+            try serializer.serialize_u16(value: self.one.2)
+            try serializer.serialize_f32(value: self.one.3)
             try serializer.decrease_container_depth()
         }
 
@@ -666,7 +666,7 @@ fn struct_with_field_that_is_a_4_tuple() {
             let oneField1 = try deserializer.deserialize_i32()
             let oneField2 = try deserializer.deserialize_u16()
             let oneField3 = try deserializer.deserialize_f32()
-            let one = Tuple4(oneField0, oneField1, oneField2, oneField3)
+            let one = (oneField0, oneField1, oneField2, oneField3)
             try deserializer.decrease_container_depth()
             return MyStruct(one: one)
         }
@@ -1149,9 +1149,9 @@ fn struct_with_vec_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var items: [String]
-        @Indirect public var numbers: [Int32]
-        @Indirect public var nestedItems: [[String]]
+        public var items: [String]
+        public var numbers: [Int32]
+        public var nestedItems: [[String]]
 
         public init(items: [String], numbers: [Int32], nestedItems: [[String]]) {
             self.items = items
@@ -1224,9 +1224,9 @@ fn struct_with_option_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var optionalString: String?
-        @Indirect public var optionalNumber: Int32?
-        @Indirect public var optionalBool: Bool?
+        public var optionalString: String?
+        public var optionalNumber: Int32?
+        public var optionalBool: Bool?
 
         public init(optionalString: String?, optionalNumber: Int32?, optionalBool: Bool?) {
             self.optionalString = optionalString
@@ -1292,9 +1292,9 @@ fn struct_with_hashmap_field() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var stringToInt: [String: Int32]
-        @Indirect public var intToBool: [Int32: Bool]
+    public struct MyStruct {
+        public var stringToInt: [String: Int32]
+        public var intToBool: [Int32: Bool]
 
         public init(stringToInt: [String: Int32], intToBool: [Int32: Bool]) {
             self.stringToInt = stringToInt
@@ -1362,12 +1362,12 @@ fn struct_with_nested_generics() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var optionalList: [String]?
-        @Indirect public var listOfOptionals: [Int32?]
-        @Indirect public var mapToList: [String: [Bool]]
-        @Indirect public var optionalMap: [String: Int32]?
-        @Indirect public var complex: [[String: [Bool]]?]
+    public struct MyStruct {
+        public var optionalList: [String]?
+        public var listOfOptionals: [Int32?]
+        public var mapToList: [String: [Bool]]
+        public var optionalMap: [String: Int32]?
+        public var complex: [[String: [Bool]]?]
 
         public init(optionalList: [String]?, listOfOptionals: [Int32?], mapToList: [String: [Bool]], optionalMap: [String: Int32]?, complex: [[String: [Bool]]?]) {
             self.optionalList = optionalList
@@ -1487,9 +1487,9 @@ fn struct_with_array_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var fixedArray: [Int32]
-        @Indirect public var byteArray: [UInt8]
-        @Indirect public var stringArray: [String]
+        public var fixedArray: [Int32]
+        public var byteArray: [UInt8]
+        public var stringArray: [String]
 
         public init(fixedArray: [Int32], byteArray: [UInt8], stringArray: [String]) {
             self.fixedArray = fixedArray
@@ -1555,9 +1555,9 @@ fn struct_with_btreemap_field() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var stringToInt: [String: Int32]
-        @Indirect public var intToBool: [Int32: Bool]
+    public struct MyStruct {
+        public var stringToInt: [String: Int32]
+        public var intToBool: [Int32: Bool]
 
         public init(stringToInt: [String: Int32], intToBool: [Int32: Bool]) {
             self.stringToInt = stringToInt
@@ -1625,8 +1625,8 @@ fn struct_with_hashset_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: Set<String>
-        @Indirect public var intSet: Set<Int32>
+        public var stringSet: Set<String>
+        public var intSet: Set<Int32>
 
         public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
@@ -1688,8 +1688,8 @@ fn struct_with_btreeset_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var stringSet: Set<String>
-        @Indirect public var intSet: Set<Int32>
+        public var stringSet: Set<String>
+        public var intSet: Set<Int32>
 
         public init(stringSet: Set<String>, intSet: Set<Int32>) {
             self.stringSet = stringSet
@@ -1750,8 +1750,8 @@ fn struct_with_box_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var boxedString: String
-        @Indirect public var boxedInt: Int32
+        public var boxedString: String
+        public var boxedInt: Int32
 
         public init(boxedString: String, boxedInt: Int32) {
             self.boxedString = boxedString
@@ -1803,8 +1803,8 @@ fn struct_with_rc_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var rcString: String
-        @Indirect public var rcInt: Int32
+        public var rcString: String
+        public var rcInt: Int32
 
         public init(rcString: String, rcInt: Int32) {
             self.rcString = rcString
@@ -1856,8 +1856,8 @@ fn struct_with_arc_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var arcString: String
-        @Indirect public var arcInt: Int32
+        public var arcString: String
+        public var arcInt: Int32
 
         public init(arcString: String, arcInt: Int32) {
             self.arcString = arcString
@@ -1912,12 +1912,12 @@ fn struct_with_mixed_collections_and_pointers() {
     let actual = emit!(MyStruct as Swift with Encoding::Bincode).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    public struct MyStruct: Hashable {
-        @Indirect public var vecOfSets: [Set<String>]
-        @Indirect public var optionalBtree: [String: Int32]?
-        @Indirect public var boxedVec: [String]
-        @Indirect public var arcOption: String?
-        @Indirect public var arrayOfBoxes: [Int32]
+    public struct MyStruct {
+        public var vecOfSets: [Set<String>]
+        public var optionalBtree: [String: Int32]?
+        public var boxedVec: [String]
+        public var arcOption: String?
+        public var arrayOfBoxes: [Int32]
 
         public init(vecOfSets: [Set<String>], optionalBtree: [String: Int32]?, boxedVec: [String], arcOption: String?, arrayOfBoxes: [Int32]) {
             self.vecOfSets = vecOfSets
@@ -2012,9 +2012,9 @@ fn struct_with_bytes_field() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var data: [UInt8]
-        @Indirect public var name: String
-        @Indirect public var header: [UInt8]
+        public var data: [UInt8]
+        public var name: String
+        public var header: [UInt8]
 
         public init(data: [UInt8], name: String, header: [UInt8]) {
             self.data = data
@@ -2073,10 +2073,10 @@ fn struct_with_bytes_field_and_slice() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct MyStruct: Hashable {
-        @Indirect public var data: [UInt8]
-        @Indirect public var name: String
-        @Indirect public var header: [UInt8]
-        @Indirect public var optionalBytes: [UInt8]?
+        public var data: [UInt8]
+        public var name: String
+        public var header: [UInt8]
+        public var optionalBytes: [UInt8]?
 
         public init(data: [UInt8], name: String, header: [UInt8], optionalBytes: [UInt8]?) {
             self.data = data
@@ -2147,7 +2147,7 @@ fn namespaced_child() {
     insta::assert_snapshot!(actual, @r#"
 
     public struct Parent: Hashable {
-        @Indirect public var child: [Test.Child]
+        public var child: [Test.Child]
 
         public init(child: [Test.Child]) {
             self.child = child
@@ -2187,7 +2187,7 @@ fn namespaced_child() {
     }
 
     public struct Child: Hashable {
-        @Indirect public var test: String
+        public var test: String
 
         public init(test: String) {
             self.test = test

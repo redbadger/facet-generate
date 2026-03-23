@@ -18,7 +18,7 @@ public class BinaryDeserializer: Deserializer {
         if newLocation > input.count {
             throw DeserializationError.invalidInput(issue: "Input is too small")
         }
-        let bytes = input[location ..< newLocation]
+        let bytes = input[location..<newLocation]
         location = newLocation
         return Array(bytes)
     }
@@ -75,13 +75,12 @@ public class BinaryDeserializer: Deserializer {
         switch value {
         case 0: return false
         case 1: return true
-        default: throw DeserializationError.invalidInput(issue: "Incorrect value for boolean: \(value)")
+        default:
+            throw DeserializationError.invalidInput(issue: "Incorrect value for boolean: \(value)")
         }
     }
 
-    public func deserialize_unit() throws -> Unit {
-        return Unit()
-    }
+    public func deserialize_unit() throws {}
 
     public func deserialize_u8() throws -> UInt8 {
         let bytes = try readBytes(count: 1)
@@ -150,7 +149,9 @@ public class BinaryDeserializer: Deserializer {
         switch value {
         case 0: return false
         case 1: return true
-        default: throw DeserializationError.invalidInput(issue: "Incorrect value for option tag: \(value)")
+        default:
+            throw DeserializationError.invalidInput(
+                issue: "Incorrect value for option tag: \(value)")
         }
     }
 

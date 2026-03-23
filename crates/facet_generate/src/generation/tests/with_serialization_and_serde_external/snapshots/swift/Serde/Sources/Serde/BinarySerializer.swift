@@ -52,7 +52,7 @@ public class BinarySerializer: Serializer {
         writeByte(value ? 1 : 0)
     }
 
-    public func serialize_unit(value _: Unit) throws {}
+    public func serialize_unit(value _: ()) throws {}
 
     func writeByte(_ value: UInt8) {
         output.append(value)

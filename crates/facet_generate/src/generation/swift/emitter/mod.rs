@@ -19,8 +19,7 @@
 //!
 //! The [`Format`] emitter maps Rust/reflection types to Swift equivalents —
 //! for example `I32` → `Int32`, `Seq(T)` → `[T]`, `Option(T)` → `T?`,
-//! `Map(K,V)` → `[K: V]`, tuples of size 2/3 → native `(A, B)` (no
-//! serialization) or `TupleN<…>` (with serialization).
+//! `Map(K,V)` → `[K: V]`, tuples of any size → native `(A, B)` (always).
 //!
 //! # Encoding-dependent output
 //!
@@ -30,6 +29,12 @@
 //! When encoding is `Bincode`, each type gets `serialize`/`deserialize`
 //! methods and `bincodeSerialize`/`bincodeDeserialize` wrappers. When
 //! encoding is `None`, only plain type declarations are emitted.
+//!
+//! Types whose fields are all [`Hashable`](https://developer.apple.com/documentation/swift/hashable)
+//! will declare `: Hashable` conformance so they can serve as `Set` elements
+//! or `Dictionary` keys. A generation-time error is raised if a non-`Hashable`
+//! type (native tuple or `[K:V]` dictionary) is used directly as a `Set`
+//! element or `Map` key.
 //!
 //! # Feature helpers (`features/` directory)
 //!
@@ -54,8 +59,8 @@
 
 #![allow(clippy::too_many_lines)]
 use std::{
-    collections::BTreeMap,
-    io::{Result, Write},
+    collections::{BTreeMap, BTreeSet},
+    io::{self, Result, Write},
 };
 
 use heck::ToLowerCamelCase as _;
@@ -69,7 +74,9 @@ use crate::{
         indent::{IndentWrite, Newlines},
         module::Module,
     },
-    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+    },
 };
 
 const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.swift");
@@ -80,18 +87,107 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 
 /// Language tag for Swift code generation.
 ///
-/// Carries the active [`Encoding`] so that each emitter implementation can
-/// decide whether to emit serialization methods, protocol conformances, or
-/// plain type declarations.
+/// Carries the active [`Encoding`] and the set of type names (within the
+/// current module) that are known to be able to synthesise [`Hashable`]
+/// conformance. This set is computed by a preprocessing pass in
+/// [`SwiftCodeGenerator`](super::super::generator::SwiftCodeGenerator) and
+/// used to decide whether each generated struct/enum should declare
+/// `: Hashable`, and to validate `Set` element and `Map` key types.
+///
+/// When `hashable_types` is `None` (e.g. in test helpers that bypass the
+/// generator) every same-module type reference is optimistically assumed to
+/// be hashable.
 #[derive(Debug, Clone)]
 pub struct Swift {
-    encoding: Encoding,
+    pub(crate) encoding: Encoding,
+    /// `None` → optimistic (all same-module `TypeName`s assumed hashable).
+    /// `Some(set)` → only names in the set are hashable.
+    pub(crate) hashable_types: Option<BTreeSet<String>>,
 }
 
 impl Swift {
     #[must_use]
     pub fn new(encoding: Encoding) -> Self {
-        Self { encoding }
+        Self {
+            encoding,
+            hashable_types: None,
+        }
+    }
+
+    /// Attach the precomputed set of hashable type names produced by
+    /// [`compute_hashable_types`](super::super::generator::compute_hashable_types).
+    #[must_use]
+    pub fn with_hashable_types(mut self, types: BTreeSet<String>) -> Self {
+        self.hashable_types = Some(types);
+        self
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hashability helpers
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if the Swift type produced by `format` can conform to
+/// `Hashable`.
+///
+/// This drives two decisions:
+/// 1. Whether a generated struct/enum should declare `: Hashable`.
+/// 2. Whether a `Set` element or `Map` key type is valid (error if not).
+///
+/// For `TypeName` references the answer depends on the precomputed
+/// [`Swift::hashable_types`] set:
+/// - `Namespace::Root` types are looked up in the set (or assumed hashable
+///   when the set is absent).
+/// - `Namespace::Named` types are external and assumed hashable.
+pub(crate) fn is_hashable(format: &Format, lang: &Swift) -> bool {
+    match format {
+        Format::Variable(_) => false,
+        Format::TypeName(qtn) => match &qtn.namespace {
+            Namespace::Root => lang
+                .hashable_types
+                .as_ref()
+                .map_or(true, |s| s.contains(&qtn.name)),
+            Namespace::Named(_) => true, // external — assume hashable
+        },
+        Format::Unit => false, // Void is not Hashable
+        Format::Bool
+        | Format::I8
+        | Format::I16
+        | Format::I32
+        | Format::I64
+        | Format::I128
+        | Format::U8
+        | Format::U16
+        | Format::U32
+        | Format::U64
+        | Format::U128
+        | Format::F32
+        | Format::F64
+        | Format::Char
+        | Format::Str
+        | Format::Bytes => true,
+        Format::Option(inner) => is_hashable(inner, lang),
+        Format::Seq(inner) | Format::TupleArray { content: inner, .. } => is_hashable(inner, lang),
+        Format::Set(inner) => is_hashable(inner, lang),
+        Format::Map { .. } => false, // [K: V] is never Hashable
+        // A 1-element tuple is transparent (emitted as the inner type).
+        // Multi-element native Swift tuples do NOT conform to Hashable.
+        Format::Tuple(formats) => formats.len() == 1 && is_hashable(&formats[0], lang),
+    }
+}
+
+/// Returns `true` if a variant is compatible with `Hashable` synthesis for
+/// the enclosing enum.
+///
+/// Note: enum associated values are separate parameters, not a Swift tuple,
+/// so `VariantFormat::Tuple` checks each element individually.
+fn variant_is_hashable(format: &VariantFormat, lang: &Swift) -> bool {
+    match format {
+        VariantFormat::Variable(_) => false,
+        VariantFormat::Unit => true,
+        VariantFormat::NewType(fmt) => is_hashable(fmt, lang),
+        VariantFormat::Tuple(formats) => formats.iter().all(|f| is_hashable(f, lang)),
+        VariantFormat::Struct(nameds) => nameds.iter().all(|n| is_hashable(&n.value, lang)),
     }
 }
 
@@ -203,13 +299,7 @@ impl Emitter<Swift> for Format {
                         .format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".")
                 )
             }
-            Format::Unit => {
-                if lang.encoding.is_none() {
-                    write!(w, "Void")
-                } else {
-                    write!(w, "Unit")
-                }
-            }
+            Format::Unit => write!(w, "Void"),
             Format::Bool => write!(w, "Bool"),
             Format::I8 => write!(w, "Int8"),
             Format::I16 => write!(w, "Int16"),
@@ -241,11 +331,29 @@ impl Emitter<Swift> for Format {
                 write!(w, "]")
             }
             Format::Set(format) => {
+                if !is_hashable(format, lang) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Set element type is not Hashable in Swift; \
+                             native tuples and dictionaries do not conform to Hashable"
+                        ),
+                    ));
+                }
                 write!(w, "Set<")?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
             Format::Map { key, value } => {
+                if !is_hashable(key, lang) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Map key type is not Hashable in Swift; \
+                             native tuples and dictionaries do not conform to Hashable"
+                        ),
+                    ));
+                }
                 write!(w, "[")?;
                 key.write(w, lang)?;
                 write!(w, ": ")?;
@@ -257,8 +365,8 @@ impl Emitter<Swift> for Format {
                 if len == 1 {
                     // A single-element tuple is just the element itself
                     formats[0].write(w, lang)
-                } else if lang.encoding.is_none() {
-                    // Use native Swift tuples when no serialization is needed
+                } else {
+                    // Always use native Swift tuples
                     write!(w, "(")?;
                     for (i, format) in formats.iter().enumerate() {
                         if i > 0 {
@@ -267,17 +375,6 @@ impl Emitter<Swift> for Format {
                         format.write(w, lang)?;
                     }
                     write!(w, ")")
-                } else {
-                    // Use TupleN<...> types from the Serde runtime because
-                    // native Swift tuples don't conform to Hashable
-                    write!(w, "Tuple{len}<")?;
-                    for (i, format) in formats.iter().enumerate() {
-                        if i > 0 {
-                            write!(w, ", ")?;
-                        }
-                        format.write(w, lang)?;
-                    }
-                    write!(w, ">")
                 }
             }
         }
@@ -292,11 +389,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
         match usage {
             Usage::Field => {
                 doc.write(w, lang)?;
-                if lang.encoding.is_none() {
-                    write!(w, "public var {name}: ")?;
-                } else {
-                    write!(w, "@Indirect public var {name}: ")?;
-                }
+                write!(w, "public var {name}: ")?;
                 value.write(w, lang)?;
                 writeln!(w)
             }
@@ -314,7 +407,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 }
                 Format::Tuple(formats) if !lang.encoding.is_bincode() => {
                     push_serializer(w)?;
-                    let formats = named(formats, "field");
+                    let formats = named(formats, "");
                     for format in formats {
                         (
                             &format,
@@ -344,8 +437,7 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                         )
                             .write(w, lang)?;
                     }
-                    let len = formats.len();
-                    write!(w, "let {name} = Tuple{len}(")?;
+                    write!(w, "let {name} = (")?;
                     for (i, format) in formats.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
@@ -548,7 +640,8 @@ fn struct_<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_none() {
+    let all_hashable = fields.iter().all(|f| is_hashable(&f.value, lang));
+    if lang.encoding.is_none() || !all_hashable {
         write!(w, "public struct {name} ")?;
     } else {
         write!(w, "public struct {name}: Hashable ")?;
@@ -697,7 +790,10 @@ fn enum_<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    if lang.encoding.is_none() {
+    let all_hashable = variants
+        .values()
+        .all(|v| variant_is_hashable(&v.value, lang));
+    if lang.encoding.is_none() || !all_hashable {
         write!(w, "indirect public enum {name} ")?;
     } else {
         write!(w, "indirect public enum {name}: Hashable ")?;
@@ -960,7 +1056,7 @@ fn write_format_serialize<W: IndentWrite>(
         }
         Format::Tuple(formats) => {
             for (i, fmt) in formats.iter().enumerate() {
-                write_format_serialize(w, fmt, &format!("{value_expr}.field{i}"))?;
+                write_format_serialize(w, fmt, &format!("{value_expr}.{i}"))?;
             }
             Ok(())
         }
@@ -988,7 +1084,7 @@ fn write_format_deserialize<W: IndentWrite>(w: &mut W, format: &Format, var: &st
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
             }
-            write!(w, "let {var} = Tuple{}(", formats.len())?;
+            write!(w, "let {var} = (")?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -1060,13 +1156,13 @@ fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<
         }
         Format::Tuple(formats) if formats.len() == 1 => write_deserialize_expr(w, &formats[0]),
         Format::Tuple(formats) => {
-            // Multi-element tuple: use Tuple{N} with temporaries
-            // We write a multi-statement block, but since this is expression position,
-            // the caller must handle the context (e.g. inside a closure body).
+            // Multi-element native tuple: emit let-bindings then a tuple literal.
+            // Uses an explicit `return` because this appears inside a multi-statement
+            // closure body (e.g. deserializeOption { … }) where Swift requires it.
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("field{i}"))?;
             }
-            write!(w, "Tuple{}(", formats.len())?;
+            write!(w, "return (")?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
