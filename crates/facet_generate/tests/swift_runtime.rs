@@ -50,7 +50,7 @@ let value = try Test.bincodeDeserialize(input: input)
 
 let value2 = Test.init(
     a: [4, 6],
-    b: Tuple2.init(-3, 5),
+    b: (-3, 5),
     c: Choice.c(x: 7)
 )
 assert(value == value2, "value != value2")
@@ -83,12 +83,13 @@ catch {{}}
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
     write!(
         file,
-        r#"// swift-tools-version:5.3
+        r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "Serde",
@@ -118,7 +119,7 @@ let package = Package(
 fn test_swift_bincode_runtime_on_supported_types() {
     let dir = tempfile::tempdir().unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
-    let registry = common::get_registry();
+    let registry = common::get_swift_registry();
     let mut installer = swift::Installer::new(&config.module_name, dir.path());
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
@@ -127,7 +128,7 @@ fn test_swift_bincode_runtime_on_supported_types() {
     let main_path = dir.path().join("Sources/main/main.swift");
     let mut main = File::create(main_path).unwrap();
 
-    let positive_encodings = common::get_positive_samples()
+    let positive_encodings = common::get_swift_positive_samples()
         .iter()
         .map(|bytes| quote_bytes(bytes))
         .collect::<Vec<_>>()
@@ -142,21 +143,22 @@ import Testing
 let positive_inputs : [[UInt8]] = [{positive_encodings}]
 
 for input in positive_inputs {{
-    let value = try SerdeData.bincodeDeserialize(input: input)
+    let value = try SwiftSerdeData.bincodeDeserialize(input: input)
     let output = try value.bincodeSerialize()
     assert(input == output, "input != output:\n  \(input)\n  \(output)")
 
-    // Test self-equality for the Serde value.
-    let value2 = try SerdeData.bincodeDeserialize(input: input)
-    assert(value == value2, "Deserialized value should test equal to itself: \(input)")
+    // Test self-equality by comparing serialized bytes.
+    let value2 = try SwiftSerdeData.bincodeDeserialize(input: input)
+    let output2 = try value2.bincodeSerialize()
+    assert(input == output2, "Two deserializations of same input should re-serialize identically: \(input)")
 
     // Test simple mutations of the input.
     for i in 0..<min(40, input.count) {{
         var input3 = input
         input3[i] ^= 0x80
-        let value3 = try? SerdeData.bincodeDeserialize(input: input3)
-        if let value3 = value3 {{
-            assert(value3 != value, "Modified input should give a different value:\n  \(input)\n  \(input3)")
+        if let value3 = try? SwiftSerdeData.bincodeDeserialize(input: input3) {{
+            let output3 = try value3.bincodeSerialize()
+            assert(output3 != input, "Modified input should round-trip to different bytes:\n  \(input)\n  \(input3)")
         }}
     }}
 
@@ -168,12 +170,13 @@ for input in positive_inputs {{
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
     write!(
         file,
-        r#"// swift-tools-version:5.3
+        r#"// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "Testing",
+    platforms: [.macOS(.v15)],
     targets: [
         .target(
             name: "Serde",

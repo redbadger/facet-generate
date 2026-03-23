@@ -10,7 +10,7 @@ public protocol Deserializer {
     func deserialize_str() throws -> String
     func deserialize_bytes() throws -> [UInt8]
     func deserialize_bool() throws -> Bool
-    func deserialize_unit() throws -> Unit
+    func deserialize_unit() throws
     func deserialize_char() throws -> Character
     func deserialize_f32() throws -> Float
     func deserialize_f64() throws -> Double
@@ -28,7 +28,6 @@ public protocol Deserializer {
     func deserialize_variant_index() throws -> UInt32
     func deserialize_option_tag() throws -> Bool
     func get_buffer_offset() -> Int
-    func check_that_key_slices_are_increasing(key1: Slice, key2: Slice) throws
     func increase_container_depth() throws
     func decrease_container_depth() throws
 }

@@ -74,9 +74,6 @@ pub trait CodeGenerator<'a> {
 pub struct Container<'a> {
     pub name: &'a QualifiedTypeName,
     pub format: &'a ContainerFormat,
-    /// Optional reference to the full registry, allowing emitters to look up
-    /// cross-type information (e.g. whether a referenced type is a C-style enum).
-    pub registry: Option<&'a Registry>,
 }
 
 impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
@@ -84,20 +81,6 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
         Container {
             name: value.0,
             format: value.1,
-            registry: None,
-        }
-    }
-}
-
-impl<'a> Container<'a> {
-    /// Attach a registry reference so that emitters can resolve cross-type
-    /// information (e.g. whether a [`Format::TypeName`](crate::reflection::format::Format::TypeName) refers to a C-style
-    /// enum).
-    #[must_use]
-    pub fn with_registry(self, registry: &'a Registry) -> Self {
-        Self {
-            registry: Some(registry),
-            ..self
         }
     }
 }
@@ -155,7 +138,7 @@ pub trait Emitter<L> {
     /// # Errors
     ///
     /// Returns an error if the underlying writer fails.
-    fn write<W: IndentWrite>(&self, writer: &mut W, lang: L) -> Result<()>;
+    fn write<W: IndentWrite>(&self, writer: &mut W, lang: &L) -> Result<()>;
 }
 
 #[cfg(all(test, feature = "generate"))]

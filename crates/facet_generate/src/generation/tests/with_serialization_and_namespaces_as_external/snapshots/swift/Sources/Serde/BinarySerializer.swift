@@ -52,7 +52,7 @@ public class BinarySerializer: Serializer {
         writeByte(value ? 1 : 0)
     }
 
-    public func serialize_unit(value _: Unit) throws {}
+    public func serialize_unit(value _: ()) throws {}
 
     func writeByte(_ value: UInt8) {
         output.append(value)
@@ -86,8 +86,13 @@ public class BinarySerializer: Serializer {
     }
 
     public func serialize_u128(value: UInt128) throws {
-        try serialize_u64(value: value.low)
-        try serialize_u64(value: value.high)
+        // Use raw byte access to avoid requiring BinaryInteger conformance,
+        // which is gated behind macOS 15 / iOS 18.
+        // On little-endian (ARM64) the memory layout matches Bincode's encoding.
+        var v = value
+        withUnsafeBytes(of: &v) { ptr in
+            output.append(contentsOf: ptr)
+        }
     }
 
     public func serialize_i8(value: Int8) throws {
@@ -107,8 +112,13 @@ public class BinarySerializer: Serializer {
     }
 
     public func serialize_i128(value: Int128) throws {
-        try serialize_u64(value: value.low)
-        try serialize_i64(value: value.high)
+        // Use raw byte access to avoid requiring BinaryInteger conformance,
+        // which is gated behind macOS 15 / iOS 18.
+        // On little-endian (ARM64) the memory layout matches Bincode's encoding.
+        var v = value
+        withUnsafeBytes(of: &v) { ptr in
+            output.append(contentsOf: ptr)
+        }
     }
 
     public func serialize_option_tag(value: Bool) throws {

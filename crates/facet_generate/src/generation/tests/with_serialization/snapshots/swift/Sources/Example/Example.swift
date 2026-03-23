@@ -96,7 +96,7 @@ func deserializeSet<T: Hashable, D: Deserializer>(
 }
 
 public struct Child: Hashable {
-    @Indirect public var name: String
+    public var name: String
 
     public init(name: String) {
         self.name = name
@@ -131,11 +131,11 @@ public struct Child: Hashable {
     }
 }
 
-public struct MyStruct: Hashable {
-    @Indirect public var stringToInt: [String: Int32]
-    @Indirect public var mapToList: [String: [Int32]]
-    @Indirect public var optionOfVecOfSet: [Set<String>]?
-    @Indirect public var parent: Parent
+public struct MyStruct: Equatable {
+    public var stringToInt: [String: Int32]
+    public var mapToList: [String: [Int32]]
+    public var optionOfVecOfSet: [Set<String>]?
+    public var parent: Parent
 
     public init(stringToInt: [String: Int32], mapToList: [String: [Int32]], optionOfVecOfSet: [Set<String>]?, parent: Parent) {
         self.stringToInt = stringToInt

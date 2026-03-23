@@ -1,4 +1,8 @@
-#![allow(clippy::must_use_candidate, clippy::missing_panics_doc)]
+#![allow(
+    clippy::must_use_candidate,
+    clippy::missing_panics_doc,
+    clippy::unsafe_derive_deserialize
+)]
 
 use std::collections::BTreeMap;
 
@@ -400,4 +404,182 @@ pub fn get_sample_with_long_sequence(length: usize) -> Vec<u8> {
     let mut result = f0[..f0.len() - e.len()].to_vec();
     result.append(&mut bincode::serialize(&(length as u64)).unwrap());
     result
+}
+
+// ---------------------------------------------------------------------------
+// Swift-compatible test fixture
+//
+// `SerdeData` includes `ComplexMap(BTreeMap<([u32; 2], [u8; 4]), ()>)` whose
+// key is a native tuple — valid in Rust but not representable as a Swift
+// `Dictionary` key (native tuples do not conform to `Hashable`).
+//
+// `SwiftSerdeData` covers the same surface area without that variant.
+// `SwiftSimpleList` is a recursive struct; it compiles in Swift because the
+// emitter generates `@Indirect` for the recursive field.
+// ---------------------------------------------------------------------------
+
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum SwiftSerdeData {
+    PrimitiveTypes(SwiftPrimitiveTypes),
+    OtherTypes(SwiftOtherTypes),
+    UnitVariant,
+    NewTypeVariant(String),
+    TupleVariant(u32, u64),
+    StructVariant {
+        f0: SwiftUnitStruct,
+        f1: SwiftNewTypeStruct,
+        f2: SwiftTupleStruct,
+        f3: SwiftStruct,
+    },
+    ListWithMutualRecursion(SwiftList<Box<SwiftSerdeData>>),
+    TreeWithMutualRecursion(Tree<Box<SwiftSerdeData>>),
+    TupleArray([u32; 3]),
+    UnitVector(Vec<()>),
+    SimpleList(SwiftSimpleList),
+    EmptyStructVariant {},
+}
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[allow(clippy::struct_field_names)]
+pub struct SwiftPrimitiveTypes {
+    pub f_bool: bool,
+    pub f_u8: u8,
+    pub f_u16: u16,
+    pub f_u32: u32,
+    pub f_u64: u64,
+    pub f_u128: u128,
+    pub f_i8: i8,
+    pub f_i16: i16,
+    pub f_i32: i32,
+    pub f_i64: i64,
+    pub f_i128: i128,
+    pub f_f32: Option<f32>,
+    pub f_f64: Option<f64>,
+    pub f_char: Option<char>,
+}
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[allow(clippy::struct_field_names)]
+pub struct SwiftOtherTypes {
+    pub f_string: String,
+    #[facet(fg::bytes)]
+    pub f_bytes: Vec<u8>,
+    pub f_option: Option<SwiftStruct>,
+    pub f_unit: (),
+    pub f_seq: Vec<SwiftStruct>,
+    pub f_opt_seq: Option<Vec<i32>>,
+    pub f_tuple: (u8, u16),
+    pub f_stringmap: BTreeMap<String, u32>,
+    pub f_nested_seq: Vec<Vec<SwiftStruct>>,
+}
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftUnitStruct;
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftNewTypeStruct(pub u64);
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftTupleStruct(pub u32, pub u64);
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftStruct {
+    pub x: u32,
+    pub y: u64,
+}
+
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum SwiftList<T> {
+    Empty,
+    Node(T, Box<SwiftList<T>>),
+}
+
+#[allow(dead_code)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SwiftSimpleList(pub Option<Box<SwiftSimpleList>>);
+
+/// Registry used for Swift compilation and runtime tests.
+///
+/// Excludes `ComplexMap(BTreeMap<([u32; 2], [u8; 4]), ()>)` because native
+/// Swift tuples are not `Hashable` and cannot be used as `Dictionary` keys.
+/// Includes `SwiftSimpleList` which the Swift emitter handles with selective
+/// `@Indirect` on the recursive field.
+pub fn get_swift_registry() -> Registry {
+    reflect!(SwiftSerdeData).unwrap()
+}
+
+/// Sample values for [`SwiftSerdeData`], serialised with bincode.
+#[allow(clippy::too_many_lines)]
+pub fn get_swift_positive_samples() -> Vec<Vec<u8>> {
+    let values: Vec<SwiftSerdeData> = vec![
+        SwiftSerdeData::UnitVariant,
+        SwiftSerdeData::NewTypeVariant("test.\u{10348}".to_string()),
+        SwiftSerdeData::TupleVariant(3, 6),
+        SwiftSerdeData::PrimitiveTypes(SwiftPrimitiveTypes {
+            f_bool: false,
+            f_u8: 6,
+            f_u16: 5,
+            f_u32: 4,
+            f_u64: 3,
+            f_u128: 2,
+            f_i8: 1,
+            f_i16: 0,
+            f_i32: -1,
+            f_i64: -2,
+            f_i128: -3,
+            f_f32: Some(0.4),
+            f_f64: Some(35.21),
+            f_char: None,
+        }),
+        SwiftSerdeData::OtherTypes(SwiftOtherTypes {
+            f_string: "test".to_string(),
+            f_bytes: b"bytes".to_vec(),
+            f_option: Some(SwiftStruct { x: 2, y: 3 }),
+            f_unit: (),
+            f_seq: vec![SwiftStruct { x: 1, y: 3 }],
+            f_opt_seq: Some(vec![1]),
+            f_tuple: (4, 5),
+            f_stringmap: {
+                let mut m = BTreeMap::new();
+                m.insert("foo".to_string(), 1u32);
+                m
+            },
+            f_nested_seq: vec![vec![SwiftStruct { x: 4, y: 5 }]],
+        }),
+        SwiftSerdeData::OtherTypes(SwiftOtherTypes {
+            f_string: String::new(),
+            f_bytes: b"".to_vec(),
+            f_option: None,
+            f_unit: (),
+            f_seq: Vec::new(),
+            f_opt_seq: None,
+            f_tuple: (0, 0),
+            f_stringmap: BTreeMap::new(),
+            f_nested_seq: vec![],
+        }),
+        SwiftSerdeData::StructVariant {
+            f0: SwiftUnitStruct,
+            f1: SwiftNewTypeStruct(1),
+            f2: SwiftTupleStruct(2, 3),
+            f3: SwiftStruct { x: 4, y: 5 },
+        },
+        SwiftSerdeData::TupleArray([0, 2, 3]),
+        SwiftSerdeData::UnitVector(vec![(); 3]),
+        SwiftSerdeData::SimpleList(SwiftSimpleList(Some(Box::new(SwiftSimpleList(None))))),
+        SwiftSerdeData::EmptyStructVariant {},
+    ];
+    values
+        .iter()
+        .map(|v| bincode::serialize(v).unwrap())
+        .collect()
 }

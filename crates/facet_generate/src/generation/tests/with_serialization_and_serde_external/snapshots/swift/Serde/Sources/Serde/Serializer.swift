@@ -10,7 +10,7 @@ public protocol Serializer {
     func serialize_str(value: String) throws
     func serialize_bytes(value: [UInt8]) throws
     func serialize_bool(value: Bool) throws
-    func serialize_unit(value: Unit) throws
+    func serialize_unit(value: ()) throws
     func serialize_char(value: Character) throws
     func serialize_f32(value: Float) throws
     func serialize_f64(value: Double) throws

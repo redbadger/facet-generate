@@ -59,7 +59,7 @@ impl<'a> KotlinCodeGenerator<'a> {
 
         let lang = Kotlin::new(config.encoding);
 
-        Module::new(&config).write(w, lang)?;
+        Module::new(&config).write(w, &lang)?;
 
         for (i, container) in Self::update_qualified_names(&config, registry)
             .iter()
@@ -69,7 +69,7 @@ impl<'a> KotlinCodeGenerator<'a> {
             if i > 0 {
                 writeln!(w)?;
             }
-            container.write(w, lang)?;
+            container.write(w, &lang)?;
         }
         Ok(())
     }

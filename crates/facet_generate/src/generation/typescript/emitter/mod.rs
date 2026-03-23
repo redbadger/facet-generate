@@ -85,7 +85,7 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.ts");
 /// Carries the active [`Encoding`] (None / Bincode / Json) and
 /// [`InstallTarget`] (Node / Deno) so emitter implementations can adapt
 /// their output accordingly.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct TypeScript {
     pub encoding: Encoding,
     pub target: InstallTarget,
@@ -105,6 +105,16 @@ impl TypeScript {
     pub fn with_target(mut self, target: InstallTarget) -> Self {
         self.target = target;
         self
+    }
+
+    /// Create a [`TypeScript`] language tag for the given encoding and registry.
+    ///
+    /// Currently delegates to [`new`](Self::new) — the registry is not used
+    /// for TypeScript generation but the method signature mirrors `Swift::for_encoding`
+    /// so that the `emit!` test macro can call a uniform constructor.
+    #[must_use]
+    pub fn for_encoding(encoding: Encoding, _registry: &crate::Registry) -> Self {
+        Self::new(encoding)
     }
 }
 
@@ -148,7 +158,7 @@ impl Module {
 }
 
 impl Emitter<TypeScript> for Module {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         let CodeGeneratorConfig {
             encoding,
             features,
@@ -218,7 +228,7 @@ impl Emitter<TypeScript> for Module {
 }
 
 impl Emitter<TypeScript> for Doc {
-    fn write<W: IndentWrite>(&self, w: &mut W, _lang: TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &TypeScript) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
@@ -228,7 +238,7 @@ impl Emitter<TypeScript> for Doc {
 }
 
 impl Emitter<TypeScript> for Container<'_> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         let Container {
             name: qualified_name,
             format,
@@ -263,7 +273,7 @@ impl Emitter<TypeScript> for Container<'_> {
 }
 
 impl Emitter<TypeScript> for Format {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         match self {
             Format::TypeName(type_) => {
                 write!(
@@ -328,7 +338,7 @@ impl Emitter<TypeScript> for Format {
 }
 
 impl Emitter<TypeScript> for Named<Format> {
-    fn write<W: IndentWrite>(&self, w: &mut W, lang: TypeScript) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         write!(w, "public {}: ", &self.name)?;
         self.value.write(w, lang)
     }
@@ -339,7 +349,7 @@ fn quote_type(format: &Format) -> String {
     let mut buf = Vec::new();
     let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(0));
     format
-        .write(&mut w, TypeScript::new(Encoding::None))
+        .write(&mut w, &TypeScript::new(Encoding::None))
         .expect("writing to Vec should not fail");
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
 }
@@ -653,7 +663,7 @@ fn output_struct_or_variant<W: IndentWrite>(
     name: &str,
     fields: &[Named<Format>],
     doc: &Doc,
-    lang: TypeScript,
+    lang: &TypeScript,
 ) -> Result<()> {
     let mut variant_base_name = String::new();
 
@@ -732,7 +742,7 @@ fn output_variant<W: IndentWrite>(
     name: &str,
     variant: &VariantFormat,
     doc: &Doc,
-    lang: TypeScript,
+    lang: &TypeScript,
 ) -> Result<()> {
     let fields = match variant {
         VariantFormat::Unit => Vec::new(),
@@ -755,7 +765,7 @@ fn output_enum_container<W: IndentWrite>(
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
-    lang: TypeScript,
+    lang: &TypeScript,
 ) -> Result<()> {
     writeln!(w)?;
     doc.write(w, lang)?;
