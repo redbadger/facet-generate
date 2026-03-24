@@ -93,12 +93,17 @@ impl CSharp {
     ///   the precomputed set of C-style enum names needed for dispatch)
     /// - [`Encoding::Json`] → includes `JsonPlugin`
     /// - [`Encoding::None`] → no plugins
+    ///
+    /// `config` must have been passed through
+    /// [`CodeGeneratorConfig::update_from`] before calling this, so that
+    /// [`CodeGeneratorConfig::unit_variant_enums`] is populated.
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
+    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
             Encoding::Bincode => {
-                let c_style_enums = collect_c_style_enums(registry);
-                vec![Arc::new(CSharpBincodePlugin { c_style_enums })]
+                vec![Arc::new(CSharpBincodePlugin {
+                    c_style_enums: config.unit_variant_enums.clone(),
+                })]
             }
             Encoding::Json => vec![Arc::new(JsonPlugin)],
             Encoding::None => vec![],
@@ -186,21 +191,6 @@ impl Emitter<CSharp> for Container<'_> {
 /// namespace on `Format::TypeName` references without touching registry keys.
 /// Within a single module the bare name is unambiguous (types are grouped by
 /// namespace via [`module::split`]).
-fn collect_c_style_enums(registry: &Registry) -> BTreeSet<String> {
-    registry
-        .iter()
-        .filter_map(|(name, format)| {
-            if let ContainerFormat::Enum(variants, _) = format
-                && variants
-                    .values()
-                    .all(|v| matches!(v.value, VariantFormat::Unit))
-            {
-                return Some(name.name.clone());
-            }
-            None
-        })
-        .collect()
-}
 
 impl Emitter<CSharp> for Named<Format> {
     /// Write a field declaration without plugin annotations.

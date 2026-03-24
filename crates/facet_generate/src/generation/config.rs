@@ -40,7 +40,7 @@ use thiserror::Error;
 use crate::{
     Registry,
     generation::indent::IndentConfig,
-    reflection::format::{Format, FormatHolder, Namespace},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, VariantFormat},
 };
 
 /// Code generation options meant to be supported by all languages.
@@ -71,6 +71,10 @@ pub struct CodeGeneratorConfig {
     /// External namespaces actually referenced via `Format::TypeName` in the registry.
     /// Populated by `update_from`. Used to generate namespace import statements.
     pub referenced_namespaces: BTreeSet<String>,
+    /// Names of all enums in the registry whose every variant is a unit variant.
+    /// Populated by `update_from`. Used by the C# Bincode plugin to dispatch
+    /// enum-typed fields through `{TypeName}Bincode.Serialize(...)` helpers.
+    pub unit_variant_enums: BTreeSet<String>,
 }
 
 /// The wire format to target when generating serialization code.
@@ -202,6 +206,7 @@ impl CodeGeneratorConfig {
             features: BTreeSet::new(),
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
+            unit_variant_enums: BTreeSet::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -354,12 +359,20 @@ impl CodeGeneratorConfig {
                 .expect("failed to parse registry");
         }
 
-        for name in registry.keys() {
+        for (name, format) in registry {
             if let Namespace::Named(ns) = &name.namespace
                 && ns != &self.module_name
             {
                 let entry = self.external_definitions.entry(ns.to_owned()).or_default();
                 entry.push(name.name.clone());
+            }
+
+            if let ContainerFormat::Enum(variants, _) = format
+                && variants
+                    .values()
+                    .all(|v| matches!(v.value, VariantFormat::Unit))
+            {
+                self.unit_variant_enums.insert(name.name.clone());
             }
         }
     }

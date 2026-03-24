@@ -217,9 +217,10 @@ macro_rules! emit {
             use $crate::generation::{Container, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
-            let cfg = CodeGeneratorConfig::new("test".to_string()).with_encoding($encoding);
+            let mut cfg = CodeGeneratorConfig::new("test".to_string()).with_encoding($encoding);
             let mut w = IndentedWriter::new(&mut out, cfg.indent);
             let registry = $crate::reflect!($($ty),*)?;
+            cfg.update_from(&registry);
             let lang = $language::new(&cfg, &registry);
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
