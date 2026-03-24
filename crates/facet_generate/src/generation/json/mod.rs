@@ -39,17 +39,3 @@ pub mod csharp;
 /// submodule (e.g. [`kotlin`]).
 #[derive(Debug, Clone)]
 pub struct JsonPlugin;
-
-impl JsonPlugin {
-    /// Create a new `JsonPlugin`.
-    #[must_use]
-    pub const fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for JsonPlugin {
-    fn default() -> Self {
-        Self::new()
-    }
-}

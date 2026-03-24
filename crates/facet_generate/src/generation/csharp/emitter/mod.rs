@@ -100,7 +100,7 @@ impl CSharp {
                 let c_style_enums = collect_c_style_enums(registry);
                 vec![Arc::new(CSharpBincodePlugin { c_style_enums })]
             }
-            Encoding::Json => vec![Arc::new(JsonPlugin::new())],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
             Encoding::None => vec![],
         };
         Self { plugins }

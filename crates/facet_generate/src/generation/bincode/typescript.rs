@@ -672,8 +672,8 @@ mod tests {
     #[test]
     fn module_helpers_emit_list_of_t() {
         let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let out = render(|w| (&plugin as &dyn EmitterPlugin<TypeScript>).module_helpers(w, &cfg));
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
+        let out = render(|w| plugin.module_helpers(w, &cfg));
         assert!(
             out.contains("serializeArray"),
             "missing serializeArray:\n{out}"
@@ -687,8 +687,8 @@ mod tests {
     #[test]
     fn module_helpers_emit_option_of_t() {
         let cfg = make_config(&[Feature::OptionOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let out = render(|w| (&plugin as &dyn EmitterPlugin<TypeScript>).module_helpers(w, &cfg));
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
+        let out = render(|w| plugin.module_helpers(w, &cfg));
         assert!(
             out.contains("serializeOption"),
             "missing serializeOption:\n{out}"
@@ -702,8 +702,8 @@ mod tests {
     #[test]
     fn module_helpers_emit_only_requested_features() {
         let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let out = render(|w| (&plugin as &dyn EmitterPlugin<TypeScript>).module_helpers(w, &cfg));
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
+        let out = render(|w| plugin.module_helpers(w, &cfg));
         assert!(
             !out.contains("serializeSet"),
             "unexpected serializeSet:\n{out}"
@@ -725,8 +725,8 @@ mod tests {
     #[test]
     fn module_helpers_no_features_emits_nothing() {
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let out = render(|w| (&plugin as &dyn EmitterPlugin<TypeScript>).module_helpers(w, &cfg));
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
+        let out = render(|w| plugin.module_helpers(w, &cfg));
         assert!(out.is_empty(), "expected empty output, got:\n{out}");
     }
 
@@ -736,9 +736,7 @@ mod tests {
 
     #[test]
     fn has_type_body_always_true() {
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<TypeScript> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
@@ -757,9 +755,7 @@ mod tests {
 
     #[test]
     fn type_body_unit_struct() {
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<TypeScript> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -784,9 +780,7 @@ mod tests {
     #[test]
     fn type_body_struct_with_fields() {
         use crate::reflection::format::Format;
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<TypeScript> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![
@@ -827,9 +821,7 @@ mod tests {
     #[test]
     fn type_body_enum_with_variants() {
         use crate::reflection::format::VariantFormat;
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<TypeScript> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
 
         let mut variants = BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
@@ -869,9 +861,7 @@ mod tests {
     #[test]
     fn type_body_variant_subclass() {
         use crate::reflection::format::{Format, VariantFormat};
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<TypeScript> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<TypeScript>;
 
         let mut variants = BTreeMap::new();
         let variant_fields = vec![Named::new(&Format::Str, "value".to_string())];

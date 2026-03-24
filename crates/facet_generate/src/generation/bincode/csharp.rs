@@ -50,7 +50,7 @@ use crate::reflection::format::{
 /// serialize enum-typed fields: all-unit enums are emitted as plain C# `enum` types
 /// and must be serialized via the static `{EnumName}Bincode` helper class rather than
 /// instance methods.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CSharpBincodePlugin {
     /// Names of all C-style (all-unit-variant) enums in the registry.
     ///
@@ -967,8 +967,6 @@ const fn is_csharp_value_type(format: &Format) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use super::*;
     use crate::generation::{
         CodeGeneratorConfig, Container,
@@ -984,21 +982,15 @@ mod tests {
         String::from_utf8(buf).unwrap()
     }
 
-    fn make_plugin() -> CSharpBincodePlugin {
-        CSharpBincodePlugin {
-            c_style_enums: BTreeSet::new(),
-        }
-    }
-
     // -------------------------------------------------------------------------
     // imports
     // -------------------------------------------------------------------------
 
     #[test]
     fn imports_returns_bincode() {
-        let plugin = make_plugin();
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let cfg = CodeGeneratorConfig::new("test".to_string());
-        let imports: Vec<String> = (&plugin as &dyn EmitterPlugin<CSharp>).imports(&cfg);
+        let imports: Vec<String> = plugin.imports(&cfg);
         assert_eq!(imports, vec!["using Facet.Runtime.Bincode;"]);
     }
 
@@ -1008,9 +1000,7 @@ mod tests {
 
     #[test]
     fn type_conformances_struct() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {
@@ -1034,9 +1024,7 @@ mod tests {
 
     #[test]
     fn type_conformances_unit_enum_returns_empty() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
@@ -1057,9 +1045,7 @@ mod tests {
 
     #[test]
     fn has_type_body_true_for_struct() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
         let container = Container {
@@ -1073,9 +1059,7 @@ mod tests {
 
     #[test]
     fn has_type_body_false_for_unit_enum() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
@@ -1096,9 +1080,7 @@ mod tests {
 
     #[test]
     fn type_body_unit_struct_emits_serialize_deserialize() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
         let container = Container {
@@ -1130,9 +1112,7 @@ mod tests {
 
     #[test]
     fn after_type_unit_enum_emits_static_helper() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
         variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
@@ -1159,9 +1139,7 @@ mod tests {
 
     #[test]
     fn after_type_struct_emits_nothing() {
-        let plugin = make_plugin();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
-
+        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {

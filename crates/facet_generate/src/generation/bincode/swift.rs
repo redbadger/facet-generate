@@ -703,8 +703,7 @@ mod tests {
     #[test]
     fn imports_returns_serde() {
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
         let imports = plugin.imports(&cfg);
 
         assert_eq!(imports, vec!["Serde"]);
@@ -713,8 +712,7 @@ mod tests {
     #[test]
     fn module_helpers_emit_list_of_t() {
         let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let mut buf = Vec::new();
         {
@@ -730,8 +728,7 @@ mod tests {
     #[test]
     fn module_helpers_emit_only_requested_features() {
         let cfg = make_config(&[Feature::SetOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let mut buf = Vec::new();
         {
@@ -750,9 +747,7 @@ mod tests {
         use crate::generation::Container;
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
-        let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -770,8 +765,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -804,8 +798,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![
@@ -842,8 +835,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![Named::new(
@@ -883,8 +875,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
 
         let mut variants = BTreeMap::new();
         variants.insert(

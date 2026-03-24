@@ -84,8 +84,8 @@ impl TypeScript {
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin::from_config(config))],
-            Encoding::Json => vec![Arc::new(JsonPlugin::new())],
+            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
             Encoding::None => vec![],
         };
         Self { plugins }

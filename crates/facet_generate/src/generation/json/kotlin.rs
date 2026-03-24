@@ -152,8 +152,7 @@ mod tests {
     #[test]
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("Serializable")));
@@ -163,8 +162,7 @@ mod tests {
     #[test]
     fn bigint_adds_json_imports() {
         let cfg = make_config(&[Feature::BigInt]);
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("KSerializer")));
@@ -177,8 +175,7 @@ mod tests {
     #[test]
     fn bigint_module_helpers_emit_feature() {
         let cfg = make_config(&[Feature::BigInt]);
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
 
         let mut buf = Vec::new();
         {
@@ -203,8 +200,7 @@ mod tests {
             format: &format,
         };
         let ctx = EmitContext::top_level(&container);
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
         let annotations = plugin.type_annotations(&ctx);
 
         assert_eq!(annotations.len(), 2);

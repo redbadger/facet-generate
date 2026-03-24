@@ -9,10 +9,20 @@
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `imports` | Serde / bincode package imports |
+//! | `imports` | Language-specific bincode package imports |
 //! | `module_helpers` | Feature helper snippets (`ListOfT`, `SetOfT`, …) |
 //! | `has_type_body` | Always `true` |
-//! | `type_body` | `serialize` / `deserialize` methods + `bincodeSerialize` / `bincodeDeserialize` wrappers |
+//! | `type_body` | `serialize` / `deserialize` methods + wrappers |
+//!
+//! # Language-specific variants
+//!
+//! - **Kotlin** — [`kotlin::KotlinBincodePlugin`] carries the resolved JVM
+//!   package names (`serde_package`, `bincode_package`) needed for import
+//!   generation.
+//! - **Swift**, **TypeScript** — use [`BincodePlugin`] directly (no
+//!   language-specific fields required).
+//! - **C#** — [`csharp::CSharpBincodePlugin`] carries the precomputed set of
+//!   C-style enum names needed for correct serialization dispatch.
 
 #[cfg(feature = "kotlin")]
 pub mod kotlin;
@@ -26,50 +36,15 @@ pub mod typescript;
 #[cfg(feature = "csharp")]
 pub mod csharp;
 
-use super::CodeGeneratorConfig;
-
 /// Bincode serialization plugin.
 ///
-/// When added to a language tag's plugin list, it provides the bincode-
-/// and serde-related imports, feature helper snippets, runtime files, and
-/// manifest dependencies for that language.
+/// A lightweight, language-agnostic plugin token. Languages that need
+/// extra configuration (e.g. JVM package names for Kotlin, C-style enum
+/// names for C#) use their own language-specific plugin structs defined in
+/// the corresponding submodule.
 ///
-/// Each target language has its own `impl EmitterPlugin<Lang>` in a
-/// submodule (e.g. [`kotlin`], [`swift`]).
-#[derive(Debug, Clone)]
-pub struct BincodePlugin {
-    /// Resolved serde package name (e.g. `"com.novi.serde"`).
-    pub(crate) serde_package: String,
-    /// Resolved bincode package name (e.g. `"com.novi.bincode"`).
-    pub(crate) bincode_package: String,
-}
-
-impl BincodePlugin {
-    /// Create a new `BincodePlugin` with package names resolved from the
-    /// given config (specifically `config.external_packages`).
-    #[must_use]
-    pub fn from_config(config: &CodeGeneratorConfig) -> Self {
-        let serde_package = resolve_package(config, super::SERDE_NAMESPACE, "com.novi.serde");
-        let bincode_package = resolve_package(config, super::BINCODE_NAMESPACE, "com.novi.bincode");
-        Self {
-            serde_package,
-            bincode_package,
-        }
-    }
-}
-
-/// Look up the package path for `namespace` in the config's external
-/// packages. Falls back to `default` when no override is configured.
-fn resolve_package(config: &CodeGeneratorConfig, namespace: &str, default: &str) -> String {
-    config
-        .external_packages
-        .get(namespace)
-        .and_then(|pkg| {
-            if let super::PackageLocation::Path(path) = &pkg.location {
-                Some(path.clone())
-            } else {
-                None
-            }
-        })
-        .unwrap_or_else(|| default.to_string())
-}
+/// Swift and TypeScript use this struct directly — neither needs any
+/// additional configuration beyond the encoding flag carried by their
+/// language tag.
+#[derive(Debug, Clone, Default)]
+pub struct BincodePlugin;

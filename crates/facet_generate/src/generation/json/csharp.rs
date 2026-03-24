@@ -149,9 +149,9 @@ mod tests {
 
     #[test]
     fn imports_returns_json_usings() {
-        let plugin = JsonPlugin::new();
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
         let cfg = CodeGeneratorConfig::new("test".to_string());
-        let imports = (&plugin as &dyn EmitterPlugin<CSharp>).imports(&cfg);
+        let imports = plugin.imports(&cfg);
         assert!(imports.iter().any(|i| i.contains("Facet.Runtime.Json")));
         assert!(
             imports
@@ -166,8 +166,7 @@ mod tests {
 
     #[test]
     fn type_annotations_unit_enum() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
@@ -191,8 +190,7 @@ mod tests {
 
     #[test]
     fn type_annotations_variant_hierarchy() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(
@@ -239,8 +237,7 @@ mod tests {
 
     #[test]
     fn type_annotations_struct_returns_empty() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
@@ -259,8 +256,7 @@ mod tests {
 
     #[test]
     fn field_annotations_returns_json_property_name() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let field = Named::new(&Format::Str, "firstName".to_string());
 
@@ -279,8 +275,7 @@ mod tests {
 
     #[test]
     fn field_annotations_pascal_case_to_camel_case() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let field = Named::new(&Format::I32, "MyField".to_string());
 
@@ -302,8 +297,7 @@ mod tests {
 
     #[test]
     fn has_type_body_true_for_struct() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
@@ -318,8 +312,7 @@ mod tests {
 
     #[test]
     fn has_type_body_false_for_unit_enum() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
@@ -341,8 +334,7 @@ mod tests {
 
     #[test]
     fn type_body_emits_json_serialize_and_deserialize() {
-        let plugin = JsonPlugin::new();
-        let plugin: &dyn EmitterPlugin<CSharp> = &plugin;
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<CSharp>;
 
         let name = QualifiedTypeName::root("MyRecord".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());

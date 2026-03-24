@@ -58,7 +58,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
-        bincode::BincodePlugin,
+        bincode::kotlin::KotlinBincodePlugin,
         indent::{IndentWrite, Newlines},
         json::JsonPlugin,
         module::Module,
@@ -105,14 +105,14 @@ impl Kotlin {
     /// encoding specified in `config`.
     ///
     /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::Bincode`] → includes `BincodePlugin` (resolves package
-    ///   names from `config.external_packages`)
+    /// - [`Encoding::Bincode`] → includes `KotlinBincodePlugin` (resolves JVM
+    ///   package names from `config.external_packages`)
     /// - [`Encoding::None`] → no plugins
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin::from_config(config))],
-            Encoding::Json => vec![Arc::new(JsonPlugin::new())],
+            Encoding::Bincode => vec![Arc::new(KotlinBincodePlugin::from_config(config))],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
             Encoding::None => vec![],
         };
         Self { plugins }

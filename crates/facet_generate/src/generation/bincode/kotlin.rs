@@ -1,14 +1,13 @@
-//! `EmitterPlugin<Kotlin>` implementation for the [`BincodePlugin`].
+//! `EmitterPlugin<Kotlin>` implementation for the Kotlin-specific bincode plugin.
 //!
 //! Provides bincode-specific imports, feature helper snippets, and type-body
 //! generation (serialize / deserialize method bodies) for Kotlin code
 //! generation.
 //!
-//! The 12 helper functions (`write_bincode_serialize`, `write_serialize`, etc.)
-//! that used to live in the Kotlin emitter are now canonical here and
-//! re-exported as `pub(crate)` so the emitter can still reference them during
-//! the transition period (the `is_bincode()` branches in the emitter will be
-//! removed in a follow-up step).
+//! Unlike the language-agnostic [`BincodePlugin`](super::BincodePlugin), this
+//! module defines [`KotlinBincodePlugin`], which carries the JVM package names
+//! (`serde_package`, `bincode_package`) needed to generate the correct import
+//! statements for the Kotlin serde/bincode runtime libraries.
 
 use std::io::{self, Result, Write};
 
@@ -16,14 +15,61 @@ use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use crate::generation::{
-    CodeGeneratorConfig, Feature,
+    BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
     kotlin::Kotlin,
     plugin::{EmitContext, EmitterPlugin},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
-use super::BincodePlugin;
+// ---------------------------------------------------------------------------
+// KotlinBincodePlugin
+// ---------------------------------------------------------------------------
+
+/// Kotlin-specific bincode plugin.
+///
+/// Carries the resolved JVM package names for the serde and bincode runtime
+/// libraries so that the correct `import` statements can be generated.
+///
+/// Use [`from_config`](Self::from_config) to construct an instance with
+/// package names resolved from the code-generator configuration.
+#[derive(Debug, Clone)]
+pub struct KotlinBincodePlugin {
+    /// Resolved serde package name (e.g. `"com.novi.serde"`).
+    pub(crate) serde_package: String,
+    /// Resolved bincode package name (e.g. `"com.novi.bincode"`).
+    pub(crate) bincode_package: String,
+}
+
+impl KotlinBincodePlugin {
+    /// Create a new `KotlinBincodePlugin` with package names resolved from the
+    /// given config (specifically `config.external_packages`).
+    #[must_use]
+    pub fn from_config(config: &CodeGeneratorConfig) -> Self {
+        let serde_package = resolve_package(config, SERDE_NAMESPACE, "com.novi.serde");
+        let bincode_package = resolve_package(config, BINCODE_NAMESPACE, "com.novi.bincode");
+        Self {
+            serde_package,
+            bincode_package,
+        }
+    }
+}
+
+/// Look up the package path for `namespace` in the config's external packages.
+/// Falls back to `default` when no override is configured.
+fn resolve_package(config: &CodeGeneratorConfig, namespace: &str, default: &str) -> String {
+    config
+        .external_packages
+        .get(namespace)
+        .and_then(|pkg| {
+            if let PackageLocation::Path(path) = &pkg.location {
+                Some(path.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| default.to_string())
+}
 
 // Bincode container helper snippets — inlined Kotlin source fragments
 // (extension functions on `Serializer` / `Deserializer`) that teach the serde
@@ -688,7 +734,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
 
-impl EmitterPlugin<Kotlin> for BincodePlugin {
+impl EmitterPlugin<Kotlin> for KotlinBincodePlugin {
     /// Bincode / serde imports for a Kotlin module.
     ///
     /// Returns the base set of imports that every bincode-enabled module
@@ -876,7 +922,6 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
 mod tests {
     use super::*;
     use crate::generation::CodeGeneratorConfig;
-    use crate::generation::indent::IndentedWriter;
     use std::collections::BTreeSet;
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
@@ -888,8 +933,7 @@ mod tests {
     #[test]
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BincodeSerializer")));
@@ -902,8 +946,7 @@ mod tests {
     #[test]
     fn bytes_feature_adds_import() {
         let cfg = make_config(&[Feature::Bytes]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("Bytes")));
@@ -912,8 +955,7 @@ mod tests {
     #[test]
     fn bigint_feature_adds_imports() {
         let cfg = make_config(&[Feature::BigInt]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BigInteger")));
@@ -923,8 +965,7 @@ mod tests {
     #[test]
     fn module_helpers_emit_list_of_t() {
         let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         let mut buf = Vec::new();
         {
@@ -944,8 +985,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -964,8 +1004,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         // Non-all-unit enum → sealed interface
         let mut variants = BTreeMap::new();
@@ -1004,8 +1043,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         // All-unit enum → enum class
         let mut variants = BTreeMap::new();
@@ -1042,8 +1080,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -1073,8 +1110,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![
@@ -1112,8 +1148,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = BincodePlugin::from_config(&cfg);
-        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
 
         let mut variants = BTreeMap::new();
         variants.insert(
