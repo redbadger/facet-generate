@@ -29,11 +29,14 @@ use std::{
 
 use serde_json::{Value, json};
 
+use std::collections::BTreeSet;
+
 use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SERDE_NAMESPACE, SourceInstaller, module, typescript::TypeScriptCodeGenerator,
+        SERDE_NAMESPACE, SourceInstaller, module,
+        typescript::{TypeScript, TypeScriptCodeGenerator},
     },
 };
 
@@ -102,12 +105,25 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Install runtimes if an encoding is configured,
-        // unless an external package provides them
-        if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
-            self.install_serde_runtime()?;
-            if self.encoding == Encoding::Bincode {
-                self.install_bincode_runtime()?;
+        // Build a lang tag to get the active plugins, then use them to install
+        // runtime files (replacing the old encoding-based install_serde/bincode calls).
+        let mut config =
+            CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+        config.update_from(registry);
+        let lang = TypeScript::new(&config, registry);
+
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            let mut written: BTreeSet<String> = BTreeSet::new();
+            for plugin in lang.plugins() {
+                for file in plugin.runtime_files() {
+                    if written.insert(file.relative_path.clone()) {
+                        let dest = self.install_dir.join(&file.relative_path);
+                        if let Some(parent) = dest.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::write(&dest, &file.contents)?;
+                    }
+                }
             }
         }
 
@@ -124,13 +140,53 @@ impl Installer {
         Ok(())
     }
 
-    fn install_runtime(&self, source_dir: &include_dir::Dir, path: &str) -> Result<(), Error> {
-        let dir_path = self.install_dir.join(path);
-        create_dir_all(&dir_path)?;
-        for entry in source_dir.files() {
-            let file_name = entry.path().to_string_lossy();
-            let mut file = File::create(dir_path.join(file_name.as_ref()))?;
-            file.write_all(entry.contents())?;
+    /// Installs the serde TypeScript runtime sources into the output directory.
+    ///
+    /// Delegates to the JSON plugin's [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files)
+    /// which embeds the serde sources via `include_dir!`.  Most callers should
+    /// prefer [`generate`](Self::generate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
+        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Json);
+        let lang = TypeScript::new(&config, &Default::default());
+        for plugin in lang.plugins() {
+            for file in plugin.runtime_files() {
+                let dest = self.install_dir.join(&file.relative_path);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent.to_path_buf())?;
+                }
+                std::fs::write(&dest, &file.contents)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Installs the bincode TypeScript runtime sources into the output directory.
+    ///
+    /// Delegates to the bincode plugin's `runtime_files`, writing only the
+    /// `bincode/` files.  Most callers should prefer [`generate`](Self::generate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_bincode_runtime(&self) -> Result<(), Error> {
+        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Bincode);
+        let lang = TypeScript::new(&config, &Default::default());
+        for plugin in lang.plugins() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("bincode/"))
+            {
+                let dest = self.install_dir.join(&file.relative_path);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent.to_path_buf())?;
+                }
+                std::fs::write(&dest, &file.contents)?;
+            }
         }
         Ok(())
     }
@@ -221,18 +277,6 @@ impl SourceInstaller for Installer {
         generator.output(&mut file, registry)?;
 
         Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        static SERDE_DIR: include_dir::Dir<'static> =
-            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
-        self.install_runtime(&SERDE_DIR, "serde")
-    }
-
-    fn install_bincode_runtime(&self) -> Result<(), Error> {
-        static BINCODE_DIR: include_dir::Dir<'static> =
-            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/bincode");
-        self.install_runtime(&BINCODE_DIR, "bincode")
     }
 
     /// Write `package.json` to the output directory.

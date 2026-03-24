@@ -75,9 +75,15 @@ impl Installer {
         // Install runtimes if an encoding is configured,
         // unless an external package provides them
         if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
-            self.install_serde_runtime()?;
+            self.install_runtime(
+                &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/serde"),
+                "com/novi/serde",
+            )?;
             if self.encoding == Encoding::Bincode {
-                self.install_bincode_runtime()?;
+                self.install_runtime(
+                    &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/bincode"),
+                    "com/novi/bincode",
+                )?;
             }
         }
 
@@ -92,6 +98,30 @@ impl Installer {
         }
 
         Ok(())
+    }
+
+    /// Installs the serde Java runtime sources into the output directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
+        self.install_runtime(
+            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/serde"),
+            "com/novi/serde",
+        )
+    }
+
+    /// Installs the bincode Java runtime sources into the output directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
+        self.install_runtime(
+            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/bincode"),
+            "com/novi/bincode",
+        )
     }
 
     fn install_runtime(
@@ -131,19 +161,5 @@ impl SourceInstaller for Installer {
         let generator = JavaCodeGenerator::new(&updated_config);
         generator.write_source_files(self.install_dir.clone(), registry)?;
         Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
-        self.install_runtime(
-            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/serde"),
-            "com/novi/serde",
-        )
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
-        self.install_runtime(
-            &include_dir!("$CARGO_MANIFEST_DIR/runtime/java/com/novi/bincode"),
-            "com/novi/bincode",
-        )
     }
 }

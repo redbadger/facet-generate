@@ -28,7 +28,7 @@ use std::{
 };
 
 use heck::ToUpperCamelCase as _;
-use include_dir::include_dir;
+
 use indent::indent_all_with;
 use indoc::formatdoc;
 
@@ -36,7 +36,8 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
-        SourceInstaller, module, swift::generator::SwiftCodeGenerator,
+        SourceInstaller, module,
+        swift::{Swift, generator::SwiftCodeGenerator},
     },
 };
 
@@ -99,12 +100,31 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Install runtimes if an encoding is configured,
-        // unless an external package provides them
-        if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
-            self.install_serde_runtime()?;
-            if self.encoding == Encoding::Bincode {
-                self.install_bincode_runtime()?;
+        // Build a lang tag to get the active plugins, then use them to install
+        // runtime files (replacing the old encoding-based install_serde/bincode calls).
+        let mut config =
+            CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+        config.update_from(registry);
+        let lang = Swift::new(&config, registry);
+
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            let mut written: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+            for plugin in lang.plugins() {
+                for file in plugin.runtime_files() {
+                    if written.insert(file.relative_path.clone()) {
+                        let dest = self.install_dir.join(&file.relative_path);
+                        if let Some(parent) = dest.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::write(&dest, &file.contents)?;
+                        // Register the "Serde" SPM target when its sources are written.
+                        if file.relative_path.starts_with("Sources/Serde/") {
+                            self.targets
+                                .entry("Serde".to_string())
+                                .or_insert_with(BTreeSet::new);
+                        }
+                    }
+                }
             }
         }
 
@@ -121,19 +141,36 @@ impl Installer {
         Ok(())
     }
 
-    fn install_runtime(
-        &self,
-        source_dir: &include_dir::Dir,
-        path: &str,
-    ) -> std::result::Result<(), Error> {
-        let dir_path = self.install_dir.join(path);
-        std::fs::create_dir_all(&dir_path)?;
-
-        for entry in source_dir.files() {
-            let mut file = std::fs::File::create(dir_path.join(entry.path()))?;
-            file.write_all(entry.contents())?;
+    /// Installs the Serde Swift runtime sources into the output directory and
+    /// registers `Serde` as a local SPM target.
+    ///
+    /// Delegates to [`BincodePlugin::runtime_files`] which embeds the
+    /// `Sources/Serde/` sources via `include_dir!`.  Most callers should
+    /// prefer [`generate`](Self::generate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
+        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Bincode);
+        let lang = Swift::new(&config, &Default::default());
+        let mut written = BTreeSet::new();
+        for plugin in lang.plugins() {
+            for file in plugin.runtime_files() {
+                if written.insert(file.relative_path.clone()) {
+                    let dest = self.install_dir.join(&file.relative_path);
+                    if let Some(parent) = dest.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(&dest, &file.contents)?;
+                    if file.relative_path.starts_with("Sources/Serde/") {
+                        self.targets
+                            .entry("Serde".to_string())
+                            .or_insert_with(BTreeSet::new);
+                    }
+                }
+            }
         }
-
         Ok(())
     }
 
@@ -291,6 +328,9 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
+        // Depend on the Serde target when the module uses serialization.
+        // (Switched to targets-based check will happen in Stage 6 when encoding
+        // is removed from CodeGeneratorConfig.)
         if config.has_encoding() {
             targets.insert("Serde".to_string());
         }
@@ -308,25 +348,6 @@ impl SourceInstaller for Installer {
         let generator = SwiftCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
-        Ok(())
-    }
-
-    /// Copy the Serde runtime `.swift` sources and register `Serde` as a
-    /// local SPM target so that generated modules can depend on it.
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
-        self.install_runtime(
-            &include_dir!("$CARGO_MANIFEST_DIR/runtime/swift/Sources/Serde"),
-            "Sources/Serde",
-        )?;
-
-        // Register Serde as a local target
-        self.targets.insert("Serde".to_string(), BTreeSet::new());
-
-        Ok(())
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
-        // Ignored. Currently always installed with Serde.
         Ok(())
     }
 

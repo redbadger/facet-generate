@@ -38,7 +38,10 @@ fn test_make_manifest_with_external_packages() {
         version: Some("2.0.0".to_string()),
     }];
 
-    let installer = Installer::new("test-package", "/tmp").external_packages(&external_packages);
+    use crate::generation::Encoding;
+    let installer = Installer::new("test-package", "/tmp")
+        .encoding(Encoding::Json)
+        .external_packages(&external_packages);
     let manifest = installer.make_manifest("test-package");
 
     // Check that external dependencies are included

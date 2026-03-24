@@ -166,7 +166,7 @@ pub enum Error {
 /// the third layer of the pipeline — after [`CodeGenerator`](super::CodeGenerator)
 /// produces the source text and [`Emitter`](super::Emitter) renders each
 /// AST node, the installer places everything into the output directory and
-/// copies any runtime files required by the chosen [`Encoding`].
+/// writes any runtime files declared by the active plugins.
 pub trait SourceInstaller {
     /// Create a module exposing the container types contained in the registry.
     fn install_module(
@@ -174,12 +174,6 @@ pub trait SourceInstaller {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Error>;
-
-    /// Install the serde runtime.
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error>;
-
-    /// Install the bincode runtime.
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error>;
 
     /// Install a package manifest.
     fn install_manifest(&self, _module_name: &str) -> std::result::Result<(), Error> {

@@ -21,6 +21,7 @@
 //!    external packages.
 
 use std::{
+    collections::BTreeSet,
     fmt::Write as _,
     io::Write as _,
     path::{Path, PathBuf},
@@ -33,7 +34,9 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SourceInstaller, csharp::CSharpCodeGenerator, module,
+        SourceInstaller,
+        csharp::{CSharp, CSharpCodeGenerator},
+        module,
     },
 };
 
@@ -89,13 +92,31 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        // Unit.cs is always required (even without encoding) because Format::Unit
+        // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
+
+        // Install encoding-specific runtime files from plugins.
         if !self.encoding.is_none() {
-            self.install_serde_runtime()?;
-            match self.encoding {
-                Encoding::Json => self.install_json_runtime()?,
-                Encoding::Bincode => self.install_bincode_runtime()?,
-                Encoding::None => {}
+            let mut config =
+                CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+            config.update_from(registry);
+            let lang = CSharp::new(&config, registry);
+
+            // Unit.cs was already written above; skip it when iterating plugin files.
+            let mut written: BTreeSet<String> =
+                BTreeSet::from(["Facet/Runtime/Serde/Unit.cs".to_string()]);
+            for plugin in lang.plugins() {
+                for file in plugin.runtime_files() {
+                    if written.insert(file.relative_path.clone()) {
+                        let dest = self.install_dir.join(&file.relative_path);
+                        if let Some(parent) = dest.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        let mut f = std::fs::File::create(&dest)?;
+                        f.write_all(&file.contents)?;
+                    }
+                }
             }
         }
 
@@ -207,14 +228,6 @@ impl Installer {
         Ok(())
     }
 
-    fn install_json_runtime(&self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Json/JsonSerde.cs",
-            include_str!("runtime/json/JsonSerde.cs"),
-        )?;
-        Ok(())
-    }
-
     fn install_runtime_file(
         &self,
         relative_path: &str,
@@ -266,50 +279,6 @@ impl SourceInstaller for Installer {
         let generator = CSharpCodeGenerator::new(&updated_config);
         generator.output(&mut file, registry)?;
 
-        Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/ISerializer.cs",
-            include_str!("runtime/serde/ISerializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/IDeserializer.cs",
-            include_str!("runtime/serde/IDeserializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/DeserializationError.cs",
-            include_str!("runtime/serde/DeserializationError.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/SerializationError.cs",
-            include_str!("runtime/serde/SerializationError.cs"),
-        )?;
-        Ok(())
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/BincodeSerializer.cs",
-            include_str!("runtime/bincode/BincodeSerializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/BincodeDeserializer.cs",
-            include_str!("runtime/bincode/BincodeDeserializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/IFacetSerializable.cs",
-            include_str!("runtime/bincode/IFacetSerializable.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/IFacetDeserializable.cs",
-            include_str!("runtime/bincode/IFacetDeserializable.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/FacetHelpers.cs",
-            include_str!("runtime/bincode/FacetHelpers.cs"),
-        )?;
         Ok(())
     }
 
