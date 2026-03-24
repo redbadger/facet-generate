@@ -202,10 +202,7 @@ impl Installer {
     fn install_core_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Serde/Unit.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public readonly record struct Unit;
-",
+            include_str!("runtime/core/Unit.cs"),
         )?;
         Ok(())
     }
@@ -213,90 +210,7 @@ public readonly record struct Unit;
     fn install_json_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Json/JsonSerde.cs",
-            r#"using System;
-using System.Collections.ObjectModel;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Json;
-
-public static class JsonSerde
-{
-    internal static readonly JsonSerializerOptions Options = new()
-    {
-        Converters =
-        {
-            new JsonStringEnumConverter(),
-            new ObservableCollectionJsonConverterFactory()
-        }
-    };
-
-    public static string Serialize<T>(T value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        return JsonSerializer.Serialize(value, Options);
-    }
-
-    public static T Deserialize<T>(string input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            throw new DeserializationError("Cannot deserialize empty input");
-        }
-
-        var value = JsonSerializer.Deserialize<T>(input, Options);
-        if (value is null)
-        {
-            throw new DeserializationError($"Deserialization produced null for {typeof(T).Name}");
-        }
-
-        return value;
-    }
-}
-
-internal sealed class ObservableCollectionJsonConverterFactory : JsonConverterFactory
-{
-    public override bool CanConvert(Type typeToConvert)
-    {
-        return typeToConvert.IsGenericType &&
-               typeToConvert.GetGenericTypeDefinition() == typeof(ObservableCollection<>);
-    }
-
-    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
-    {
-        var elementType = typeToConvert.GetGenericArguments()[0];
-        var converterType = typeof(ObservableCollectionJsonConverter<>).MakeGenericType(elementType);
-        return (JsonConverter)Activator.CreateInstance(converterType)!;
-    }
-
-    private sealed class ObservableCollectionJsonConverter<T> : JsonConverter<ObservableCollection<T>>
-    {
-        public override ObservableCollection<T> Read(
-            ref Utf8JsonReader reader,
-            Type typeToConvert,
-            JsonSerializerOptions options)
-        {
-            var list = JsonSerializer.Deserialize<List<T>>(ref reader, options)
-                ?? throw new DeserializationError("Failed to deserialize collection");
-            return new ObservableCollection<T>(list);
-        }
-
-        public override void Write(
-            Utf8JsonWriter writer,
-            ObservableCollection<T> value,
-            JsonSerializerOptions options)
-        {
-            JsonSerializer.Serialize(writer, (IEnumerable<T>)value, options);
-        }
-    }
-}
-"#,
+            include_str!("runtime/json/JsonSerde.cs"),
         )?;
         Ok(())
     }
@@ -358,141 +272,19 @@ impl SourceInstaller for Installer {
     fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Serde/ISerializer.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public interface ISerializer
-{
-    void IncreaseContainerDepth();
-
-    void DecreaseContainerDepth();
-
-    void SerializeUnit(Unit value);
-
-    void SerializeBool(bool value);
-
-    void SerializeI8(sbyte value);
-
-    void SerializeI16(short value);
-
-    void SerializeI32(int value);
-
-    void SerializeI64(long value);
-
-    void SerializeI128(Int128 value);
-
-    void SerializeU8(byte value);
-
-    void SerializeU16(ushort value);
-
-    void SerializeU32(uint value);
-
-    void SerializeU64(ulong value);
-
-    void SerializeU128(UInt128 value);
-
-    void SerializeF32(float value);
-
-    void SerializeF64(double value);
-
-    void SerializeChar(char value);
-
-    void SerializeStr(string value);
-
-    void SerializeBytes(byte[] value);
-
-    void SerializeLen(ulong value);
-
-    void SerializeVariantIndex(uint value);
-
-    void SerializeOptionTag(bool value);
-
-    byte[] GetBytes();
-
-    int GetBufferOffset();
-}
-",
+            include_str!("runtime/serde/ISerializer.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/IDeserializer.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public interface IDeserializer
-{
-    void IncreaseContainerDepth();
-
-    void DecreaseContainerDepth();
-
-    Unit DeserializeUnit();
-
-    bool DeserializeBool();
-
-    sbyte DeserializeI8();
-
-    short DeserializeI16();
-
-    int DeserializeI32();
-
-    long DeserializeI64();
-
-    Int128 DeserializeI128();
-
-    byte DeserializeU8();
-
-    ushort DeserializeU16();
-
-    uint DeserializeU32();
-
-    ulong DeserializeU64();
-
-    UInt128 DeserializeU128();
-
-    float DeserializeF32();
-
-    double DeserializeF64();
-
-    char DeserializeChar();
-
-    string DeserializeStr();
-
-    byte[] DeserializeBytes();
-
-    ulong DeserializeLen();
-
-    uint DeserializeVariantIndex();
-
-    bool DeserializeOptionTag();
-
-    int GetBufferOffset();
-}
-",
+            include_str!("runtime/serde/IDeserializer.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/DeserializationError.cs",
-            r"using System;
-
-namespace Facet.Runtime.Serde;
-
-public sealed class DeserializationError : Exception
-{
-    public DeserializationError(string message) : base(message)
-    {
-    }
-}
-",
+            include_str!("runtime/serde/DeserializationError.cs"),
         )?;
         self.install_runtime_file(
             "Facet/Runtime/Serde/SerializationError.cs",
-            r"using System;
-
-namespace Facet.Runtime.Serde;
-
-public sealed class SerializationError : Exception
-{
-    public SerializationError(string message) : base(message)
-    {
-    }
-}
-",
+            include_str!("runtime/serde/SerializationError.cs"),
         )?;
         Ok(())
     }

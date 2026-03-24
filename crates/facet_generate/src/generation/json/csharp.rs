@@ -23,7 +23,7 @@ use crate::generation::{
     CodeGeneratorConfig,
     csharp::CSharp,
     indent::{IndentWrite, Newlines, with_block},
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
@@ -34,6 +34,43 @@ use super::JsonPlugin;
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<CSharp> for JsonPlugin {
+    /// Returns the core, serde, and JSON C# runtime sources to be written
+    /// into the output directory alongside the generated code.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        vec![
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/Unit.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/core/Unit.cs").to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/ISerializer.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/ISerializer.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/IDeserializer.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/IDeserializer.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/DeserializationError.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/serde/DeserializationError.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/SerializationError.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/SerializationError.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Json/JsonSerde.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/json/JsonSerde.cs").to_vec(),
+            },
+        ]
+    }
+
     /// Returns `using` directives for JSON support.
     fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![

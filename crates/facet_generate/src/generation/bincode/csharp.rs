@@ -30,7 +30,7 @@ use crate::generation::{
     CodeGeneratorConfig,
     csharp::CSharp,
     indent::{IndentWrite, Newlines, with_block},
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{
     ContainerFormat, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -64,6 +64,72 @@ pub struct CSharpBincodePlugin {
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<CSharp> for CSharpBincodePlugin {
+    /// Returns the core, serde, and bincode C# runtime sources to be written
+    /// into the output directory alongside the generated code.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        vec![
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/Unit.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/core/Unit.cs").to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/ISerializer.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/ISerializer.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/IDeserializer.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/IDeserializer.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/DeserializationError.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/serde/DeserializationError.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Serde/SerializationError.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/serde/SerializationError.cs")
+                    .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Bincode/BincodeSerializer.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/bincode/BincodeSerializer.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Bincode/BincodeDeserializer.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/bincode/BincodeDeserializer.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Bincode/IFacetSerializable.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/bincode/IFacetSerializable.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Bincode/IFacetDeserializable.cs".to_string(),
+                contents: include_bytes!(
+                    "../csharp/installer/runtime/bincode/IFacetDeserializable.cs"
+                )
+                .to_vec(),
+            },
+            RuntimeFile {
+                relative_path: "Facet/Runtime/Bincode/FacetHelpers.cs".to_string(),
+                contents: include_bytes!("../csharp/installer/runtime/bincode/FacetHelpers.cs")
+                    .to_vec(),
+            },
+        ]
+    }
+
     /// Returns the single `using` directive needed for bincode support.
     fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec!["using Facet.Runtime.Bincode;".to_string()]
