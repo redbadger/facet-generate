@@ -23,6 +23,9 @@ pub mod swift;
 #[cfg(feature = "typescript")]
 pub mod typescript;
 
+#[cfg(feature = "csharp")]
+pub mod csharp;
+
 use super::CodeGeneratorConfig;
 
 /// Bincode serialization plugin.
