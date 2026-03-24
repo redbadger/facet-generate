@@ -58,43 +58,56 @@ use crate::{
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         json::JsonPlugin,
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
 
 /// Language tag for TypeScript code generation.
 ///
-/// Carries the active [`Encoding`] (None / Bincode / Json) and the plugin
-/// list built from it. Emitter implementations consult the plugins at each
-/// extension point; the encoding field is retained for the module-level
-/// `Serializer`/`Deserializer` import check.
+/// Carries a plugin list that controls all encoding-specific behaviour
+/// (serialize/deserialize methods, feature helpers, imports). Build the
+/// standard plugin list from the config encoding via
+/// [`BuildPluginsFor<TypeScript>`], or supply custom plugins with
+/// [`with_plugin`](Self::with_plugin).
 #[derive(Debug, Clone)]
 pub struct TypeScript {
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl TypeScript {
-    /// Create a TypeScript language tag, building the appropriate plugins for
-    /// the encoding specified in `config`.
-    ///
-    /// - [`Encoding::Bincode`] → includes `BincodePlugin`
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// Create a TypeScript language tag using the plugins derived from
+    /// `config.encoding` via [`BuildPluginsFor<TypeScript>`].
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+        Self {
+            plugins: config.build_plugins_for(),
+        }
     }
 
     /// Access the plugin list.
     #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
+    }
+
+    /// Add a plugin to this language tag, returning the modified tag.
+    ///
+    /// Plugins are invoked in the order they were added.
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
+}
+
+impl BuildPluginsFor<TypeScript> for CodeGeneratorConfig {
+    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<TypeScript>>> {
+        match self.encoding {
+            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
+            Encoding::None => vec![],
+        }
     }
 }
 

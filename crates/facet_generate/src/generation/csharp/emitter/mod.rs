@@ -67,7 +67,7 @@ use crate::{
         indent::{IndentWrite, Newlines},
         json::JsonPlugin,
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
+        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -87,34 +87,45 @@ pub struct CSharp {
 }
 
 impl CSharp {
-    /// Create a [`CSharp`] language tag for the given config and registry.
-    ///
-    /// - [`Encoding::Bincode`] → includes `CSharpBincodePlugin` (carries
-    ///   the precomputed set of C-style enum names needed for dispatch)
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// Create a [`CSharp`] language tag with the default plugins derived from
+    /// `config.encoding`.
     ///
     /// `config` must have been passed through
     /// [`CodeGeneratorConfig::update_from`] before calling this, so that
     /// [`CodeGeneratorConfig::unit_variant_enums`] is populated.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => {
-                vec![Arc::new(CSharpBincodePlugin {
-                    c_style_enums: config.unit_variant_enums.clone(),
-                })]
-            }
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+        Self {
+            plugins: config.build_plugins_for(),
+        }
+    }
+
+    /// Append a plugin to this language tag's plugin list.
+    ///
+    /// Useful for adding custom plugins on top of the defaults returned by
+    /// [`new`](Self::new).
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
     }
 
     /// Access the plugin list.
     #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
+    }
+}
+
+impl BuildPluginsFor<CSharp> for CodeGeneratorConfig {
+    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<CSharp>>> {
+        match self.encoding {
+            Encoding::Bincode => vec![Arc::new(CSharpBincodePlugin {
+                c_style_enums: self.unit_variant_enums.clone(),
+            })],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
+            Encoding::None => vec![],
+        }
     }
 }
 

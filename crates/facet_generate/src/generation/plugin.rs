@@ -390,6 +390,35 @@ pub struct RuntimeFile {
 }
 
 // ---------------------------------------------------------------------------
+// BuildPluginsFor: extension trait for constructing a plugin list from config
+// ---------------------------------------------------------------------------
+
+/// Extension trait that constructs a language's default plugin list from a
+/// [`CodeGeneratorConfig`].
+///
+/// Implementations live in each language's emitter module, where
+/// language-specific plugin types are already imported.  Keeping the impls
+/// there avoids circular dependencies — `config.rs` never needs to know about
+/// language-specific types, while the language modules already depend on
+/// `config.rs`.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use facet_generate::generation::plugin::BuildPluginsFor;
+///
+/// let plugins: Vec<_> = config.build_plugins_for::<Kotlin>();
+/// ```
+pub trait BuildPluginsFor<L> {
+    /// Build the default plugin list for language `L` from this config.
+    ///
+    /// The list is derived from the encoding currently stored in the config.
+    /// Callers that need to extend or replace the defaults can call
+    /// [`Lang::with_plugin`] on the resulting language tag.
+    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<L>>>;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers for calling plugin lists
 // ---------------------------------------------------------------------------
 

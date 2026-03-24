@@ -62,7 +62,7 @@ use crate::{
         indent::{IndentWrite, Newlines},
         json::JsonPlugin,
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -110,18 +110,34 @@ impl Kotlin {
     /// - [`Encoding::None`] → no plugins
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(KotlinBincodePlugin::from_config(config))],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+        Self {
+            plugins: config.build_plugins_for(),
+        }
+    }
+
+    /// Add a plugin to this language tag, returning the modified tag.
+    ///
+    /// Plugins are invoked in the order they are added.
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
     }
 
     /// Access the plugin list.
     #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
+    }
+}
+
+impl BuildPluginsFor<Kotlin> for CodeGeneratorConfig {
+    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<Kotlin>>> {
+        match self.encoding {
+            Encoding::Bincode => vec![Arc::new(KotlinBincodePlugin::from_config(self))],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
+            Encoding::None => vec![],
+        }
     }
 }
 

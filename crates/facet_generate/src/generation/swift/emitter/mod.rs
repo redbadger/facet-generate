@@ -99,23 +99,18 @@ pub struct Swift {
 }
 
 impl Swift {
-    /// Create a Swift language tag with computed type sets and plugins for
-    /// the encoding specified in `config`.
+    /// Create a Swift language tag with computed type sets and plugins derived
+    /// from the encoding in `config`.
     ///
-    /// - [`Encoding::Bincode`] → includes `BincodePlugin`
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// The `hashable_types` and `equatable_types` sets are computed from the
+    /// registry via fixed-point analysis and are unrelated to plugin selection.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
+        use crate::generation::plugin::BuildPluginsFor as _;
         Self {
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
-            plugins,
+            plugins: config.build_plugins_for(),
         }
     }
 
@@ -123,6 +118,23 @@ impl Swift {
     #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
+    }
+
+    /// Add a plugin to this language tag (builder-style).
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
+}
+
+impl crate::generation::plugin::BuildPluginsFor<Swift> for CodeGeneratorConfig {
+    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<Swift>>> {
+        match self.encoding {
+            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
+            Encoding::None => vec![],
+        }
     }
 }
 
