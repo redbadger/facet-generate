@@ -6,15 +6,15 @@
 use std::{
     collections::BTreeSet,
     io::{Result, Write},
+    sync::Arc,
 };
-
-use std::sync::Arc;
 
 use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
-        indent::IndentedWriter, json::JsonPlugin, module::Module, swift::emitter::Swift,
+        indent::IndentedWriter, json::JsonPlugin, module::Module, plugin::EmitterPlugin,
+        swift::emitter::Swift,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
@@ -30,11 +30,18 @@ pub struct SwiftCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Which serialization encoding to generate code for.
     pub(crate) encoding: Encoding,
+    /// Pre-built plugins supplied by the caller (e.g. from the installer).
+    /// When non-empty these take priority over [`encoding`](Self::encoding).
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
 }
 
 impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        SwiftCodeGenerator::new(config)
+        Self {
+            config,
+            encoding: Encoding::None,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: std::io::Write>(
@@ -51,10 +58,11 @@ impl<'a> SwiftCodeGenerator<'a> {
     ///
     /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
             encoding: Encoding::None,
+            plugins: vec![],
         }
     }
 
@@ -62,6 +70,16 @@ impl<'a> SwiftCodeGenerator<'a> {
     #[must_use]
     pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Set the pre-built plugin list, returning the modified generator.
+    ///
+    /// When plugins are provided this way they take priority over the
+    /// [`encoding`](Self::with_encoding) setting.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -76,13 +94,19 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = {
+        let lang = if self.plugins.is_empty() {
             let base = Swift::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }
+        } else {
+            let mut base = Swift::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
+            }
+            base
         };
 
         Module::new(&config).write(w, &lang)?;

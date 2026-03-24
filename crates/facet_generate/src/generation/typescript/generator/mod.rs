@@ -13,7 +13,8 @@ use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
-        indent::IndentedWriter, json::JsonPlugin, module::Module, typescript::emitter::TypeScript,
+        indent::IndentedWriter, json::JsonPlugin, module::Module, plugin::EmitterPlugin,
+        typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -27,11 +28,17 @@ pub struct TypeScriptCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Which serialization encoding to generate code for.
     pub(crate) encoding: Encoding,
+    /// Pre-built plugin list. When non-empty, takes priority over `encoding`.
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
 impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        TypeScriptCodeGenerator::new(config)
+        Self {
+            config,
+            encoding: Encoding::None,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -44,10 +51,11 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     ///
     /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
             encoding: Encoding::None,
+            plugins: vec![],
         }
     }
 
@@ -55,6 +63,16 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     #[must_use]
     pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    ///
+    /// When plugins are provided, they take priority over the
+    /// [`encoding`](Self::with_encoding) setting.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -69,13 +87,19 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = {
+        let lang = if self.plugins.is_empty() {
             let base = TypeScript::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }
+        } else {
+            let mut base = TypeScript::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
+            }
+            base
         };
 
         Module::new(&config).write(w, &lang)?;

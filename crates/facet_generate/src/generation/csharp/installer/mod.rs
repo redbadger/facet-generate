@@ -25,6 +25,7 @@ use std::{
     fmt::Write as _,
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use heck::ToUpperCamelCase as _;
@@ -39,6 +40,7 @@ use crate::{
         csharp::{CSharp, CSharpCodeGenerator},
         json::JsonPlugin,
         module,
+        plugin::EmitterPlugin,
     },
 };
 
@@ -48,6 +50,7 @@ pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
     encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
 impl Installer {
@@ -63,6 +66,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
             encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
@@ -70,6 +74,16 @@ impl Installer {
     #[must_use]
     pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Add a plugin to be used during code generation.
+    ///
+    /// When plugins are added explicitly, they take priority over the
+    /// [`encoding`](Self::encoding) setting.
+    #[must_use]
+    pub fn plugin(mut self, plugin: impl Into<Arc<dyn EmitterPlugin<CSharp>>>) -> Self {
+        self.plugins.push(plugin.into());
         self
     }
 
@@ -98,17 +112,28 @@ impl Installer {
         // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
 
-        // Install encoding-specific runtime files from plugins.
-        if !self.encoding.is_none() {
-            let mut config = CodeGeneratorConfig::new(self.package_name.clone());
-            config.update_from(registry);
-            let lang = {
-                let base = CSharp::new(&config, registry);
-                match self.encoding {
-                    Encoding::Bincode => base.with_plugin(std::sync::Arc::new(BincodePlugin)),
-                    Encoding::Json => base.with_plugin(std::sync::Arc::new(JsonPlugin)),
-                    Encoding::None => base,
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
+        config.update_from(registry);
+
+        // Resolve plugins: explicit plugins take priority over encoding
+        if self.plugins.is_empty() {
+            self.plugins = match self.encoding {
+                Encoding::Bincode => {
+                    vec![Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<CSharp>>]
                 }
+                Encoding::Json => vec![Arc::new(JsonPlugin) as Arc<dyn EmitterPlugin<CSharp>>],
+                Encoding::None => vec![],
+            };
+        }
+
+        // Install encoding-specific runtime files from plugins.
+        if !self.plugins.is_empty() {
+            let lang = {
+                let mut base = CSharp::new(&config, registry);
+                for p in &self.plugins {
+                    base = base.with_plugin(p.clone());
+                }
+                base
             };
 
             // Unit.cs was already written above; skip it when iterating plugin files.
@@ -280,7 +305,9 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = CSharpCodeGenerator::new(&updated_config).with_encoding(self.encoding);
+        let generator = CSharpCodeGenerator::new(&updated_config)
+            .with_encoding(self.encoding)
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())

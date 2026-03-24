@@ -25,6 +25,7 @@ use std::{
     fs::{File, create_dir_all},
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde_json::{Value, json};
@@ -36,6 +37,7 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller, module,
+        plugin::EmitterPlugin,
         typescript::{TypeScript, TypeScriptCodeGenerator},
     },
 };
@@ -55,6 +57,7 @@ pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
     encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
 impl Installer {
@@ -70,6 +73,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
             encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
@@ -81,6 +85,16 @@ impl Installer {
     #[must_use]
     pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Add a plugin to be used during code generation.
+    ///
+    /// When plugins are added explicitly, they take priority over the
+    /// [`encoding`](Self::encoding) setting.
+    #[must_use]
+    pub fn plugin(mut self, plugin: impl Into<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
+        self.plugins.push(plugin.into());
         self
     }
 
@@ -109,17 +123,23 @@ impl Installer {
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
+        // Resolve plugins: explicit plugins take priority over encoding
+        if self.plugins.is_empty() {
+            self.plugins = match self.encoding {
+                Encoding::Bincode => vec![Arc::new(crate::generation::bincode::BincodePlugin)
+                    as Arc<dyn EmitterPlugin<TypeScript>>],
+                Encoding::Json => vec![Arc::new(crate::generation::json::JsonPlugin)
+                    as Arc<dyn EmitterPlugin<TypeScript>>],
+                Encoding::None => vec![],
+            };
+        }
+
         let lang = {
-            let base = TypeScript::new(&config, registry);
-            match self.encoding {
-                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::BincodePlugin,
-                )),
-                Encoding::Json => {
-                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
-                }
-                Encoding::None => base,
+            let mut base = TypeScript::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
             }
+            base
         };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
@@ -286,7 +306,9 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = TypeScriptCodeGenerator::new(&updated_config).with_encoding(self.encoding);
+        let generator = TypeScriptCodeGenerator::new(&updated_config)
+            .with_encoding(self.encoding)
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())

@@ -22,6 +22,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use heck::ToPascalCase;
@@ -34,6 +35,7 @@ use crate::{
         SERDE_NAMESPACE, SourceInstaller,
         kotlin::{Kotlin, KotlinCodeGenerator},
         module,
+        plugin::EmitterPlugin,
     },
 };
 
@@ -46,12 +48,14 @@ pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
     encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>,
 }
 
 impl Installer {
     /// Create a new installer for the given package name and output directory.
     ///
-    /// Use the builder methods [`encoding`](Self::encoding) and
+    /// Use the builder methods [`encoding`](Self::encoding),
+    /// [`plugin`](Self::plugin), and
     /// [`external_packages`](Self::external_packages) to configure, then call
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
@@ -61,6 +65,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
             encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
@@ -69,9 +74,23 @@ impl Installer {
     /// When set to anything other than [`Encoding::None`], the appropriate
     /// runtimes (serde + encoding-specific) are installed automatically by
     /// [`generate`](Self::generate).
+    ///
+    /// Note: if plugins have been added explicitly via [`plugin`](Self::plugin),
+    /// those take priority and this setting is ignored.
     #[must_use]
     pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Add a plugin to be used during code generation.
+    ///
+    /// When plugins are added explicitly, they take priority over the
+    /// [`encoding`](Self::encoding) setting. Multiple plugins can be added
+    /// and they are invoked in the order they were registered.
+    #[must_use]
+    pub fn plugin(mut self, plugin: impl Into<Arc<dyn EmitterPlugin<Kotlin>>>) -> Self {
+        self.plugins.push(plugin.into());
         self
     }
 
@@ -100,17 +119,28 @@ impl Installer {
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
-        let lang = {
-            let base = Kotlin::new(&config, registry);
-            match self.encoding {
-                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::BincodePlugin,
-                )),
-                Encoding::Json => {
-                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+
+        // Resolve plugins: explicit plugins take priority over encoding
+        if self.plugins.is_empty() {
+            self.plugins = match self.encoding {
+                Encoding::Bincode => {
+                    vec![Arc::new(crate::generation::bincode::BincodePlugin)
+                        as Arc<dyn EmitterPlugin<Kotlin>>]
                 }
-                Encoding::None => base,
+                Encoding::Json => {
+                    vec![Arc::new(crate::generation::json::JsonPlugin)
+                        as Arc<dyn EmitterPlugin<Kotlin>>]
+                }
+                Encoding::None => vec![],
+            };
+        }
+
+        let lang = {
+            let mut base = Kotlin::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
             }
+            base
         };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
@@ -153,7 +183,7 @@ impl Installer {
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default())
-            .with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin));
+            .with_plugin(Arc::new(crate::generation::json::JsonPlugin));
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
                 let dest = self.install_dir.join(&file.relative_path);
@@ -177,9 +207,8 @@ impl Installer {
     /// Returns an error if any file I/O fails.
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
-        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(std::sync::Arc::new(
-            crate::generation::bincode::BincodePlugin,
-        ));
+        let lang = Kotlin::new(&config, &BTreeMap::default())
+            .with_plugin(Arc::new(crate::generation::bincode::BincodePlugin));
         for plugin in lang.plugins() {
             for file in plugin
                 .runtime_files()
@@ -209,17 +238,27 @@ impl Installer {
         // Collect manifest dependencies from active plugins. For example,
         // JsonPlugin contributes the kotlinx-serialization-json dependency.
         let plugin_config = CodeGeneratorConfig::new(package_name.to_string());
-        let lang = {
-            let base = Kotlin::new(&plugin_config, &BTreeMap::default());
+        let resolved = if self.plugins.is_empty() {
             match self.encoding {
-                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::BincodePlugin,
-                )),
-                Encoding::Json => {
-                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+                Encoding::Bincode => {
+                    vec![Arc::new(crate::generation::bincode::BincodePlugin)
+                        as Arc<dyn EmitterPlugin<Kotlin>>]
                 }
-                Encoding::None => base,
+                Encoding::Json => {
+                    vec![Arc::new(crate::generation::json::JsonPlugin)
+                        as Arc<dyn EmitterPlugin<Kotlin>>]
+                }
+                Encoding::None => vec![],
             }
+        } else {
+            self.plugins.clone()
+        };
+        let lang = {
+            let mut base = Kotlin::new(&plugin_config, &BTreeMap::default());
+            for p in &resolved {
+                base = base.with_plugin(p.clone());
+            }
+            base
         };
         let mut dependencies: Vec<String> = lang
             .plugins()
@@ -335,7 +374,9 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = KotlinCodeGenerator::new(&updated_config).with_encoding(self.encoding);
+        let generator = KotlinCodeGenerator::new(&updated_config)
+            .with_encoding(self.encoding)
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())

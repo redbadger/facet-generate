@@ -25,6 +25,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use heck::ToUpperCamelCase as _;
@@ -37,6 +38,7 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
         SourceInstaller, module,
+        plugin::EmitterPlugin,
         swift::{Swift, generator::SwiftCodeGenerator},
     },
 };
@@ -49,6 +51,7 @@ pub struct Installer {
     targets: BTreeMap<String, BTreeSet<String>>,
     external_packages: ExternalPackages,
     encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
 }
 
 impl Installer {
@@ -65,6 +68,7 @@ impl Installer {
             targets: BTreeMap::new(),
             external_packages: ExternalPackages::new(),
             encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
@@ -76,6 +80,16 @@ impl Installer {
     #[must_use]
     pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Add a plugin to be used during code generation.
+    ///
+    /// When plugins are added explicitly, they take priority over the
+    /// [`encoding`](Self::encoding) setting.
+    #[must_use]
+    pub fn plugin(mut self, plugin: impl Into<Arc<dyn EmitterPlugin<Swift>>>) -> Self {
+        self.plugins.push(plugin.into());
         self
     }
 
@@ -100,21 +114,27 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Build a lang tag to get the active plugins, then use them to install
-        // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
+
+        // Resolve plugins: explicit plugins take priority over encoding
+        if self.plugins.is_empty() {
+            self.plugins =
+                match self.encoding {
+                    Encoding::Bincode => vec![Arc::new(crate::generation::bincode::BincodePlugin)
+                        as Arc<dyn EmitterPlugin<Swift>>],
+                    Encoding::Json => vec![Arc::new(crate::generation::json::JsonPlugin)
+                        as Arc<dyn EmitterPlugin<Swift>>],
+                    Encoding::None => vec![],
+                };
+        }
+
         let lang = {
-            let base = Swift::new(&config, registry);
-            match self.encoding {
-                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::BincodePlugin,
-                )),
-                Encoding::Json => {
-                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
-                }
-                Encoding::None => base,
+            let mut base = Swift::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
             }
+            base
         };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
@@ -336,9 +356,9 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
-        // Depend on the Serde target when the installer is configured with
-        // a serialization encoding.
-        if !self.encoding.is_none() {
+        // Depend on the Serde target when the installer has plugins or an
+        // encoding configured (i.e. serialization code will be generated).
+        if !self.plugins.is_empty() || !self.encoding.is_none() {
             targets.insert("Serde".to_string());
         }
 
@@ -352,7 +372,9 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = SwiftCodeGenerator::new(&updated_config).with_encoding(self.encoding);
+        let generator = SwiftCodeGenerator::new(&updated_config)
+            .with_encoding(self.encoding)
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())

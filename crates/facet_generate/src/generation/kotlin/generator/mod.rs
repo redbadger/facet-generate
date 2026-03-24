@@ -13,7 +13,7 @@ use crate::{
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
         config::PackageLocation, indent::IndentedWriter, json::JsonPlugin, kotlin::emitter::Kotlin,
-        module::Module,
+        module::Module, plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -25,6 +25,8 @@ pub struct KotlinCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Which serialization encoding to generate code for.
     pub(crate) encoding: Encoding,
+    /// Pre-built plugins that take priority over [`encoding`](Self::encoding).
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>,
 }
 
 impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
@@ -51,6 +53,7 @@ impl<'a> KotlinCodeGenerator<'a> {
         Self {
             config,
             encoding: Encoding::None,
+            plugins: vec![],
         }
     }
 
@@ -60,9 +63,21 @@ impl<'a> KotlinCodeGenerator<'a> {
     /// is called — `Bincode` installs the Kotlin bincode plugin, `Json`
     /// installs the JSON/kotlinx.serialization plugin, `None` produces plain
     /// types.
+    ///
+    /// Note: if plugins have been set via [`with_plugins`](Self::with_plugins),
+    /// those take priority and this encoding setting is ignored.
     #[must_use]
     pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    ///
+    /// When plugins are set, they take priority over [`with_encoding`](Self::with_encoding).
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -77,13 +92,19 @@ impl<'a> KotlinCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = {
+        let lang = if self.plugins.is_empty() {
             let base = Kotlin::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }
+        } else {
+            let mut base = Kotlin::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
+            }
+            base
         };
 
         Module::new(&config).write(w, &lang)?;

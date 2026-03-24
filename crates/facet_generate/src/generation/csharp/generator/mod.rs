@@ -14,6 +14,7 @@ use crate::{
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
         csharp::emitter::CSharp, indent::IndentedWriter, json::JsonPlugin, module::Module,
+        plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -27,11 +28,17 @@ pub struct CSharpCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Which serialization encoding to generate code for.
     pub(crate) encoding: Encoding,
+    /// Pre-built plugins passed from the installer (takes priority over `encoding`).
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
 impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CSharpCodeGenerator::new(config)
+        Self {
+            config,
+            encoding: Encoding::None,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -44,21 +51,32 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
             encoding: Encoding::None,
+            plugins: vec![],
         }
     }
 
     /// Set the encoding, returning the modified generator.
     ///
-    /// The C# Bincode plugin reads `unit_variant_enums` from the config after
-    /// [`update_from`](CodeGeneratorConfig::update_from) runs, so it is
-    /// constructed lazily inside [`output`](Self::output).
+    /// When [`with_plugins`](Self::with_plugins) has been called with a
+    /// non-empty list, those plugins take priority and this setting is
+    /// ignored.
     #[must_use]
     pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    ///
+    /// When plugins are provided explicitly, they take priority over the
+    /// [`encoding`](Self::with_encoding) setting.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>) -> Self {
+        self.plugins = plugins;
         self
     }
 
@@ -74,13 +92,19 @@ impl<'a> CSharpCodeGenerator<'a> {
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = {
+        let lang = if self.plugins.is_empty() {
             let base = CSharp::new(&config, &updated_registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }
+        } else {
+            let mut base = CSharp::new(&config, &updated_registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
+            }
+            base
         };
 
         Module::new(&config).write(w, &lang)?;
