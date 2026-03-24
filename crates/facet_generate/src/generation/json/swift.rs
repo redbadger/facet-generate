@@ -737,3 +737,255 @@ fn push_deserializer(w: &mut dyn IndentWrite) -> io::Result<()> {
 fn pop_deserializer(w: &mut dyn IndentWrite) -> io::Result<()> {
     writeln!(w, "try deserializer.decrease_container_depth()")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generation::CodeGeneratorConfig;
+    use crate::generation::indent::IndentedWriter;
+    use std::collections::BTreeSet;
+
+    fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
+        let mut cfg = CodeGeneratorConfig::new("com.example".to_string());
+        cfg.features = features.iter().copied().collect::<BTreeSet<_>>();
+        cfg
+    }
+
+    #[test]
+    fn imports_returns_serde() {
+        let cfg = make_config(&[]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let imports = plugin.imports(&cfg);
+
+        assert_eq!(imports, vec!["Serde"]);
+    }
+
+    #[test]
+    fn module_helpers_emit_option_of_t() {
+        let cfg = make_config(&[Feature::OptionOfT]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin.module_helpers(&mut w, &cfg).unwrap();
+        }
+
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serializeOption"));
+        assert!(output.contains("deserializeOption"));
+    }
+
+    #[test]
+    fn module_helpers_emit_list_of_t() {
+        let cfg = make_config(&[Feature::ListOfT]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin.module_helpers(&mut w, &cfg).unwrap();
+        }
+
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serializeArray"));
+        assert!(output.contains("deserializeArray"));
+    }
+
+    #[test]
+    fn has_type_body_always_true() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("Foo".to_string());
+        let format = ContainerFormat::UnitStruct(Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+        assert!(plugin.has_type_body(&ctx));
+    }
+
+    #[test]
+    fn type_body_unit_struct() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("UnitStruct".to_string());
+        let format = ContainerFormat::UnitStruct(Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("public func serialize<S: Serializer>"));
+        assert!(output.contains("increase_container_depth"));
+        assert!(output.contains("decrease_container_depth"));
+        assert!(output.contains("jsonSerialize"));
+        assert!(output.contains("public static func deserialize<D: Deserializer>"));
+        assert!(output.contains("jsonDeserialize"));
+        assert!(output.contains("return UnitStruct()"));
+    }
+
+    #[test]
+    fn type_body_struct_with_fields() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("MyStruct".to_string());
+        let fields = vec![
+            Named::new(&Format::Str, "name".to_string()),
+            Named::new(&Format::I32, "age".to_string()),
+        ];
+        let format = ContainerFormat::Struct(fields, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serialize_str(value: self.name)"));
+        assert!(output.contains("serialize_i32(value: self.age)"));
+        assert!(output.contains("jsonSerialize"));
+        assert!(output.contains("let name = try deserializer.deserialize_str()"));
+        assert!(output.contains("let age = try deserializer.deserialize_i32()"));
+        assert!(output.contains("jsonDeserialize"));
+        assert!(output.contains("return MyStruct(name: name, age: age)"));
+    }
+
+    #[test]
+    fn type_body_tuple_field_extra_container_depth() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        // struct MyStruct { pair: (String, Int32) }
+        let name = QualifiedTypeName::root("MyStruct".to_string());
+        let fields = vec![Named::new(
+            &Format::Tuple(vec![Format::Str, Format::I32]),
+            "pair".to_string(),
+        )];
+        let format = ContainerFormat::Struct(fields, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+
+        // JSON adds tuple-field-level push/pop on top of the struct-level push/pop,
+        // and both serialize and deserialize contribute — 4 total:
+        //   serialize:   struct-level + tuple-field-level
+        //   deserialize: struct-level + tuple-field-level
+        let depth_count = output.matches("increase_container_depth").count();
+        assert_eq!(
+            depth_count, 4,
+            "expected struct-level + tuple-field-level depth push for each of serialize and deserialize"
+        );
+
+        // Elements addressed as pair.0, pair.1 — no self. prefix
+        assert!(output.contains("pair.0"));
+        assert!(output.contains("pair.1"));
+        assert!(!output.contains("self.pair"));
+
+        // Deserialization uses pair0, pair1 variable names (no Field infix)
+        assert!(output.contains("let pair0 ="));
+        assert!(output.contains("let pair1 ="));
+        assert!(output.contains("let pair = (pair0, pair1)"));
+    }
+
+    #[test]
+    fn type_body_enum() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+        use std::collections::BTreeMap;
+
+        let cfg = make_config(&[]);
+        let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut variants = BTreeMap::new();
+        variants.insert(
+            0,
+            Named {
+                name: "unit".to_string(),
+                doc: Doc::default(),
+                value: VariantFormat::Unit,
+            },
+        );
+        variants.insert(
+            1,
+            Named {
+                name: "withValue".to_string(),
+                doc: Doc::default(),
+                value: VariantFormat::NewType(Box::new(Format::Str)),
+            },
+        );
+        let name = QualifiedTypeName::root("MyEnum".to_string());
+        let format = ContainerFormat::Enum(variants, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serialize_variant_index(value: 0)"));
+        assert!(output.contains("serialize_variant_index(value: 1)"));
+        assert!(output.contains("deserialize_variant_index()"));
+        assert!(output.contains("jsonSerialize"));
+        assert!(output.contains("jsonDeserialize"));
+        assert!(output.contains("return .unit"));
+        assert!(output.contains("return .withValue(x)"));
+    }
+}

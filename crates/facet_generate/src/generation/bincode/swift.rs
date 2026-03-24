@@ -686,3 +686,246 @@ fn push_deserializer(w: &mut dyn IndentWrite) -> io::Result<()> {
 fn pop_deserializer(w: &mut dyn IndentWrite) -> io::Result<()> {
     writeln!(w, "try deserializer.decrease_container_depth()")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generation::CodeGeneratorConfig;
+    use crate::generation::indent::IndentedWriter;
+    use std::collections::BTreeSet;
+
+    fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
+        let mut cfg = CodeGeneratorConfig::new("com.example".to_string());
+        cfg.features = features.iter().copied().collect::<BTreeSet<_>>();
+        cfg
+    }
+
+    #[test]
+    fn imports_returns_serde() {
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+        let imports = plugin.imports(&cfg);
+
+        assert_eq!(imports, vec!["Serde"]);
+    }
+
+    #[test]
+    fn module_helpers_emit_list_of_t() {
+        let cfg = make_config(&[Feature::ListOfT]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin.module_helpers(&mut w, &cfg).unwrap();
+        }
+
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serializeArray"));
+        assert!(output.contains("deserializeArray"));
+    }
+
+    #[test]
+    fn module_helpers_emit_only_requested_features() {
+        let cfg = make_config(&[Feature::SetOfT]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin.module_helpers(&mut w, &cfg).unwrap();
+        }
+
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serializeSet"));
+        assert!(!output.contains("serializeArray"));
+        assert!(!output.contains("serializeMap"));
+    }
+
+    #[test]
+    fn has_type_body_always_true() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("Foo".to_string());
+        let format = ContainerFormat::UnitStruct(Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+        assert!(plugin.has_type_body(&ctx));
+    }
+
+    #[test]
+    fn type_body_unit_struct() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("UnitStruct".to_string());
+        let format = ContainerFormat::UnitStruct(Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("public func serialize<S: Serializer>"));
+        assert!(output.contains("increase_container_depth"));
+        assert!(output.contains("decrease_container_depth"));
+        assert!(output.contains("bincodeSerialize"));
+        assert!(output.contains("public static func deserialize<D: Deserializer>"));
+        assert!(output.contains("return UnitStruct()"));
+        assert!(output.contains("bincodeDeserialize"));
+    }
+
+    #[test]
+    fn type_body_struct_with_fields() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("MyStruct".to_string());
+        let fields = vec![
+            Named::new(&Format::Str, "label".to_string()),
+            Named::new(&Format::I32, "count".to_string()),
+        ];
+        let format = ContainerFormat::Struct(fields, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serialize_str(value: self.label)"));
+        assert!(output.contains("serialize_i32(value: self.count)"));
+        assert!(output.contains("bincodeSerialize"));
+        assert!(output.contains("let label = try deserializer.deserialize_str()"));
+        assert!(output.contains("let count = try deserializer.deserialize_i32()"));
+        assert!(output.contains("return MyStruct(label: label, count: count)"));
+        assert!(output.contains("bincodeDeserialize"));
+    }
+
+    #[test]
+    fn type_body_struct_tuple_field_no_extra_depth() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let name = QualifiedTypeName::root("MyStruct".to_string());
+        let fields = vec![Named::new(
+            &Format::Tuple(vec![Format::Str, Format::I32]),
+            "pair".to_string(),
+        )];
+        let format = ContainerFormat::Struct(fields, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        // Bincode: one push/pop pair per method (serialize + deserialize) = 2 total,
+        // with no extra push/pop for the tuple field itself
+        assert_eq!(output.matches("increase_container_depth").count(), 2);
+        // Elements accessed as self.pair.0, self.pair.1
+        assert!(output.contains("self.pair.0"));
+        assert!(output.contains("self.pair.1"));
+        // Deserialization variable names use Field infix
+        assert!(output.contains("pairField0"));
+        assert!(output.contains("pairField1"));
+        assert!(output.contains("let pair = (pairField0, pairField1)"));
+    }
+
+    #[test]
+    fn type_body_enum_with_variants() {
+        use crate::generation::Container;
+        use crate::reflection::format::{ContainerFormat, Doc, Format, QualifiedTypeName};
+
+        let cfg = make_config(&[]);
+        let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Swift> = &plugin;
+
+        let mut variants = BTreeMap::new();
+        variants.insert(
+            0,
+            Named {
+                name: "unit".to_string(),
+                doc: Doc::default(),
+                value: VariantFormat::Unit,
+            },
+        );
+        variants.insert(
+            1,
+            Named {
+                name: "withValue".to_string(),
+                doc: Doc::default(),
+                value: VariantFormat::NewType(Box::new(Format::Str)),
+            },
+        );
+        let name = QualifiedTypeName::root("MyEnum".to_string());
+        let format = ContainerFormat::Enum(variants, Doc::default());
+        let container = Container {
+            name: &name,
+            format: &format,
+        };
+        let ctx = EmitContext::top_level(&container);
+
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin
+                .type_body(&mut w as &mut dyn IndentWrite, &ctx)
+                .unwrap();
+        }
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains("serialize_variant_index(value: 0)"));
+        assert!(output.contains("serialize_variant_index(value: 1)"));
+        assert!(output.contains("deserialize_variant_index()"));
+        assert!(output.contains("return .unit"));
+        assert!(output.contains("serialize_str(value: x)"));
+        assert!(output.contains("return .withValue(x)"));
+        assert!(output.contains("bincodeSerialize"));
+        assert!(output.contains("bincodeDeserialize"));
+    }
+}

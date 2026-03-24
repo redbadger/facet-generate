@@ -153,7 +153,8 @@ mod tests {
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
         let plugin = JsonPlugin::new();
-        let imports = <JsonPlugin as EmitterPlugin<Kotlin>>::imports(&plugin, &cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("Serializable")));
         assert!(imports.iter().any(|i| i.contains("SerialName")));
@@ -163,7 +164,8 @@ mod tests {
     fn bigint_adds_json_imports() {
         let cfg = make_config(&[Feature::BigInt]);
         let plugin = JsonPlugin::new();
-        let imports = <JsonPlugin as EmitterPlugin<Kotlin>>::imports(&plugin, &cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("KSerializer")));
         assert!(imports.iter().any(|i| i.contains("PrimitiveKind")));
@@ -176,12 +178,13 @@ mod tests {
     fn bigint_module_helpers_emit_feature() {
         let cfg = make_config(&[Feature::BigInt]);
         let plugin = JsonPlugin::new();
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let mut buf = Vec::new();
         {
             use crate::generation::indent::IndentedWriter;
             let mut w = IndentedWriter::new(&mut buf, cfg.indent);
-            <JsonPlugin as EmitterPlugin<Kotlin>>::module_helpers(&plugin, &mut w, &cfg).unwrap();
+            plugin.module_helpers(&mut w, &cfg).unwrap();
         }
 
         let output = String::from_utf8(buf).unwrap();
@@ -201,7 +204,8 @@ mod tests {
         };
         let ctx = EmitContext::top_level(&container);
         let plugin = JsonPlugin::new();
-        let annotations = <JsonPlugin as EmitterPlugin<Kotlin>>::type_annotations(&plugin, &ctx);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
+        let annotations = plugin.type_annotations(&ctx);
 
         assert_eq!(annotations.len(), 2);
         assert_eq!(annotations[0], "@Serializable");

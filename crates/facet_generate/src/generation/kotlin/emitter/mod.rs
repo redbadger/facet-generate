@@ -97,7 +97,6 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
 /// produce serialization code.
 #[derive(Debug, Clone)]
 pub struct Kotlin {
-    pub encoding: Encoding,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
@@ -116,10 +115,7 @@ impl Kotlin {
             Encoding::Json => vec![Arc::new(JsonPlugin::new())],
             Encoding::None => vec![],
         };
-        Self {
-            encoding: config.encoding,
-            plugins,
-        }
+        Self { plugins }
     }
 
     /// Access the plugin list.
