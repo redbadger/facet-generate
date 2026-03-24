@@ -112,7 +112,7 @@ impl<'a> SwiftCodeGenerator<'a> {
 /// External types (not present in the registry) are assumed to be hashable.
 /// Mutually recursive types that form a cycle will conservatively not be
 /// added to the set.
-pub(crate) fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
+pub fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
     // Names of all types defined in this module.
     let local_names: BTreeSet<String> = registry
         .keys()
@@ -244,7 +244,7 @@ fn fmt_can_be_hashable(
 ///
 /// Mutually recursive or self-referential types that cannot resolve the
 /// cycle will conservatively not be added to the set.
-pub(crate) fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
+pub fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
     // Names of all types defined in this module.
     let local_names: BTreeSet<String> = registry
         .keys()

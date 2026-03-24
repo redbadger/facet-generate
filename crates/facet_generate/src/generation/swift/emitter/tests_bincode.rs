@@ -38,7 +38,6 @@ fn unit_struct_1() {
     /// line 1
     /// line 2
     public struct UnitStruct: Hashable {
-
         public init() {
         }
 
@@ -84,7 +83,6 @@ fn unit_struct_2() {
     /// line 1
     /// line 2
     public struct UnitStruct: Hashable {
-
         public init() {
         }
 

@@ -889,6 +889,7 @@ mod tests {
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BincodeSerializer")));
@@ -902,6 +903,7 @@ mod tests {
     fn bytes_feature_adds_import() {
         let cfg = make_config(&[Feature::Bytes]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("Bytes")));
@@ -911,6 +913,7 @@ mod tests {
     fn bigint_feature_adds_imports() {
         let cfg = make_config(&[Feature::BigInt]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BigInteger")));
@@ -921,6 +924,7 @@ mod tests {
     fn module_helpers_emit_list_of_t() {
         let cfg = make_config(&[Feature::ListOfT]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let mut buf = Vec::new();
         {
@@ -941,6 +945,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -960,6 +965,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         // Non-all-unit enum → sealed interface
         let mut variants = BTreeMap::new();
@@ -999,6 +1005,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         // All-unit enum → enum class
         let mut variants = BTreeMap::new();
@@ -1036,6 +1043,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -1066,6 +1074,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![
@@ -1104,6 +1113,7 @@ mod tests {
 
         let cfg = make_config(&[]);
         let plugin = BincodePlugin::from_config(&cfg);
+        let plugin: &dyn EmitterPlugin<Kotlin> = &plugin;
 
         let mut variants = BTreeMap::new();
         variants.insert(

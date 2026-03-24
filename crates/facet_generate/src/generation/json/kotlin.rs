@@ -153,7 +153,7 @@ mod tests {
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
         let plugin = JsonPlugin::new();
-        let imports = plugin.imports(&cfg);
+        let imports = <JsonPlugin as EmitterPlugin<Kotlin>>::imports(&plugin, &cfg);
 
         assert!(imports.iter().any(|i| i.contains("Serializable")));
         assert!(imports.iter().any(|i| i.contains("SerialName")));
@@ -163,7 +163,7 @@ mod tests {
     fn bigint_adds_json_imports() {
         let cfg = make_config(&[Feature::BigInt]);
         let plugin = JsonPlugin::new();
-        let imports = plugin.imports(&cfg);
+        let imports = <JsonPlugin as EmitterPlugin<Kotlin>>::imports(&plugin, &cfg);
 
         assert!(imports.iter().any(|i| i.contains("KSerializer")));
         assert!(imports.iter().any(|i| i.contains("PrimitiveKind")));
@@ -181,7 +181,7 @@ mod tests {
         {
             use crate::generation::indent::IndentedWriter;
             let mut w = IndentedWriter::new(&mut buf, cfg.indent);
-            plugin.module_helpers(&mut w, &cfg).unwrap();
+            <JsonPlugin as EmitterPlugin<Kotlin>>::module_helpers(&plugin, &mut w, &cfg).unwrap();
         }
 
         let output = String::from_utf8(buf).unwrap();
@@ -201,7 +201,7 @@ mod tests {
         };
         let ctx = EmitContext::top_level(&container);
         let plugin = JsonPlugin::new();
-        let annotations = plugin.type_annotations(&ctx);
+        let annotations = <JsonPlugin as EmitterPlugin<Kotlin>>::type_annotations(&plugin, &ctx);
 
         assert_eq!(annotations.len(), 2);
         assert_eq!(annotations[0], "@Serializable");

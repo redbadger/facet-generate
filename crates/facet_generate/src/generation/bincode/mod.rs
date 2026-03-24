@@ -1,27 +1,24 @@
 //! Internal bincode plugin — provides bincode-specific imports and module
 //! helpers through the [`EmitterPlugin`] trait.
 //!
-//! This module is the first step toward extracting all bincode code-generation
-//! into a separate crate (`facet-generate-bincode`). For now it lives inside
-//! the core crate so it can share types and feature constants.
+//! This module is part of the ongoing effort to extract all encoding-specific
+//! code-generation into separate plugin crates. For now it lives inside the
+//! core crate so it can share types and feature constants.
 //!
-//! # What the plugin handles today
+//! # What the plugin handles
 //!
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | Serde / bincode package imports |
-//! | `module_helpers` | Feature helper snippets (`ListOfT.kt`, `SetOfT.kt`, …) |
-//!
-//! # What still lives in the per-language emitters
-//!
-//! Type-body generation (serialize / deserialize methods, companion objects)
-//! remains in the language emitters because it relies heavily on
-//! [`IndentWrite::block`] which requires `Self: Sized` and therefore cannot
-//! be called through the `&mut dyn IndentWrite` that plugin methods receive.
-//! Migrating this code is planned for a future phase.
+//! | `module_helpers` | Feature helper snippets (`ListOfT`, `SetOfT`, …) |
+//! | `has_type_body` | Always `true` |
+//! | `type_body` | `serialize` / `deserialize` methods + `bincodeSerialize` / `bincodeDeserialize` wrappers |
 
 #[cfg(feature = "kotlin")]
 pub mod kotlin;
+
+#[cfg(feature = "swift")]
+pub mod swift;
 
 use super::CodeGeneratorConfig;
 
@@ -32,7 +29,7 @@ use super::CodeGeneratorConfig;
 /// manifest dependencies for that language.
 ///
 /// Each target language has its own `impl EmitterPlugin<Lang>` in a
-/// submodule (e.g. [`kotlin`]).
+/// submodule (e.g. [`kotlin`], [`swift`]).
 #[derive(Debug, Clone)]
 pub struct BincodePlugin {
     /// Resolved serde package name (e.g. `"com.novi.serde"`).

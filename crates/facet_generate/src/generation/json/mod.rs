@@ -10,14 +10,18 @@
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `imports` | `kotlinx.serialization.*` imports, BigInt JSON imports |
-//! | `module_helpers` | BigInt JSON helper snippet (`BigInt.kt`) |
-//! | `type_annotations` | `@Serializable`, `@SerialName("…")` above each type |
-//! | `type_body` | `val serialName` accessor in all-unit enum classes |
+//! | `imports` | `kotlinx.serialization.*` imports (Kotlin), `import Serde` (Swift) |
+//! | `module_helpers` | BigInt JSON helper (Kotlin); feature snippets (Swift) |
+//! | `type_annotations` | `@Serializable`, `@SerialName("…")` above each type (Kotlin) |
+//! | `type_body` | `val serialName` accessor for enum classes (Kotlin); `serialize` / `deserialize` + `jsonSerialize` / `jsonDeserialize` wrappers (Swift) |
+//! | `has_type_body` | Always `true` (Swift) |
 //!
 
 #[cfg(feature = "kotlin")]
 pub mod kotlin;
+
+#[cfg(feature = "swift")]
+pub mod swift;
 
 /// JSON serialization plugin.
 ///

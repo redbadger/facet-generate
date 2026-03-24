@@ -12,8 +12,8 @@
 //! | [`Container`] | `public struct` or `indirect public enum` |
 //! | [`Named<Format>`](Named) | `public var` property / `case` declaration |
 //! | [`Format`] | Inline type expression (`Int32`, `[String]`, `Set<T>`, …) |
-//! | [`Doc`] | `///` doc comments (stripped for bincode) |
-//! | `(Named<VariantFormat>, Usage)` | An enum case variant |
+//! | [`Doc`] | `///` doc comments |
+//! | `(Named<VariantFormat>, Usage)` | An enum case declaration |
 //!
 //! # Swift type mapping
 //!
@@ -23,39 +23,33 @@
 //!
 //! # Encoding-dependent output
 //!
-//! The [`Swift`] language tag carries the active [`Encoding`]. When encoding
-//! is `Json`, types get `Serializer`/`Deserializer` protocol-based
-//! serialization methods plus `jsonSerialize`/`jsonDeserialize` wrappers.
-//! When encoding is `Bincode`, each type gets `serialize`/`deserialize`
-//! methods and `bincodeSerialize`/`bincodeDeserialize` wrappers. When
-//! encoding is `None`, only plain type declarations are emitted.
+//! The [`Swift`] language tag carries a list of [`EmitterPlugin`]s. All
+//! encoding-specific behaviour is delegated to those plugins — the emitter
+//! itself contains no encoding checks. For example:
+//!
+//! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
+//!   `bincodeSerialize` / `bincodeDeserialize` wrappers.
+//! - `JsonPlugin` supplies the same `serialize` / `deserialize` methods and
+//!   `jsonSerialize` / `jsonDeserialize` wrappers.
+//! - With no plugins (`Encoding::None`), only plain type declarations are
+//!   emitted.
+//!
+//! # Feature helpers
+//!
+//! The encoding-specific feature helpers (`serializeArray`, `serializeOption`,
+//! etc.) are inlined in `BincodePlugin` and `JsonPlugin`
+//! (`generation/bincode/swift.rs` and `generation/json/swift.rs`).
+//! They are emitted via the [`EmitterPlugin::module_helpers`] hook when the
+//! corresponding [`Feature`] flag is set by
+//! [`CodeGeneratorConfig::update_from`].
+//!
+//! # Hashable / Equatable
 //!
 //! Types whose fields are all [`Hashable`](https://developer.apple.com/documentation/swift/hashable)
 //! will declare `: Hashable` conformance so they can serve as `Set` elements
 //! or `Dictionary` keys. A generation-time error is raised if a non-`Hashable`
 //! type (native tuple or `[K:V]` dictionary) is used directly as a `Set`
 //! element or `Map` key.
-//!
-//! # Feature helpers (`features/` directory)
-//!
-//! Swift has `Array`, `Set`, `Dictionary`, and optional types built in, but
-//! the Serde `Serializer`/`Deserializer` runtime only handles primitives and
-//! user-defined types (which get their own `serialize`/`deserialize` methods).
-//! The feature helpers are Swift functions that bridge this gap — they teach
-//! the serde runtime how to length-prefix and iterate over generic containers.
-//!
-//! | Helper | What it provides | When included |
-//! |---|---|---|
-//! | `ListOfT.swift` | `[T]` serialize/deserialize | Bincode + `Seq` type used |
-//! | `SetOfT.swift` | `Set<T>` serialize/deserialize | Bincode + `Set` type used |
-//! | `MapOfT.swift` | `[K:V]` serialize/deserialize | Bincode + `Map` type used |
-//! | `OptionOfT.swift` | `T?` serialize/deserialize | Bincode + `Option` type used |
-//! | `TupleArray.swift` | Fixed-size array support | `TupleArray` type used |
-//!
-//! These `.swift` snippets are embedded at compile time via `include_bytes!`
-//! and written into the file header by the [`Module`] emitter when the
-//! corresponding [`Feature`] flag is active (discovered automatically by
-//! [`CodeGeneratorConfig::update_from`]).
 
 #![allow(clippy::too_many_lines)]
 use std::{
@@ -65,29 +59,23 @@ use std::{
 };
 
 use heck::ToLowerCamelCase as _;
-use indoc::{formatdoc, writedoc};
+use indoc::formatdoc;
 
 use heck::ToUpperCamelCase as _;
 
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
+        CodeGeneratorConfig, Container, Emitter, Encoding,
+        bincode::BincodePlugin,
         indent::{IndentWrite, Newlines},
+        json::JsonPlugin,
         module::Module,
-        plugin::EmitterPlugin,
+        plugin::{EmitContext, EmitterPlugin},
         swift::generator::{compute_equatable_types, compute_hashable_types},
     },
-    reflection::format::{
-        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
-    },
+    reflection::format::{ContainerFormat, Doc, Format, Named, Namespace, VariantFormat},
 };
-
-const FEATURE_LIST_OF_T: &[u8] = include_bytes!("features/ListOfT.swift");
-const FEATURE_MAP_OF_T: &[u8] = include_bytes!("features/MapOfT.swift");
-const FEATURE_OPTION_OF_T: &[u8] = include_bytes!("features/OptionOfT.swift");
-const FEATURE_SET_OF_T: &[u8] = include_bytes!("features/SetOfT.swift");
-const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 
 /// Language tag for Swift code generation.
 ///
@@ -95,44 +83,39 @@ const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.swift");
 /// current module) that are known to be able to synthesize `Hashable` and
 /// `Equatable` conformance respectively. Both sets are computed by a
 /// preprocessing pass — see
-/// [`SwiftCodeGenerator`](crate::generation::swift::generator::SwiftCodeGenerator)
-/// and the `for_encoding` constructor.
+/// [`SwiftCodeGenerator`](crate::generation::swift::generator::SwiftCodeGenerator).
 ///
-/// An empty set means "no same-module type is known to be hashable/equatable"
-/// (conservative). Use [`new`](Self::new) and supply a [`Registry`](crate::Registry)
-/// so that the sets are computed correctly.
-///
-/// > **Future direction** — when the plugin branch is merged, `hashable_types`
-/// > and `equatable_types` will be replaced by `EmitterPlugin` implementations
-/// > that receive the registry via `EmitContext.container.registry` at emission
-/// > time. `for_encoding` will then simply install the appropriate plugins and
-/// > the precomputed sets will be removed.
-///
-/// Carries the active [`Encoding`] so that each emitter implementation can
-/// decide whether to emit serialization methods, protocol conformances, or
-/// plain type declarations.
+/// The plugin list is built in [`new`](Self::new) from the config encoding.
+/// Eventually, plugins will be supplied externally and `encoding` will be
+/// removed.
 #[derive(Debug, Clone)]
 pub struct Swift {
-    pub(crate) encoding: Encoding,
     /// Type names (root-namespace) that can synthesize `Hashable` conformance.
-    /// Empty → no same-module type is known to be hashable (conservative).
     pub(crate) hashable_types: BTreeSet<String>,
     /// Type names (root-namespace) that can synthesize or manually implement
     /// `Equatable` conformance.
-    /// Empty → no same-module type is known to be equatable (conservative).
     pub(crate) equatable_types: BTreeSet<String>,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl Swift {
-    /// Create a Swift language tag with computed type sets.
+    /// Create a Swift language tag with computed type sets and plugins for
+    /// the encoding specified in `config`.
+    ///
+    /// - [`Encoding::Bincode`] → includes `BincodePlugin`
+    /// - [`Encoding::Json`] → includes `JsonPlugin`
+    /// - [`Encoding::None`] → no plugins
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
+            Encoding::Bincode => vec![Arc::new(BincodePlugin::from_config(config))],
+            Encoding::Json => vec![Arc::new(JsonPlugin::new())],
+            Encoding::None => vec![],
+        };
         Self {
-            encoding: config.encoding,
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
-            plugins: vec![],
+            plugins,
         }
     }
 
@@ -149,25 +132,17 @@ impl Swift {
 
 /// Returns `true` if the Swift type produced by `format` can conform to
 /// `Hashable`.
-///
-/// This drives two decisions:
-/// 1. Whether a generated struct/enum should declare `: Hashable`.
-/// 2. Whether a `Set` element or `Map` key type is valid (error if not).
-///
-/// For `TypeName` references the answer depends on the precomputed
-/// [`Swift::hashable_types`] set:
-/// - `Namespace::Root` types are looked up in the set (or assumed hashable
-///   when the set is absent).
-/// - `Namespace::Named` types are external and assumed hashable.
-pub(crate) fn is_hashable(format: &Format, lang: &Swift) -> bool {
+pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
     match format {
         Format::Variable(_)
         | Format::Unit  // Void does not conform to Hashable in Swift
         | Format::Map { .. } => false, // [K: V] is never Hashable
+
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.hashable_types.contains(&qtn.name),
             Namespace::Named(_) => true, // external — assume hashable
         },
+
         Format::Bool
         | Format::I8
         | Format::I16
@@ -184,50 +159,40 @@ pub(crate) fn is_hashable(format: &Format, lang: &Swift) -> bool {
         | Format::Char
         | Format::Str
         | Format::Bytes => true,
+
         Format::Option(inner)
+        | Format::Set(inner)
         | Format::Seq(inner)
-        | Format::TupleArray { content: inner, .. }
-        | Format::Set(inner) => is_hashable(inner, lang),
-        // A 1-element tuple is transparent (emitted as the inner type).
-        // Multi-element native Swift tuples do NOT conform to Hashable.
-        Format::Tuple(formats) => formats.len() == 1 && is_hashable(&formats[0], lang),
+        | Format::TupleArray { content: inner, .. } => is_hashable(inner, lang),
+
+        // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
+        Format::Tuple(formats) => {
+            formats.len() == 1 && is_hashable(&formats[0], lang)
+        }
     }
 }
 
-/// Returns `true` if a variant is compatible with `Hashable` synthesis for
-/// the enclosing enum.
-///
-/// Note: enum associated values are separate parameters, not a Swift tuple,
-/// so `VariantFormat::Tuple` checks each element individually.
 fn variant_is_hashable(format: &VariantFormat, lang: &Swift) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
         VariantFormat::Unit => true,
         VariantFormat::NewType(fmt) => is_hashable(fmt, lang),
-        VariantFormat::Tuple(formats) => formats.iter().all(|f| is_hashable(f, lang)),
+        VariantFormat::Tuple(fmts) => fmts.iter().all(|f| is_hashable(f, lang)),
         VariantFormat::Struct(nameds) => nameds.iter().all(|n| is_hashable(&n.value, lang)),
     }
 }
 
-/// Controls how a [`Named<Format>`](Named) is rendered in different contexts.
-///
-/// The same field definition produces different Swift syntax depending on
-/// whether it appears as a property declaration, an initializer parameter,
-/// a serialization call, etc.
+// ---------------------------------------------------------------------------
+// Usage — field / case rendering context
+// ---------------------------------------------------------------------------
+
 enum Usage {
     Field,
     /// Like `Field` but prefixed with `@Indirect` for recursive struct fields
     /// that would otherwise create an infinite-size value type.
     IndirectField,
     Parameter,
-    Argument,
     Assignment,
-    Serialize {
-        receiver: String,
-    },
-    Deserialize {
-        receiver: String,
-    },
 }
 
 // ---------------------------------------------------------------------------
@@ -237,16 +202,11 @@ enum Usage {
 /// Returns `true` if a struct field of this format would create an
 /// infinite-size value-type cycle back to the containing struct named
 /// `struct_name`.
-///
-/// Recurses through value-typed wrappers (`Option`, tuples) but stops at
-/// heap-allocated containers (`Seq`, `Map`, `Set`, `TupleArray`), because
-/// those break the infinite-size chain.
 fn needs_indirect(format: &Format, struct_name: &str) -> bool {
     match format {
         Format::TypeName(qtn) => qtn.name == struct_name,
         Format::Option(inner) => needs_indirect(inner, struct_name),
         Format::Tuple(formats) => formats.iter().any(|f| needs_indirect(f, struct_name)),
-        // Seq / Map / Set / TupleArray use heap storage — no infinite-size cycle.
         _ => false,
     }
 }
@@ -255,26 +215,12 @@ fn needs_indirect(format: &Format, struct_name: &str) -> bool {
 // Equatable helpers
 // ---------------------------------------------------------------------------
 
-/// Returns `true` if Swift can **auto-synthesize** `Equatable` for a field
-/// of this format type.
-///
-/// Differs from [`is_hashable`] in two ways:
-/// - `Map { .. }` → `true` when key and value are equatable — `[K:V]` IS `Equatable`.
-/// - `TypeName(Namespace::Root)` → looked up in [`Swift::equatable_types`] (or assumed
-///   equatable when the set is absent); `Namespace::Named` types are external and assumed
-///   equatable.
-///
-/// The only format that blocks auto-synthesis is a multi-element native tuple,
-/// because tuples do not conform to the `Equatable` *protocol* in Swift.
 fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
     match format {
-        // Look up same-module types in the equatable set; external types are assumed equatable.
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.equatable_types.contains(&qtn.name),
-            Namespace::Named(_) => true, // external — assume equatable
+            Namespace::Named(_) => true,
         },
-        // Void does not conform to Equatable in Swift — a stored property of
-        // type Void prevents both Hashable and Equatable auto-synthesis.
         Format::Variable(_) | Format::Unit => false,
         Format::Bool
         | Format::I8
@@ -296,23 +242,13 @@ fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
         Format::Seq(inner) | Format::TupleArray { content: inner, .. } => {
             is_equatable_auto(inner, lang)
         }
-        // [K: V] IS Equatable when K and V are Equatable.
         Format::Map { key, value } => {
             is_equatable_auto(key, lang) && is_equatable_auto(value, lang)
         }
-        // A 1-element tuple is transparent (emitted as the inner type).
-        // Multi-element native tuples do NOT conform to the Equatable protocol.
         Format::Tuple(formats) => formats.len() == 1 && is_equatable_auto(&formats[0], lang),
     }
 }
 
-/// Returns `true` if `lhs.field == rhs.field` compiles in Swift for a field
-/// of this format type.
-///
-/// Identical to [`is_equatable_auto`] except that multi-element native tuples
-/// are accepted when all their elements are auto-equatable. Swift supplies a
-/// built-in `==` operator for tuples whose elements are `Equatable`, even
-/// though tuples themselves do not conform to the `Equatable` *protocol*.
 fn can_use_eq_operator(format: &Format, lang: &Swift) -> bool {
     match format {
         Format::Tuple(formats) if formats.len() > 1 => {
@@ -322,10 +258,6 @@ fn can_use_eq_operator(format: &Format, lang: &Swift) -> bool {
     }
 }
 
-/// Variant-level counterpart to [`is_equatable_auto`].
-///
-/// Note: `VariantFormat::Tuple` represents separate enum associated values,
-/// not a Swift tuple, so each element is checked individually.
 fn variant_is_equatable_auto(format: &VariantFormat, lang: &Swift) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
@@ -336,7 +268,6 @@ fn variant_is_equatable_auto(format: &VariantFormat, lang: &Swift) -> bool {
     }
 }
 
-/// Variant-level counterpart to [`can_use_eq_operator`].
 fn variant_can_use_eq_operator(format: &VariantFormat, lang: &Swift) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
@@ -347,87 +278,70 @@ fn variant_can_use_eq_operator(format: &VariantFormat, lang: &Swift) -> bool {
     }
 }
 
-impl Emitter<Swift> for Module {
-    fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
-        let CodeGeneratorConfig {
-            encoding, features, ..
-        } = self.config();
+// ---------------------------------------------------------------------------
+// Module emitter
+// ---------------------------------------------------------------------------
 
+impl Emitter<Swift> for Module {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let mut imports = vec![];
-        if !encoding.is_none() {
-            imports.push("Serde".to_string());
-        }
+
+        // Encoding-independent base imports (external namespaces).
         for ns in self.config().external_definitions.keys() {
             imports.push(ns.to_upper_camel_case());
         }
+
+        // Plugin imports (e.g. `import Serde`).
+        for plugin in lang.plugins() {
+            imports.extend(plugin.imports(self.config()));
+        }
+
         imports.sort();
         imports.dedup();
-
         for import in &imports {
             writeln!(w, "import {import}")?;
         }
 
-        if encoding.is_none() {
-            return Ok(());
-        }
-
-        for feature in features {
-            match feature {
-                Feature::OptionOfT => {
-                    writeln!(w)?;
-                    w.write_all(FEATURE_OPTION_OF_T)?;
-                }
-                Feature::ListOfT => {
-                    writeln!(w)?;
-                    w.write_all(FEATURE_LIST_OF_T)?;
-                }
-                Feature::SetOfT => {
-                    writeln!(w)?;
-                    w.write_all(FEATURE_SET_OF_T)?;
-                }
-                Feature::MapOfT => {
-                    writeln!(w)?;
-                    w.write_all(FEATURE_MAP_OF_T)?;
-                }
-                Feature::TupleArray => {
-                    writeln!(w)?;
-                    w.write_all(FEATURE_TUPLE_ARRAY)?;
-                }
-                Feature::BigInt | Feature::Bytes => {}
-            }
+        // Plugin module helpers (feature snippets).
+        for plugin in lang.plugins() {
+            plugin.module_helpers(w, self.config())?;
         }
 
         Ok(())
     }
 }
 
+// ---------------------------------------------------------------------------
+// Container emitter
+// ---------------------------------------------------------------------------
+
 impl Emitter<Swift> for Container<'_> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
-        let Container {
-            name: QualifiedTypeName { namespace: _, name },
-            format,
-            ..
-        } = self;
+        let Container { format, .. } = self;
         match format {
-            ContainerFormat::UnitStruct(doc) => struct_(w, name, &[], doc, lang),
+            ContainerFormat::UnitStruct(doc) => struct_(w, self, &[], doc, lang),
             ContainerFormat::NewTypeStruct(format, doc) => struct_(
                 w,
-                name,
+                self,
                 &[&Named::new(format, "value".to_string())],
                 doc,
                 lang,
             ),
             ContainerFormat::TupleStruct(formats, doc) => {
                 let formats = named(formats, "field");
-                struct_(w, name, &formats.iter().collect::<Vec<_>>(), doc, lang)
+                struct_(w, self, &formats.iter().collect::<Vec<_>>(), doc, lang)
             }
             ContainerFormat::Struct(nameds, doc) => {
-                struct_(w, name, &nameds.iter().collect::<Vec<_>>(), doc, lang)
+                struct_(w, self, &nameds.iter().collect::<Vec<_>>(), doc, lang)
             }
-            ContainerFormat::Enum(variants, doc) => enum_(w, name, variants, doc, lang),
+            ContainerFormat::Enum(variants, doc) => enum_(w, self, variants, doc, lang),
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Format emitter
+// ---------------------------------------------------------------------------
 
 impl Emitter<Swift> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
@@ -505,10 +419,8 @@ impl Emitter<Swift> for Format {
             Self::Tuple(formats) => {
                 let len = formats.len();
                 if len == 1 {
-                    // A single-element tuple is just the element itself
                     formats[0].write(w, lang)
                 } else {
-                    // Always use native Swift tuples
                     write!(w, "(")?;
                     for (i, format) in formats.iter().enumerate() {
                         if i > 0 {
@@ -522,6 +434,10 @@ impl Emitter<Swift> for Format {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Named<Format> emitter — field / parameter / argument / assignment
+// ---------------------------------------------------------------------------
 
 impl Emitter<Swift> for (&Named<Format>, Usage) {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
@@ -545,61 +461,14 @@ impl Emitter<Swift> for (&Named<Format>, Usage) {
                 write!(w, "{name}: ")?;
                 value.write(w, lang)
             }
-            Usage::Argument => {
-                write!(w, "{name}: {name}")
-            }
             Usage::Assignment => writeln!(w, "self.{name} = {name}"),
-            Usage::Serialize { receiver } => match value {
-                Format::Variable(_) => {
-                    unreachable!("placeholders should not get this far")
-                }
-                Format::Tuple(formats) if !lang.encoding.is_bincode() => {
-                    push_serializer(w)?;
-                    let formats = named(formats, "");
-                    for format in formats {
-                        (
-                            &format,
-                            Usage::Serialize {
-                                receiver: name.clone(),
-                            },
-                        )
-                            .write(w, lang)?;
-                    }
-                    pop_serializer(w)
-                }
-                _ => write_format_serialize(w, value, &format!("{receiver}.{name}")),
-            },
-            Usage::Deserialize { receiver: _ } => match value {
-                Format::Variable(_) => {
-                    unreachable!("placeholders should not get this far")
-                }
-                Format::Tuple(formats) if !lang.encoding.is_bincode() => {
-                    push_deserializer(w)?;
-                    let formats = named(formats, name);
-                    for (i, format) in formats.iter().enumerate() {
-                        (
-                            format,
-                            Usage::Deserialize {
-                                receiver: i.to_string(),
-                            },
-                        )
-                            .write(w, lang)?;
-                    }
-                    write!(w, "let {name} = (")?;
-                    for (i, format) in formats.iter().enumerate() {
-                        if i > 0 {
-                            write!(w, ", ")?;
-                        }
-                        write!(w, "{}", format.name)?;
-                    }
-                    writeln!(w, ")")?;
-                    pop_deserializer(w)
-                }
-                _ => write_format_deserialize(w, value, name),
-            },
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Named<VariantFormat> emitter — case declarations only
+// ---------------------------------------------------------------------------
 
 impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
@@ -623,9 +492,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                 VariantFormat::Variable(_variable) => {
                     unreachable!("placeholders should not get this far")
                 }
-                VariantFormat::Unit => {
-                    writeln!(w, "case {name}")
-                }
+                VariantFormat::Unit => writeln!(w, "case {name}"),
                 VariantFormat::NewType(format) => {
                     write!(w, "case {name}(")?;
                     format.write(w, lang)?;
@@ -652,145 +519,48 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                     writeln!(w, ")")
                 }
             },
-            Usage::Parameter | Usage::Argument | Usage::Assignment => Ok(()),
-            Usage::Serialize { receiver: index } => {
-                match format {
-                    VariantFormat::Variable(_) => {
-                        unreachable!("placeholders should not get this far")
-                    }
-                    VariantFormat::Unit => {
-                        writeln!(w, "case .{name}:")?;
-                        w.indent();
-                        writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
-                        w.unindent();
-                    }
-                    VariantFormat::NewType(fmt) => {
-                        writeln!(w, "case .{name}(let x):")?;
-                        w.indent();
-                        writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
-                        write_format_serialize(w, fmt, "x")?;
-                        w.unindent();
-                    }
-                    VariantFormat::Tuple(formats) => {
-                        write!(w, "case .{name}(")?;
-                        for (i, _) in formats.iter().enumerate() {
-                            if i > 0 {
-                                write!(w, ", ")?;
-                            }
-                            write!(w, "let x{i}")?;
-                        }
-                        writeln!(w, "):")?;
-                        w.indent();
-                        writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
-                        for (i, fmt) in formats.iter().enumerate() {
-                            write_format_serialize(w, fmt, &format!("x{i}"))?;
-                        }
-                        w.unindent();
-                    }
-                    VariantFormat::Struct(nameds) => {
-                        write!(w, "case .{name}(")?;
-                        for (i, named) in nameds.iter().enumerate() {
-                            if i > 0 {
-                                write!(w, ", ")?;
-                            }
-                            let field_name = named.name.to_lower_camel_case();
-                            write!(w, "let {field_name}")?;
-                        }
-                        writeln!(w, "):")?;
-                        w.indent();
-                        writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
-                        for named in nameds {
-                            let field_name = named.name.to_lower_camel_case();
-                            write_format_serialize(w, &named.value, &field_name)?;
-                        }
-                        w.unindent();
-                    }
-                }
-                Ok(())
-            }
-            Usage::Deserialize { receiver: index } => {
-                writeln!(w, "case {index}:")?;
-                w.indent();
-                match format {
-                    VariantFormat::Variable(_) => {
-                        unreachable!("placeholders should not get this far")
-                    }
-                    VariantFormat::Unit => {
-                        pop_deserializer(w)?;
-                        writeln!(w, "return .{name}")?;
-                    }
-                    VariantFormat::NewType(fmt) => {
-                        write_format_deserialize(w, fmt, "x")?;
-                        pop_deserializer(w)?;
-                        writeln!(w, "return .{name}(x)")?;
-                    }
-                    VariantFormat::Tuple(formats) => {
-                        for (i, fmt) in formats.iter().enumerate() {
-                            write_format_deserialize(w, fmt, &format!("x{i}"))?;
-                        }
-                        pop_deserializer(w)?;
-                        write!(w, "return .{name}(")?;
-                        for (i, _) in formats.iter().enumerate() {
-                            if i > 0 {
-                                write!(w, ", ")?;
-                            }
-                            write!(w, "x{i}")?;
-                        }
-                        writeln!(w, ")")?;
-                    }
-                    VariantFormat::Struct(nameds) => {
-                        for named in nameds {
-                            let field_name = named.name.to_lower_camel_case();
-                            write_format_deserialize(w, &named.value, &field_name)?;
-                        }
-                        pop_deserializer(w)?;
-                        write!(w, "return .{name}(")?;
-                        for (i, named) in nameds.iter().enumerate() {
-                            if i > 0 {
-                                write!(w, ", ")?;
-                            }
-                            let field_name = named.name.to_lower_camel_case();
-                            write!(w, "{field_name}: {field_name}")?;
-                        }
-                        writeln!(w, ")")?;
-                    }
-                }
-                w.unindent();
-                Ok(())
-            }
+            Usage::Parameter | Usage::Assignment => Ok(()),
         }
     }
 }
 
-/// Doc-comment emitter. Writes `///` lines for each comment.
-///
+// ---------------------------------------------------------------------------
+// Doc emitter
+// ---------------------------------------------------------------------------
+
 impl Emitter<Swift> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
         for comment in self.comments() {
             writeln!(w, "/// {comment}")?;
         }
-
         Ok(())
     }
 }
 
-/// Emit a `public struct` with `Hashable` conformance (when encoding is
-/// active), a memberwise initializer, and encoding-specific
-/// `serialize`/`deserialize` methods.
+// ---------------------------------------------------------------------------
+// struct_ — emits a public struct
+// ---------------------------------------------------------------------------
+
+/// Emit a `public struct` with optional `Hashable` / `Equatable` conformance,
+/// a memberwise initializer, and (via plugins) `serialize` / `deserialize`
+/// methods.
 fn struct_<W: IndentWrite>(
     w: &mut W,
-    name: &str,
+    container: &Container<'_>,
     fields: &[&Named<Format>],
     doc: &Doc,
     lang: &Swift,
 ) -> Result<()> {
+    let name = &container.name.name;
+
     doc.write(w, lang)?;
 
+    let has_plugins = !lang.plugins().is_empty();
     let all_hashable = fields.iter().all(|f| is_hashable(&f.value, lang));
     let all_equatable_auto = fields.iter().all(|f| is_equatable_auto(&f.value, lang));
     let all_can_eq = fields.iter().all(|f| can_use_eq_operator(&f.value, lang));
 
-    if lang.encoding.is_none() {
+    if !has_plugins {
         write!(w, "public struct {name} ")?;
     } else if all_hashable {
         write!(w, "public struct {name}: Hashable ")?;
@@ -802,7 +572,7 @@ fn struct_<W: IndentWrite>(
     let mut w = w.block(Newlines::BOTH)?;
 
     for field in fields {
-        let usage = if !lang.encoding.is_none() && needs_indirect(&field.value, name) {
+        let usage = if has_plugins && needs_indirect(&field.value, name) {
             Usage::IndirectField
         } else {
             Usage::Field
@@ -810,7 +580,7 @@ fn struct_<W: IndentWrite>(
         (*field, usage).write(&mut w, lang)?;
     }
 
-    if !fields.is_empty() || lang.encoding.is_bincode() {
+    if !fields.is_empty() {
         writeln!(w)?;
     }
 
@@ -829,124 +599,22 @@ fn struct_<W: IndentWrite>(
         }
     }
 
-    match lang.encoding {
-        Encoding::None => {}
-        Encoding::Json => {
-            writeln!(w)?;
-            write!(
-                w,
-                "public func serialize<S: Serializer>(serializer: S) throws "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_serializer(&mut w)?;
-                for field in fields {
-                    (
-                        *field,
-                        Usage::Serialize {
-                            receiver: "self".to_string(),
-                        },
-                    )
-                        .write(&mut w, lang)?;
-                }
-                pop_serializer(&mut w)?;
-            }
-            write_json_serialize(&mut w)?;
-            writeln!(w)?;
-            write!(
-                w,
-                "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_deserializer(&mut w)?;
-                for field in fields {
-                    (
-                        *field,
-                        Usage::Deserialize {
-                            receiver: "self".to_string(),
-                        },
-                    )
-                        .write(&mut w, lang)?;
-                }
-                pop_deserializer(&mut w)?;
-                write!(w, "return {name}(")?;
-                for (i, field) in fields.iter().enumerate() {
-                    if i > 0 {
-                        write!(w, ", ")?;
-                    }
-                    (*field, Usage::Argument).write(&mut w, lang)?;
-                }
-                writeln!(w, ")")?;
-            }
-            write_json_deserialize(&mut w, name)?;
-        }
-        Encoding::Bincode => {
-            writeln!(w)?;
-            write!(
-                w,
-                "public func serialize<S: Serializer>(serializer: S) throws "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_serializer(&mut w)?;
-                for field in fields {
-                    (
-                        *field,
-                        Usage::Serialize {
-                            receiver: "self".to_string(),
-                        },
-                    )
-                        .write(&mut w, lang)?;
-                }
-                pop_serializer(&mut w)?;
-            }
-            write_bincode_serialize(&mut w)?;
-            writeln!(w)?;
-            write!(
-                w,
-                "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_deserializer(&mut w)?;
-                for field in fields {
-                    (
-                        *field,
-                        Usage::Deserialize {
-                            receiver: "self".to_string(),
-                        },
-                    )
-                        .write(&mut w, lang)?;
-                }
-                pop_deserializer(&mut w)?;
-                write!(w, "return {name}(")?;
-                for (i, field) in fields.iter().enumerate() {
-                    if i > 0 {
-                        write!(w, ", ")?;
-                    }
-                    (*field, Usage::Argument).write(&mut w, lang)?;
-                }
-                writeln!(w, ")")?;
-            }
-            write_bincode_deserialize(&mut w, name)?;
-        }
+    // Plugin type bodies (serialize / deserialize methods).
+    let ctx = EmitContext::top_level(container);
+    for plugin in lang.plugins() {
+        plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
 
     // Emit manual Equatable implementation when auto-synthesis is blocked
     // (because one or more fields are native tuples) but == can still be
     // written field-by-field using Swift's built-in tuple == operator.
-    if !lang.encoding.is_none() && !all_hashable && !all_equatable_auto && all_can_eq {
+    if has_plugins && !all_hashable && !all_equatable_auto && all_can_eq {
         write_struct_eq(&mut w, name, fields)?;
     }
 
     Ok(())
 }
 
-/// Emit `public static func == (lhs: Name, rhs: Name) -> Bool { ... }` for
-/// structs that cannot use `Equatable` auto-synthesis because one or more
-/// fields are native tuples (which don't conform to the `Equatable` protocol)
-/// but whose fields all support the `==` operator.
 fn write_struct_eq<W: IndentWrite>(w: &mut W, name: &str, fields: &[&Named<Format>]) -> Result<()> {
     writeln!(w)?;
     write!(
@@ -971,18 +639,25 @@ fn write_struct_eq<W: IndentWrite>(w: &mut W, name: &str, fields: &[&Named<Forma
     Ok(())
 }
 
-/// Emit an `indirect public enum` with `Hashable` conformance (when encoding
-/// is active), case variants, and encoding-specific `serialize`/`deserialize`
-/// methods.
+// ---------------------------------------------------------------------------
+// enum_ — emits an indirect public enum
+// ---------------------------------------------------------------------------
+
+/// Emit an `indirect public enum` with optional `Hashable` / `Equatable`
+/// conformance, case declarations, and (via plugins) `serialize` /
+/// `deserialize` methods.
 fn enum_<W: IndentWrite>(
     w: &mut W,
-    name: &str,
+    container: &Container<'_>,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
     doc: &Doc,
     lang: &Swift,
 ) -> Result<()> {
+    let name = &container.name.name;
+
     doc.write(w, lang)?;
 
+    let has_plugins = !lang.plugins().is_empty();
     let all_hashable = variants
         .values()
         .all(|v| variant_is_hashable(&v.value, lang));
@@ -993,7 +668,7 @@ fn enum_<W: IndentWrite>(
         .values()
         .all(|v| variant_can_use_eq_operator(&v.value, lang));
 
-    if lang.encoding.is_none() {
+    if !has_plugins {
         write!(w, "indirect public enum {name} ")?;
     } else if all_hashable {
         write!(w, "indirect public enum {name}: Hashable ")?;
@@ -1004,151 +679,24 @@ fn enum_<W: IndentWrite>(
     }
     let mut w = w.block(Newlines::BOTH)?;
 
-    let variants = variants.values().collect::<Vec<_>>();
-
-    for format in &variants {
-        (*format, Usage::Field).write(&mut w, lang)?;
+    for variant in variants.values() {
+        (variant, Usage::Field).write(&mut w, lang)?;
     }
 
-    match lang.encoding {
-        Encoding::None => {}
-        Encoding::Json => {
-            writeln!(w)?;
-            write!(
-                w,
-                "public func serialize<S: Serializer>(serializer: S) throws "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_serializer(&mut w)?;
-                write!(w, "switch self ")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    w.unindent();
-                    for (i, variant) in variants.iter().enumerate() {
-                        (
-                            &variant.without_docs(),
-                            Usage::Serialize {
-                                receiver: i.to_string(),
-                            },
-                        )
-                            .write(&mut w, lang)?;
-                    }
-                    w.indent();
-                }
-                pop_serializer(&mut w)?;
-            }
-            write_json_serialize(&mut w)?;
-
-            writeln!(w)?;
-            write!(
-                w,
-                "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(
-                    w,
-                    "let index = try deserializer.deserialize_variant_index()"
-                )?;
-                push_deserializer(&mut w)?;
-                write!(w, "switch index ")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    w.unindent();
-                    for (i, variant) in variants.iter().enumerate() {
-                        (
-                            &variant.without_docs(),
-                            Usage::Deserialize {
-                                receiver: i.to_string(),
-                            },
-                        )
-                            .write(&mut w, lang)?;
-                    }
-                    writeln!(
-                        w,
-                        r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
-                    )?;
-                    w.indent();
-                }
-            }
-            write_json_deserialize(&mut w, name)?;
-        }
-        Encoding::Bincode => {
-            writeln!(w)?;
-            write!(
-                w,
-                "public func serialize<S: Serializer>(serializer: S) throws "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                push_serializer(&mut w)?;
-                write!(w, "switch self ")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    w.unindent();
-                    for (i, variant) in variants.iter().enumerate() {
-                        (
-                            &variant.without_docs(),
-                            Usage::Serialize {
-                                receiver: i.to_string(),
-                            },
-                        )
-                            .write(&mut w, lang)?;
-                    }
-                    w.indent();
-                }
-                pop_serializer(&mut w)?;
-            }
-            write_bincode_serialize(&mut w)?;
-
-            writeln!(w)?;
-            write!(
-                w,
-                "public static func deserialize<D: Deserializer>(deserializer: D) throws -> {name} "
-            )?;
-            {
-                let mut w = w.block(Newlines::BOTH)?;
-                writeln!(
-                    w,
-                    "let index = try deserializer.deserialize_variant_index()"
-                )?;
-                push_deserializer(&mut w)?;
-                write!(w, "switch index ")?;
-                {
-                    let mut w = w.block(Newlines::BOTH)?;
-                    w.unindent();
-                    for (i, variant) in variants.iter().enumerate() {
-                        (
-                            &variant.without_docs(),
-                            Usage::Deserialize {
-                                receiver: i.to_string(),
-                            },
-                        )
-                            .write(&mut w, lang)?;
-                    }
-                    writeln!(
-                        w,
-                        r#"default: throw DeserializationError.invalidInput(issue: "Unknown variant index for {name}: \(index)")"#
-                    )?;
-                    w.indent();
-                }
-            }
-            write_bincode_deserialize(&mut w, name)?;
-        }
+    // Plugin type bodies (serialize / deserialize methods).
+    let ctx = EmitContext::top_level(container);
+    for plugin in lang.plugins() {
+        plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
 
     // Emit manual Equatable implementation when auto-synthesis is blocked.
-    if !lang.encoding.is_none() && !all_hashable && !all_equatable_auto && all_can_eq {
-        write_enum_eq(&mut w, name, &variants)?;
+    if has_plugins && !all_hashable && !all_equatable_auto && all_can_eq {
+        write_enum_eq(&mut w, name, &variants.values().collect::<Vec<_>>())?;
     }
 
     Ok(())
 }
 
-/// Emit `public static func == (lhs: Name, rhs: Name) -> Bool { ... }` for
-/// enums that cannot use `Equatable` auto-synthesis because one or more
-/// variant associated values are native tuples.
 fn write_enum_eq<W: IndentWrite>(
     w: &mut W,
     name: &str,
@@ -1165,34 +713,34 @@ fn write_enum_eq<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         w.unindent();
         for variant in variants {
-            let vname = variant.name.to_lower_camel_case();
+            let variant_name = variant.name.to_lower_camel_case();
             match &variant.value {
-                VariantFormat::Variable(_) => {
-                    unreachable!("placeholders should not get this far")
-                }
                 VariantFormat::Unit => {
-                    writeln!(w, "case (.{vname}, .{vname}): return true")?;
+                    writeln!(w, "case (.{variant_name}, .{variant_name}): return true")?;
                 }
                 VariantFormat::NewType(_) => {
-                    writeln!(w, "case (.{vname}(let l), .{vname}(let r)): return l == r")?;
+                    writeln!(
+                        w,
+                        "case (.{variant_name}(let l), .{variant_name}(let r)): return l == r"
+                    )?;
                 }
                 VariantFormat::Tuple(formats) => {
-                    write!(w, "case (.{vname}(")?;
-                    for i in 0..formats.len() {
+                    write!(w, "case (.{variant_name}(")?;
+                    for (i, _) in formats.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
                         write!(w, "let l{i}")?;
                     }
-                    write!(w, "), .{vname}(")?;
-                    for i in 0..formats.len() {
+                    write!(w, "), .{variant_name}(")?;
+                    for (i, _) in formats.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
                         write!(w, "let r{i}")?;
                     }
                     write!(w, ")): return ")?;
-                    for i in 0..formats.len() {
+                    for (i, _) in formats.iter().enumerate() {
                         if i > 0 {
                             write!(w, " && ")?;
                         }
@@ -1201,28 +749,33 @@ fn write_enum_eq<W: IndentWrite>(
                     writeln!(w)?;
                 }
                 VariantFormat::Struct(nameds) => {
-                    write!(w, "case (.{vname}(")?;
-                    for i in 0..nameds.len() {
+                    write!(w, "case (.{variant_name}(")?;
+                    for (i, n) in nameds.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        write!(w, "let l{i}")?;
+                        let fname = n.name.to_lower_camel_case();
+                        write!(w, "{fname}: let l{i}")?;
                     }
-                    write!(w, "), .{vname}(")?;
-                    for i in 0..nameds.len() {
+                    write!(w, "), .{variant_name}(")?;
+                    for (i, n) in nameds.iter().enumerate() {
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        write!(w, "let r{i}")?;
+                        let fname = n.name.to_lower_camel_case();
+                        write!(w, "{fname}: let r{i}")?;
                     }
                     write!(w, ")): return ")?;
-                    for i in 0..nameds.len() {
+                    for (i, _) in nameds.iter().enumerate() {
                         if i > 0 {
                             write!(w, " && ")?;
                         }
                         write!(w, "l{i} == r{i}")?;
                     }
                     writeln!(w)?;
+                }
+                VariantFormat::Variable(_) => {
+                    unreachable!("placeholders should not get this far")
                 }
             }
         }
@@ -1232,273 +785,9 @@ fn write_enum_eq<W: IndentWrite>(
     Ok(())
 }
 
-fn write_bincode_serialize<W: IndentWrite>(w: &mut W) -> Result<()> {
-    writeln!(w)?;
-    writedoc!(
-        w,
-        r"
-        public func bincodeSerialize() throws -> [UInt8] {{
-            let serializer = BincodeSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }}
-        "
-    )
-}
-
-fn write_bincode_deserialize<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
-    writeln!(w)?;
-    writedoc!(
-        w,
-        r#"
-        public static func bincodeDeserialize(input: [UInt8]) throws -> {name} {{
-            let deserializer = BincodeDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {{
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }}
-            return obj
-        }}
-        "#
-    )
-}
-
-fn write_json_serialize<W: IndentWrite>(w: &mut W) -> Result<()> {
-    writeln!(w)?;
-    writedoc!(
-        w,
-        r"
-        public func jsonSerialize() throws -> [UInt8] {{
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }}
-        "
-    )
-}
-
-fn write_json_deserialize<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
-    writeln!(w)?;
-    writedoc!(
-        w,
-        r#"
-        public static func jsonDeserialize(input: [UInt8]) throws -> {name} {{
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {{
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }}
-            return obj
-        }}
-        "#
-    )
-}
-
-fn write_format_serialize<W: IndentWrite>(
-    w: &mut W,
-    format: &Format,
-    value_expr: &str,
-) -> Result<()> {
-    match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(_) => {
-            writeln!(w, "try {value_expr}.serialize(serializer: serializer)")
-        }
-        Format::Option(inner) => {
-            write!(
-                w,
-                "try serializeOption(value: {value_expr}, serializer: serializer) "
-            )?;
-            {
-                let mut w = w.block(Newlines::CLOSE)?;
-                writeln!(w, " value, serializer in")?;
-                write_format_serialize(&mut w, inner, "value")
-            }
-        }
-        Format::Seq(inner) => {
-            write!(
-                w,
-                "try serializeArray(value: {value_expr}, serializer: serializer) "
-            )?;
-            {
-                let mut w = w.block(Newlines::CLOSE)?;
-                writeln!(w, " item, serializer in")?;
-                write_format_serialize(&mut w, inner, "item")
-            }
-        }
-        Format::Set(inner) => {
-            write!(
-                w,
-                "try serializeSet(value: {value_expr}, serializer: serializer) "
-            )?;
-            {
-                let mut w = w.block(Newlines::CLOSE)?;
-                writeln!(w, " item, serializer in")?;
-                write_format_serialize(&mut w, inner, "item")
-            }
-        }
-        Format::Map { key, value } => {
-            write!(
-                w,
-                "try serializeMap(value: {value_expr}, serializer: serializer) "
-            )?;
-            {
-                let mut w = w.block(Newlines::CLOSE)?;
-                writeln!(w, " key, value, serializer in")?;
-                write_format_serialize(&mut w, key, "key")?;
-                write_format_serialize(&mut w, value, "value")
-            }
-        }
-        Format::Tuple(formats) => {
-            for (i, fmt) in formats.iter().enumerate() {
-                write_format_serialize(w, fmt, &format!("{value_expr}.{i}"))?;
-            }
-            Ok(())
-        }
-        Format::TupleArray { content, .. } => {
-            write!(
-                w,
-                "try serializeTupleArray(value: {value_expr}, serializer: serializer) "
-            )?;
-            {
-                let mut w = w.block(Newlines::CLOSE)?;
-                writeln!(w, " item, serializer in")?;
-                write_format_serialize(&mut w, content, "item")
-            }
-        }
-        primitive => {
-            let t = format!("{primitive:?}").to_lowercase();
-            writeln!(w, "try serializer.serialize_{t}(value: {value_expr})")
-        }
-    }
-}
-
-fn write_format_deserialize<W: IndentWrite>(w: &mut W, format: &Format, var: &str) -> Result<()> {
-    match format {
-        Format::Tuple(formats) if formats.len() > 1 => {
-            for (i, fmt) in formats.iter().enumerate() {
-                write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
-            }
-            write!(w, "let {var} = (")?;
-            for i in 0..formats.len() {
-                if i > 0 {
-                    write!(w, ", ")?;
-                }
-                write!(w, "{var}Field{i}")?;
-            }
-            writeln!(w, ")")
-        }
-        _ => {
-            write!(w, "let {var} = ")?;
-            write_deserialize_expr(w, format)?;
-            writeln!(w)
-        }
-    }
-}
-
-/// Writes a deserialization expression (no `let` prefix, no trailing newline).
-fn write_deserialize_expr<W: IndentWrite>(w: &mut W, format: &Format) -> Result<()> {
-    match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) => {
-            let type_name = &qtn.format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".");
-            write!(w, "try {type_name}.deserialize(deserializer: deserializer)")
-        }
-        Format::Option(inner) => {
-            writeln!(
-                w,
-                "try deserializeOption(deserializer: deserializer) {{ deserializer in"
-            )?;
-            w.indent();
-            write_deserialize_expr(w, inner)?;
-            writeln!(w)?;
-            w.unindent();
-            write!(w, "}}")
-        }
-        Format::Seq(inner) => {
-            writeln!(
-                w,
-                "try deserializeArray(deserializer: deserializer) {{ deserializer in"
-            )?;
-            w.indent();
-            write_deserialize_expr(w, inner)?;
-            writeln!(w)?;
-            w.unindent();
-            write!(w, "}}")
-        }
-        Format::Set(inner) => {
-            writeln!(
-                w,
-                "try deserializeSet(deserializer: deserializer) {{ deserializer in"
-            )?;
-            w.indent();
-            write_deserialize_expr(w, inner)?;
-            writeln!(w)?;
-            w.unindent();
-            write!(w, "}}")
-        }
-        Format::Map { key, value } => {
-            writeln!(
-                w,
-                "try deserializeMap(deserializer: deserializer) {{ deserializer in"
-            )?;
-            w.indent();
-            write_format_deserialize(w, key, "key")?;
-            write_format_deserialize(w, value, "value")?;
-            writeln!(w, "return (key, value)")?;
-            w.unindent();
-            write!(w, "}}")
-        }
-        Format::Tuple(formats) if formats.len() == 1 => write_deserialize_expr(w, &formats[0]),
-        Format::Tuple(formats) => {
-            // Multi-element native tuple: emit let-bindings then a tuple literal.
-            // Uses an explicit `return` because this appears inside a multi-statement
-            // closure body (e.g. deserializeOption { … }) where Swift requires it.
-            for (i, fmt) in formats.iter().enumerate() {
-                write_format_deserialize(w, fmt, &format!("field{i}"))?;
-            }
-            write!(w, "return (")?;
-            for i in 0..formats.len() {
-                if i > 0 {
-                    write!(w, ", ")?;
-                }
-                write!(w, "field{i}")?;
-            }
-            write!(w, ")")
-        }
-        Format::TupleArray { content, size } => {
-            writeln!(
-                w,
-                "try deserializeTupleArray(deserializer: deserializer, size: {size}) {{ deserializer in"
-            )?;
-            w.indent();
-            write_deserialize_expr(w, content)?;
-            writeln!(w)?;
-            w.unindent();
-            write!(w, "}}")
-        }
-        primitive => {
-            let t = format!("{primitive:?}").to_lowercase();
-            write!(w, "try deserializer.deserialize_{t}()")
-        }
-    }
-}
-
-fn push_serializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "try serializer.increase_container_depth()")
-}
-
-fn pop_serializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "try serializer.decrease_container_depth()")
-}
-
-fn push_deserializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "try deserializer.increase_container_depth()")
-}
-
-fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
-    writeln!(w, "try deserializer.decrease_container_depth()")
-}
+// ---------------------------------------------------------------------------
+// Utility
+// ---------------------------------------------------------------------------
 
 fn named<Format: Clone>(formats: &[Format], prefix: &str) -> Vec<Named<Format>> {
     formats

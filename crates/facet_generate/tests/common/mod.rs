@@ -433,8 +433,8 @@ pub enum SwiftSerdeData {
         f2: SwiftTupleStruct,
         f3: SwiftStruct,
     },
-    ListWithMutualRecursion(SwiftList<Box<SwiftSerdeData>>),
-    TreeWithMutualRecursion(Tree<Box<SwiftSerdeData>>),
+    ListWithMutualRecursion(SwiftList<Box<Self>>),
+    TreeWithMutualRecursion(Tree<Box<Self>>),
     TupleArray([u32; 3]),
     UnitVector(Vec<()>),
     SimpleList(SwiftSimpleList),
@@ -462,7 +462,7 @@ pub struct SwiftPrimitiveTypes {
 }
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[allow(clippy::struct_field_names)]
 pub struct SwiftOtherTypes {
     pub f_string: String,
@@ -478,35 +478,35 @@ pub struct SwiftOtherTypes {
 }
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftUnitStruct;
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftNewTypeStruct(pub u64);
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftTupleStruct(pub u32, pub u64);
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftStruct {
     pub x: u32,
     pub y: u64,
 }
 
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[repr(C)]
 #[allow(dead_code)]
 pub enum SwiftList<T> {
     Empty,
-    Node(T, Box<SwiftList<T>>),
+    Node(T, Box<Self>),
 }
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
-pub struct SwiftSimpleList(pub Option<Box<SwiftSimpleList>>);
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SwiftSimpleList(pub Option<Box<Self>>);
 
 /// Registry used for Swift compilation and runtime tests.
 ///
