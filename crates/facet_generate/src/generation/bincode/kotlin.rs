@@ -25,22 +25,92 @@ use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
 use super::BincodePlugin;
 
-// Feature helper snippets — the same `include_bytes!` constants that used to
-// live in the Kotlin emitter.  They are Kotlin source files embedded at
-// compile time and written into the module header when the corresponding
-// [`Feature`] flag is active.
-const FEATURE_LIST_OF_T: &[u8] =
-    include_bytes!("../../generation/kotlin/emitter/features/ListOfT.kt");
-const FEATURE_MAP_OF_T: &[u8] =
-    include_bytes!("../../generation/kotlin/emitter/features/MapOfT.kt");
-const FEATURE_OPTION_OF_T: &[u8] =
-    include_bytes!("../../generation/kotlin/emitter/features/OptionOfT.kt");
-const FEATURE_SET_OF_T: &[u8] =
-    include_bytes!("../../generation/kotlin/emitter/features/SetOfT.kt");
+// Bincode container helper snippets — inlined Kotlin source fragments
+// (extension functions on `Serializer` / `Deserializer`) that teach the serde
+// runtime how to handle generic containers.  Written into the module header
+// when the corresponding [`Feature`] flag is active.
+const FEATURE_LIST_OF_T: &str = r"fun <T> List<T>.serialize(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { element ->
+        serializer.serializeElement(element)
+    }
+}
 
-// ---------------------------------------------------------------------------
-// Helper functions (moved from the Kotlin emitter)
-// ---------------------------------------------------------------------------
+fun <T> Deserializer.deserializeListOf(deserializeElement: (Deserializer) -> T): List<T> {
+    val length = deserialize_len()
+    val list = mutableListOf<T>()
+    repeat(length.toInt()) {
+        list.add(deserializeElement(this))
+    }
+    return list
+}
+";
+
+const FEATURE_MAP_OF_T: &str = r"fun <K, V> Map<K, V>.serialize(
+    serializer: Serializer,
+    serializeEntry: Serializer.(K, V) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { (key, value) ->
+        serializer.serializeEntry(key, value)
+    }
+}
+
+fun <K, V> Deserializer.deserializeMapOf(deserializeEntry: (Deserializer) -> Pair<K, V>): Map<K, V> {
+    val length = deserialize_len()
+    val map = mutableMapOf<K, V>()
+    repeat(length.toInt()) {
+        val (key, value) = deserializeEntry(this)
+        map[key] = value
+    }
+    return map
+}
+";
+
+const FEATURE_OPTION_OF_T: &str = r"fun <T> T?.serializeOptionOf(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    if (this != null) {
+        serializer.serialize_option_tag(true)
+        serializer.serializeElement(this)
+    } else {
+        serializer.serialize_option_tag(false)
+    }
+}
+
+fun <T> Deserializer.deserializeOptionOf(deserializeElement: (Deserializer) -> T): T? {
+    val tag = deserialize_option_tag()
+    return if (tag) {
+        deserializeElement(this)
+    } else {
+        null
+    }
+}
+";
+
+const FEATURE_SET_OF_T: &str = r"fun <T> Set<T>.serialize(
+    serializer: Serializer,
+    serializeElement: Serializer.(T) -> Unit,
+) {
+    serializer.serialize_len(size.toLong())
+    forEach { element ->
+        serializer.serializeElement(element)
+    }
+}
+
+fun <T> Deserializer.deserializeSetOf(deserializeElement: (Deserializer) -> T): Set<T> {
+    val length = deserialize_len()
+    val set = mutableSetOf<T>()
+    repeat(length.toInt()) {
+        set.add(deserializeElement(this))
+    }
+    return set
+}
+";
 
 fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
     writedoc!(
@@ -368,10 +438,6 @@ fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
     writeln!(w, "deserializer.decrease_container_depth()")
 }
 
-// ---------------------------------------------------------------------------
-// Type-body generation helpers (private to this module)
-// ---------------------------------------------------------------------------
-
 /// Write the bincode type body for a top-level `data object` (unit struct or
 /// empty struct).
 fn write_data_object_top_level<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
@@ -674,25 +740,23 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         for feature in &config.features {
             match feature {
                 Feature::ListOfT => {
-                    w.write_all(FEATURE_LIST_OF_T)?;
+                    write!(w, "{FEATURE_LIST_OF_T}")?;
                     writeln!(w)?;
                 }
                 Feature::OptionOfT => {
-                    w.write_all(FEATURE_OPTION_OF_T)?;
+                    write!(w, "{FEATURE_OPTION_OF_T}")?;
                     writeln!(w)?;
                 }
                 Feature::SetOfT => {
-                    w.write_all(FEATURE_SET_OF_T)?;
+                    write!(w, "{FEATURE_SET_OF_T}")?;
                     writeln!(w)?;
                 }
                 Feature::MapOfT => {
-                    w.write_all(FEATURE_MAP_OF_T)?;
+                    write!(w, "{FEATURE_MAP_OF_T}")?;
                     writeln!(w)?;
                 }
-                // BigInt, Bytes, TupleArray are handled elsewhere
-                // (BigInt for *JSON* has a helper but that belongs to a
-                // future JSON plugin; TupleArray is encoding-independent
-                // and stays in the emitter).
+                // BigInt and Bytes add imports (handled above); TupleArray is
+                // encoding-independent and stays in the emitter.
                 _ => {}
             }
         }

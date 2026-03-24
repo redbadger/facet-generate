@@ -34,35 +34,16 @@
 //! - With no plugins (`Encoding::None`), only plain type declarations are
 //!   emitted.
 //!
-//! # Feature helpers (`features/` directory)
+//! # Feature helpers
 //!
-//! Kotlin has `List`, `Set`, `Map`, and nullable types built in, but the
-//! bincode `Serializer`/`Deserializer` runtime only handles primitives and
-//! user-defined types (which get their own `serialize`/`deserialize` methods).
-//! The feature helpers are Kotlin extension functions that bridge this gap —
-//! they teach the serde runtime how to length-prefix and iterate over generic
-//! containers.
+//! The encoding-independent `TupleArray` helper (`buildList` polyfill for
+//! Kotlin < 1.6.0) is inlined here as [`FEATURE_TUPLE_ARRAY`] and emitted
+//! when [`Feature::TupleArray`] is set by [`CodeGeneratorConfig::update_from`].
 //!
-//! For example, the generated code for a `List<Foo>` field calls:
-//! ```kotlin
-//! myList.serialize(serializer) { it.serialize(serializer) }
-//! ```
-//! where `List<T>.serialize` (from `ListOfT.kt`) writes the length, then
-//! delegates each element to the lambda.
-//!
-//! | Helper | What it provides | When included |
-//! |---|---|---|
-//! | `ListOfT.kt` | `List<T>.serialize` / `Deserializer.deserializeListOf` | Bincode + `Seq` type used |
-//! | `SetOfT.kt` | `Set<T>.serialize` / `Deserializer.deserializeSetOf` | Bincode + `Set` type used |
-//! | `MapOfT.kt` | `Map<K,V>.serialize` / `Deserializer.deserializeMapOf` | Bincode + `Map` type used |
-//! | `OptionOfT.kt` | `T?.serializeOptionOf` / `Deserializer.deserializeOptionOf` | Bincode + `Option` type used |
-//! | `BigInt.kt` | `KSerializer<BigInteger>` for kotlinx.serialization | JSON + `I128`/`U128` type used |
-//! | `TupleArray.kt` | `buildList` polyfill for Kotlin < 1.6.0 | `TupleArray` type used (any encoding) |
-//!
-//! These `.kt` snippets are embedded at compile time via `include_bytes!` and
-//! written into the file header by the [`Module`] emitter when the
-//! corresponding [`Feature`] flag is active (discovered automatically by
-//! [`CodeGeneratorConfig::update_from`]).
+//! Bincode container helpers (`List<T>.serialize`, `Set<T>.serialize`, etc.)
+//! are inlined in `BincodePlugin` (`generation/bincode/kotlin.rs`).
+//! The JSON `BigInteger` `KSerializer` is inlined in `JsonPlugin`
+//! (`generation/json/kotlin.rs`).
 
 use std::{
     collections::BTreeMap,
@@ -86,7 +67,28 @@ use crate::{
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
 
-const FEATURE_TUPLE_ARRAY: &[u8] = include_bytes!("features/TupleArray.kt");
+const FEATURE_TUPLE_ARRAY: &str = r"/**
+ * Compatibility functions for buildList, ensuring support for Kotlin versions < 1.6.0
+ *
+ * These functions provide the same functionality as the standard library buildList functions
+ * introduced in Kotlin 1.6.0. On Kotlin 1.6+, the compiler will prefer the standard library
+ * versions due to better overload resolution, so these serve as fallbacks for older versions.
+ *
+ * The functions are inline and generate efficient bytecode equivalent to the standard library
+ * implementations, so there's no performance penalty when included.
+ */
+inline fun <T> buildList(capacity: Int, builderAction: MutableList<T>.() -> Unit): List<T> {
+    val list = ArrayList<T>(capacity)
+    list.builderAction()
+    return list
+}
+
+inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
+    val list = mutableListOf<T>()
+    list.builderAction()
+    return list
+}
+";
 
 /// Language tag for Kotlin code generation.
 ///
@@ -148,16 +150,15 @@ impl Emitter<Kotlin> for Module {
         for feature in features {
             match feature {
                 Feature::BigInt => {
-                    // BigInteger import is needed regardless of encoding
-                    // (JVM-only — kept for backward compat).
+                    // `import java.math.BigInteger` is needed for all encodings,
+                    // including `Encoding::None` where no plugin runs.
+                    // Plugin-specific BigInt imports (JSON KSerializer, Bincode
+                    // Int128) are added by their respective plugins.
                     imports.push("import java.math.BigInteger".to_string());
-                    // JSON-specific BigInt imports and helper are provided by
-                    // JsonPlugin::imports() / module_helpers().
-                    // Bincode BigInt imports (Int128) come from BincodePlugin::imports().
                 }
                 Feature::TupleArray => {
                     // TupleArray is encoding-independent — stays in the emitter.
-                    features_out.write_all(FEATURE_TUPLE_ARRAY)?;
+                    write!(features_out, "{FEATURE_TUPLE_ARRAY}")?;
                     writeln!(features_out)?;
                 }
                 // Bincode feature helpers (ListOfT, SetOfT, MapOfT, OptionOfT, Bytes)
