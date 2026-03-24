@@ -62,7 +62,7 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::for_encoding(config.encoding, registry);
+        let lang = Swift::for_encoding(config.encoding, registry, &config);
 
         Module::new(&config).write(w, &lang)?;
 
@@ -119,7 +119,11 @@ impl Swift {
     ///
     /// Prefer this over [`Swift::new`] whenever a registry is available.
     #[must_use]
-    pub fn for_encoding(encoding: Encoding, registry: &Registry) -> Self {
+    pub fn for_encoding(
+        encoding: Encoding,
+        registry: &Registry,
+        _config: &CodeGeneratorConfig,
+    ) -> Self {
         Self {
             encoding,
             hashable_types: compute_hashable_types(registry),

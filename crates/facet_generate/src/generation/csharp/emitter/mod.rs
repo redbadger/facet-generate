@@ -103,7 +103,11 @@ impl CSharp {
     /// of C-style enums (all-unit-variant enums) needed for correct
     /// serialization dispatch.
     #[must_use]
-    pub fn for_encoding(encoding: Encoding, registry: &crate::Registry) -> Self {
+    pub fn for_encoding(
+        encoding: Encoding,
+        registry: &crate::Registry,
+        _config: &CodeGeneratorConfig,
+    ) -> Self {
         let c_style_enums = if encoding == Encoding::Bincode {
             collect_c_style_enums(registry)
         } else {

@@ -9,7 +9,7 @@ use crate::{
     generation::{
         Encoding, ExternalPackage, PackageLocation, java, kotlin, swift,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
-        typescript::{self, InstallTarget},
+        typescript,
     },
     reflect,
 };
@@ -98,7 +98,7 @@ fn test() {
                     .unwrap();
             }
             TargetLanguage::TypeScript => {
-                typescript::Installer::new("example", tmp_path, InstallTarget::Node)
+                typescript::Installer::new("example", tmp_path)
                     .encoding(Encoding::Bincode)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),

@@ -4,10 +4,7 @@
 pub mod common;
 
 use common::{Choice, Test};
-use facet_generate::generation::{
-    CodeGeneratorConfig, Encoding, SourceInstaller,
-    typescript::{self, InstallTarget},
-};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
@@ -18,7 +15,7 @@ fn test_typescript_runtime_bincode_serialization() {
     let dir_path = dir.path();
     std::fs::create_dir_all(dir_path).unwrap();
 
-    let mut installer = typescript::Installer::new("main", dir_path, InstallTarget::Deno);
+    let mut installer = typescript::Installer::new("main", dir_path);
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();
 
@@ -28,13 +25,13 @@ fn test_typescript_runtime_bincode_serialization() {
     writeln!(
         source,
         r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
-import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/mod.ts";
+import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
 "#
     )
     .unwrap();
 
     let config = CodeGeneratorConfig::new("main".to_string()).with_encoding(Encoding::Bincode);
-    let generator = typescript::TypeScriptCodeGenerator::new(&config, InstallTarget::Deno);
+    let generator = typescript::TypeScriptCodeGenerator::new(&config);
     generator.output(&mut source, &registry).unwrap();
 
     let reference = bincode::serialize(&Test {
@@ -78,6 +75,7 @@ Deno.test("bincode serialization matches deserialization", () => {{
     let status = Command::new("deno")
         .current_dir(dir_path)
         .arg("test")
+        .arg("--sloppy-imports")
         .arg(&source_path)
         .status()
         .unwrap();
