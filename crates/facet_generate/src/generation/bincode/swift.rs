@@ -764,6 +764,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let plugin = &BincodePlugin as &dyn EmitterPlugin<Swift>;
+        let config = CodeGeneratorConfig::new("test".to_string());
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -771,7 +772,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
         assert!(plugin.has_type_body(&ctx));
     }
 
@@ -789,7 +790,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -826,7 +827,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -863,7 +864,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -916,7 +917,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {

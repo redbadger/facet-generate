@@ -215,7 +215,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let annotations = plugin.type_annotations(&ctx);
         assert_eq!(annotations.len(), 1);
@@ -251,7 +252,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let annotations = plugin.type_annotations(&ctx);
         assert!(
@@ -282,7 +284,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.type_annotations(&ctx).is_empty());
     }
@@ -303,7 +306,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let annotations = plugin.field_annotations(&field, &ctx);
         assert_eq!(annotations.len(), 1);
@@ -322,7 +326,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let annotations = plugin.field_annotations(&field, &ctx);
         assert_eq!(annotations[0], "[JsonPropertyName(\"myField\")]");
@@ -342,7 +347,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.has_type_body(&ctx));
     }
@@ -360,7 +366,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(!plugin.has_type_body(&ctx));
     }
@@ -379,7 +386,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(out.contains("public string JsonSerialize()"), "{out}");

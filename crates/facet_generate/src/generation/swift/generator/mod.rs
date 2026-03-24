@@ -77,7 +77,7 @@ impl<'a> SwiftCodeGenerator<'a> {
         config.update_from(registry);
 
         let lang = {
-            let base = Swift::new(registry);
+            let base = Swift::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),

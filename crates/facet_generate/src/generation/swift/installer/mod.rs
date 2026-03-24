@@ -105,7 +105,7 @@ impl Installer {
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
         let lang = {
-            let base = Swift::new(registry);
+            let base = Swift::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
                     crate::generation::bincode::BincodePlugin,
@@ -160,9 +160,10 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let lang = Swift::new(&BTreeMap::default()).with_plugin(std::sync::Arc::new(
-            crate::generation::bincode::BincodePlugin,
-        ));
+        let default_config = CodeGeneratorConfig::new(self.package_name.clone());
+        let lang = Swift::new(&default_config, &BTreeMap::default()).with_plugin(
+            std::sync::Arc::new(crate::generation::bincode::BincodePlugin),
+        );
         let mut written = BTreeSet::new();
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {

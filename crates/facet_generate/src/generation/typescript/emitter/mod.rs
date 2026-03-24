@@ -70,6 +70,7 @@ use crate::{
 /// [`with_plugin`](Self::with_plugin).
 #[derive(Debug, Clone)]
 pub struct TypeScript {
+    pub(crate) config: CodeGeneratorConfig,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
@@ -80,8 +81,17 @@ impl TypeScript {
     /// or use the generator's `with_encoding` method to derive standard plugins
     /// from an [`Encoding`](crate::generation::Encoding).
     #[must_use]
-    pub fn new(_registry: &crate::Registry) -> Self {
-        Self { plugins: vec![] }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the config.
+    #[must_use]
+    pub fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Access the plugin list.
@@ -104,7 +114,7 @@ impl TypeScript {
 impl crate::generation::plugin::FromEncoding for TypeScript {
     fn from_encoding(
         encoding: crate::generation::Encoding,
-        _config: &CodeGeneratorConfig,
+        config: &CodeGeneratorConfig,
         _registry: &crate::Registry,
     ) -> Self {
         use crate::generation::{bincode::BincodePlugin, json::JsonPlugin};
@@ -113,7 +123,10 @@ impl crate::generation::plugin::FromEncoding for TypeScript {
             crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
             crate::generation::Encoding::None => vec![],
         };
-        Self { plugins }
+        Self {
+            config: config.clone(),
+            plugins,
+        }
     }
 }
 
@@ -198,12 +211,12 @@ impl Emitter<TypeScript> for Container<'_> {
 
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &[], doc, lang)
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 let fields = vec![Named::new(format.as_ref(), "value".to_string())];
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
             }
             ContainerFormat::TupleStruct(formats, doc) => {
@@ -212,11 +225,11 @@ impl Emitter<TypeScript> for Container<'_> {
                     .enumerate()
                     .map(|(i, f)| Named::new(f, format!("field{i}")))
                     .collect();
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
             }
             ContainerFormat::Struct(fields, doc) => {
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, fields, doc, lang)
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -383,7 +396,7 @@ fn output_variant<W: IndentWrite>(
         fields: &fields,
         parent_name: base,
     };
-    let ctx = EmitContext::for_variant(parent, variant_info);
+    let ctx = EmitContext::for_variant(parent, &lang.config, variant_info);
     output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
 }
 
@@ -401,7 +414,7 @@ fn output_enum_container<W: IndentWrite>(
     {
         let mut w = w.block(Newlines::BOTH)?;
         // Plugin type bodies (abstract serialize + static deserialize switch).
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }

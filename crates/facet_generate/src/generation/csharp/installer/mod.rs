@@ -35,7 +35,7 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SourceInstaller,
-        bincode::csharp::CSharpBincodePlugin,
+        bincode::BincodePlugin,
         csharp::{CSharp, CSharpCodeGenerator},
         json::JsonPlugin,
         module,
@@ -105,11 +105,7 @@ impl Installer {
             let lang = {
                 let base = CSharp::new(&config, registry);
                 match self.encoding {
-                    Encoding::Bincode => {
-                        base.with_plugin(std::sync::Arc::new(CSharpBincodePlugin {
-                            c_style_enums: config.unit_variant_enums.clone(),
-                        }))
-                    }
+                    Encoding::Bincode => base.with_plugin(std::sync::Arc::new(BincodePlugin)),
                     Encoding::Json => base.with_plugin(std::sync::Arc::new(JsonPlugin)),
                     Encoding::None => base,
                 }

@@ -110,7 +110,7 @@ impl Installer {
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
         let lang = {
-            let base = TypeScript::new(registry);
+            let base = TypeScript::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
                     crate::generation::bincode::BincodePlugin,
@@ -160,7 +160,8 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let lang = TypeScript::new(&BTreeMap::default())
+        let config = CodeGeneratorConfig::new(self.package_name.clone());
+        let lang = TypeScript::new(&config, &BTreeMap::default())
             .with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin));
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
@@ -183,7 +184,8 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
-        let lang = TypeScript::new(&BTreeMap::default()).with_plugin(std::sync::Arc::new(
+        let config = CodeGeneratorConfig::new(self.package_name.clone());
+        let lang = TypeScript::new(&config, &BTreeMap::default()).with_plugin(std::sync::Arc::new(
             crate::generation::bincode::BincodePlugin,
         ));
         for plugin in lang.plugins() {

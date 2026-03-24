@@ -104,7 +104,7 @@ impl Installer {
             let base = Kotlin::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(&config),
+                    crate::generation::bincode::BincodePlugin,
                 )),
                 Encoding::Json => {
                     base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
@@ -168,7 +168,7 @@ impl Installer {
 
     /// Installs the bincode Kotlin runtime sources into the output directory.
     ///
-    /// Delegates to `KotlinBincodePlugin::runtime_files`, writing only the
+    /// Delegates to `BincodePlugin::runtime_files`, writing only the
     /// `com/novi/bincode/` files.  Most callers should prefer
     /// [`generate`](Self::generate).
     ///
@@ -178,7 +178,7 @@ impl Installer {
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(std::sync::Arc::new(
-            crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(&config),
+            crate::generation::bincode::BincodePlugin,
         ));
         for plugin in lang.plugins() {
             for file in plugin
@@ -213,9 +213,7 @@ impl Installer {
             let base = Kotlin::new(&plugin_config, &BTreeMap::default());
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
-                    crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(
-                        &plugin_config,
-                    ),
+                    crate::generation::bincode::BincodePlugin,
                 )),
                 Encoding::Json => {
                     base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))

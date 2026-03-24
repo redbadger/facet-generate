@@ -1,15 +1,14 @@
 //! C#-specific bincode plugin for the `facet-generate` code generation pipeline.
 //!
-//! This module provides [`CSharpBincodePlugin`] — a standalone plugin that implements
-//! [`EmitterPlugin<CSharp>`](crate::generation::plugin::EmitterPlugin) and injects
-//! bincode serialization and deserialization methods into generated C# types.
+//! This module implements [`EmitterPlugin<CSharp>`](crate::generation::plugin::EmitterPlugin)
+//! for [`BincodePlugin`], injecting bincode serialization and
+//! deserialization methods into generated C# types.
 //!
-//! Unlike the JVM-specific [`BincodePlugin`](super::BincodePlugin) (which carries
-//! `serde_package` / `bincode_package`), this plugin carries a precomputed set of
-//! C-style enum names ([`CSharpBincodePlugin::c_style_enums`]) required for correct
-//! serialization dispatch.  C-style enums (all-unit-variant enums) are emitted as
-//! plain C# `enum` types and must be serialized via a static `{EnumName}Bincode`
-//! helper class rather than instance methods.
+//! The plugin reads the set of all-unit-variant enum names from
+//! [`EmitContext::config`](crate::generation::plugin::EmitContext)
+//! (`unit_variant_enums`) at call time.  C-style enums (all-unit-variant enums) are
+//! emitted as plain C# `enum` types and must be serialized via a static
+//! `{EnumName}Bincode` helper class rather than instance methods.
 //!
 //! # Extension points implemented
 //!
@@ -24,6 +23,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
+use super::BincodePlugin;
+
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
@@ -36,34 +37,7 @@ use crate::reflection::format::{
     ContainerFormat, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
 
-// ---------------------------------------------------------------------------
-// Plugin struct
-// ---------------------------------------------------------------------------
-
-/// C#-specific bincode plugin.
-///
-/// Implements [`EmitterPlugin<CSharp>`] to inject bincode `Serialize`/`Deserialize`
-/// methods and `BincodeSerialize`/`BincodeDeserialize` convenience wrappers into
-/// generated C# types.
-///
-/// The [`c_style_enums`](Self::c_style_enums) set is needed to determine how to
-/// serialize enum-typed fields: all-unit enums are emitted as plain C# `enum` types
-/// and must be serialized via the static `{EnumName}Bincode` helper class rather than
-/// instance methods.
-#[derive(Debug, Clone, Default)]
-pub struct CSharpBincodePlugin {
-    /// Names of all C-style (all-unit-variant) enums in the registry.
-    ///
-    /// Used during serialization-expression generation to dispatch enum-typed fields
-    /// through `{TypeName}Bincode.Serialize(...)` instead of `value.Serialize(...)`.
-    pub c_style_enums: BTreeSet<String>,
-}
-
-// ---------------------------------------------------------------------------
-// EmitterPlugin implementation
-// ---------------------------------------------------------------------------
-
-impl EmitterPlugin<CSharp> for CSharpBincodePlugin {
+impl EmitterPlugin<CSharp> for BincodePlugin {
     /// Returns the core, serde, and bincode C# runtime sources to be written
     /// into the output directory alongside the generated code.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
@@ -169,13 +143,13 @@ impl EmitterPlugin<CSharp> for CSharpBincodePlugin {
                 return Ok(());
             }
             let variants: Vec<Named<VariantFormat>> = variants_map.values().cloned().collect();
-            write_record_bincode_helpers(w, ctx.name(), &variants, &self.c_style_enums)
+            write_record_bincode_helpers(w, ctx.name(), &variants, &ctx.config.unit_variant_enums)
         } else {
             write_class_bincode_methods(
                 w,
                 &ctx.name().to_upper_camel_case(),
                 &ctx.fields(),
-                &self.c_style_enums,
+                &ctx.config.unit_variant_enums,
             )
         }
     }
@@ -1036,6 +1010,7 @@ mod tests {
     use super::*;
     use crate::generation::{
         CodeGeneratorConfig, Container,
+        bincode::BincodePlugin,
         indent::{IndentConfig, IndentedWriter},
         plugin::EmitContext,
     };
@@ -1054,7 +1029,7 @@ mod tests {
 
     #[test]
     fn imports_returns_bincode() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
         let cfg = CodeGeneratorConfig::new("test".to_string());
         let imports: Vec<String> = plugin.imports(&cfg);
         assert_eq!(imports, vec!["using Facet.Runtime.Bincode;"]);
@@ -1066,14 +1041,15 @@ mod tests {
 
     #[test]
     fn type_conformances_struct() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         let conformances = plugin.type_conformances(&ctx);
         assert!(
@@ -1090,7 +1066,8 @@ mod tests {
 
     #[test]
     fn type_conformances_unit_enum_returns_empty() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
@@ -1100,7 +1077,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.type_conformances(&ctx).is_empty());
     }
@@ -1111,21 +1088,23 @@ mod tests {
 
     #[test]
     fn has_type_body_true_for_struct() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.has_type_body(&ctx));
     }
 
     #[test]
     fn has_type_body_false_for_unit_enum() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
@@ -1135,7 +1114,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(!plugin.has_type_body(&ctx));
     }
@@ -1146,14 +1125,15 @@ mod tests {
 
     #[test]
     fn type_body_unit_struct_emits_serialize_deserialize() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -1178,7 +1158,8 @@ mod tests {
 
     #[test]
     fn after_type_unit_enum_emits_static_helper() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let mut variants = std::collections::BTreeMap::new();
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
         variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
@@ -1189,7 +1170,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.after_type(w, &ctx));
         assert!(out.contains("public static class MyEnumBincode"), "{out}");
@@ -1205,14 +1186,15 @@ mod tests {
 
     #[test]
     fn after_type_struct_emits_nothing() {
-        let plugin = &CSharpBincodePlugin::default() as &dyn EmitterPlugin<CSharp>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<CSharp>;
+        let config = CodeGeneratorConfig::new("test".to_string());
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.after_type(w, &ctx));
         assert!(out.is_empty(), "expected empty output, got:\n{out}");

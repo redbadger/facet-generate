@@ -95,6 +95,7 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
 /// produce serialization code.
 #[derive(Debug, Clone)]
 pub struct Kotlin {
+    pub(crate) config: CodeGeneratorConfig,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
@@ -105,8 +106,17 @@ impl Kotlin {
     /// generator's `with_encoding` builder which wires up the standard
     /// Bincode / JSON plugins automatically.
     #[must_use]
-    pub fn new(_config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        Self { plugins: vec![] }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the generator config.
+    #[must_use]
+    pub fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Add a plugin to this language tag, returning the modified tag.
@@ -136,14 +146,17 @@ impl crate::generation::plugin::FromEncoding for Kotlin {
 
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
             crate::generation::Encoding::Bincode => {
-                use crate::generation::bincode::kotlin::KotlinBincodePlugin;
+                use crate::generation::bincode::BincodePlugin;
 
-                vec![Arc::new(KotlinBincodePlugin::from_config(config))]
+                vec![Arc::new(BincodePlugin)]
             }
             crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
             crate::generation::Encoding::None => vec![],
         };
-        Self { plugins }
+        Self {
+            config: config.clone(),
+            plugins,
+        }
     }
 }
 
@@ -528,6 +541,7 @@ fn data_object<W: IndentWrite>(
         let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
             EmitContext::for_variant(
                 &temp_container,
+                &lang.config,
                 VariantInfo {
                     name,
                     index,
@@ -537,7 +551,7 @@ fn data_object<W: IndentWrite>(
                 },
             )
         } else {
-            EmitContext::top_level(&temp_container)
+            EmitContext::top_level(&temp_container, &lang.config)
         };
         write_plugin_body(w, lang, &ctx)?;
     }
@@ -590,6 +604,7 @@ fn data_class<W: IndentWrite>(
         let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
             EmitContext::for_variant(
                 &temp_container,
+                &lang.config,
                 VariantInfo {
                     name,
                     index,
@@ -599,7 +614,7 @@ fn data_class<W: IndentWrite>(
                 },
             )
         } else {
-            EmitContext::top_level(&temp_container)
+            EmitContext::top_level(&temp_container, &lang.config)
         };
         write_plugin_body(w, lang, &ctx)?;
     }
@@ -637,7 +652,7 @@ fn enum_class<W: IndentWrite>(
 
     // Plugin type body (e.g. JSON serialName accessor)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -669,7 +684,7 @@ fn sealed_interface<W: IndentWrite>(
 
     // Plugin type body preamble (before variants)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body_preamble(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -685,7 +700,7 @@ fn sealed_interface<W: IndentWrite>(
 
     // Plugin type body (after variants)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -724,7 +739,7 @@ fn write_plugin_annotations<W: IndentWrite>(w: &mut W, name: &str, lang: &Kotlin
         name: &temp_name,
         format: &temp_format,
     };
-    let ctx = EmitContext::top_level(&temp_container);
+    let ctx = EmitContext::top_level(&temp_container, &lang.config);
     for plugin in lang.plugins() {
         for annotation in plugin.type_annotations(&ctx) {
             writeln!(w, "{annotation}")?;

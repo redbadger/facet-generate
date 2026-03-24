@@ -215,13 +215,14 @@ mod tests {
         use crate::generation::Container;
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
+        let config = make_config(&[]);
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
         let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
         let annotations = plugin.type_annotations(&ctx);
 

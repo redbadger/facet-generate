@@ -80,6 +80,8 @@ use crate::{
 /// itself contains no encoding checks.
 #[derive(Debug, Clone)]
 pub struct CSharp {
+    /// The code-generator configuration (namespace, feature flags, etc.).
+    pub(crate) config: CodeGeneratorConfig,
     /// Plugins to apply during code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
@@ -91,8 +93,17 @@ impl CSharp {
     /// code generator's `with_encoding` builder to get the standard
     /// encoding-derived plugins automatically.
     #[must_use]
-    pub fn new(_config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        Self { plugins: vec![] }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the code-generator configuration.
+    #[must_use]
+    pub fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Append a plugin to this language tag's plugin list.
@@ -119,16 +130,17 @@ impl crate::generation::plugin::FromEncoding for CSharp {
         config: &CodeGeneratorConfig,
         _registry: &crate::Registry,
     ) -> Self {
-        use crate::generation::{bincode::csharp::CSharpBincodePlugin, json::JsonPlugin};
+        use crate::generation::{bincode::BincodePlugin, json::JsonPlugin};
 
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
-            crate::generation::Encoding::Bincode => vec![Arc::new(CSharpBincodePlugin {
-                c_style_enums: config.unit_variant_enums.clone(),
-            })],
+            crate::generation::Encoding::Bincode => vec![Arc::new(BincodePlugin)],
             crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
             crate::generation::Encoding::None => vec![],
         };
-        Self { plugins }
+        Self {
+            config: config.clone(),
+            plugins,
+        }
     }
 }
 
@@ -263,7 +275,7 @@ fn write_sealed_record<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let record_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -299,7 +311,7 @@ fn write_class<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let class_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -346,7 +358,7 @@ fn write_enum<W: IndentWrite>(
     lang: &CSharp,
 ) -> Result<()> {
     let enum_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
 
@@ -387,7 +399,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     lang: &CSharp,
 ) -> Result<()> {
     let base_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
 

@@ -788,7 +788,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.has_type_body(&ctx));
     }
@@ -807,7 +808,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -836,7 +838,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -877,7 +880,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -931,7 +935,8 @@ mod tests {
             fields: &variant_fields,
             parent_name: "Result",
         };
-        let ctx = EmitContext::for_variant(&container, variant_info);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::for_variant(&container, &config, variant_info);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(

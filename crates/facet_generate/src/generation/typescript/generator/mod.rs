@@ -70,7 +70,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         config.update_from(registry);
 
         let lang = {
-            let base = TypeScript::new(registry);
+            let base = TypeScript::new(&config, registry);
             match self.encoding {
                 Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),

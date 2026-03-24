@@ -11,9 +11,9 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::kotlin::KotlinBincodePlugin, config::PackageLocation, indent::IndentedWriter,
-        json::JsonPlugin, kotlin::emitter::Kotlin, module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
+        config::PackageLocation, indent::IndentedWriter, json::JsonPlugin, kotlin::emitter::Kotlin,
+        module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -80,9 +80,7 @@ impl<'a> KotlinCodeGenerator<'a> {
         let lang = {
             let base = Kotlin::new(&config, registry);
             match self.encoding {
-                Encoding::Bincode => {
-                    base.with_plugin(Arc::new(KotlinBincodePlugin::from_config(&config)))
-                }
+                Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }

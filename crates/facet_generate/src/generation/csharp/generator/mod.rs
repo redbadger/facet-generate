@@ -12,9 +12,8 @@ use std::sync::Arc;
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::csharp::CSharpBincodePlugin, csharp::emitter::CSharp, indent::IndentedWriter,
-        json::JsonPlugin, module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
+        csharp::emitter::CSharp, indent::IndentedWriter, json::JsonPlugin, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -78,9 +77,7 @@ impl<'a> CSharpCodeGenerator<'a> {
         let lang = {
             let base = CSharp::new(&config, &updated_registry);
             match self.encoding {
-                Encoding::Bincode => base.with_plugin(Arc::new(CSharpBincodePlugin {
-                    c_style_enums: config.unit_variant_enums.clone(),
-                })),
+                Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
                 Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
                 Encoding::None => base,
             }

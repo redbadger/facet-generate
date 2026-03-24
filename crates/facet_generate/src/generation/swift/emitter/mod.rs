@@ -63,7 +63,6 @@ use indoc::formatdoc;
 
 use heck::ToUpperCamelCase as _;
 
-#[cfg(test)]
 use crate::generation::CodeGeneratorConfig;
 use crate::{
     Registry,
@@ -90,6 +89,8 @@ use crate::{
 /// removed.
 #[derive(Debug, Clone)]
 pub struct Swift {
+    /// The code-generator configuration for the current module.
+    pub(crate) config: CodeGeneratorConfig,
     /// Type names (root-namespace) that can synthesize `Hashable` conformance.
     pub(crate) hashable_types: BTreeSet<String>,
     /// Type names (root-namespace) that can synthesize or manually implement
@@ -106,12 +107,19 @@ impl Swift {
     /// The `hashable_types` and `equatable_types` sets are computed from the
     /// registry via fixed-point analysis and are unrelated to plugin selection.
     #[must_use]
-    pub fn new(registry: &Registry) -> Self {
+    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
         Self {
+            config: config.clone(),
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
             plugins: vec![],
         }
+    }
+
+    /// Access the code-generator configuration.
+    #[must_use]
+    pub fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Access the plugin list.
@@ -132,7 +140,7 @@ impl Swift {
 impl crate::generation::plugin::FromEncoding for Swift {
     fn from_encoding(
         encoding: crate::generation::Encoding,
-        _config: &CodeGeneratorConfig,
+        config: &CodeGeneratorConfig,
         registry: &crate::Registry,
     ) -> Self {
         use crate::generation::{Encoding, bincode::BincodePlugin, json::JsonPlugin};
@@ -142,6 +150,7 @@ impl crate::generation::plugin::FromEncoding for Swift {
             Encoding::None => vec![],
         };
         Self {
+            config: config.clone(),
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
             plugins,
@@ -623,7 +632,7 @@ fn struct_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -707,7 +716,7 @@ fn enum_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }

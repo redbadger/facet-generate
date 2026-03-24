@@ -242,7 +242,8 @@ fn set_of_tuple_errors() {
     use std::sync::Arc;
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(&registry).with_plugin(Arc::new(BincodePlugin));
+    let config = CodeGeneratorConfig::new("test".to_string());
+    let lang = Swift::new(&config, &registry).with_plugin(Arc::new(BincodePlugin));
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
@@ -276,7 +277,8 @@ fn map_with_tuple_key_errors() {
     use std::sync::Arc;
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(&registry).with_plugin(Arc::new(BincodePlugin));
+    let config = CodeGeneratorConfig::new("test".to_string());
+    let lang = Swift::new(&config, &registry).with_plugin(Arc::new(BincodePlugin));
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
