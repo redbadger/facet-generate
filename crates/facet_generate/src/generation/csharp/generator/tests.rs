@@ -41,8 +41,8 @@ fn first_field_type(registry: &Registry) -> &Format {
     &fields[0].value
 }
 
-fn render_output(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = CSharpCodeGenerator::new(config);
+fn render_output(config: &CodeGeneratorConfig, encoding: Encoding, registry: &Registry) -> String {
+    let generator = CSharpCodeGenerator::new(config).with_encoding(encoding);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -106,11 +106,10 @@ fn update_qualified_names_roots_root_namespace_for_dotted_module() {
 
 #[test]
 fn output_writes_preamble_and_namespace() {
-    let config =
-        CodeGeneratorConfig::new("Company.Models".to_string()).with_encoding(Encoding::None);
+    let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, &registry);
+    let output = render_output(&config, Encoding::None, &registry);
 
     assert!(output.contains("using CommunityToolkit.Mvvm.ComponentModel;"));
     assert!(output.contains("namespace Company.Models;"));
@@ -125,27 +124,25 @@ fn output_uses_rooted_namespace_for_external_types() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, &registry);
+    let output = render_output(&config, Encoding::None, &registry);
     assert!(output.contains("private Company.Models.Shared.Child _value;"));
 }
 
 #[test]
 fn output_json_encoding_adds_json_imports() {
-    let config =
-        CodeGeneratorConfig::new("Company.Models".to_string()).with_encoding(Encoding::Json);
+    let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, &registry);
+    let output = render_output(&config, Encoding::Json, &registry);
     assert!(output.contains("using System.Text.Json.Serialization;"));
 }
 
 #[test]
 fn output_bincode_encoding_adds_runtime_imports() {
-    let config =
-        CodeGeneratorConfig::new("Company.Models".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, &registry);
+    let output = render_output(&config, Encoding::Bincode, &registry);
     assert!(output.contains("using Facet.Runtime.Serde;"));
     assert!(output.contains("using Facet.Runtime.Bincode;"));
 }

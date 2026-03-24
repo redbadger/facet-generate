@@ -1,9 +1,12 @@
-//! Code generation — transforms a [`Registry`] into source code for target
-//! languages.
+#![allow(clippy::too_long_first_doc_paragraph)]
+//! Code generation — transforms a [`Registry`] into source code.
 //!
-//! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`) behind a
-//! feature flag. The generation pipeline has three layers:
+//! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`)
+//! behind a feature flag.
 //!
+//! ## Generation pipeline
+//!
+//! The generation pipeline has three layers:
 //! - **Generator** ([`CodeGenerator`]) — top-level entry point that writes a complete output file
 //!   from a registry.
 //! - **Emitter** ([`Emitter`]) — walks the [`Format`](crate::reflection::format::Format) AST
@@ -12,7 +15,8 @@
 //! - **Installer** — (language-specific) scaffolds project files, package manifests, and
 //!   generated source into an output directory.
 //!
-//! Shared infrastructure:
+//! ## Shared infrastructure
+//!
 //! - [`CodeGeneratorConfig`] — configuration (package name, encoding, custom types, etc.)
 //! - [`indent`] — indentation-aware writer
 //! - [`module`] — splits a registry by namespace into separate output modules
@@ -27,13 +31,13 @@ pub mod module;
 /// Plugin infrastructure for extending code generation.
 pub mod plugin;
 
-/// Internal bincode plugin — provides bincode-specific imports and helpers
-/// through the plugin trait. Will eventually move to a separate crate.
-pub(crate) mod bincode;
+/// Bincode serialization plugin — provides bincode-specific imports and helpers
+/// through the plugin trait.
+pub mod bincode;
 
-/// Internal JSON plugin — provides JSON-specific imports, annotations, and
-/// helpers through the plugin trait. Will eventually move to a separate crate.
-pub(crate) mod json;
+/// JSON serialization plugin — provides JSON-specific imports, annotations, and
+/// helpers through the plugin trait.
+pub mod json;
 
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]

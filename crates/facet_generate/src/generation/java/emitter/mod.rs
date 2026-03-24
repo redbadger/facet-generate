@@ -601,7 +601,7 @@ return obj;
         self.out.unindent();
         writeln!(self.out, "}}")?;
         // Serialize
-        if self.generator.config.has_encoding() {
+        if !self.generator.encoding.is_none() {
             writeln!(
                 self.out,
                 "\npublic void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError {{",
@@ -758,7 +758,7 @@ if (getClass() != obj.getClass()) return false;
             .map(|v| v.name.as_str())
             .collect::<Vec<_>>();
         self.enter_class(name, &reserved_names);
-        if self.generator.config.has_encoding() {
+        if !self.generator.encoding.is_none() {
             writeln!(
                 self.out,
                 "\nabstract public void serialize(com.novi.serde.Serializer serializer) throws com.novi.serde.SerializationError;"
@@ -801,7 +801,7 @@ switch (index) {{",
     }
 
     fn output_class_serialize_for_encoding(&mut self) -> std::io::Result<()> {
-        let encoding = self.generator.config.encoding;
+        let encoding = self.generator.encoding;
         writeln!(
             self.out,
             r"
@@ -816,7 +816,7 @@ public byte[] {0}Serialize() throws com.novi.serde.SerializationError {{
     }
 
     fn output_class_deserialize_for_encoding(&mut self, name: &str) -> std::io::Result<()> {
-        let encoding = self.generator.config.encoding;
+        let encoding = self.generator.encoding;
         writeln!(
             self.out,
             r#"

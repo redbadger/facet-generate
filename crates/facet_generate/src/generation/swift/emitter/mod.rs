@@ -63,13 +63,13 @@ use indoc::formatdoc;
 
 use heck::ToUpperCamelCase as _;
 
+#[cfg(test)]
+use crate::generation::CodeGeneratorConfig;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::BincodePlugin,
+        Container, Emitter,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
         plugin::{EmitContext, EmitterPlugin},
         swift::generator::{compute_equatable_types, compute_hashable_types},
@@ -79,7 +79,7 @@ use crate::{
 
 /// Language tag for Swift code generation.
 ///
-/// Carries the active [`Encoding`] and the sets of type names (within the
+/// Carries the active `Encoding` and the sets of type names (within the
 /// current module) that are known to be able to synthesize `Hashable` and
 /// `Equatable` conformance respectively. Both sets are computed by a
 /// preprocessing pass — see
@@ -99,18 +99,18 @@ pub struct Swift {
 }
 
 impl Swift {
-    /// Create a Swift language tag with computed type sets and plugins derived
-    /// from the encoding in `config`.
+    /// Create a Swift language tag with computed type sets and an empty plugin
+    /// list. Plugins are added by the code generator (which holds the encoding)
+    /// or explicitly via [`with_plugin`](Self::with_plugin).
     ///
     /// The `hashable_types` and `equatable_types` sets are computed from the
     /// registry via fixed-point analysis and are unrelated to plugin selection.
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
-        use crate::generation::plugin::BuildPluginsFor as _;
+    pub fn new(registry: &Registry) -> Self {
         Self {
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
-            plugins: config.build_plugins_for(),
+            plugins: vec![],
         }
     }
 
@@ -128,24 +128,14 @@ impl Swift {
     }
 }
 
-impl crate::generation::plugin::BuildPluginsFor<Swift> for CodeGeneratorConfig {
-    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<Swift>>> {
-        match self.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        }
-    }
-}
-
 #[cfg(test)]
 impl crate::generation::plugin::FromEncoding for Swift {
     fn from_encoding(
         encoding: crate::generation::Encoding,
-        config: &CodeGeneratorConfig,
+        _config: &CodeGeneratorConfig,
         registry: &crate::Registry,
     ) -> Self {
-        use crate::generation::Encoding;
+        use crate::generation::{Encoding, bincode::BincodePlugin, json::JsonPlugin};
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
             Encoding::Bincode => vec![Arc::new(BincodePlugin)],
             Encoding::Json => vec![Arc::new(JsonPlugin)],
@@ -829,6 +819,10 @@ fn named<Format: Clone>(formats: &[Format], prefix: &str) -> Vec<Named<Format>> 
         .map(|(i, f)| Named::new(f, format!("{prefix}{i}")))
         .collect()
 }
+
+#[cfg(test)]
+#[allow(unused_imports)]
+pub use crate::generation::Encoding;
 
 #[cfg(test)]
 mod tests;

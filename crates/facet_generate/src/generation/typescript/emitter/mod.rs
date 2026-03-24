@@ -53,12 +53,10 @@ use heck::ToUpperCamelCase;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, PackageLocation,
-        bincode::BincodePlugin,
+        CodeGeneratorConfig, Container, Emitter, PackageLocation,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
-        json::JsonPlugin,
         module::Module,
-        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
+        plugin::{EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
@@ -68,7 +66,7 @@ use crate::{
 /// Carries a plugin list that controls all encoding-specific behaviour
 /// (serialize/deserialize methods, feature helpers, imports). Build the
 /// standard plugin list from the config encoding via
-/// [`BuildPluginsFor<TypeScript>`], or supply custom plugins with
+/// `BuildPluginsFor<TypeScript>`, or supply custom plugins with
 /// [`with_plugin`](Self::with_plugin).
 #[derive(Debug, Clone)]
 pub struct TypeScript {
@@ -76,13 +74,14 @@ pub struct TypeScript {
 }
 
 impl TypeScript {
-    /// Create a TypeScript language tag using the plugins derived from
-    /// `config.encoding` via [`BuildPluginsFor<TypeScript>`].
+    /// Create a TypeScript language tag with no plugins.
+    ///
+    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction,
+    /// or use the generator's `with_encoding` method to derive standard plugins
+    /// from an [`Encoding`](crate::generation::Encoding).
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
-        Self {
-            plugins: config.build_plugins_for(),
-        }
+    pub fn new(_registry: &crate::Registry) -> Self {
+        Self { plugins: vec![] }
     }
 
     /// Access the plugin list.
@@ -101,16 +100,6 @@ impl TypeScript {
     }
 }
 
-impl BuildPluginsFor<TypeScript> for CodeGeneratorConfig {
-    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<TypeScript>>> {
-        match self.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        }
-    }
-}
-
 #[cfg(test)]
 impl crate::generation::plugin::FromEncoding for TypeScript {
     fn from_encoding(
@@ -118,6 +107,7 @@ impl crate::generation::plugin::FromEncoding for TypeScript {
         _config: &CodeGeneratorConfig,
         _registry: &crate::Registry,
     ) -> Self {
+        use crate::generation::{bincode::BincodePlugin, json::JsonPlugin};
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
             crate::generation::Encoding::Bincode => vec![Arc::new(BincodePlugin)],
             crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
@@ -468,6 +458,10 @@ fn format_type_aliases(input: &BTreeSet<String>) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[cfg(test)]
+#[allow(unused_imports)]
+pub use crate::generation::Encoding;
 
 #[cfg(test)]
 #[path = "tests.rs"]

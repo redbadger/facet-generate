@@ -57,12 +57,10 @@ use heck::ToLowerCamelCase;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
-        bincode::kotlin::KotlinBincodePlugin,
+        CodeGeneratorConfig, Container, Emitter, Feature,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
-        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -93,7 +91,7 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
 /// Language tag for Kotlin code generation.
 ///
 /// Passed as the `L` parameter to every [`Emitter<L>`](super::super::Emitter)
-/// call. Carries the target [`Encoding`] so emitters can conditionally
+/// call. Carries the target `Encoding` so emitters can conditionally
 /// produce serialization code.
 #[derive(Debug, Clone)]
 pub struct Kotlin {
@@ -101,18 +99,14 @@ pub struct Kotlin {
 }
 
 impl Kotlin {
-    /// Create a Kotlin language tag, building the appropriate plugins for the
-    /// encoding specified in `config`.
+    /// Create a Kotlin language tag with no default plugins.
     ///
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::Bincode`] → includes `KotlinBincodePlugin` (resolves JVM
-    ///   package names from `config.external_packages`)
-    /// - [`Encoding::None`] → no plugins
+    /// Use [`with_plugin`](Self::with_plugin) to attach plugins, or use the
+    /// generator's `with_encoding` builder which wires up the standard
+    /// Bincode / JSON plugins automatically.
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        Self {
-            plugins: config.build_plugins_for(),
-        }
+    pub fn new(_config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        Self { plugins: vec![] }
     }
 
     /// Add a plugin to this language tag, returning the modified tag.
@@ -131,16 +125,6 @@ impl Kotlin {
     }
 }
 
-impl BuildPluginsFor<Kotlin> for CodeGeneratorConfig {
-    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<Kotlin>>> {
-        match self.encoding {
-            Encoding::Bincode => vec![Arc::new(KotlinBincodePlugin::from_config(self))],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        }
-    }
-}
-
 #[cfg(test)]
 impl crate::generation::plugin::FromEncoding for Kotlin {
     fn from_encoding(
@@ -148,8 +132,12 @@ impl crate::generation::plugin::FromEncoding for Kotlin {
         config: &CodeGeneratorConfig,
         _registry: &crate::Registry,
     ) -> Self {
+        use crate::generation::json::JsonPlugin;
+
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
             crate::generation::Encoding::Bincode => {
+                use crate::generation::bincode::kotlin::KotlinBincodePlugin;
+
                 vec![Arc::new(KotlinBincodePlugin::from_config(config))]
             }
             crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],

@@ -35,7 +35,9 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SourceInstaller,
+        bincode::csharp::CSharpBincodePlugin,
         csharp::{CSharp, CSharpCodeGenerator},
+        json::JsonPlugin,
         module,
     },
 };
@@ -98,10 +100,20 @@ impl Installer {
 
         // Install encoding-specific runtime files from plugins.
         if !self.encoding.is_none() {
-            let mut config =
-                CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+            let mut config = CodeGeneratorConfig::new(self.package_name.clone());
             config.update_from(registry);
-            let lang = CSharp::new(&config, registry);
+            let lang = {
+                let base = CSharp::new(&config, registry);
+                match self.encoding {
+                    Encoding::Bincode => {
+                        base.with_plugin(std::sync::Arc::new(CSharpBincodePlugin {
+                            c_style_enums: config.unit_variant_enums.clone(),
+                        }))
+                    }
+                    Encoding::Json => base.with_plugin(std::sync::Arc::new(JsonPlugin)),
+                    Encoding::None => base,
+                }
+            };
 
             // Unit.cs was already written above; skip it when iterating plugin files.
             let mut written: BTreeSet<String> =
@@ -121,11 +133,7 @@ impl Installer {
         }
 
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m
-                .config()
-                .clone()
-                .with_parent(&self.package_name)
-                .with_encoding(self.encoding);
+            let config = m.config().clone().with_parent(&self.package_name);
             self.install_module(&config, &module_registry)?;
         }
 
@@ -276,7 +284,7 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = CSharpCodeGenerator::new(&updated_config);
+        let generator = CSharpCodeGenerator::new(&updated_config).with_encoding(self.encoding);
         generator.output(&mut file, registry)?;
 
         Ok(())

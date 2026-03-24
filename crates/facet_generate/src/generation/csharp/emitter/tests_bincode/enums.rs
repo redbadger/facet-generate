@@ -7,7 +7,7 @@
 use facet::Facet;
 
 use super::super::*;
-use crate::emit;
+use crate::{emit, generation::Encoding};
 
 #[test]
 fn enum_with_unit_variants() {

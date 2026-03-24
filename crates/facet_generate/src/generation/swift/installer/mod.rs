@@ -102,10 +102,20 @@ impl Installer {
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
-        let mut config =
-            CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
-        let lang = Swift::new(&config, registry);
+        let lang = {
+            let base = Swift::new(registry);
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
+                    crate::generation::bincode::BincodePlugin,
+                )),
+                Encoding::Json => {
+                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+                }
+                Encoding::None => base,
+            }
+        };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
             let mut written: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -119,9 +129,7 @@ impl Installer {
                         std::fs::write(&dest, &file.contents)?;
                         // Register the "Serde" SPM target when its sources are written.
                         if file.relative_path.starts_with("Sources/Serde/") {
-                            self.targets
-                                .entry("Serde".to_string())
-                                .or_insert_with(BTreeSet::new);
+                            self.targets.entry("Serde".to_string()).or_default();
                         }
                     }
                 }
@@ -130,7 +138,7 @@ impl Installer {
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m.config().clone().with_encoding(self.encoding);
+            let config = m.config().clone();
             self.install_module(&config, &module_registry)?;
         }
 
@@ -144,7 +152,7 @@ impl Installer {
     /// Installs the Serde Swift runtime sources into the output directory and
     /// registers `Serde` as a local SPM target.
     ///
-    /// Delegates to [`BincodePlugin::runtime_files`] which embeds the
+    /// Delegates to `BincodePlugin::runtime_files` which embeds the
     /// `Sources/Serde/` sources via `include_dir!`.  Most callers should
     /// prefer [`generate`](Self::generate).
     ///
@@ -152,8 +160,9 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Bincode);
-        let lang = Swift::new(&config, &Default::default());
+        let lang = Swift::new(&BTreeMap::default()).with_plugin(std::sync::Arc::new(
+            crate::generation::bincode::BincodePlugin,
+        ));
         let mut written = BTreeSet::new();
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
@@ -164,9 +173,7 @@ impl Installer {
                     }
                     std::fs::write(&dest, &file.contents)?;
                     if file.relative_path.starts_with("Sources/Serde/") {
-                        self.targets
-                            .entry("Serde".to_string())
-                            .or_insert_with(BTreeSet::new);
+                        self.targets.entry("Serde".to_string()).or_default();
                     }
                 }
             }
@@ -328,10 +335,9 @@ impl SourceInstaller for Installer {
             targets.insert(target.to_upper_camel_case());
         }
 
-        // Depend on the Serde target when the module uses serialization.
-        // (Switched to targets-based check will happen in Stage 6 when encoding
-        // is removed from CodeGeneratorConfig.)
-        if config.has_encoding() {
+        // Depend on the Serde target when the installer is configured with
+        // a serialization encoding.
+        if !self.encoding.is_none() {
             targets.insert("Serde".to_string());
         }
 
@@ -345,7 +351,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = SwiftCodeGenerator::new(&updated_config);
+        let generator = SwiftCodeGenerator::new(&updated_config).with_encoding(self.encoding);
         generator.output(&mut file, registry)?;
 
         Ok(())

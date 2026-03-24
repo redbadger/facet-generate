@@ -14,6 +14,7 @@ use tempfile::tempdir;
 fn test_typescript_code_generates_with_config(
     dir_path: &Path,
     config: &CodeGeneratorConfig,
+    encoding: Encoding,
 ) -> std::path::PathBuf {
     let registry = common::get_registry();
     std::fs::create_dir_all(dir_path.join("testing")).unwrap_or(());
@@ -24,7 +25,7 @@ fn test_typescript_code_generates_with_config(
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::TypeScriptCodeGenerator::new(config);
+    let generator = typescript::TypeScriptCodeGenerator::new(config).with_encoding(encoding);
     generator.output(&mut source, &registry).unwrap();
 
     dir_path.join("testing")
@@ -33,8 +34,8 @@ fn test_typescript_code_generates_with_config(
 #[test]
 fn test_typescript_code_generates_with_bincode() {
     let dir = tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    test_typescript_code_generates_with_config(dir.path(), &config);
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    test_typescript_code_generates_with_config(dir.path(), &config, Encoding::Bincode);
 }
 
 #[test]
@@ -86,7 +87,7 @@ fn test_typescript_code_generates_with_external_definitions() {
     let config = CodeGeneratorConfig::new("testing".to_string())
         .with_external_definitions(external_definitions);
 
-    test_typescript_code_generates_with_config(dir.path(), &config);
+    test_typescript_code_generates_with_config(dir.path(), &config, Encoding::None);
 }
 
 #[test]
@@ -114,9 +115,10 @@ fn test_typescript_code_generation_file_layout() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("testing".to_string());
 
-    let mut installer = typescript::Installer::new("testing", dir.path());
+    let mut installer =
+        typescript::Installer::new("testing", dir.path()).encoding(Encoding::Bincode);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();

@@ -414,7 +414,7 @@ pub trait BuildPluginsFor<L> {
     ///
     /// The list is derived from the encoding currently stored in the config.
     /// Callers that need to extend or replace the defaults can call
-    /// [`Lang::with_plugin`] on the resulting language tag.
+    /// `Lang::with_plugin` on the resulting language tag.
     fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<L>>>;
 }
 

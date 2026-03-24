@@ -3,7 +3,8 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, indent::IndentedWriter, java::emitter::JavaEmitter,
+        CodeGenerator, CodeGeneratorConfig, Encoding, indent::IndentedWriter,
+        java::emitter::JavaEmitter,
     },
     reflection::format::ContainerFormat,
 };
@@ -16,6 +17,8 @@ use crate::{
 pub struct JavaCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Which serialization encoding to generate code for.
+    pub(crate) encoding: Encoding,
     /// Mapping from external type names to fully-qualified class names (e.g. "`MyClass`" -> "`com.my_org.my_package.MyClass`").
     /// Derived from `config.external_definitions`.
     pub(crate) external_qualified_names: HashMap<String, String>,
@@ -51,7 +54,7 @@ impl<'a> CodeGenerator<'a> for JavaCodeGenerator<'a> {
             emitter.output_container(&name.name, format)?;
         }
 
-        if self.config.has_encoding() {
+        if !self.encoding.is_none() {
             emitter.output_trait_helpers(registry)?;
         }
 
@@ -83,8 +86,16 @@ impl<'a> JavaCodeGenerator<'a> {
         }
         Self {
             config,
+            encoding: Encoding::None,
             external_qualified_names,
         }
+    }
+
+    /// Set the encoding, returning the modified generator.
+    #[must_use]
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Output class definitions for ` registry` in separate source files.
@@ -112,7 +123,7 @@ impl<'a> JavaCodeGenerator<'a> {
             self.write_container_class(&dir_path, current_namespace.clone(), &name.name, format)?;
         }
 
-        if self.config.has_encoding() {
+        if !self.encoding.is_none() {
             self.write_helper_class(&dir_path, current_namespace, registry)?;
         }
 

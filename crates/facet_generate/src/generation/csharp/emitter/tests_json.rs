@@ -16,8 +16,7 @@ use std::sync::Arc;
 use facet::Facet;
 
 use super::*;
-use crate as fg;
-use crate::emit;
+use crate::{self as fg, emit, generation::Encoding};
 
 #[test]
 fn unit_struct() {

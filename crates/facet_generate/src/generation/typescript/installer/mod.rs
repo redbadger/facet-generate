@@ -107,10 +107,20 @@ impl Installer {
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
-        let mut config =
-            CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
-        let lang = TypeScript::new(&config, registry);
+        let lang = {
+            let base = TypeScript::new(registry);
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
+                    crate::generation::bincode::BincodePlugin,
+                )),
+                Encoding::Json => {
+                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+                }
+                Encoding::None => base,
+            }
+        };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
             let mut written: BTreeSet<String> = BTreeSet::new();
@@ -129,7 +139,7 @@ impl Installer {
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m.config().clone().with_encoding(self.encoding);
+            let config = m.config().clone();
             self.install_module(&config, &module_registry)?;
         }
 
@@ -150,13 +160,13 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Json);
-        let lang = TypeScript::new(&config, &Default::default());
+        let lang = TypeScript::new(&BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin));
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
-                    std::fs::create_dir_all(parent.to_path_buf())?;
+                    std::fs::create_dir_all(parent)?;
                 }
                 std::fs::write(&dest, &file.contents)?;
             }
@@ -173,8 +183,9 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
-        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Bincode);
-        let lang = TypeScript::new(&config, &Default::default());
+        let lang = TypeScript::new(&BTreeMap::default()).with_plugin(std::sync::Arc::new(
+            crate::generation::bincode::BincodePlugin,
+        ));
         for plugin in lang.plugins() {
             for file in plugin
                 .runtime_files()
@@ -183,7 +194,7 @@ impl Installer {
             {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
-                    std::fs::create_dir_all(parent.to_path_buf())?;
+                    std::fs::create_dir_all(parent)?;
                 }
                 std::fs::write(&dest, &file.contents)?;
             }
@@ -273,7 +284,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = TypeScriptCodeGenerator::new(&updated_config);
+        let generator = TypeScriptCodeGenerator::new(&updated_config).with_encoding(self.encoding);
         generator.output(&mut file, registry)?;
 
         Ok(())

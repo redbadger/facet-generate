@@ -66,10 +66,11 @@ fn manifest_with_serde_as_target() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer = Installer::new(package_name, install_dir.path());
+    let mut installer =
+        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -115,16 +116,17 @@ fn manifest_with_serde_as_a_remote_dependency() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Url("https://github.com/serde-rs/serde".to_string()),
             module_name: None,
             version: Some("1.0.137".to_string()),
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -170,16 +172,17 @@ fn manifest_with_serde_as_a_local_dependency() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "serde".to_string(),
             location: PackageLocation::Path("../Serde".to_string()),
             module_name: None,
             version: None,
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -228,10 +231,11 @@ fn manifest_with_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(package_name, install_dir.path());
+    let mut installer =
+        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -279,10 +283,11 @@ fn manifest_with_disjoint_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer = Installer::new(package_name, install_dir.path());
+    let mut installer =
+        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -375,18 +380,19 @@ fn manifest_with_namespaces_and_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "another_package".to_string(),
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
             ),
             module_name: None,
             version: Some("1.0".to_string()),
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -437,18 +443,19 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "another_namespace".to_string(),
             location: PackageLocation::Url(
                 "https://github.com/example/another_package".to_string(),
             ),
             module_name: None,
             version: Some("1.0".to_string()),
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -507,16 +514,17 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
     let package_name = "App";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "api".to_string(),
             location: PackageLocation::Path("../Api".to_string()),
             module_name: None,
             version: None,
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 
@@ -577,16 +585,17 @@ fn external_dependency_references_local_dependency() {
     let package_name = "App";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).external_packages(&[ExternalPackage {
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
             for_namespace: "external_dependency".to_string(),
             location: PackageLocation::Path("../ExternalDependency".to_string()),
             module_name: None,
             version: None,
-        }]);
+        }])
+        .encoding(Encoding::Bincode);
 
     for (module, registry) in split(package_name, &registry) {
-        let config = module.config().clone().with_encoding(Encoding::Bincode);
+        let config = module.config().clone();
         installer.install_module(&config, &registry).unwrap();
     }
 

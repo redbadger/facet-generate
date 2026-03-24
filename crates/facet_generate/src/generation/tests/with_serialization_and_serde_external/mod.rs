@@ -49,28 +49,8 @@ fn test() {
         match target {
             TargetLanguage::Java => {
                 let package_name = "com.example";
-                let mut installer =
-                    java::Installer::new(package_name, tmp_path).external_packages(&[
-                        ExternalPackage {
-                            for_namespace: "serde".to_string(),
-                            location: PackageLocation::Path("com.novi.serde".to_string()),
-                            module_name: None,
-                            version: None,
-                        },
-                    ]);
-                installer.install_serde_runtime().unwrap();
-                for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .config()
-                        .clone()
-                        .with_parent(package_name)
-                        .with_encoding(Encoding::Bincode);
-                    installer.install_module(&config, registry).unwrap();
-                }
-            }
-            TargetLanguage::Kotlin => {
-                let package_name = "com.example";
-                let mut installer = kotlin::Installer::new(package_name, tmp_path)
+                let mut installer = java::Installer::new(package_name, tmp_path)
+                    .encoding(Encoding::Bincode)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("com.novi.serde".to_string()),
@@ -79,17 +59,30 @@ fn test() {
                     }]);
                 installer.install_serde_runtime().unwrap();
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module
-                        .config()
-                        .clone()
-                        .with_parent(package_name)
-                        .with_encoding(Encoding::Bincode);
+                    let config = module.config().clone().with_parent(package_name);
+                    installer.install_module(&config, registry).unwrap();
+                }
+            }
+            TargetLanguage::Kotlin => {
+                let package_name = "com.example";
+                let mut installer = kotlin::Installer::new(package_name, tmp_path)
+                    .encoding(Encoding::Bincode)
+                    .external_packages(&[ExternalPackage {
+                        for_namespace: "serde".to_string(),
+                        location: PackageLocation::Path("com.novi.serde".to_string()),
+                        module_name: None,
+                        version: None,
+                    }]);
+                installer.install_serde_runtime().unwrap();
+                for (module, registry) in &module::split(package_name, &registry) {
+                    let config = module.config().clone().with_parent(package_name);
                     installer.install_module(&config, registry).unwrap();
                 }
             }
             TargetLanguage::Swift => {
                 let package_name = "Example";
                 let mut installer = Installer::new(package_name, tmp_path.join(package_name))
+                    .encoding(Encoding::Bincode)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../Serde".to_string()),
@@ -97,7 +90,7 @@ fn test() {
                         version: None,
                     }]);
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    let config = module.config().clone();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();
@@ -111,6 +104,7 @@ fn test() {
                 let package_name = "example";
                 let mut installer =
                     typescript::Installer::new(package_name, tmp_path.join(package_name))
+                        .encoding(Encoding::Bincode)
                         .external_packages(&[ExternalPackage {
                             for_namespace: "serde".to_string(),
                             location: PackageLocation::Path("../serde".to_string()),
@@ -119,7 +113,7 @@ fn test() {
                         }]);
 
                 for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_encoding(Encoding::Bincode);
+                    let config = module.config().clone();
                     installer.install_module(&config, registry).unwrap();
                 }
                 installer.install_manifest(package_name).unwrap();

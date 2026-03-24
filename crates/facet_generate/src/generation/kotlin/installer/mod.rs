@@ -19,7 +19,7 @@
 //!    encoding, or external package references), and JAR manifest metadata.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     io::Write as _,
     path::{Path, PathBuf},
 };
@@ -98,10 +98,20 @@ impl Installer {
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
-        let mut config =
-            CodeGeneratorConfig::new(self.package_name.clone()).with_encoding(self.encoding);
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
-        let lang = Kotlin::new(&config, registry);
+        let lang = {
+            let base = Kotlin::new(&config, registry);
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
+                    crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(&config),
+                )),
+                Encoding::Json => {
+                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+                }
+                Encoding::None => base,
+            }
+        };
 
         if !self.external_packages.contains_key(SERDE_NAMESPACE) {
             let mut written: BTreeSet<String> = BTreeSet::new();
@@ -120,11 +130,7 @@ impl Installer {
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m
-                .config()
-                .clone()
-                .with_parent(&self.package_name)
-                .with_encoding(self.encoding);
+            let config = m.config().clone().with_parent(&self.package_name);
             self.install_module(&config, &module_registry)?;
         }
 
@@ -137,7 +143,7 @@ impl Installer {
 
     /// Installs the serde Kotlin runtime sources into the output directory.
     ///
-    /// Delegates to [`JsonPlugin::runtime_files`] which embeds the serde
+    /// Delegates to `JsonPlugin::runtime_files` which embeds the serde
     /// sources via `include_dir!`.  This method is provided for callers that
     /// need fine-grained control; most callers should prefer [`generate`](Self::generate).
     ///
@@ -145,8 +151,9 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Json);
-        let lang = Kotlin::new(&config, &Default::default());
+        let config = CodeGeneratorConfig::new(String::new());
+        let lang = Kotlin::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin));
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
                 let dest = self.install_dir.join(&file.relative_path);
@@ -161,7 +168,7 @@ impl Installer {
 
     /// Installs the bincode Kotlin runtime sources into the output directory.
     ///
-    /// Delegates to [`KotlinBincodePlugin::runtime_files`], writing only the
+    /// Delegates to `KotlinBincodePlugin::runtime_files`, writing only the
     /// `com/novi/bincode/` files.  Most callers should prefer
     /// [`generate`](Self::generate).
     ///
@@ -169,8 +176,10 @@ impl Installer {
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
-        let config = CodeGeneratorConfig::new(String::new()).with_encoding(Encoding::Bincode);
-        let lang = Kotlin::new(&config, &Default::default());
+        let config = CodeGeneratorConfig::new(String::new());
+        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(std::sync::Arc::new(
+            crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(&config),
+        ));
         for plugin in lang.plugins() {
             for file in plugin
                 .runtime_files()
@@ -199,9 +208,21 @@ impl Installer {
 
         // Collect manifest dependencies from active plugins. For example,
         // JsonPlugin contributes the kotlinx-serialization-json dependency.
-        let plugin_config =
-            CodeGeneratorConfig::new(package_name.to_string()).with_encoding(self.encoding);
-        let lang = Kotlin::new(&plugin_config, &Default::default());
+        let plugin_config = CodeGeneratorConfig::new(package_name.to_string());
+        let lang = {
+            let base = Kotlin::new(&plugin_config, &BTreeMap::default());
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(std::sync::Arc::new(
+                    crate::generation::bincode::kotlin::KotlinBincodePlugin::from_config(
+                        &plugin_config,
+                    ),
+                )),
+                Encoding::Json => {
+                    base.with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin))
+                }
+                Encoding::None => base,
+            }
+        };
         let mut dependencies: Vec<String> = lang
             .plugins()
             .iter()
@@ -316,7 +337,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = KotlinCodeGenerator::new(&updated_config);
+        let generator = KotlinCodeGenerator::new(&updated_config).with_encoding(self.encoding);
         generator.output(&mut file, registry)?;
 
         Ok(())

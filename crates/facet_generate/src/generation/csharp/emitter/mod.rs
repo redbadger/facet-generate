@@ -51,10 +51,10 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use std::collections::BTreeSet;
-use std::io::Result;
-use std::io::Write;
-use std::sync::Arc;
+use std::{
+    io::{Result, Write},
+    sync::Arc,
+};
 
 use crate::Registry;
 
@@ -62,19 +62,17 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::csharp::CSharpBincodePlugin,
+        CodeGeneratorConfig, Container, Emitter,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
-        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
+        plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
     },
 };
 
-/// Language tag for C#, carrying the active [`Encoding`] and a plugin list
+/// Language tag for C#, carrying the active `Encoding` and a plugin list
 /// built from it.
 ///
 /// Passed to every [`Emitter`](super::super::Emitter) implementation.
@@ -87,17 +85,14 @@ pub struct CSharp {
 }
 
 impl CSharp {
-    /// Create a [`CSharp`] language tag with the default plugins derived from
-    /// `config.encoding`.
+    /// Create a [`CSharp`] language tag with no plugins.
     ///
-    /// `config` must have been passed through
-    /// [`CodeGeneratorConfig::update_from`] before calling this, so that
-    /// [`CodeGeneratorConfig::unit_variant_enums`] is populated.
+    /// Use [`with_plugin`](Self::with_plugin) to add plugins, or use the
+    /// code generator's `with_encoding` builder to get the standard
+    /// encoding-derived plugins automatically.
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        Self {
-            plugins: config.build_plugins_for(),
-        }
+    pub fn new(_config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        Self { plugins: vec![] }
     }
 
     /// Append a plugin to this language tag's plugin list.
@@ -117,18 +112,6 @@ impl CSharp {
     }
 }
 
-impl BuildPluginsFor<CSharp> for CodeGeneratorConfig {
-    fn build_plugins_for(&self) -> Vec<Arc<dyn EmitterPlugin<CSharp>>> {
-        match self.encoding {
-            Encoding::Bincode => vec![Arc::new(CSharpBincodePlugin {
-                c_style_enums: self.unit_variant_enums.clone(),
-            })],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        }
-    }
-}
-
 #[cfg(test)]
 impl crate::generation::plugin::FromEncoding for CSharp {
     fn from_encoding(
@@ -136,6 +119,8 @@ impl crate::generation::plugin::FromEncoding for CSharp {
         config: &CodeGeneratorConfig,
         _registry: &crate::Registry,
     ) -> Self {
+        use crate::generation::{bincode::csharp::CSharpBincodePlugin, json::JsonPlugin};
+
         let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
             crate::generation::Encoding::Bincode => vec![Arc::new(CSharpBincodePlugin {
                 c_style_enums: config.unit_variant_enums.clone(),
@@ -216,11 +201,10 @@ impl Emitter<CSharp> for Container<'_> {
 /// `{Enum}Bincode` helper class instead of instance methods.
 ///
 /// We collect bare type names (`String`) rather than full
-/// [`QualifiedTypeName`]s because [`update_qualified_names`] rewrites the
+/// [`QualifiedTypeName`]s because `update_qualified_names` rewrites the
 /// namespace on `Format::TypeName` references without touching registry keys.
 /// Within a single module the bare name is unambiguous (types are grouped by
-/// namespace via [`module::split`]).
-
+/// namespace via `module::split`).
 impl Emitter<CSharp> for Named<Format> {
     /// Write a field declaration without plugin annotations.
     ///

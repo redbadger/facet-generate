@@ -1,5 +1,5 @@
 //! Internal bincode plugin — provides bincode-specific imports and module
-//! helpers through the [`EmitterPlugin`] trait.
+//! helpers through the `EmitterPlugin` trait.
 //!
 //! This module is part of the ongoing effort to extract all encoding-specific
 //! code-generation into separate plugin crates. For now it lives inside the
@@ -16,12 +16,12 @@
 //!
 //! # Language-specific variants
 //!
-//! - **Kotlin** — [`kotlin::KotlinBincodePlugin`] carries the resolved JVM
+//! - **Kotlin** — `kotlin::KotlinBincodePlugin` carries the resolved JVM
 //!   package names (`serde_package`, `bincode_package`) needed for import
 //!   generation.
-//! - **Swift**, **TypeScript** — use [`BincodePlugin`] directly (no
+//! - **Swift**, **TypeScript** — use `BincodePlugin` directly (no
 //!   language-specific fields required).
-//! - **C#** — [`csharp::CSharpBincodePlugin`] carries the precomputed set of
+//! - **C#** — `csharp::CSharpBincodePlugin` carries the precomputed set of
 //!   C-style enum names needed for correct serialization dispatch.
 
 #[cfg(feature = "kotlin")]

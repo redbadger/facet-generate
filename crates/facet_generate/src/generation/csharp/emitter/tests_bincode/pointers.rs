@@ -11,6 +11,7 @@ use facet::Facet;
 
 use super::super::*;
 use crate::emit;
+use crate::generation::Encoding;
 
 #[test]
 fn struct_with_box_field() {

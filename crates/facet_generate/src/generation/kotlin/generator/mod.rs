@@ -3,22 +3,28 @@
 //! [`KotlinCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single Kotlin source file from a [`Registry`].
 
+use std::{
+    io::{Result, Write},
+    sync::Arc,
+};
+
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, config::PackageLocation,
-        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
+        bincode::kotlin::KotlinBincodePlugin, config::PackageLocation, indent::IndentedWriter,
+        json::JsonPlugin, kotlin::emitter::Kotlin, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
-use std::io::{Result, Write};
 
 /// Kotlin code generator — holds a reference to the shared
 /// [`CodeGeneratorConfig`] and implements [`CodeGenerator`].
 pub struct KotlinCodeGenerator<'a> {
-    /// Language-independent configuration (encoding, module name, external
-    /// packages, etc.).
+    /// Language-independent configuration (module name, external packages, etc.).
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Which serialization encoding to generate code for.
+    pub(crate) encoding: Encoding,
 }
 
 impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
@@ -36,10 +42,28 @@ impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
 }
 
 impl<'a> KotlinCodeGenerator<'a> {
-    /// Create a Kotlin code generator for the given config
+    /// Create a Kotlin code generator for the given config with no encoding
+    /// (plain type declarations only, no serialize/deserialize methods).
+    ///
+    /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
     pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            encoding: Encoding::None,
+        }
+    }
+
+    /// Set the encoding, returning the modified generator.
+    ///
+    /// This controls which plugins are activated when [`output`](Self::output)
+    /// is called — `Bincode` installs the Kotlin bincode plugin, `Json`
+    /// installs the JSON/kotlinx.serialization plugin, `None` produces plain
+    /// types.
+    #[must_use]
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Produce a complete Kotlin source file for the given `registry`.
@@ -53,7 +77,16 @@ impl<'a> KotlinCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Kotlin::new(&config, registry);
+        let lang = {
+            let base = Kotlin::new(&config, registry);
+            match self.encoding {
+                Encoding::Bincode => {
+                    base.with_plugin(Arc::new(KotlinBincodePlugin::from_config(&config)))
+                }
+                Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
+                Encoding::None => base,
+            }
+        };
 
         Module::new(&config).write(w, &lang)?;
 

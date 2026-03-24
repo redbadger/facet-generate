@@ -14,8 +14,8 @@ fn test_java_bincode_runtime_on_simple_data() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    let generator = java::JavaCodeGenerator::new(&config);
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    let generator = java::JavaCodeGenerator::new(&config).with_encoding(Encoding::Bincode);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
@@ -114,8 +114,8 @@ fn test_java_bincode_runtime_on_supported_types() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    let generator = java::JavaCodeGenerator::new(&config);
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    let generator = java::JavaCodeGenerator::new(&config).with_encoding(Encoding::Bincode);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();

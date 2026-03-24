@@ -4,7 +4,7 @@
 pub mod common;
 
 use common::{Choice, Test};
-use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
+use facet_generate::generation::{CodeGeneratorConfig, Encoding, typescript};
 use std::{fs::File, io::Write, process::Command};
 use tempfile::tempdir;
 
@@ -30,8 +30,9 @@ import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
     )
     .unwrap();
 
-    let config = CodeGeneratorConfig::new("main".to_string()).with_encoding(Encoding::Bincode);
-    let generator = typescript::TypeScriptCodeGenerator::new(&config);
+    let config = CodeGeneratorConfig::new("main".to_string());
+    let generator =
+        typescript::TypeScriptCodeGenerator::new(&config).with_encoding(Encoding::Bincode);
     generator.output(&mut source, &registry).unwrap();
 
     let reference = bincode::serialize(&Test {

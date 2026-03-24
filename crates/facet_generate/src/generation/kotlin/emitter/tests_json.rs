@@ -16,7 +16,7 @@ use std::{
     sync::Arc,
 };
 
-use crate as fg;
+use crate::{self as fg, generation::Encoding};
 use facet::Facet;
 
 use super::*;

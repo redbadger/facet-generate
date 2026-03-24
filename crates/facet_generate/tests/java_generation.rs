@@ -11,11 +11,12 @@ use tempfile::{TempDir, tempdir};
 
 fn test_that_java_code_compiles_with_config(
     config: &CodeGeneratorConfig,
+    encoding: Encoding,
 ) -> (TempDir, std::path::PathBuf) {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
 
-    let generator = java::JavaCodeGenerator::new(config);
+    let generator = java::JavaCodeGenerator::new(config).with_encoding(encoding);
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
         .unwrap();
@@ -41,19 +42,19 @@ fn test_that_java_code_compiles_with_config(
 #[test]
 fn test_that_java_code_compiles() {
     let config = CodeGeneratorConfig::new("testing".to_string());
-    test_that_java_code_compiles_with_config(&config);
+    test_that_java_code_compiles_with_config(&config, Encoding::None);
 }
 
 #[test]
 fn test_that_java_code_compiles_without_serialization() {
     let config = CodeGeneratorConfig::new("testing".to_string());
-    test_that_java_code_compiles_with_config(&config);
+    test_that_java_code_compiles_with_config(&config, Encoding::None);
 }
 
 #[test]
 fn test_that_java_code_compiles_with_bincode() {
-    let config = CodeGeneratorConfig::new("testing".to_string()).with_encoding(Encoding::Bincode);
-    test_that_java_code_compiles_with_config(&config);
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    test_that_java_code_compiles_with_config(&config, Encoding::Bincode);
 }
 
 #[test]
@@ -66,7 +67,7 @@ fn test_that_java_code_compiles_with_comments() {
     .collect();
     let config = CodeGeneratorConfig::new("testing".to_string()).with_comments(comments);
 
-    let (_dir, path) = test_that_java_code_compiles_with_config(&config);
+    let (_dir, path) = test_that_java_code_compiles_with_config(&config, Encoding::None);
 
     // Comment was correctly generated.
     let content = std::fs::read_to_string(path.join("SerdeData.java")).unwrap();
@@ -88,10 +89,9 @@ fn test_java_code_with_external_definitions() {
     // (wrongly) Declare TraitHelpers as external.
     let mut definitions = BTreeMap::new();
     definitions.insert("foo".to_string(), vec!["TraitHelpers".to_string()]);
-    let config = CodeGeneratorConfig::new("testing".to_string())
-        .with_external_definitions(definitions)
-        .with_encoding(Encoding::Bincode);
-    let generator = java::JavaCodeGenerator::new(&config);
+    let config =
+        CodeGeneratorConfig::new("testing".to_string()).with_external_definitions(definitions);
+    let generator = java::JavaCodeGenerator::new(&config).with_encoding(Encoding::Bincode);
 
     generator
         .write_source_files(dir.path().to_path_buf(), &registry)
@@ -112,7 +112,7 @@ fn test_that_java_code_compiles_with_custom_code() {
     .collect();
     let config = CodeGeneratorConfig::new("testing".to_string()).with_comments(comments);
 
-    let (_dir, path) = test_that_java_code_compiles_with_config(&config);
+    let (_dir, path) = test_that_java_code_compiles_with_config(&config, Encoding::None);
 
     // Comment was correctly generated.
     let content = std::fs::read_to_string(path.join("SerdeData.java")).unwrap();

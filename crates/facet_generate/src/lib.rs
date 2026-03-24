@@ -218,7 +218,7 @@ macro_rules! emit {
             use $crate::generation::plugin::FromEncoding as _;
             use std::io::Write as _;
             let mut out = Vec::new();
-            let mut cfg = CodeGeneratorConfig::new("test".to_string()).with_encoding($encoding);
+            let mut cfg = CodeGeneratorConfig::new("test".to_string());
             let mut w = IndentedWriter::new(&mut out, cfg.indent);
             let registry = $crate::reflect!($($ty),*)?;
             cfg.update_from(&registry);
@@ -247,10 +247,10 @@ macro_rules! emit_java {
         || -> anyhow::Result<String> {
             use $crate::generation::{Encoding, indent::IndentedWriter};
             let mut out = Vec::new();
-            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
-                .with_encoding($encoding);
+            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string());
             let w = IndentedWriter::new(&mut out, config.indent);
-            let generator = $crate::generation::java::JavaCodeGenerator::new(&config);
+            let generator = $crate::generation::java::JavaCodeGenerator::new(&config)
+                .with_encoding($encoding);
             let mut emitter = $crate::generation::java::emitter::JavaEmitter {
                 out: w,
                 generator: &generator,

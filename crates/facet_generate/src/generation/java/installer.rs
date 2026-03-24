@@ -89,11 +89,7 @@ impl Installer {
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m
-                .config()
-                .clone()
-                .with_parent(&self.package_name)
-                .with_encoding(self.encoding);
+            let config = m.config().clone().with_parent(&self.package_name);
             self.install_module(&config, &module_registry)?;
         }
 
@@ -158,7 +154,7 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = JavaCodeGenerator::new(&updated_config);
+        let generator = JavaCodeGenerator::new(&updated_config).with_encoding(self.encoding);
         generator.write_source_files(self.install_dir.clone(), registry)?;
         Ok(())
     }

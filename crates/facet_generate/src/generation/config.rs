@@ -51,7 +51,6 @@ use crate::{
 )]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
-    pub encoding: Encoding,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
@@ -188,10 +187,9 @@ pub trait SourceInstaller {
 impl CodeGeneratorConfig {
     /// Default config for the given module name.
     #[must_use]
-    pub fn new(module_name: String) -> Self {
+    pub const fn new(module_name: String) -> Self {
         Self {
             module_name,
-            encoding: Encoding::default(),
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
@@ -221,23 +219,11 @@ impl CodeGeneratorConfig {
         self
     }
 
-    /// Which encoding to use.
-    #[must_use]
-    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
     /// Which indentation style to use when writing generated source code.
     #[must_use]
     pub const fn with_indent(mut self, indent: IndentConfig) -> Self {
         self.indent = indent;
         self
-    }
-
-    #[must_use]
-    pub fn has_encoding(&self) -> bool {
-        !self.encoding.is_none()
     }
 
     /// Container names provided by other modules.

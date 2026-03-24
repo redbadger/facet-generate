@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use facet::Facet;
 
 use super::super::*;
-use crate::emit;
+use crate::{emit, generation::Encoding};
 
 #[test]
 fn struct_with_vec_field() {

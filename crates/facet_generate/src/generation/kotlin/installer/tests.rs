@@ -10,7 +10,7 @@
 //! - External path dependencies: local file-system dependencies via
 //!   `files("…")`.
 
-use crate::generation::{ExternalPackage, PackageLocation, kotlin::Installer};
+use crate::generation::{Encoding, ExternalPackage, PackageLocation, kotlin::Installer};
 
 #[test]
 fn test_new_installer() {
@@ -38,7 +38,6 @@ fn test_make_manifest_with_external_packages() {
         version: Some("2.0.0".to_string()),
     }];
 
-    use crate::generation::Encoding;
     let installer = Installer::new("test-package", "/tmp")
         .encoding(Encoding::Json)
         .external_packages(&external_packages);

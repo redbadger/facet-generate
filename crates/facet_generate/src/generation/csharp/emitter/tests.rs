@@ -27,6 +27,7 @@ use std::sync::Arc;
 use facet::Facet;
 
 use super::*;
+use crate::generation::Encoding;
 use crate::{self as fg, emit};
 
 #[test]

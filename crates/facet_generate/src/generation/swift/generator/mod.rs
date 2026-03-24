@@ -8,11 +8,13 @@ use std::{
     io::{Result, Write},
 };
 
+use std::sync::Arc;
+
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, swift::emitter::Swift,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
+        indent::IndentedWriter, json::JsonPlugin, module::Module, swift::emitter::Swift,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
@@ -26,6 +28,8 @@ use crate::{
 pub struct SwiftCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Which serialization encoding to generate code for.
+    pub(crate) encoding: Encoding,
 }
 
 impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
@@ -43,10 +47,22 @@ impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
 }
 
 impl<'a> SwiftCodeGenerator<'a> {
-    /// Create a Swift code generator for the given config.
+    /// Create a Swift code generator with no encoding (plain types only).
+    ///
+    /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
     pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            encoding: Encoding::None,
+        }
+    }
+
+    /// Set the encoding, returning the modified generator.
+    #[must_use]
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Produce a complete Swift source file for `registry`.
@@ -60,7 +76,14 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::new(&config, registry);
+        let lang = {
+            let base = Swift::new(registry);
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
+                Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
+                Encoding::None => base,
+            }
+        };
 
         Module::new(&config).write(w, &lang)?;
 

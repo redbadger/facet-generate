@@ -7,11 +7,14 @@
 
 use std::io::{Result, Write};
 
+use std::sync::Arc;
+
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
-        indent::IndentedWriter, module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
+        bincode::csharp::CSharpBincodePlugin, csharp::emitter::CSharp, indent::IndentedWriter,
+        json::JsonPlugin, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -23,6 +26,8 @@ use crate::{
 pub struct CSharpCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Which serialization encoding to generate code for.
+    pub(crate) encoding: Encoding,
 }
 
 impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
@@ -36,10 +41,26 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
 }
 
 impl<'a> CSharpCodeGenerator<'a> {
-    /// Create a C# code generator for the given config.
+    /// Create a C# code generator with no encoding (plain types only).
+    ///
+    /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
     #[must_use]
     pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            encoding: Encoding::None,
+        }
+    }
+
+    /// Set the encoding, returning the modified generator.
+    ///
+    /// The C# Bincode plugin reads `unit_variant_enums` from the config after
+    /// [`update_from`](CodeGeneratorConfig::update_from) runs, so it is
+    /// constructed lazily inside [`output`](Self::output).
+    #[must_use]
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
+        self.encoding = encoding;
+        self
     }
 
     /// Output type definitions for `registry`.
@@ -54,7 +75,16 @@ impl<'a> CSharpCodeGenerator<'a> {
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = CSharp::new(&config, &updated_registry);
+        let lang = {
+            let base = CSharp::new(&config, &updated_registry);
+            match self.encoding {
+                Encoding::Bincode => base.with_plugin(Arc::new(CSharpBincodePlugin {
+                    c_style_enums: config.unit_variant_enums.clone(),
+                })),
+                Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
+                Encoding::None => base,
+            }
+        };
 
         Module::new(&config).write(w, &lang)?;
 
