@@ -20,6 +20,9 @@ pub mod kotlin;
 #[cfg(feature = "swift")]
 pub mod swift;
 
+#[cfg(feature = "typescript")]
+pub mod typescript;
+
 use super::CodeGeneratorConfig;
 
 /// Bincode serialization plugin.

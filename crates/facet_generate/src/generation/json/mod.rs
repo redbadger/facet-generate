@@ -23,6 +23,9 @@ pub mod kotlin;
 #[cfg(feature = "swift")]
 pub mod swift;
 
+#[cfg(feature = "typescript")]
+pub mod typescript;
+
 /// JSON serialization plugin.
 ///
 /// When added to a language tag's plugin list, it provides the
