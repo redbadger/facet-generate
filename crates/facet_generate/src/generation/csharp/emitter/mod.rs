@@ -129,6 +129,24 @@ impl BuildPluginsFor<CSharp> for CodeGeneratorConfig {
     }
 }
 
+#[cfg(test)]
+impl crate::generation::plugin::FromEncoding for CSharp {
+    fn from_encoding(
+        encoding: crate::generation::Encoding,
+        config: &CodeGeneratorConfig,
+        _registry: &crate::Registry,
+    ) -> Self {
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
+            crate::generation::Encoding::Bincode => vec![Arc::new(CSharpBincodePlugin {
+                c_style_enums: config.unit_variant_enums.clone(),
+            })],
+            crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
+            crate::generation::Encoding::None => vec![],
+        };
+        Self { plugins }
+    }
+}
+
 impl Emitter<CSharp> for Module {
     fn write<W: Write>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();

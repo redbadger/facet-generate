@@ -419,6 +419,35 @@ pub trait BuildPluginsFor<L> {
 }
 
 // ---------------------------------------------------------------------------
+// FromEncoding: test-only shorthand for constructing a language tag
+// ---------------------------------------------------------------------------
+
+/// Test-only trait for building a language tag from the [`Encoding`]
+/// shorthand used in the [`emit!`] macro.
+///
+/// This is intentionally `#[cfg(test)]`-only. Production callers should
+/// specify plugins explicitly via [`Lang::with_plugin`].
+///
+/// Implementations live in each language's emitter module alongside the
+/// [`BuildPluginsFor`] impls, so they have access to all the plugin types
+/// they need.
+#[cfg(test)]
+pub trait FromEncoding: Sized {
+    /// Build a language tag with the standard plugins for `encoding`.
+    ///
+    /// `config` should already have been passed through
+    /// [`CodeGeneratorConfig::update_from`] so that derived fields such as
+    /// `unit_variant_enums` are populated.  `registry` is provided for
+    /// languages (e.g. Swift) that compute additional per-registry metadata
+    /// unrelated to plugins.
+    fn from_encoding(
+        encoding: crate::generation::Encoding,
+        config: &CodeGeneratorConfig,
+        registry: &crate::Registry,
+    ) -> Self;
+}
+
+// ---------------------------------------------------------------------------
 // Helpers for calling plugin lists
 // ---------------------------------------------------------------------------
 

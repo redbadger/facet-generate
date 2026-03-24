@@ -141,6 +141,24 @@ impl BuildPluginsFor<Kotlin> for CodeGeneratorConfig {
     }
 }
 
+#[cfg(test)]
+impl crate::generation::plugin::FromEncoding for Kotlin {
+    fn from_encoding(
+        encoding: crate::generation::Encoding,
+        config: &CodeGeneratorConfig,
+        _registry: &crate::Registry,
+    ) -> Self {
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
+            crate::generation::Encoding::Bincode => {
+                vec![Arc::new(KotlinBincodePlugin::from_config(config))]
+            }
+            crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
+            crate::generation::Encoding::None => vec![],
+        };
+        Self { plugins }
+    }
+}
+
 impl Emitter<Kotlin> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let CodeGeneratorConfig {

@@ -111,6 +111,22 @@ impl BuildPluginsFor<TypeScript> for CodeGeneratorConfig {
     }
 }
 
+#[cfg(test)]
+impl crate::generation::plugin::FromEncoding for TypeScript {
+    fn from_encoding(
+        encoding: crate::generation::Encoding,
+        _config: &CodeGeneratorConfig,
+        _registry: &crate::Registry,
+    ) -> Self {
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
+            crate::generation::Encoding::Bincode => vec![Arc::new(BincodePlugin)],
+            crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
+            crate::generation::Encoding::None => vec![],
+        };
+        Self { plugins }
+    }
+}
+
 impl Module {
     fn ts_serde_import_path(&self) -> String {
         self.config()

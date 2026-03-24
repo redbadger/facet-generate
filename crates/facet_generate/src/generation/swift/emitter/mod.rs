@@ -138,6 +138,27 @@ impl crate::generation::plugin::BuildPluginsFor<Swift> for CodeGeneratorConfig {
     }
 }
 
+#[cfg(test)]
+impl crate::generation::plugin::FromEncoding for Swift {
+    fn from_encoding(
+        encoding: crate::generation::Encoding,
+        config: &CodeGeneratorConfig,
+        registry: &crate::Registry,
+    ) -> Self {
+        use crate::generation::Encoding;
+        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
+            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
+            Encoding::Json => vec![Arc::new(JsonPlugin)],
+            Encoding::None => vec![],
+        };
+        Self {
+            hashable_types: compute_hashable_types(registry),
+            equatable_types: compute_equatable_types(registry),
+            plugins,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Hashability helpers
 // ---------------------------------------------------------------------------
