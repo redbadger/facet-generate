@@ -33,7 +33,7 @@ use indoc::writedoc;
 use crate::generation::{
     CodeGeneratorConfig, Feature,
     indent::{IndentWrite, Newlines, with_block},
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
     swift::Swift,
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
@@ -171,6 +171,22 @@ func deserializeTupleArray<T, D: Deserializer>(
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<Swift> for BincodePlugin {
+    /// Returns the Serde Swift runtime sources to be written into the output
+    /// directory. Swift's bincode runtime is bundled inside the Serde target
+    /// (see `runtime/swift/Sources/Serde/`), so there are no separate bincode
+    /// files to install.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        static SERDE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/swift/Sources/Serde");
+        SERDE
+            .files()
+            .map(|f| RuntimeFile {
+                relative_path: format!("Sources/Serde/{}", f.path().display()),
+                contents: f.contents().to_vec(),
+            })
+            .collect()
+    }
+
     fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec!["Serde".to_string()]
     }

@@ -18,7 +18,7 @@ use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
     kotlin::Kotlin,
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
@@ -735,6 +735,28 @@ fn write_sealed_interface_body<W: IndentWrite>(
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<Kotlin> for KotlinBincodePlugin {
+    /// Returns the serde and bincode Kotlin runtime sources to be written
+    /// into the output directory alongside the generated code.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        static SERDE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/kotlin/com/novi/serde");
+        static BINCODE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/kotlin/com/novi/bincode");
+
+        let mut files: Vec<RuntimeFile> = SERDE
+            .files()
+            .map(|f| RuntimeFile {
+                relative_path: format!("com/novi/serde/{}", f.path().display()),
+                contents: f.contents().to_vec(),
+            })
+            .collect();
+        files.extend(BINCODE.files().map(|f| RuntimeFile {
+            relative_path: format!("com/novi/bincode/{}", f.path().display()),
+            contents: f.contents().to_vec(),
+        }));
+        files
+    }
+
     /// Bincode / serde imports for a Kotlin module.
     ///
     /// Returns the base set of imports that every bincode-enabled module

@@ -53,12 +53,12 @@ use heck::ToUpperCamelCase;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, PackageLocation, SERDE_NAMESPACE,
+        CodeGeneratorConfig, Container, Emitter, Encoding, PackageLocation,
         bincode::BincodePlugin,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         json::JsonPlugin,
         module::Module,
-        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{BuildPluginsFor, EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
@@ -128,24 +128,6 @@ impl crate::generation::plugin::FromEncoding for TypeScript {
 }
 
 impl Module {
-    fn ts_serde_import_path(&self) -> String {
-        self.config()
-            .external_packages
-            .get(SERDE_NAMESPACE)
-            .map_or_else(
-                || "./serde".to_string(),
-                |path| match &path.location {
-                    PackageLocation::Path(_) => {
-                        let name = &path.for_namespace;
-                        path.module_name
-                            .as_ref()
-                            .map_or_else(|| name.clone(), |mod_name| format!("{name}/{mod_name}"))
-                    }
-                    PackageLocation::Url(_) => path.for_namespace.clone(),
-                },
-            )
-    }
-
     fn ts_namespace_import_path(&self, namespace: &str) -> String {
         self.config().external_packages.get(namespace).map_or_else(
             || format!("../{namespace}"),
@@ -170,12 +152,10 @@ impl Emitter<TypeScript> for Module {
             ..
         } = self.config();
 
-        if self.config().has_encoding() {
-            let import_path = self.ts_serde_import_path();
-            writeln!(
-                w,
-                r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
-            )?;
+        // Plugin imports (e.g. `import { Serializer, Deserializer }` from the
+        // bincode or json plugin). These replace the old `has_encoding()` check.
+        for import in collect_from_plugins(lang.plugins(), |p| p.imports(self.config())) {
+            writeln!(w, "{import}")?;
         }
 
         // Write namespace imports (e.g. `import * as Foo from "../foo";`)
