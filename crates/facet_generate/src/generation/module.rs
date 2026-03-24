@@ -10,8 +10,6 @@
 
 use std::{cmp::Ordering, collections::BTreeMap};
 
-use serde::Serialize;
-
 use crate::{
     Registry,
     generation::CodeGeneratorConfig,
@@ -23,17 +21,17 @@ use crate::{
 ///
 /// Equality, ordering, and hashing are based on the module name alone, so
 /// modules can be used as `BTreeMap` keys.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Module(CodeGeneratorConfig);
 
 impl Module {
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig) -> Self {
-        Module(config.clone())
+        Self(config.clone())
     }
 
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.0
     }
 }

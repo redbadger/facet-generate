@@ -3,7 +3,7 @@
 use facet::Facet;
 use serde::{Deserialize, Serialize};
 
-#[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 #[facet(tag = "type", content = "content", rename_all = "camelCase")]
 #[repr(C)]
 pub enum AnonymousStructWithRename {

@@ -3,9 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig,
-        indent::{IndentConfig, IndentedWriter},
-        java::emitter::JavaEmitter,
+        CodeGenerator, CodeGeneratorConfig, indent::IndentedWriter, java::emitter::JavaEmitter,
     },
     reflection::format::ContainerFormat,
 };
@@ -41,7 +39,7 @@ impl<'a> CodeGenerator<'a> for JavaCodeGenerator<'a> {
             .collect::<Vec<_>>();
 
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(writer, IndentConfig::Space(4)),
+            out: IndentedWriter::new(writer, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),
@@ -68,20 +66,16 @@ impl<'a> JavaCodeGenerator<'a> {
         let mut external_qualified_names = HashMap::new();
         for (namespace, names) in &config.external_definitions {
             // Get the external package for this namespace to determine the correct package location
-            let package_name =
-                if let Some(external_package) = config.external_packages.get(namespace) {
-                    // Use the external package location for the qualified name
-                    match &external_package.location {
-                        crate::generation::PackageLocation::Path(path) => path.clone(),
-                        crate::generation::PackageLocation::Url(_) => {
-                            // Fallback to using the current module name + namespace for URLs
-                            format!("{}.{}", config.module_name(), namespace)
-                        }
+            let package_name = config.external_packages.get(namespace).map_or_else(
+                || format!("{}.{}", config.module_name(), namespace),
+                |external_package| match &external_package.location {
+                    crate::generation::PackageLocation::Path(path) => path.clone(),
+                    crate::generation::PackageLocation::Url(_) => {
+                        // Fallback to using the current module name + namespace for URLs
+                        format!("{}.{}", config.module_name(), namespace)
                     }
-                } else {
-                    // Fallback to using the current module name + namespace if no external package is defined
-                    format!("{}.{}", config.module_name(), namespace)
-                };
+                },
+            );
 
             for name in names {
                 external_qualified_names.insert(name.clone(), format!("{package_name}.{name}"));
@@ -134,7 +128,7 @@ impl<'a> JavaCodeGenerator<'a> {
     ) -> std::io::Result<()> {
         let mut file = std::fs::File::create(dir_path.join(name.to_string() + ".java"))?;
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
+            out: IndentedWriter::new(&mut file, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),
@@ -152,7 +146,7 @@ impl<'a> JavaCodeGenerator<'a> {
     ) -> std::io::Result<()> {
         let mut file = std::fs::File::create(dir_path.join("TraitHelpers.java"))?;
         let mut emitter = JavaEmitter {
-            out: IndentedWriter::new(&mut file, IndentConfig::Space(4)),
+            out: IndentedWriter::new(&mut file, self.config.indent),
             generator: self,
             current_namespace,
             current_reserved_names: HashMap::new(),

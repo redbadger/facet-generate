@@ -76,7 +76,7 @@ impl Installer {
     /// runtimes (serde + encoding-specific) are installed automatically by
     /// [`generate`](Self::generate).
     #[must_use]
-    pub fn encoding(mut self, encoding: Encoding) -> Self {
+    pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
     }
@@ -106,7 +106,7 @@ impl Installer {
         // unless an external package provides them
         if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
             self.install_serde_runtime()?;
-            if let Encoding::Bincode = self.encoding {
+            if self.encoding == Encoding::Bincode {
                 self.install_bincode_runtime()?;
             }
         }
@@ -174,9 +174,8 @@ impl Installer {
                         },
                         external_package
                             .version
-                            .as_ref()
-                            .unwrap_or(&"*".to_string())
-                            .clone(),
+                            .clone()
+                            .unwrap_or_else(|| "*".to_string()),
                     ),
                 };
                 dependencies.insert(name, version);

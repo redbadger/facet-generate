@@ -2712,7 +2712,7 @@ fn rename_all_multiple_fields() {
 #[test]
 fn self_referencing_type() {
     #[derive(Facet)]
-    struct SimpleList(Option<Box<SimpleList>>);
+    struct SimpleList(Option<Box<Self>>);
 
     insta::assert_debug_snapshot!(reflect!(SimpleList).unwrap(), @r#"
     {
@@ -2742,7 +2742,7 @@ fn complex_self_referencing_type() {
     #[allow(clippy::vec_box)]
     struct Node {
         value: i32,
-        children: Option<Vec<Box<Node>>>,
+        children: Option<Vec<Box<Self>>>,
     }
 
     insta::assert_debug_snapshot!(reflect!(Node).unwrap(), @r#"
@@ -2789,14 +2789,14 @@ fn tree_struct_with_mutual_recursion() {
     #[derive(Facet)]
     struct Tree<T> {
         value: T,
-        children: Vec<Tree<T>>,
+        children: Vec<Self>,
     }
 
     #[derive(Facet)]
     #[repr(C)]
     #[allow(unused)]
     enum Test {
-        TreeWithMutualRecursion(Tree<Box<Test>>),
+        TreeWithMutualRecursion(Tree<Box<Self>>),
     }
 
     insta::assert_debug_snapshot!(reflect!(Test).unwrap(), @r#"
@@ -2876,7 +2876,7 @@ fn tree_enum_with_mutual_recursion() {
 
     #[derive(Facet)]
     struct Test {
-        tree_with_mutual_recursion: Tree<Box<Test>>,
+        tree_with_mutual_recursion: Tree<Box<Self>>,
     }
 
     insta::assert_debug_snapshot!(reflect!(Test).unwrap(), @r#"

@@ -3,19 +3,15 @@
 //! [`KotlinCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single Kotlin source file from a [`Registry`].
 
-use std::io::{Result, Write};
-
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        config::PackageLocation,
-        indent::{IndentConfig, IndentedWriter},
-        kotlin::emitter::Kotlin,
-        module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, config::PackageLocation,
+        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
+use std::io::{Result, Write};
 
 /// Kotlin code generator — holds a reference to the shared
 /// [`CodeGeneratorConfig`] and implements [`CodeGenerator`].
@@ -42,7 +38,7 @@ impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
 impl<'a> KotlinCodeGenerator<'a> {
     /// Create a Kotlin code generator for the given config
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
     }
 
@@ -52,12 +48,12 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///
     /// Returns an error if the underlying writer fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Kotlin::new(config.encoding);
+        let lang = Kotlin::new(&config, registry);
 
         Module::new(&config).write(w, &lang)?;
 
@@ -132,7 +128,7 @@ impl<'a> KotlinCodeGenerator<'a> {
                                 let current_leaf_namespace = config
                                     .module_name()
                                     .rsplit_once('.')
-                                    .map_or(config.module_name(), |(_, leaf)| leaf);
+                                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
 
                                 if config.external_definitions.contains_key(&namespace)
                                     && namespace != current_leaf_namespace

@@ -45,8 +45,8 @@ pub enum SwiftSerdeData {
         f2: SwiftTupleStruct,
         f3: SwiftStruct,
     },
-    ListWithMutualRecursion(SwiftList<Box<SwiftSerdeData>>),
-    TreeWithMutualRecursion(Tree<Box<SwiftSerdeData>>),
+    ListWithMutualRecursion(SwiftList<Box<Self>>),
+    TreeWithMutualRecursion(Tree<Box<Self>>),
     TupleArray([u32; 3]),
     UnitVector(Vec<()>),
     SimpleList(SwiftSimpleList),
@@ -73,7 +73,7 @@ pub struct SwiftPrimitiveTypes {
 }
 
 #[allow(dead_code, clippy::struct_field_names)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftOtherTypes {
     f_string: String,
     #[facet(fg::bytes)]
@@ -88,35 +88,35 @@ pub struct SwiftOtherTypes {
 }
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftUnitStruct;
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftNewTypeStruct(u64);
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftTupleStruct(u32, u64);
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftStruct {
     x: u32,
     y: u64,
 }
 
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[repr(C)]
 #[allow(dead_code)]
 pub enum SwiftList<T> {
     Empty,
-    Node(T, Box<SwiftList<T>>),
+    Node(T, Box<Self>),
 }
 
 #[allow(dead_code)]
-#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
-pub struct SwiftSimpleList(pub Option<Box<SwiftSimpleList>>);
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SwiftSimpleList(pub Option<Box<Self>>);
 
 /// Registry used for Swift compilation tests.
 ///
@@ -238,7 +238,9 @@ fn set_of_tuple_errors() {
     };
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(Encoding::Bincode);
+    let config = facet_generate::generation::CodeGeneratorConfig::new(String::new())
+        .with_encoding(Encoding::Bincode);
+    let lang = Swift::new(&config, &registry);
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
@@ -270,7 +272,9 @@ fn map_with_tuple_key_errors() {
     };
 
     let registry = reflect!(MyStruct).unwrap();
-    let lang = Swift::new(Encoding::Bincode);
+    let config = facet_generate::generation::CodeGeneratorConfig::new(String::new())
+        .with_encoding(Encoding::Bincode);
+    let lang = Swift::new(&config, &registry);
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {

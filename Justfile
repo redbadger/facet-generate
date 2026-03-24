@@ -36,6 +36,10 @@ check:
     cargo fmt --all -- --check
     cargo clippy --all-targets -- --no-deps '-Dclippy::pedantic' -Dwarnings
 
+check-nursery:
+    @echo '{{ style("command") }}check-nursery:{{ NORMAL }}'
+    cargo clippy --all-targets -- --no-deps '-Dclippy::nursery' -Dwarnings
+
 # local development: fix, check, build, test with snapshot review
 dev: fix check build test-review
 

@@ -65,7 +65,7 @@ fn create_test_registry_with_struct_field(
     };
 
     // Create a struct that references this type
-    let field_format = Format::TypeName(field_qualified_name.clone());
+    let field_format = Format::TypeName(field_qualified_name);
     let named_field = Named {
         name: "field".to_string(),
         doc: Doc::new(),

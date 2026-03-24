@@ -11,10 +11,8 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding,
-        indent::{IndentConfig, IndentedWriter},
-        module::Module,
-        swift::emitter::Swift,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
+        module::Module, swift::emitter::Swift,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
@@ -47,7 +45,7 @@ impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
 impl<'a> SwiftCodeGenerator<'a> {
     /// Create a Swift code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
     }
 
@@ -57,12 +55,12 @@ impl<'a> SwiftCodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::for_encoding(config.encoding, registry, &config);
+        let lang = Swift::new(&config, registry);
 
         Module::new(&config).write(w, &lang)?;
 
@@ -103,35 +101,6 @@ impl<'a> SwiftCodeGenerator<'a> {
     }
 }
 
-/// Extends [`Swift`] with the standard constructor that computes type sets
-/// from a registry.
-///
-/// This is the standard constructor whenever a registry is available. The
-/// precomputed `Swift::hashable_types` and `Swift::equatable_types` sets
-/// are derived here using a monotone fixed-point pass over the registry.
-///
-/// > **Future direction** — when the plugin branch is merged this method will
-/// > install `EmitterPlugin` implementations instead of precomputing sets, and
-/// > the `registry` parameter will be dropped in favor of per-container
-/// > registry access via `EmitContext`.
-impl Swift {
-    /// Create a [`Swift`] language tag with type sets computed from `registry`.
-    ///
-    /// Prefer this over [`Swift::new`] whenever a registry is available.
-    #[must_use]
-    pub fn for_encoding(
-        encoding: Encoding,
-        registry: &Registry,
-        _config: &CodeGeneratorConfig,
-    ) -> Self {
-        Self {
-            encoding,
-            hashable_types: compute_hashable_types(registry),
-            equatable_types: compute_equatable_types(registry),
-        }
-    }
-}
-
 /// Computes the set of type names (within this module) that can synthesize
 /// Swift `Hashable` conformance.
 ///
@@ -143,7 +112,7 @@ impl Swift {
 /// External types (not present in the registry) are assumed to be hashable.
 /// Mutually recursive types that form a cycle will conservatively not be
 /// added to the set.
-pub(crate) fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
+pub fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
     // Names of all types defined in this module.
     let local_names: BTreeSet<String> = registry
         .keys()
@@ -275,7 +244,7 @@ fn fmt_can_be_hashable(
 ///
 /// Mutually recursive or self-referential types that cannot resolve the
 /// cycle will conservatively not be added to the set.
-pub(crate) fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
+pub fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
     // Names of all types defined in this module.
     let local_names: BTreeSet<String> = registry
         .keys()

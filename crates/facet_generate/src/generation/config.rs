@@ -39,11 +39,12 @@ use thiserror::Error;
 
 use crate::{
     Registry,
+    generation::indent::IndentConfig,
     reflection::format::{Format, FormatHolder, Namespace},
 };
 
 /// Code generation options meant to be supported by all languages.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 #[expect(
     deprecated,
     reason = "CodeGeneratorConfig still contains the deprecated CustomCode field for backwards compatibility"
@@ -58,6 +59,12 @@ pub struct CodeGeneratorConfig {
     pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
+    /// The indentation style used when writing generated source code.
+    ///
+    /// Defaults to `IndentConfig::Space(4)`. Pass a custom value via
+    /// [`with_indent`](Self::with_indent) if a different style is required
+    /// (e.g. tabs, or a different space width).
+    pub indent: IndentConfig,
     /// Which primitive/leaf format types are used in the registry.
     /// Populated by `update_from`. Used by TypeScript to emit type aliases.
     pub used_format_types: BTreeSet<String>,
@@ -100,17 +107,17 @@ pub enum Feature {
 impl Encoding {
     #[must_use]
     pub fn is_none(self) -> bool {
-        self == Encoding::None
+        self == Self::None
     }
 
     #[must_use]
     pub fn is_json(self) -> bool {
-        self == Encoding::Json
+        self == Self::Json
     }
 
     #[must_use]
     pub fn is_bincode(self) -> bool {
-        self == Encoding::Bincode
+        self == Self::Bincode
     }
 }
 
@@ -195,6 +202,7 @@ impl CodeGeneratorConfig {
             features: BTreeSet::new(),
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
+            indent: IndentConfig::Space(4),
         }
     }
 
@@ -216,8 +224,15 @@ impl CodeGeneratorConfig {
 
     /// Which encoding to use.
     #[must_use]
-    pub fn with_encoding(mut self, encoding: Encoding) -> Self {
+    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
+        self
+    }
+
+    /// Which indentation style to use when writing generated source code.
+    #[must_use]
+    pub const fn with_indent(mut self, indent: IndentConfig) -> Self {
+        self.indent = indent;
         self
     }
 
@@ -257,7 +272,7 @@ impl CodeGeneratorConfig {
 
     /// Generate a package manifest file for the target language.
     #[must_use]
-    pub fn with_package_manifest(mut self, package_manifest: bool) -> Self {
+    pub const fn with_package_manifest(mut self, package_manifest: bool) -> Self {
         self.package_manifest = package_manifest;
         self
     }
@@ -352,11 +367,11 @@ impl CodeGeneratorConfig {
 
 impl Encoding {
     #[must_use]
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            Encoding::None => "none",
-            Encoding::Json => "json",
-            Encoding::Bincode => "bincode",
+            Self::None => "none",
+            Self::Json => "json",
+            Self::Bincode => "bincode",
         }
     }
 }
@@ -403,13 +418,13 @@ impl Config {
 
 impl ConfigBuilder {
     #[must_use]
-    pub fn encoding(&mut self, encoding: Encoding) -> &mut Self {
+    pub const fn encoding(&mut self, encoding: Encoding) -> &mut Self {
         self.encoding = Some(encoding);
         self
     }
 
     #[must_use]
-    pub fn add_extensions(&mut self) -> &mut Self {
+    pub const fn add_extensions(&mut self) -> &mut Self {
         self.add_extensions = Some(true);
         self
     }

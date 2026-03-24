@@ -10,10 +10,8 @@ use std::io::{Result, Write};
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        csharp::emitter::CSharp,
-        indent::{IndentConfig, IndentedWriter},
-        module::Module,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
+        indent::IndentedWriter, module::Module,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -40,7 +38,7 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
 impl<'a> CSharpCodeGenerator<'a> {
     /// Create a C# code generator for the given config.
     #[must_use]
-    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self { config }
     }
 
@@ -50,13 +48,13 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// Returns an error if writing to `out` fails.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, IndentConfig::Space(4));
+        let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = CSharp::for_encoding(config.encoding, &updated_registry, &config);
+        let lang = CSharp::new(&config, &updated_registry);
 
         Module::new(&config).write(w, &lang)?;
 
@@ -91,7 +89,7 @@ impl<'a> CSharpCodeGenerator<'a> {
                             let current_leaf_namespace = config
                                 .module_name()
                                 .rsplit_once('.')
-                                .map_or(config.module_name(), |(_, leaf)| leaf);
+                                .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
 
                             if namespace == current_leaf_namespace {
                                 *qualified_name =

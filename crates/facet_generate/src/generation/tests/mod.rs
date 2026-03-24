@@ -27,10 +27,10 @@ pub enum TargetLanguage {
 impl Display for TargetLanguage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            TargetLanguage::Java => write!(f, "Java"),
-            TargetLanguage::Kotlin => write!(f, "Kotlin"),
-            TargetLanguage::Swift => write!(f, "Swift"),
-            TargetLanguage::TypeScript => write!(f, "TypeScript"),
+            Self::Java => write!(f, "Java"),
+            Self::Kotlin => write!(f, "Kotlin"),
+            Self::Swift => write!(f, "Swift"),
+            Self::TypeScript => write!(f, "TypeScript"),
         }
     }
 }

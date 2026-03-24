@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum Error {
     #[error("problem reflecting type '{type_name:?}': {message}")]
     ReflectionError { type_name: String, message: String },

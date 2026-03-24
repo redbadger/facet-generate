@@ -53,7 +53,7 @@ impl Installer {
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
     pub fn new(package_name: &str, install_dir: impl AsRef<Path>) -> Self {
-        Installer {
+        Self {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
@@ -67,7 +67,7 @@ impl Installer {
     /// runtimes (serde + encoding-specific) are installed automatically by
     /// [`generate`](Self::generate).
     #[must_use]
-    pub fn encoding(mut self, encoding: Encoding) -> Self {
+    pub const fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self
     }
@@ -97,7 +97,7 @@ impl Installer {
         // unless an external package provides them
         if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
             self.install_serde_runtime()?;
-            if let Encoding::Bincode = self.encoding {
+            if self.encoding == Encoding::Bincode {
                 self.install_bincode_runtime()?;
             }
         }
@@ -253,7 +253,7 @@ impl SourceInstaller for Installer {
             .module_name()
             .split('.')
             .next_back()
-            .unwrap_or(config.module_name())
+            .unwrap_or_else(|| config.module_name())
             .to_pascal_case();
 
         let source_path = module_dir.join(format!("{file_name}.kt"));

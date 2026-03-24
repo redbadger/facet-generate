@@ -55,8 +55,8 @@ pub enum Namespace {
 impl fmt::Display for Namespace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Namespace::Root => write!(f, "ROOT"),
-            Namespace::Named(name) => write!(f, "{name}"),
+            Self::Root => write!(f, "ROOT"),
+            Self::Named(name) => write!(f, "{name}"),
         }
     }
 }
@@ -93,7 +93,7 @@ impl From<&str> for QualifiedTypeName {
 impl QualifiedTypeName {
     /// Create a new qualified type name in the root namespace.
     #[must_use]
-    pub fn root(name: String) -> Self {
+    pub const fn root(name: String) -> Self {
         Self {
             namespace: Namespace::Root,
             name,
@@ -102,7 +102,7 @@ impl QualifiedTypeName {
 
     /// Create a new qualified type name in a named namespace.
     #[must_use]
-    pub fn namespaced(namespace: String, name: String) -> Self {
+    pub const fn namespaced(namespace: String, name: String) -> Self {
         Self {
             namespace: Namespace::Named(namespace),
             name,
@@ -133,7 +133,7 @@ pub struct Doc(Vec<String>);
 
 impl Doc {
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(Vec::new())
     }
 
@@ -173,7 +173,9 @@ impl From<&Variant> for Doc {
 }
 
 /// The shape of a value type — an AST node describing how a field, variant payload, or nested
-/// value is serialized. Primitives are leaf nodes; composites (`Option`, `Seq`, `Map`, `Tuple`)
+/// value is serialized.
+///
+/// Primitives are leaf nodes; composites (`Option`, `Seq`, `Map`, `Tuple`)
 /// contain nested `Format` nodes; and `TypeName` is a reference to a [`ContainerFormat`] in
 /// the [`Registry`](crate::Registry).
 ///
@@ -190,7 +192,7 @@ pub enum Format {
     /// resolving to a concrete format (e.g. `U32`, `Str`, `TypeName(...)`). Not involved in code
     /// generation — all variables must be resolved before
     /// [`RegistryBuilder::build`](super::RegistryBuilder::build) completes.
-    Variable(#[serde(with = "not_implemented")] Variable<Format>),
+    Variable(#[serde(with = "not_implemented")] Variable<Self>),
 
     /// A reference to a named container type in the [`Registry`](crate::Registry).
     TypeName(QualifiedTypeName),
@@ -215,31 +217,33 @@ pub enum Format {
     Bytes,
 
     /// The format of `Option<T>`.
-    Option(Box<Format>),
+    Option(Box<Self>),
     /// A sequence, e.g. the format of `Vec<Foo>`.
-    Seq(Box<Format>),
+    Seq(Box<Self>),
     /// A set, e.g. the format of `HashSet<Foo>`.
-    Set(Box<Format>),
+    Set(Box<Self>),
     /// A map, e.g. the format of `BTreeMap<K, V>`.
     #[serde(rename_all = "UPPERCASE")]
     Map {
-        key: Box<Format>,
-        value: Box<Format>,
+        key: Box<Self>,
+        value: Box<Self>,
     },
 
     /// A tuple, e.g. the format of `(Foo, Bar)`.
-    Tuple(Vec<Format>),
+    Tuple(Vec<Self>),
     /// Alias for `(Foo, ... Foo)`.
     /// E.g. the format of `[Foo; N]`.
     #[serde(rename_all = "UPPERCASE")]
     TupleArray {
-        content: Box<Format>,
+        content: Box<Self>,
         size: usize,
     },
 }
 
 /// The shape of a named top-level type — a struct or enum that gets its own entry in the
-/// [`Registry`](crate::Registry). Each variant holds the [`Format`] nodes that describe
+/// [`Registry`](crate::Registry).
+///
+/// Each variant holds the [`Format`] nodes that describe
 /// its fields or inner values, plus a [`Doc`] for documentation comments.
 ///
 /// See [`Format`] for how these are referenced from within other containers.
@@ -294,6 +298,8 @@ where
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 /// A mutable cell that starts as `None` and is filled in during registry construction.
+///
+///
 /// Used inside [`Format::Variable`] and [`VariantFormat::Variable`] to hold formats
 /// that aren't known yet when the node is first created. The interior mutability
 /// (`Rc<RefCell<...>>`) allows the value to be resolved after the node is already
@@ -309,7 +315,7 @@ pub struct Variable<T>(Rc<RefCell<Option<T>>>);
 pub enum VariantFormat {
     /// A placeholder for a variant format not yet known at construction time.
     /// See [`Format::Variable`] for details.
-    Variable(#[serde(with = "not_implemented")] Variable<VariantFormat>),
+    Variable(#[serde(with = "not_implemented")] Variable<Self>),
     /// A variant without parameters, e.g. `A` in `enum X { A }`
     Unit,
     /// A variant with a single unnamed parameter, e.g. `A` in `enum X { A(u16) }`
@@ -506,17 +512,15 @@ where
     }
 
     fn visit_mut(&mut self, f: &mut dyn FnMut(&mut Format) -> Result<()>) -> Result<()> {
-        match &mut *self.borrow_mut() {
-            None => Err(Error::UnknownFormat),
-            Some(value) => value.visit_mut(f),
-        }
+        (*self.borrow_mut())
+            .as_mut()
+            .map_or(Err(Error::UnknownFormat), |value| value.visit_mut(f))
     }
 
     fn is_unknown(&self) -> bool {
-        match self.borrow().as_ref() {
-            None => true,
-            Some(format) => format.is_unknown(),
-        }
+        self.borrow()
+            .as_ref()
+            .map_or_else(|| true, FormatHolder::is_unknown)
     }
 }
 
@@ -684,6 +688,39 @@ impl Format {
     pub fn unknown() -> Self {
         Self::Variable(Variable::new(None))
     }
+
+    /// Whether this format is a native/primitive type (not a container or
+    /// reference).
+    #[must_use]
+    pub(crate) const fn is_native(&self) -> bool {
+        matches!(
+            self,
+            Self::Unit
+                | Self::Bool
+                | Self::I8
+                | Self::I16
+                | Self::I32
+                | Self::I64
+                | Self::I128
+                | Self::U8
+                | Self::U16
+                | Self::U32
+                | Self::U64
+                | Self::U128
+                | Self::F32
+                | Self::F64
+                | Self::Char
+                | Self::Str
+                | Self::Bytes
+        )
+    }
+
+    /// Whether this format is a leaf type — either a native primitive or a
+    /// named type reference.
+    #[must_use]
+    pub(crate) const fn is_leaf(&self) -> bool {
+        self.is_native() || matches!(self, Self::TypeName(..))
+    }
 }
 
 impl VariantFormat {
@@ -735,7 +772,7 @@ struct NamedVisitor<T> {
 }
 
 impl<T> NamedVisitor<T> {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             marker: std::marker::PhantomData,
         }
@@ -786,7 +823,7 @@ impl<'de, T> Deserialize<'de> for Named<T>
 where
     T: Deserialize<'de>,
 {
-    fn deserialize<D>(deserializer: D) -> Result<Named<T>, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
     {

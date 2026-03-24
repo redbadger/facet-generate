@@ -17,6 +17,6 @@ enum EnumHasVoidType {
 
 impl Default for EnumHasVoidType {
     fn default() -> Self {
-        EnumHasVoidType::HasAUnit(())
+        Self::HasAUnit(())
     }
 }

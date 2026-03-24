@@ -14,7 +14,7 @@
 use std::io::{Result, Write};
 
 /// How a single indentation level is represented in the output.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum IndentConfig {
     Tab,
     Space(usize),
@@ -104,6 +104,12 @@ impl Newlines {
 /// change nesting depth, or use [`block()`](Self::block) for RAII-managed
 /// `{ }` pairs. The concrete implementation is [`IndentedWriter`].
 pub trait IndentWrite: Write {
+    /// Returns the indentation config this writer was created with.
+    ///
+    /// This is object-safe (no `Self: Sized` bound) so it can be called
+    /// through a `&mut dyn IndentWrite` trait object.
+    fn config(&self) -> IndentConfig;
+
     fn indent(&mut self) {}
     fn unindent(&mut self) {}
 
@@ -129,6 +135,35 @@ pub trait IndentWrite: Write {
             newlines,
         })
     }
+
+    /// Create a child writer that writes to `out`, inheriting this writer's
+    /// [`IndentConfig`].
+    ///
+    /// The child writes to its own separate `out` — the parent's buffer is
+    /// unaffected.  Use this when output ordering forces you to buffer content
+    /// before flushing it to the parent (e.g. writing feature helpers after
+    /// imports).
+    fn child<W: Write>(&self, out: W) -> IndentedWriter<W>
+    where
+        Self: Sized,
+    {
+        IndentedWriter::new(out, self.config())
+    }
+
+    /// Create a child writer that writes *through* this writer (i.e. uses the
+    /// parent as its buffer), inheriting the [`IndentConfig`].
+    ///
+    /// The parent's current indentation becomes the baseline; the child's own
+    /// [`indent`](Self::indent) / [`unindent`](Self::unindent) calls add on
+    /// top of it.  The intermediate `Vec` + `write_all` pattern is eliminated
+    /// entirely.
+    fn child_writer(&mut self) -> IndentedWriter<&mut Self>
+    where
+        Self: Sized,
+    {
+        let config = self.config();
+        IndentedWriter::new(self, config)
+    }
 }
 
 /// RAII guard returned by [`IndentWrite::block`].
@@ -151,6 +186,10 @@ impl Write for Block<'_> {
 }
 
 impl IndentWrite for Block<'_> {
+    fn config(&self) -> IndentConfig {
+        self.writer.config()
+    }
+
     fn indent(&mut self) {
         self.writer.indent();
     }
@@ -180,7 +219,7 @@ pub struct IndentedWriter<T> {
 }
 
 impl<T> IndentedWriter<T> {
-    pub fn new(out: T, config: IndentConfig) -> Self {
+    pub const fn new(out: T, config: IndentConfig) -> Self {
         Self {
             out,
             indentation: Vec::new(),
@@ -191,6 +230,10 @@ impl<T> IndentedWriter<T> {
 }
 
 impl<T: Write> IndentWrite for IndentedWriter<T> {
+    fn config(&self) -> IndentConfig {
+        self.config
+    }
+
     fn indent(&mut self) {
         match self.config {
             IndentConfig::Tab => {
@@ -221,11 +264,10 @@ impl<T: Write> Write for IndentedWriter<T> {
 
         while !buf.is_empty() {
             let (before_newline, has_newline, after_newline) =
-                if let Some(idx) = buf.iter().position(|&b| b == b'\n') {
-                    (&buf[..idx], true, &buf[idx + 1..])
-                } else {
-                    (buf, false, &buf[buf.len()..])
-                };
+                buf.iter().position(|&b| b == b'\n').map_or_else(
+                    || (buf, false, &buf[buf.len()..]),
+                    |idx| (&buf[..idx], true, &buf[idx + 1..]),
+                );
 
             if self.at_beginning_of_line && !before_newline.is_empty() {
                 self.out.write_all(&self.indentation)?;
@@ -250,6 +292,50 @@ impl<T: Write> Write for IndentedWriter<T> {
     fn flush(&mut self) -> Result<()> {
         self.out.flush()
     }
+}
+
+/// Creates a `{ }` block scope on a `dyn IndentWrite` writer.
+///
+/// This is the dynamic-dispatch equivalent of [`IndentWrite::block`].
+/// Because `block()` requires `Self: Sized` (it stores `&mut dyn IndentWrite`
+/// internally), it cannot be called through a trait object. This free function
+/// fills that gap — it writes the opening brace, bumps indentation, invokes
+/// the closure, then restores indentation and writes the closing brace.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use facet_generate::generation::indent::{with_block, Newlines};
+///
+/// fn emit(w: &mut dyn IndentWrite) -> std::io::Result<()> {
+///     write!(w, "fun serialize() ")?;
+///     with_block(w, Newlines::BOTH, |w| {
+///         writeln!(w, "// body")?;
+///         Ok(())
+///     })
+/// }
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if writing the opening brace, invoking the closure, or
+/// writing the closing brace fails.
+pub fn with_block<F>(w: &mut dyn IndentWrite, newlines: Newlines, f: F) -> Result<()>
+where
+    F: FnOnce(&mut dyn IndentWrite) -> Result<()>,
+{
+    write!(w, "{{")?;
+    for _ in 0..newlines.after_open {
+        writeln!(w)?;
+    }
+    w.indent();
+    let result = f(w);
+    w.unindent();
+    write!(w, "}}")?;
+    for _ in 0..newlines.after_close {
+        writeln!(w)?;
+    }
+    result
 }
 
 #[cfg(test)]
@@ -343,6 +429,102 @@ mod test {
         }
 
         insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @r#"fn foo() {let _ = "hello";}"#);
+
+        Ok(())
+    }
+
+    // ----- child writer tests -----
+
+    /// A child created with `parent.child(out)` writes to its own buffer but
+    /// inherits the parent's `IndentConfig`, so callers never have to repeat
+    /// the config at every call-site.
+    #[test]
+    fn child_inherits_config() -> Result<()> {
+        // Use Space(3) – a deliberately unusual width so it is obvious the
+        // child is not just picking up a hardcoded default.
+        let mut parent_buf: Vec<u8> = Vec::new();
+        let parent = IndentedWriter::new(&mut parent_buf, IndentConfig::Space(3));
+
+        let mut child_buf: Vec<u8> = Vec::new();
+        let mut child = parent.child(&mut child_buf);
+
+        writeln!(child, "top")?;
+        child.indent();
+        writeln!(child, "indented")?;
+        child.unindent();
+        writeln!(child, "bottom")?;
+        drop(child);
+
+        // The parent's own buffer must be untouched – the child wrote to its
+        // own separate buffer.
+        assert!(parent_buf.is_empty());
+
+        // The child used Space(3) inherited from the parent.
+        insta::assert_snapshot!(String::from_utf8(child_buf).unwrap(), @"
+top
+   indented
+bottom
+");
+
+        Ok(())
+    }
+
+    /// A child created with `parent.child_writer()` writes *through* the
+    /// parent rather than to a separate buffer.  The parent's current
+    /// indentation becomes the baseline, and the child's own indent/unindent
+    /// calls add on top of it.
+    #[test]
+    fn child_writer_uses_parents_buffer() -> Result<()> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut parent = IndentedWriter::new(&mut buffer, IndentConfig::Space(2));
+
+        writeln!(parent, "outer")?;
+        parent.indent(); // parent is now at one level (2 spaces)
+
+        {
+            let mut child = parent.child_writer();
+            writeln!(child, "middle")?; // gets parent's 2-space base
+            child.indent();
+            writeln!(child, "inner")?; // gets parent's 2 + child's 2 = 4 spaces
+        } // child dropped; parent borrow released
+
+        parent.unindent();
+        writeln!(parent, "end")?;
+
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @"
+outer
+  middle
+    inner
+end
+");
+
+        Ok(())
+    }
+
+    /// When the parent is only available as `&mut dyn IndentWrite`, callers
+    /// obtain the config with `w.config()` and then construct the child
+    /// manually.  This covers the pattern used in bincode/kotlin where the
+    /// intermediate `Vec` + `write_all` can be eliminated.
+    #[test]
+    fn child_writer_through_dyn_indent_write() -> Result<()> {
+        let mut buffer: Vec<u8> = Vec::new();
+        let mut parent = IndentedWriter::new(&mut buffer, IndentConfig::Space(4));
+        parent.indent(); // simulate being one level deep (e.g., inside a class body)
+
+        let w: &mut dyn IndentWrite = &mut parent;
+        {
+            let config = w.config();
+            let mut child = IndentedWriter::new(&mut *w, config);
+
+            writeln!(child, "content")?; // parent's 4-space base
+            child.indent();
+            writeln!(child, "nested")?; // parent's 4 + child's 4 = 8 spaces
+        }
+
+        insta::assert_snapshot!(String::from_utf8(buffer).unwrap(), @"
+    content
+        nested
+");
 
         Ok(())
     }

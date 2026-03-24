@@ -8,7 +8,7 @@ use facet::Facet;
 pub enum Options {
     Red(bool),
     Banana(String),
-    Vermont(Box<Options>),
+    Vermont(Box<Self>),
 }
 
 #[derive(Facet)]
@@ -17,5 +17,5 @@ pub enum Options {
 pub enum MoreOptions {
     News(bool),
     Exactly { config: String },
-    Built { top: Box<MoreOptions> },
+    Built { top: Box<Self> },
 }
