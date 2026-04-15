@@ -38,7 +38,6 @@ fn single_namespace() {
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -187,7 +186,6 @@ fn root_namespace_with_two_child_namespaces() {
                 },
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -243,7 +241,6 @@ fn root_namespace_with_two_child_namespaces() {
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -306,7 +303,6 @@ fn root_namespace_with_two_child_namespaces() {
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -400,7 +396,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 },
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -464,7 +459,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(

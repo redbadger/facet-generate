@@ -234,40 +234,6 @@ macro_rules! emit {
     };
 }
 
-/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
-#[cfg(test)]
-#[macro_export]
-#[deprecated(
-    since = "0.16.0",
-    note = "The Java generator is deprecated. Use the Kotlin generator instead."
-)]
-macro_rules! emit_java {
-    ($($ty:ident),* as $encoding:path) => {
-        #[allow(deprecated)]
-        || -> anyhow::Result<String> {
-            use $crate::generation::{Encoding, indent::IndentedWriter};
-            let mut out = Vec::new();
-            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string());
-            let w = IndentedWriter::new(&mut out, config.indent);
-            let generator = $crate::generation::java::JavaCodeGenerator::new(&config)
-                .with_encoding($encoding);
-            let mut emitter = $crate::generation::java::emitter::JavaEmitter {
-                out: w,
-                generator: &generator,
-                current_namespace: Vec::new(),
-                current_reserved_names: HashMap::new(),
-            };
-            let registry = $crate::reflect!($($ty),*)?;
-            for (name, format) in &registry {
-                emitter.output_container(&name.name, format).unwrap();
-            }
-            let out = String::from_utf8(out)?;
-
-            Ok(out)
-        }()
-    };
-}
-
 /// Reflects one or more types into a [`Registry`], recursively capturing all reachable types.
 ///
 /// This is a convenience wrapper around [`RegistryBuilder`](reflection::RegistryBuilder) —

@@ -7,7 +7,7 @@ use tempfile::tempdir;
 use crate::{self as fg, source_dir};
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, java, kotlin, swift,
+        Encoding, ExternalPackage, PackageLocation, kotlin, swift,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript,
     },
@@ -47,7 +47,6 @@ fn test() {
     let this_dir = source_dir!().join("snapshots");
 
     for target in [
-        TargetLanguage::Java,
         TargetLanguage::Kotlin,
         TargetLanguage::Swift,
         TargetLanguage::TypeScript,
@@ -59,18 +58,6 @@ fn test() {
         fs::create_dir_all(&snapshot_dir).unwrap();
 
         match target {
-            TargetLanguage::Java => {
-                java::Installer::new("com.example", tmp_path)
-                    .encoding(Encoding::Bincode)
-                    .external_packages(&[ExternalPackage {
-                        for_namespace: "other".to_string(),
-                        location: PackageLocation::Path("com.example2.other".to_string()),
-                        module_name: None,
-                        version: None,
-                    }])
-                    .generate(&registry)
-                    .unwrap();
-            }
             TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
                     .encoding(Encoding::Bincode)

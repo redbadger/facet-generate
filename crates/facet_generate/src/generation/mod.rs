@@ -42,17 +42,15 @@ pub mod json;
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
 pub mod csharp;
-/// Support for code-generation in Java.
-///
-/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
-#[cfg(feature = "java")]
-pub mod java;
+
 /// Support for code-generation in Kotlin
 #[cfg(feature = "kotlin")]
 pub mod kotlin;
+
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
+
 /// Support for code-generation in TypeScript
 #[cfg(feature = "typescript")]
 pub mod typescript;

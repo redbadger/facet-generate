@@ -6,7 +6,7 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, java, kotlin, module,
+        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, kotlin, module,
         swift::Installer,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript,
@@ -34,7 +34,6 @@ fn test() {
     let this_dir = source_dir!().join("snapshots");
 
     for target in [
-        TargetLanguage::Java,
         TargetLanguage::Kotlin,
         TargetLanguage::Swift,
         TargetLanguage::TypeScript,
@@ -47,22 +46,6 @@ fn test() {
 
         #[allow(clippy::match_same_arms)]
         match target {
-            TargetLanguage::Java => {
-                let package_name = "com.example";
-                let mut installer = java::Installer::new(package_name, tmp_path)
-                    .encoding(Encoding::Bincode)
-                    .external_packages(&[ExternalPackage {
-                        for_namespace: "serde".to_string(),
-                        location: PackageLocation::Path("com.novi.serde".to_string()),
-                        module_name: None,
-                        version: None,
-                    }]);
-                installer.install_serde_runtime().unwrap();
-                for (module, registry) in &module::split(package_name, &registry) {
-                    let config = module.config().clone().with_parent(package_name);
-                    installer.install_module(&config, registry).unwrap();
-                }
-            }
             TargetLanguage::Kotlin => {
                 let package_name = "com.example";
                 let mut installer = kotlin::Installer::new(package_name, tmp_path)

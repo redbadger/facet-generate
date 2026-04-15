@@ -45,17 +45,11 @@ use crate::{
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug)]
-#[expect(
-    deprecated,
-    reason = "CodeGeneratorConfig still contains the deprecated CustomCode field for backwards compatibility"
-)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
-    /// **Deprecated since 0.16.0:** `custom_code` was only used by the Java generator, which is deprecated. Use Kotlin instead.
-    pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
     /// The indentation style used when writing generated source code.
@@ -180,10 +174,6 @@ pub trait SourceInstaller {
     }
 }
 
-#[expect(
-    deprecated,
-    reason = "impl references the deprecated CustomCode type and with_custom_code method"
-)]
 impl CodeGeneratorConfig {
     /// Default config for the given module name.
     #[must_use]
@@ -193,7 +183,6 @@ impl CodeGeneratorConfig {
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
-            custom_code: BTreeMap::new(),
             package_manifest: true,
             features: BTreeSet::new(),
             used_format_types: BTreeSet::new(),
@@ -241,17 +230,6 @@ impl CodeGeneratorConfig {
             *comment = format!("{}\n", comment.trim());
         }
         self.comments = comments;
-        self
-    }
-
-    /// Custom code attached to particular entity.
-    #[must_use]
-    #[deprecated(
-        since = "0.16.0",
-        note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
-    )]
-    pub fn with_custom_code(mut self, code: CustomCode) -> Self {
-        self.custom_code = code;
         self
     }
 
