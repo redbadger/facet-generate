@@ -5,7 +5,9 @@
 pub mod common;
 
 use common::{Choice, Test};
-use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, swift};
+use facet_generate::generation::{
+    CodeGeneratorConfig, SourceInstaller, bincode::BincodePlugin, swift,
+};
 use std::{fs::File, io::Write as _, path::Path, process::Command};
 
 #[test]
@@ -26,7 +28,7 @@ fn test_swift_bincode_runtime_on_simple_data() {
     let config = CodeGeneratorConfig::new("Testing".to_string());
     let registry = common::get_simple_registry();
     let mut installer =
-        swift::Installer::new(&config.module_name, dir.path()).encoding(Encoding::Bincode);
+        swift::Installer::new(&config.module_name, dir.path()).plugin(BincodePlugin);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 
@@ -122,7 +124,7 @@ fn test_swift_bincode_runtime_on_supported_types() {
     let config = CodeGeneratorConfig::new("Testing".to_string());
     let registry = common::get_swift_registry();
     let mut installer =
-        swift::Installer::new(&config.module_name, dir.path()).encoding(Encoding::Bincode);
+        swift::Installer::new(&config.module_name, dir.path()).plugin(BincodePlugin);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
 

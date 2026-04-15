@@ -110,26 +110,6 @@ impl TypeScript {
     }
 }
 
-#[cfg(test)]
-impl crate::generation::plugin::FromEncoding for TypeScript {
-    fn from_encoding(
-        encoding: crate::generation::Encoding,
-        config: &CodeGeneratorConfig,
-        _registry: &crate::Registry,
-    ) -> Self {
-        use crate::generation::{bincode::BincodePlugin, json::JsonPlugin};
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
-            crate::generation::Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
-            crate::generation::Encoding::None => vec![],
-        };
-        Self {
-            config: config.clone(),
-            plugins,
-        }
-    }
-}
-
 impl Module {
     fn ts_namespace_import_path(&self, namespace: &str) -> String {
         self.config().external_packages.get(namespace).map_or_else(
@@ -471,10 +451,6 @@ fn format_type_aliases(input: &BTreeSet<String>) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
-
-#[cfg(test)]
-#[allow(unused_imports)]
-pub use crate::generation::Encoding;
 
 #[cfg(test)]
 #[path = "tests.rs"]

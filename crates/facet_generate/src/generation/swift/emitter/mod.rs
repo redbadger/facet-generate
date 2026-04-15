@@ -136,28 +136,6 @@ impl Swift {
     }
 }
 
-#[cfg(test)]
-impl crate::generation::plugin::FromEncoding for Swift {
-    fn from_encoding(
-        encoding: crate::generation::Encoding,
-        config: &CodeGeneratorConfig,
-        registry: &crate::Registry,
-    ) -> Self {
-        use crate::generation::{Encoding, bincode::BincodePlugin, json::JsonPlugin};
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self {
-            config: config.clone(),
-            hashable_types: compute_hashable_types(registry),
-            equatable_types: compute_equatable_types(registry),
-            plugins,
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Hashability helpers
 // ---------------------------------------------------------------------------
@@ -828,10 +806,6 @@ fn named<Format: Clone>(formats: &[Format], prefix: &str) -> Vec<Named<Format>> 
         .map(|(i, f)| Named::new(f, format!("{prefix}{i}")))
         .collect()
 }
-
-#[cfg(test)]
-#[allow(unused_imports)]
-pub use crate::generation::Encoding;
 
 #[cfg(test)]
 mod tests;

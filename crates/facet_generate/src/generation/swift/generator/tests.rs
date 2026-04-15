@@ -16,15 +16,22 @@
 
 use std::collections::BTreeMap;
 
+use std::sync::Arc;
+
 use crate::{
-    generation::{CodeGeneratorConfig, Encoding},
+    generation::{CodeGeneratorConfig, bincode::BincodePlugin, plugin::EmitterPlugin},
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
 };
 
 use super::*;
+use crate::generation::swift::emitter::Swift;
 
-fn generate(config: &CodeGeneratorConfig, encoding: Encoding, registry: &Registry) -> String {
-    let generator = SwiftCodeGenerator::new(config).with_encoding(encoding);
+fn generate(
+    config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
+    registry: &Registry,
+) -> String {
+    let generator = SwiftCodeGenerator::new(config).with_plugins(plugins);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -45,7 +52,7 @@ fn test_no_encoding_does_not_import_serde() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, Encoding::None, &registry);
+    let output = generate(&config, vec![], &registry);
 
     assert!(
         !output.contains("import Serde"),
@@ -68,7 +75,7 @@ fn test_bincode_encoding_has_serde_import() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, Encoding::Bincode, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("import Serde"),
@@ -90,7 +97,7 @@ fn test_preamble_includes_external_definition_imports() {
         ContainerFormat::UnitStruct(Doc::new()),
     );
 
-    let output = generate(&config, Encoding::Bincode, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("import AnotherTarget"),
@@ -117,7 +124,7 @@ fn test_trait_helpers_emitted_for_complex_types() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, Encoding::Bincode, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("func serializeArray<T, S: Serializer>"),
@@ -144,7 +151,7 @@ fn test_no_trait_helpers_without_encoding() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, Encoding::None, &registry);
+    let output = generate(&config, vec![], &registry);
 
     assert!(
         !output.contains("func serializeArray"),

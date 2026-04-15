@@ -11,7 +11,7 @@ use facet::Facet;
 
 use super::super::*;
 use crate::emit;
-use crate::generation::Encoding;
+use crate::generation::bincode::BincodePlugin;
 
 #[test]
 fn struct_with_box_field() {
@@ -22,7 +22,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -84,7 +84,7 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -146,7 +146,7 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -212,7 +212,7 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {

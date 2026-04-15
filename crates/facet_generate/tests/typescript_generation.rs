@@ -4,8 +4,12 @@
 
 pub mod common;
 
+use std::sync::Arc;
+
 use facet::Facet;
-use facet_generate::generation::{CodeGeneratorConfig, Encoding, SourceInstaller, typescript};
+use facet_generate::generation::{
+    CodeGeneratorConfig, SourceInstaller, bincode::BincodePlugin, plugin::EmitterPlugin, typescript,
+};
 use facet_generate::reflection::RegistryBuilder;
 use serde_json::Value;
 use std::{collections::BTreeMap, fs::File, path::Path};
@@ -14,7 +18,7 @@ use tempfile::tempdir;
 fn test_typescript_code_generates_with_config(
     dir_path: &Path,
     config: &CodeGeneratorConfig,
-    encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<typescript::TypeScript>>>,
 ) -> std::path::PathBuf {
     let registry = common::get_registry();
     std::fs::create_dir_all(dir_path.join("testing")).unwrap_or(());
@@ -25,7 +29,7 @@ fn test_typescript_code_generates_with_config(
     let source_path = dir_path.join("testing").join("test.ts");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = typescript::TypeScriptCodeGenerator::new(config).with_encoding(encoding);
+    let generator = typescript::TypeScriptCodeGenerator::new(config).with_plugins(plugins);
     generator.output(&mut source, &registry).unwrap();
 
     dir_path.join("testing")
@@ -35,7 +39,7 @@ fn test_typescript_code_generates_with_config(
 fn test_typescript_code_generates_with_bincode() {
     let dir = tempdir().unwrap();
     let config = CodeGeneratorConfig::new("testing".to_string());
-    test_typescript_code_generates_with_config(dir.path(), &config, Encoding::Bincode);
+    test_typescript_code_generates_with_config(dir.path(), &config, vec![Arc::new(BincodePlugin)]);
 }
 
 #[test]
@@ -87,7 +91,7 @@ fn test_typescript_code_generates_with_external_definitions() {
     let config = CodeGeneratorConfig::new("testing".to_string())
         .with_external_definitions(external_definitions);
 
-    test_typescript_code_generates_with_config(dir.path(), &config, Encoding::None);
+    test_typescript_code_generates_with_config(dir.path(), &config, vec![]);
 }
 
 #[test]
@@ -117,8 +121,7 @@ fn test_typescript_code_generation_file_layout() {
 
     let config = CodeGeneratorConfig::new("testing".to_string());
 
-    let mut installer =
-        typescript::Installer::new("testing", dir.path()).encoding(Encoding::Bincode);
+    let mut installer = typescript::Installer::new("testing", dir.path()).plugin(BincodePlugin);
     installer.install_module(&config, &registry).unwrap();
     installer.install_serde_runtime().unwrap();
     installer.install_bincode_runtime().unwrap();

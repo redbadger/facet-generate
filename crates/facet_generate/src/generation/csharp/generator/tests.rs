@@ -13,9 +13,14 @@
 //! - Encoding-specific imports (JSON adds `System.Text.Json.Serialization`,
 //!   Bincode adds `Facet.Runtime.Bincode`)
 
+use std::sync::Arc;
+
 use super::*;
 use crate::{
-    generation::{CodeGeneratorConfig, Encoding},
+    generation::{
+        CodeGeneratorConfig, bincode::BincodePlugin, csharp::emitter::CSharp, json::JsonPlugin,
+        plugin::EmitterPlugin,
+    },
     reflection::format::{ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName},
 };
 
@@ -41,8 +46,12 @@ fn first_field_type(registry: &Registry) -> &Format {
     &fields[0].value
 }
 
-fn render_output(config: &CodeGeneratorConfig, encoding: Encoding, registry: &Registry) -> String {
-    let generator = CSharpCodeGenerator::new(config).with_encoding(encoding);
+fn render_output(
+    config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
+    registry: &Registry,
+) -> String {
+    let generator = CSharpCodeGenerator::new(config).with_plugins(plugins);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -109,7 +118,7 @@ fn output_writes_preamble_and_namespace() {
     let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
 
     assert!(output.contains("using CommunityToolkit.Mvvm.ComponentModel;"));
     assert!(output.contains("namespace Company.Models;"));
@@ -124,7 +133,7 @@ fn output_uses_rooted_namespace_for_external_types() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains("private Company.Models.Shared.Child _value;"));
 }
 
@@ -133,7 +142,7 @@ fn output_json_encoding_adds_json_imports() {
     let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, Encoding::Json, &registry);
+    let output = render_output(&config, vec![Arc::new(JsonPlugin)], &registry);
     assert!(output.contains("using System.Text.Json.Serialization;"));
 }
 
@@ -142,7 +151,7 @@ fn output_bincode_encoding_adds_runtime_imports() {
     let config = CodeGeneratorConfig::new("Company.Models".to_string());
     let registry = registry_with_struct_field(Format::Str);
 
-    let output = render_output(&config, Encoding::Bincode, &registry);
+    let output = render_output(&config, vec![Arc::new(BincodePlugin)], &registry);
     assert!(output.contains("using Facet.Runtime.Serde;"));
     assert!(output.contains("using Facet.Runtime.Bincode;"));
 }

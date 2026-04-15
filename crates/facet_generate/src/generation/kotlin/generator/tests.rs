@@ -775,7 +775,7 @@ fn test_deserialization_uses_fully_qualified_names() {
     // Test that deserialization code uses fully qualified type names
     use crate::{
         generation::{
-            CodeGeneratorConfig, Encoding,
+            CodeGeneratorConfig,
             config::{ExternalPackage, PackageLocation},
             kotlin::KotlinCodeGenerator,
         },
@@ -833,7 +833,9 @@ fn test_deserialization_uses_fully_qualified_names() {
     registry.insert(struct_qualified_name, struct_container);
 
     // Generate the Kotlin code
-    let code_generator = KotlinCodeGenerator::new(&config).with_encoding(Encoding::Bincode);
+    let code_generator = KotlinCodeGenerator::new(&config).with_plugins(vec![std::sync::Arc::new(
+        crate::generation::bincode::BincodePlugin,
+    )]);
     let mut output = Vec::new();
     code_generator.output(&mut output, &registry).unwrap();
     let generated_code = String::from_utf8(output).unwrap();

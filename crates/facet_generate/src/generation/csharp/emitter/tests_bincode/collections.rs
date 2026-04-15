@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use facet::Facet;
 
 use super::super::*;
-use crate::{emit, generation::Encoding};
+use crate::{emit, generation::bincode::BincodePlugin};
 
 #[test]
 fn struct_with_vec_field() {
@@ -19,7 +19,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -88,7 +88,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -155,7 +155,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -220,7 +220,7 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -299,7 +299,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -366,7 +366,7 @@ fn struct_with_btreemap_field() {
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -428,7 +428,7 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -490,7 +490,7 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -557,7 +557,7 @@ fn option_value_type_needs_dot_value_for_serialize() {
         maybe_int: Option<i32>,
     }
 
-    let actual = emit!(HasOptionals as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(HasOptionals as CSharp with BincodePlugin).unwrap();
     assert!(
         actual.contains("FacetHelpers.SerializeOption(MaybeFloat, serializer,"),
         "float? should use FacetHelpers.SerializeOption\n{actual}"
@@ -590,7 +590,7 @@ fn nested_seq_deserialization_uses_unique_variable_names() {
         nested: Vec<Vec<Inner>>,
     }
 
-    let actual = emit!(HasNestedVec as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(HasNestedVec as CSharp with BincodePlugin).unwrap();
     // The inner loop must not reuse `i` or `item` from the outer loop.
     let i_decl_count = actual.matches("ulong i ").count();
     assert!(
@@ -608,7 +608,7 @@ fn map_deserialization_uses_unique_variable_names() {
         lookup: std::collections::BTreeMap<String, u32>,
     }
 
-    let actual = emit!(HasMap as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(HasMap as CSharp with BincodePlugin).unwrap();
     let value_decl_count = actual.matches("var value ").count();
     assert!(
         value_decl_count <= 1,

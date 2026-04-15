@@ -35,8 +35,11 @@ use std::collections::BTreeSet;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SERDE_NAMESPACE, SourceInstaller, module,
+        CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
+        SERDE_NAMESPACE, SourceInstaller,
+        bincode::BincodePlugin,
+        json::JsonPlugin,
+        module,
         plugin::EmitterPlugin,
         typescript::{TypeScript, TypeScriptCodeGenerator},
     },
@@ -56,7 +59,6 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    encoding: Encoding,
     plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
@@ -72,20 +74,8 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
-            encoding: Encoding::default(),
             plugins: vec![],
         }
-    }
-
-    /// Set the encoding for serialization/deserialization.
-    ///
-    /// When set to anything other than [`Encoding::None`], the appropriate
-    /// runtimes (serde + encoding-specific) are installed automatically by
-    /// [`generate`](Self::generate).
-    #[must_use]
-    pub const fn encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
     }
 
     /// Add a plugin to be used during code generation.
@@ -93,8 +83,8 @@ impl Installer {
     /// When plugins are added explicitly, they take priority over the
     /// [`encoding`](Self::encoding) setting.
     #[must_use]
-    pub fn plugin(mut self, plugin: impl Into<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
-        self.plugins.push(plugin.into());
+    pub fn plugin<P: EmitterPlugin<TypeScript> + 'static>(mut self, plugin: P) -> Self {
+        self.plugins.push(std::sync::Arc::new(plugin));
         self
     }
 
@@ -123,17 +113,6 @@ impl Installer {
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
-        // Resolve plugins: explicit plugins take priority over encoding
-        if self.plugins.is_empty() {
-            self.plugins = match self.encoding {
-                Encoding::Bincode => vec![Arc::new(crate::generation::bincode::BincodePlugin)
-                    as Arc<dyn EmitterPlugin<TypeScript>>],
-                Encoding::Json => vec![Arc::new(crate::generation::json::JsonPlugin)
-                    as Arc<dyn EmitterPlugin<TypeScript>>],
-                Encoding::None => vec![],
-            };
-        }
-
         let lang = {
             let mut base = TypeScript::new(&config, registry);
             for p in &self.plugins {
@@ -182,7 +161,7 @@ impl Installer {
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(self.package_name.clone());
         let lang = TypeScript::new(&config, &BTreeMap::default())
-            .with_plugin(std::sync::Arc::new(crate::generation::json::JsonPlugin));
+            .with_plugin(std::sync::Arc::new(JsonPlugin));
         for plugin in lang.plugins() {
             for file in plugin.runtime_files() {
                 let dest = self.install_dir.join(&file.relative_path);
@@ -205,9 +184,8 @@ impl Installer {
     /// Returns an error if any file I/O fails.
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(self.package_name.clone());
-        let lang = TypeScript::new(&config, &BTreeMap::default()).with_plugin(std::sync::Arc::new(
-            crate::generation::bincode::BincodePlugin,
-        ));
+        let lang = TypeScript::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(BincodePlugin));
         for plugin in lang.plugins() {
             for file in plugin
                 .runtime_files()
@@ -306,9 +284,8 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = TypeScriptCodeGenerator::new(&updated_config)
-            .with_encoding(self.encoding)
-            .with_plugins(self.plugins.clone());
+        let generator =
+            TypeScriptCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())

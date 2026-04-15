@@ -6,7 +6,8 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, kotlin, swift,
+        bincode::BincodePlugin,
+        kotlin, swift,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript,
     },
@@ -45,19 +46,19 @@ fn test() {
         match target {
             TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .generate(&registry)
                     .unwrap();
             }
             TargetLanguage::Swift => {
                 swift::Installer::new("Example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .generate(&registry)
                     .unwrap();
             }
             TargetLanguage::TypeScript => {
                 typescript::Installer::new("example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .generate(&registry)
                     .unwrap();
             }

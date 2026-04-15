@@ -19,13 +19,16 @@
 //! | Priority | External packages override relative imports for the same namespace |
 //! | Deserialization | Qualified names appear correctly in `deserialize` call sites |
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use super::*;
 use crate::{
     generation::{
-        CodeGeneratorConfig, Encoding,
+        CodeGeneratorConfig,
+        bincode::BincodePlugin,
         config::{ExternalPackage, PackageLocation},
+        plugin::EmitterPlugin,
+        typescript::TypeScript,
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -71,8 +74,12 @@ fn first_field_type(registry: &Registry) -> &Format {
     &fields[0].value
 }
 
-fn render_output(config: &CodeGeneratorConfig, encoding: Encoding, registry: &Registry) -> String {
-    let generator = TypeScriptCodeGenerator::new(config).with_encoding(encoding);
+fn render_output(
+    config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
+    registry: &Registry,
+) -> String {
+    let generator = TypeScriptCodeGenerator::new(config).with_plugins(plugins);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -224,7 +231,7 @@ fn output_adds_import_for_external_namespace() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "../other";"#));
 }
 
@@ -236,7 +243,7 @@ fn output_does_not_import_current_module() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(!output.contains(r#"import * as Root from "../root";"#));
 }
 
@@ -258,7 +265,7 @@ fn output_uses_external_package_path_for_namespace() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
     assert!(!output.contains(r#"import * as Other from "../other";"#));
 }
@@ -281,7 +288,7 @@ fn output_uses_external_package_module_name_when_present() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types/models";"#));
 }
 
@@ -304,7 +311,7 @@ fn output_uses_for_namespace_for_url_packages() {
     )));
 
     // TS imports use the package namespace identifier; URL metadata is used by installer logic.
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Remote from "@org/remote";"#));
 }
 
@@ -331,7 +338,7 @@ fn output_external_package_takes_priority_over_relative_import() {
         "Child".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
     assert!(!output.contains(r#"import * as Other from "../other";"#));
 }
@@ -344,7 +351,7 @@ fn output_falls_back_to_relative_import_without_external_package() {
         "OldType".to_string(),
     )));
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Legacy from "../legacy";"#));
 }
 
@@ -396,7 +403,7 @@ fn output_handles_multiple_external_packages() {
         ),
     );
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Auth from "@org/auth";"#));
     assert!(output.contains(r#"import * as Billing from "billing-types/v1";"#));
 }
@@ -442,7 +449,7 @@ fn output_deserialization_uses_local_and_external_qualification() {
         ),
     );
 
-    let output = render_output(&config, Encoding::Bincode, &registry);
+    let output = render_output(&config, vec![Arc::new(BincodePlugin)], &registry);
     assert!(output.contains("const local = LocalType.deserialize(deserializer);"));
     assert!(output.contains("const external = Other.ExternalType.deserialize(deserializer);"));
 }
@@ -491,7 +498,7 @@ fn output_mixed_external_and_local_references() {
         ),
     );
 
-    let output = render_output(&config, Encoding::None, &registry);
+    let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
     assert!(!output.contains(r#"import * as Root from "../root";"#));
     assert!(output.contains("public local_root: LocalRoot"));
@@ -551,7 +558,7 @@ fn output_user_example_multiple_external_references() {
         ),
     );
 
-    let output = render_output(&config, Encoding::Bincode, &registry);
+    let output = render_output(&config, vec![Arc::new(BincodePlugin)], &registry);
     assert!(output.contains(r#"import * as Other from "other-package/models";"#));
     assert_eq!(output.matches("Other.Other").count(), 4);
     assert!(output.contains("public image: Optional<CatImage>"));

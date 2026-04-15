@@ -17,8 +17,8 @@ use facet::Facet;
 use crate as fg;
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
-        swift::installer::Installer,
+        ExternalPackage, PackageLocation, SourceInstaller as _, bincode::BincodePlugin,
+        module::split, swift::installer::Installer,
     },
     reflect,
 };
@@ -66,8 +66,7 @@ fn manifest_with_serde_as_target() {
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
 
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
+    let mut installer = Installer::new(package_name, install_dir.path()).plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -123,7 +122,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
             module_name: None,
             version: Some("1.0.137".to_string()),
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -179,7 +178,7 @@ fn manifest_with_serde_as_a_local_dependency() {
             module_name: None,
             version: None,
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -231,8 +230,7 @@ fn manifest_with_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
+    let mut installer = Installer::new(package_name, install_dir.path()).plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -283,8 +281,7 @@ fn manifest_with_disjoint_namespaces() {
 
     let package_name = "MyPackage";
     let install_dir = tempfile::tempdir().unwrap();
-    let mut installer =
-        Installer::new(package_name, install_dir.path()).encoding(Encoding::Bincode);
+    let mut installer = Installer::new(package_name, install_dir.path()).plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -389,7 +386,7 @@ fn manifest_with_namespaces_and_dependencies() {
             module_name: None,
             version: Some("1.0".to_string()),
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -452,7 +449,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
             module_name: None,
             version: Some("1.0".to_string()),
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -521,7 +518,7 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
             module_name: None,
             version: None,
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();
@@ -592,7 +589,7 @@ fn external_dependency_references_local_dependency() {
             module_name: None,
             version: None,
         }])
-        .encoding(Encoding::Bincode);
+        .plugin(BincodePlugin);
 
     for (module, registry) in split(package_name, &registry) {
         let config = module.config().clone();

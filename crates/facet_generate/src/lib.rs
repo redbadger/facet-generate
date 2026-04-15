@@ -198,12 +198,19 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
 /// Test/convenience macro: reflects the given types and emits code for each
-/// container using the specified language tag and encoding.
+/// container using the specified language tag, optionally with plugins.
 ///
 /// Returns `anyhow::Result<String>` containing the generated source.
 ///
 /// ```ignore
-/// let code = emit!(MyStruct, MyEnum as Kotlin with Encoding::Json)?;
+/// // Plain type declarations (no serialization)
+/// let code = emit!(MyStruct, MyEnum as Kotlin)?;
+///
+/// // With a plugin (e.g. bincode serialization)
+/// let code = emit!(MyStruct, MyEnum as Kotlin with BincodePlugin)?;
+///
+/// // With multiple plugins
+/// let code = emit!(MyStruct as Swift with BincodePlugin, MyCustomPlugin)?;
 /// ```
 ///
 /// This skips the [`Module`](generation::module::Module) header (no `package`
@@ -212,24 +219,25 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 #[cfg(test)]
 #[macro_export]
 macro_rules! emit {
-    ($($ty:ident),* as $language:ident with $encoding:path) => {
+    ($($ty:ident),* as $language:ident) => {
+        emit!($($ty),* as $language with)
+    };
+    ($($ty:ident),* as $language:ident with $($plugin:expr),* $(,)?) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::{Container, CodeGeneratorConfig, indent::IndentedWriter};
-            use $crate::generation::plugin::FromEncoding as _;
+            use $crate::generation::{Container, Emitter as _, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
             let mut cfg = CodeGeneratorConfig::new("test".to_string());
-            let mut w = IndentedWriter::new(&mut out, cfg.indent);
             let registry = $crate::reflect!($($ty),*)?;
             cfg.update_from(&registry);
-            let lang = $language::from_encoding($encoding, &cfg, &registry);
+            let mut w = IndentedWriter::new(&mut out, cfg.indent);
+            let lang = $language::new(&cfg, &registry)
+                $(.with_plugin(Arc::new($plugin)))*;
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;
             }
-            let out = String::from_utf8(out)?;
-
-            Ok(out)
+            Ok(String::from_utf8(out)?)
         }()
     };
 }

@@ -5,11 +5,6 @@
 //! Configuration that controls code-generation behaviour independent of the
 //! target language.
 //!
-//! The most important knob is [`Encoding`]: it decides whether generated types
-//! are plain data classes (`None`) or also get `serialize` / `deserialize`
-//! methods (`Json` or `Bincode`). When serialization is enabled, the installer
-//! copies the corresponding runtime support files alongside the generated code.
-//!
 //! Cross-module relationships are handled by [`ExternalDefinitions`] (which
 //! types live in other modules) and [`ExternalPackages`] (where to import them
 //! from), so generators can emit `import` / `using` statements instead of
@@ -22,11 +17,9 @@
 //! There are two configuration levels:
 //!
 //! - [`Config`] / [`ConfigBuilder`] — the public API entry point (package
-//!   name, output directory, encoding, external packages).
+//!   name, output directory, external packages).
 //! - [`CodeGeneratorConfig`] — the internal, per-module config that generators
-//!   and [`Emitter`](super::Emitter) implementations receive. Generators copy
-//!   the [`Encoding`] from here into the language tag so that emitters can
-//!   access it via the `lang` parameter without needing the full config.
+//!   and [`Emitter`](super::Emitter) implementations receive.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -70,21 +63,6 @@ pub struct CodeGeneratorConfig {
     pub unit_variant_enums: BTreeSet<String>,
 }
 
-/// The wire format to target when generating serialization code.
-///
-/// - `None` — generate type declarations only, with no serialization support.
-/// - `Json` — generate JSON `serialize` / `deserialize` methods and install
-///   the JSON serde runtime.
-/// - `Bincode` — generate binary `serialize` / `bincodeDeserialize` methods
-///   and install the Bincode runtime.
-#[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
-pub enum Encoding {
-    #[default]
-    None,
-    Json,
-    Bincode,
-}
-
 /// Container or leaf types in the registry that need a runtime support file
 /// installed alongside the generated code.
 ///
@@ -99,23 +77,6 @@ pub enum Feature {
     OptionOfT,
     SetOfT,
     TupleArray,
-}
-
-impl Encoding {
-    #[must_use]
-    pub fn is_none(self) -> bool {
-        self == Self::None
-    }
-
-    #[must_use]
-    pub fn is_json(self) -> bool {
-        self == Self::Json
-    }
-
-    #[must_use]
-    pub fn is_bincode(self) -> bool {
-        self == Self::Bincode
-    }
 }
 
 /// Track type definitions provided by other modules (key = `module`, value = `type names`).
@@ -336,17 +297,6 @@ impl CodeGeneratorConfig {
     }
 }
 
-impl Encoding {
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Json => "json",
-            Self::Bincode => "bincode",
-        }
-    }
-}
-
 /// Public API entry point for configuring a generation run.
 ///
 /// Use [`Config::builder`] to create one, then pass it to a language-specific
@@ -367,11 +317,6 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
-    /// The encoding to use for serialization/deserialization.
-    /// When set to anything other than `Encoding::None`, the appropriate
-    /// runtimes will be installed automatically.
-    #[builder(default, setter(custom))]
-    pub encoding: Encoding,
     /// Whether to add extensions to the generated types.
     #[builder(default = false, setter(custom))]
     pub add_extensions: bool,
@@ -388,12 +333,6 @@ impl Config {
 }
 
 impl ConfigBuilder {
-    #[must_use]
-    pub const fn encoding(&mut self, encoding: Encoding) -> &mut Self {
-        self.encoding = Some(encoding);
-        self
-    }
-
     #[must_use]
     pub const fn add_extensions(&mut self) -> &mut Self {
         self.add_extensions = Some(true);

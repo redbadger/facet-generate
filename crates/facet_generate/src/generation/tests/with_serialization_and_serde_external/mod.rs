@@ -6,7 +6,9 @@ use tempfile::tempdir;
 
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, SourceInstaller as _, kotlin, module,
+        ExternalPackage, PackageLocation, SourceInstaller as _,
+        bincode::BincodePlugin,
+        kotlin, module,
         swift::Installer,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript,
@@ -49,7 +51,7 @@ fn test() {
             TargetLanguage::Kotlin => {
                 let package_name = "com.example";
                 let mut installer = kotlin::Installer::new(package_name, tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("com.novi.serde".to_string()),
@@ -65,7 +67,7 @@ fn test() {
             TargetLanguage::Swift => {
                 let package_name = "Example";
                 let mut installer = Installer::new(package_name, tmp_path.join(package_name))
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "serde".to_string(),
                         location: PackageLocation::Path("../Serde".to_string()),
@@ -87,7 +89,7 @@ fn test() {
                 let package_name = "example";
                 let mut installer =
                     typescript::Installer::new(package_name, tmp_path.join(package_name))
-                        .encoding(Encoding::Bincode)
+                        .plugin(BincodePlugin)
                         .external_packages(&[ExternalPackage {
                             for_namespace: "serde".to_string(),
                             location: PackageLocation::Path("../serde".to_string()),

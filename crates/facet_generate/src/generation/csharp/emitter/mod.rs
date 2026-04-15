@@ -123,27 +123,6 @@ impl CSharp {
     }
 }
 
-#[cfg(test)]
-impl crate::generation::plugin::FromEncoding for CSharp {
-    fn from_encoding(
-        encoding: crate::generation::Encoding,
-        config: &CodeGeneratorConfig,
-        _registry: &crate::Registry,
-    ) -> Self {
-        use crate::generation::{bincode::BincodePlugin, json::JsonPlugin};
-
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match encoding {
-            crate::generation::Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            crate::generation::Encoding::Json => vec![Arc::new(JsonPlugin)],
-            crate::generation::Encoding::None => vec![],
-        };
-        Self {
-            config: config.clone(),
-            plugins,
-        }
-    }
-}
-
 impl Emitter<CSharp> for Module {
     fn write<W: Write>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();

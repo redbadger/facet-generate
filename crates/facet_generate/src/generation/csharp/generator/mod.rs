@@ -12,9 +12,8 @@ use std::sync::Arc;
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
-        csharp::emitter::CSharp, indent::IndentedWriter, json::JsonPlugin, module::Module,
-        plugin::EmitterPlugin,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
+        indent::IndentedWriter, module::Module, plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -26,9 +25,7 @@ use crate::{
 pub struct CSharpCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
-    /// Which serialization encoding to generate code for.
-    pub(crate) encoding: Encoding,
-    /// Pre-built plugins passed from the installer (takes priority over `encoding`).
+    /// Pre-built plugins to apply during code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
@@ -36,7 +33,6 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
-            encoding: Encoding::None,
             plugins: vec![],
         }
     }
@@ -47,33 +43,18 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
 }
 
 impl<'a> CSharpCodeGenerator<'a> {
-    /// Create a C# code generator with no encoding (plain types only).
+    /// Create a C# code generator with no plugins.
     ///
-    /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
+    /// Call [`with_plugins`](Self::with_plugins) to add serialization plugins.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
-            encoding: Encoding::None,
             plugins: vec![],
         }
     }
 
-    /// Set the encoding, returning the modified generator.
-    ///
-    /// When [`with_plugins`](Self::with_plugins) has been called with a
-    /// non-empty list, those plugins take priority and this setting is
-    /// ignored.
-    #[must_use]
-    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
     /// Set pre-built plugins, returning the modified generator.
-    ///
-    /// When plugins are provided explicitly, they take priority over the
-    /// [`encoding`](Self::with_encoding) setting.
     #[must_use]
     pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>) -> Self {
         self.plugins = plugins;
@@ -92,20 +73,10 @@ impl<'a> CSharpCodeGenerator<'a> {
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = if self.plugins.is_empty() {
-            let base = CSharp::new(&config, &updated_registry);
-            match self.encoding {
-                Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
-                Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
-                Encoding::None => base,
-            }
-        } else {
-            let mut base = CSharp::new(&config, &updated_registry);
-            for p in &self.plugins {
-                base = base.with_plugin(p.clone());
-            }
-            base
-        };
+        let mut lang = CSharp::new(&config, &updated_registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

@@ -12,9 +12,8 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, Encoding, bincode::BincodePlugin,
-        indent::IndentedWriter, json::JsonPlugin, module::Module, plugin::EmitterPlugin,
-        typescript::emitter::TypeScript,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
+        module::Module, plugin::EmitterPlugin, typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -26,9 +25,7 @@ use crate::{
 pub struct TypeScriptCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
-    /// Which serialization encoding to generate code for.
-    pub(crate) encoding: Encoding,
-    /// Pre-built plugin list. When non-empty, takes priority over `encoding`.
+    /// Plugins that control encoding-specific code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
@@ -36,7 +33,6 @@ impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
-            encoding: Encoding::None,
             plugins: vec![],
         }
     }
@@ -47,29 +43,18 @@ impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
 }
 
 impl<'a> TypeScriptCodeGenerator<'a> {
-    /// Create a TypeScript code generator with no encoding (plain types only).
+    /// Create a TypeScript code generator with no plugins (plain types only).
     ///
-    /// Call [`with_encoding`](Self::with_encoding) to enable serialization.
+    /// Call [`with_plugins`](Self::with_plugins) to enable serialization.
     #[must_use]
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
-            encoding: Encoding::None,
             plugins: vec![],
         }
     }
 
-    /// Set the encoding, returning the modified generator.
-    #[must_use]
-    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
     /// Set pre-built plugins, returning the modified generator.
-    ///
-    /// When plugins are provided, they take priority over the
-    /// [`encoding`](Self::with_encoding) setting.
     #[must_use]
     pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
         self.plugins = plugins;
@@ -87,20 +72,10 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = if self.plugins.is_empty() {
-            let base = TypeScript::new(&config, registry);
-            match self.encoding {
-                Encoding::Bincode => base.with_plugin(Arc::new(BincodePlugin)),
-                Encoding::Json => base.with_plugin(Arc::new(JsonPlugin)),
-                Encoding::None => base,
-            }
-        } else {
-            let mut base = TypeScript::new(&config, registry);
-            for p in &self.plugins {
-                base = base.with_plugin(p.clone());
-            }
-            base
-        };
+        let mut lang = TypeScript::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

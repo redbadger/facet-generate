@@ -4,10 +4,11 @@ use expect_test::expect_file;
 use facet::Facet;
 use tempfile::tempdir;
 
+use crate::generation::bincode::BincodePlugin;
 use crate::{self as fg, source_dir};
 use crate::{
     generation::{
-        Encoding, ExternalPackage, PackageLocation, kotlin, swift,
+        ExternalPackage, PackageLocation, kotlin, swift,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
         typescript,
     },
@@ -60,7 +61,7 @@ fn test() {
         match target {
             TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),
                         location: PackageLocation::Path("com.example2.other".to_string()),
@@ -72,7 +73,7 @@ fn test() {
             }
             TargetLanguage::Swift => {
                 swift::Installer::new("Example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),
                         location: PackageLocation::Url(
@@ -86,7 +87,7 @@ fn test() {
             }
             TargetLanguage::TypeScript => {
                 typescript::Installer::new("example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .external_packages(&[ExternalPackage {
                         for_namespace: "other".to_string(),
                         location: PackageLocation::Url(
