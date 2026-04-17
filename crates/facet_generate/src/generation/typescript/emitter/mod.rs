@@ -23,13 +23,12 @@
 //! `Option(T)` → `Optional<T>` (i.e. `T | null`), `Map(K,V)` → `Map<K, V>`,
 //! tuples → `[A, B]` (via `Tuple<[…]>`), fixed-size arrays → `ListTuple<[T]>`.
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`TypeScript`] language tag carries the active [`Encoding`] and a list
-//! of [`EmitterPlugin`]s. All encoding-specific behaviour — serialize /
-//! deserialize methods and feature helper snippets — is delegated to those
-//! plugins. With no plugins (`Encoding::None`), only plain type declarations
-//! are emitted.
+//! The [`TypeScript`] language tag carries a list of [`EmitterPlugin`]s.
+//! All encoding-specific behaviour — serialize / deserialize methods and
+//! feature helper snippets — is delegated to those plugins. With no plugins,
+//! only plain type declarations are emitted.
 //!
 //! # Plugins
 //!
@@ -38,8 +37,7 @@
 //! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies the same
 //!   interface for JSON (the TypeScript Serializer/Deserializer API is
 //!   identical for both encodings).
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 
 #[cfg(test)]
 use std::collections::BTreeSet;
@@ -64,10 +62,8 @@ use crate::{
 /// Language tag for TypeScript code generation.
 ///
 /// Carries a plugin list that controls all encoding-specific behaviour
-/// (serialize/deserialize methods, feature helpers, imports). Build the
-/// standard plugin list from the config encoding via
-/// `BuildPluginsFor<TypeScript>`, or supply custom plugins with
-/// [`with_plugin`](Self::with_plugin).
+/// (serialize/deserialize methods, feature helpers, imports). Use
+/// [`with_plugin`](Self::with_plugin) to add plugins.
 #[derive(Debug, Clone)]
 pub struct TypeScript {
     pub(crate) config: CodeGeneratorConfig,
@@ -77,9 +73,7 @@ pub struct TypeScript {
 impl TypeScript {
     /// Create a TypeScript language tag with no plugins.
     ///
-    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction,
-    /// or use the generator's `with_encoding` method to derive standard plugins
-    /// from an [`Encoding`](crate::generation::Encoding).
+    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
         Self {
@@ -90,7 +84,7 @@ impl TypeScript {
 
     /// Access the config.
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.config
     }
 

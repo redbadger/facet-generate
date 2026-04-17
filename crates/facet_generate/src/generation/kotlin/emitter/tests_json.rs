@@ -1,6 +1,6 @@
 //! Snapshot tests for the Kotlin emitter — **JSON encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! Mirrors the structure of [`tests`](super::tests) but uses `JsonPlugin`
 //! so that every generated type carries `kotlinx.serialization` annotations:
 //! `@Serializable`, `@SerialName`, and `@Contextual` where appropriate.
 //!

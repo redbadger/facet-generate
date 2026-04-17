@@ -1,6 +1,6 @@
 //! Snapshot tests for the C# emitter — **JSON encoding**.
 //!
-//! Mirrors [`super::tests`] but with [`Encoding::Json`]. Generated types
+//! Mirrors [`super::tests`] but with [`JsonPlugin`]. Generated types
 //! include `[JsonPropertyName]` attributes on fields,
 //! `[JsonConverter(typeof(JsonStringEnumConverter))]` on unit enums,
 //! `[JsonPolymorphic]`/`[JsonDerivedType]` on variant hierarchies, and

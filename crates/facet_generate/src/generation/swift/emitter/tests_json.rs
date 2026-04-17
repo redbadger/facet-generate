@@ -1,6 +1,6 @@
 //! Snapshot tests for the Swift emitter — **JSON encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! Mirrors the structure of [`tests`](super::tests) but uses `JsonPlugin`
 //! so that every generated type includes `Hashable` conformance and
 //! `Serializer`/`Deserializer` protocol-based serialization methods plus
 //! `jsonSerialize`/`jsonDeserialize` convenience wrappers.

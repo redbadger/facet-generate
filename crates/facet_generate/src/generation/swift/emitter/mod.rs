@@ -31,8 +31,7 @@
 //!   `bincodeSerialize` / `bincodeDeserialize` wrappers.
 //! - `JsonPlugin` supplies the same `serialize` / `deserialize` methods and
 //!   `jsonSerialize` / `jsonDeserialize` wrappers.
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
@@ -118,7 +117,7 @@ impl Swift {
 
     /// Access the code-generator configuration.
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.config
     }
 

@@ -1,6 +1,6 @@
 //! Snapshot tests for the C# emitter — **no serialization**.
 //!
-//! Every test uses the [`emit!`] macro with [`Encoding::None`], producing
+//! Every test uses the [`emit!`] macro with no plugins, producing
 //! plain MVVM types verified against `insta` inline snapshots.
 //!
 //! # Output shapes

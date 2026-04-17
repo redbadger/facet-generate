@@ -1,10 +1,10 @@
 //! Snapshot tests for the Swift emitter — **no serialization**.
 //!
 //! Each test defines one or more Rust types annotated with `#[derive(Facet)]`,
-//! runs them through the [`emit!`] macro with `Encoding::None`, and asserts the
+//! runs them through the [`emit!`] macro with no plugins, and asserts the
 //! generated Swift source against an [`insta`] inline snapshot.
 //!
-//! Because encoding is `None`, the output contains only plain type declarations
+//! Because no plugins are configured, the output contains only plain type declarations
 //! (`public struct`, `indirect public enum`) with no `serialize`/`deserialize`
 //! methods and no `Hashable` conformance.
 //!

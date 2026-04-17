@@ -65,7 +65,7 @@ pub struct Installer {
 impl Installer {
     /// Create a new installer for the given package name and output directory.
     ///
-    /// Use the builder methods [`encoding`](Self::encoding) and
+    /// Use the builder methods [`plugin`](Self::plugin) and
     /// [`external_packages`](Self::external_packages) to configure, then call
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
@@ -80,8 +80,7 @@ impl Installer {
 
     /// Add a plugin to be used during code generation.
     ///
-    /// When plugins are added explicitly, they take priority over the
-    /// [`encoding`](Self::encoding) setting.
+    /// When multiple plugins are added, they are invoked in the order they were registered.
     #[must_use]
     pub fn plugin<P: EmitterPlugin<TypeScript> + 'static>(mut self, plugin: P) -> Self {
         self.plugins.push(std::sync::Arc::new(plugin));

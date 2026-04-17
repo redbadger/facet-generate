@@ -115,11 +115,10 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 /// 1. **Dispatch** — A single AST type (e.g. [`Container`], [`Module`](module::Module),
 ///    `Named<Format>`) can implement `Emitter<L>` once per language, and the compiler
 ///    resolves the correct implementation from the tag alone.
-/// 2. **Configuration** — Language tags carry per-invocation settings such as the
-///    target [`Encoding`] (None / Json / Bincode) and a list of
-///    [`EmitterPlugin`](plugin::EmitterPlugin)s, so implementations can
-///    conditionally emit serialization methods and delegate to plugins at
-///    well-defined extension points.
+/// 2. **Configuration** — Language tags carry per-invocation settings such as a list of
+///    [`EmitterPlugin`](plugin::EmitterPlugin)s (e.g. `BincodePlugin` or `JsonPlugin`),
+///    so implementations can conditionally emit serialization methods and delegate to
+///    plugins at well-defined extension points.
 ///
 /// # Typical implementors
 ///

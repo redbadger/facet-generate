@@ -70,9 +70,8 @@ impl Installer {
 
     /// Add a plugin to be used during code generation.
     ///
-    /// When plugins are added explicitly, they take priority over the
-    /// [`encoding`](Self::encoding) setting. Multiple plugins can be added
-    /// and they are invoked in the order they were registered.
+    /// Multiple plugins can be added and they are invoked in the order they
+    /// were registered.
     #[must_use]
     pub fn plugin<P: EmitterPlugin<Kotlin> + 'static>(mut self, plugin: P) -> Self {
         self.plugins.push(std::sync::Arc::new(plugin));

@@ -6,9 +6,10 @@
 //! — and, optionally, serialization code to move data across the boundary. Writing these by
 //! hand is tedious and error-prone; this crate automates it.
 //!
-//! Optionally, when an [`Encoding`](generation::Encoding) such as Bincode or JSON is
-//! configured, the generated types include `serialize` / `deserialize` methods and the
-//! appropriate runtime library is installed alongside the generated code.
+//! Optionally, when a plugin such as [`BincodePlugin`](generation::bincode::BincodePlugin) or
+//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated types include
+//! `serialize` / `deserialize` methods and the appropriate runtime library is installed
+//! alongside the generated code.
 //!
 //! # Modules
 //!
@@ -74,33 +75,31 @@
 //!
 //! ## 3. Generate code
 //!
-//! Pass the [`Registry`] to a language-specific installer, optionally configure an
-//! [`Encoding`](generation::Encoding), and call `generate()`:
+//! Pass the [`Registry`] to a language-specific installer, optionally add plugins for
+//! serialization support, and call `generate()`:
 //!
 //! ```rust,ignore
-//! use facet_generate::generation::{self, Encoding};
-//! use generation::{kotlin, swift, typescript};
-//! use generation::typescript::InstallTarget;
+//! use facet_generate::generation::{bincode::BincodePlugin, kotlin, swift, typescript};
 //!
 //! // Swift package with Bincode serialization
 //! swift::Installer::new("MyPackage", &out_dir)
-//!     .encoding(Encoding::Bincode)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
 //! // Kotlin package with Bincode serialization
 //! kotlin::Installer::new("com.example", &out_dir)
-//!     .encoding(Encoding::Bincode)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
-//! // TypeScript (Node) with Bincode serialization
-//! typescript::Installer::new("my-package", &out_dir, InstallTarget::Node)
-//!     .encoding(Encoding::Bincode)
+//! // TypeScript with Bincode serialization
+//! typescript::Installer::new("my-package", &out_dir)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //! ```
 //!
 //! Each installer writes a ready-to-build project to `out_dir` — type definitions plus,
-//! when encoding is configured, the appropriate serialization runtime. Omit
-//! `.encoding(...)` to generate plain type definitions without any serialization code.
+//! when a serialization plugin is configured, the appropriate runtime. Omit
+//! `.plugin(...)` to generate plain type definitions without any serialization code.
 //!
 //! ## Key attributes
 //!

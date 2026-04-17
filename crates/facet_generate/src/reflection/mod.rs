@@ -1770,14 +1770,10 @@ fn bytes_attribute_format(field: &Field) -> Option<Format> {
             match shape.ty {
                 Type::User(ty) => match ty {
                     UserType::Struct(ty) => match ty.kind {
-                        StructKind::TupleStruct => {
-                            if ty.fields.len() == 1 {
-                                let field = ty.fields[0];
-                                shape = field.shape();
-                                is_bytes_attr(&field)
-                            } else {
-                                false
-                            }
+                        StructKind::TupleStruct if ty.fields.len() == 1 => {
+                            let field = ty.fields[0];
+                            shape = field.shape();
+                            is_bytes_attr(&field)
                         }
                         _ => false,
                     },

@@ -1,7 +1,7 @@
 //! Snapshot tests for the TypeScript emitter — **Bincode encoding**.
 //!
 //! Mirrors the structure of [`tests`](super::tests) but uses
-//! `Encoding::Bincode` so that every generated type includes hand-written
+//! `BincodePlugin` so that every generated type includes hand-written
 //! `serialize`/`deserialize` methods using the `Serializer`/`Deserializer`
 //! interface pattern.
 //!

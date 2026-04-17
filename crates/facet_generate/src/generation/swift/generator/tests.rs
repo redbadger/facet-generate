@@ -9,10 +9,10 @@
 //!
 //! | Area | What is tested |
 //! |------|----------------|
-//! | Serde imports | Bincode encoding triggers `import Serde`; `Encoding::None` does not |
+//! | Serde imports | `BincodePlugin` triggers `import Serde`; no plugin does not |
 //! | External definitions | External namespaces appear as `import` statements |
-//! | Encoding config | Encoding propagates through to generated output |
-//! | Feature helpers | Complex types (e.g. `Seq`) trigger trait helper emission when encoding is active |
+//! | Plugin config | Plugins propagate through to generated output |
+//! | Feature helpers | Complex types (e.g. `Seq`) trigger trait helper emission when a plugin is active |
 
 use std::collections::BTreeMap;
 

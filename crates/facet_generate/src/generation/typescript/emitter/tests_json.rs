@@ -1,6 +1,6 @@
 //! Snapshot tests for the TypeScript emitter — **JSON encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Json`
+//! Mirrors the structure of [`tests`](super::tests) but uses [`JsonPlugin`]
 //! so that every generated type includes `Serializer`/`Deserializer`
 //! interface-based serialization methods.
 //!

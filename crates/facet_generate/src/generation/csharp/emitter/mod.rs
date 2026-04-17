@@ -23,16 +23,19 @@
 //! `Option(T)` → `T?`, tuples → `(T1, T2, …)`, `TupleArray` → `T[]`,
 //! `Unit` → `Unit` (custom readonly record struct).
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`CSharp`] language tag carries the active [`Encoding`]. When encoding
-//! is `Json`, types get `System.Text.Json` annotations (`[JsonPropertyName]`,
-//! `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
-//! `JsonSerde` static helper methods. When encoding is `Bincode`, types
-//! implement `IFacetSerializable`/`IFacetDeserializable<T>` interfaces with
-//! hand-written `Serialize`/`Deserialize` methods and convenience
-//! `BincodeSerialize`/`BincodeDeserialize` wrappers. When encoding is `None`,
-//! only plain MVVM type declarations are emitted.
+//! The [`CSharp`] language tag carries a list of [`EmitterPlugin`]s. All
+//! encoding-specific behaviour is delegated to those plugins — the emitter
+//! itself contains no encoding checks. For example:
+//!
+//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonPropertyName]`,
+//!   `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
+//!   `JsonSerde` static helper methods.
+//! - `BincodePlugin` supplies `IFacetSerializable`/`IFacetDeserializable<T>`
+//!   interface implementations with `Serialize`/`Deserialize` methods and
+//!   `BincodeSerialize`/`BincodeDeserialize` wrappers.
+//! - With no plugins, only plain MVVM type declarations are emitted.
 //!
 //! # Feature helpers via `FacetHelpers.cs`
 //!
@@ -72,8 +75,7 @@ use crate::{
     },
 };
 
-/// Language tag for C#, carrying the active `Encoding` and a plugin list
-/// built from it.
+/// Language tag for C#.
 ///
 /// Passed to every [`Emitter`](super::super::Emitter) implementation.
 /// All encoding-specific behaviour is delegated to plugins — the emitter
@@ -89,9 +91,7 @@ pub struct CSharp {
 impl CSharp {
     /// Create a [`CSharp`] language tag with no plugins.
     ///
-    /// Use [`with_plugin`](Self::with_plugin) to add plugins, or use the
-    /// code generator's `with_encoding` builder to get the standard
-    /// encoding-derived plugins automatically.
+    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
         Self {
@@ -102,7 +102,7 @@ impl CSharp {
 
     /// Access the code-generator configuration.
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.config
     }
 

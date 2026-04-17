@@ -1,6 +1,6 @@
 //! Snapshot tests for the Swift emitter — **Bincode encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses `Encoding::Bincode`
+//! Mirrors the structure of [`tests`](super::tests) but uses `BincodePlugin`
 //! so that every generated type includes `Hashable` conformance, hand-written
 //! `serialize`/`deserialize` methods, plus `bincodeSerialize`/`bincodeDeserialize`
 //! convenience wrappers.

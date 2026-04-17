@@ -21,18 +21,17 @@
 //! for example `I32` → `Int`, `Seq(T)` → `List<T>`, `Option(T)` → `T?`,
 //! tuples of size 2/3 → `Pair`/`Triple`, and larger tuples to `NTupleN<…>`.
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`Kotlin`] language tag carries the active [`Encoding`] and a list of
-//! [`EmitterPlugin`]s. All encoding-specific behaviour is delegated to those
-//! plugins — the emitter itself contains no encoding checks. For example:
+//! The [`Kotlin`] language tag carries a list of [`EmitterPlugin`]s. All
+//! encoding-specific behaviour is delegated to those plugins — the emitter
+//! itself contains no encoding checks. For example:
 //!
 //! - `JsonPlugin` supplies `@Serializable` / `@SerialName` type annotations
 //!   and inline `@SerialName` annotations for all-unit enum class variants.
 //! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
 //!   convenience `bincodeSerialize` / `bincodeDeserialize` wrappers.
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
@@ -91,8 +90,7 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
 /// Language tag for Kotlin code generation.
 ///
 /// Passed as the `L` parameter to every [`Emitter<L>`](super::super::Emitter)
-/// call. Carries the target `Encoding` so emitters can conditionally
-/// produce serialization code.
+/// call. Carries a plugin list that controls all encoding-specific behaviour.
 #[derive(Debug, Clone)]
 pub struct Kotlin {
     pub(crate) config: CodeGeneratorConfig,
@@ -102,9 +100,7 @@ pub struct Kotlin {
 impl Kotlin {
     /// Create a Kotlin language tag with no default plugins.
     ///
-    /// Use [`with_plugin`](Self::with_plugin) to attach plugins, or use the
-    /// generator's `with_encoding` builder which wires up the standard
-    /// Bincode / JSON plugins automatically.
+    /// Use [`with_plugin`](Self::with_plugin) to attach plugins.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
         Self {
@@ -115,7 +111,7 @@ impl Kotlin {
 
     /// Access the generator config.
     #[must_use]
-    pub fn config(&self) -> &CodeGeneratorConfig {
+    pub const fn config(&self) -> &CodeGeneratorConfig {
         &self.config
     }
 
@@ -156,8 +152,8 @@ impl Emitter<Kotlin> for Module {
         for feature in features {
             match feature {
                 Feature::BigInt => {
-                    // `import java.math.BigInteger` is needed for all encodings,
-                    // including `Encoding::None` where no plugin runs.
+                    // `import java.math.BigInteger` is needed regardless of plugins,
+                    // including when no plugin runs.
                     // Plugin-specific BigInt imports (JSON KSerializer, Bincode
                     // Int128) are added by their respective plugins.
                     imports.push("import java.math.BigInteger".to_string());
