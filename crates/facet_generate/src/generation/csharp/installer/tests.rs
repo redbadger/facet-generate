@@ -8,8 +8,8 @@
 //! - Bincode runtime file installation (serde interfaces, serializer,
 //!   deserializer, error types)
 //! - JSON runtime installation (`JsonSerde.cs`)
-//! - No-encoding skips serde/bincode runtimes
-//! - Core `Unit.cs` always present regardless of encoding
+//! - No plugins skips serde/bincode runtimes
+//! - Core `Unit.cs` always present regardless of plugins
 
 use crate::{
     Registry,

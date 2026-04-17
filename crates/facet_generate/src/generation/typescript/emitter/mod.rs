@@ -130,7 +130,7 @@ impl Emitter<TypeScript> for Module {
         } = self.config();
 
         // Plugin imports (e.g. `import { Serializer, Deserializer }` from the
-        // bincode or json plugin). These replace the old `has_encoding()` check.
+        // bincode or json plugin).
         for import in collect_from_plugins(lang.plugins(), |p| p.imports(self.config())) {
             writeln!(w, "{import}")?;
         }

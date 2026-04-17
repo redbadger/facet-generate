@@ -513,7 +513,7 @@ fn write_variant_deserialize_case(
 }
 
 // ---------------------------------------------------------------------------
-// Encoding wrappers
+// Serialization wrappers
 // ---------------------------------------------------------------------------
 
 fn write_json_serialize(w: &mut dyn IndentWrite) -> io::Result<()> {

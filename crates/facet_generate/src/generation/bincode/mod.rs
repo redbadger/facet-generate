@@ -1,9 +1,8 @@
 //! Internal bincode plugin — provides bincode-specific imports and module
 //! helpers through the `EmitterPlugin` trait.
 //!
-//! This module is part of the ongoing effort to extract all encoding-specific
-//! code-generation into separate plugin crates. For now it lives inside the
-//! core crate so it can share types and feature constants.
+//! This module lives inside the core crate so it can share types and feature
+//! constants with the language emitters.
 //!
 //! # What the plugin handles
 //!

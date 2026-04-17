@@ -88,7 +88,7 @@ impl Installer {
     /// Generate all code for the given registry.
     ///
     /// This method:
-    /// 1. Installs the appropriate runtimes based on the configured encoding
+    /// 1. Installs the appropriate runtimes based on the active plugins
     /// 2. Splits the registry by namespace and installs each module
     /// 3. Writes the package manifest
     ///
@@ -96,14 +96,14 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Unit.cs is always required (even without encoding) because Format::Unit
+        // Unit.cs is always required (even with no plugins) because Format::Unit
         // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
 
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
 
-        // Install encoding-specific runtime files from plugins.
+        // Install plugin runtime files.
         if !self.plugins.is_empty() {
             let lang = {
                 let mut base = CSharp::new(&config, registry);

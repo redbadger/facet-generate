@@ -437,7 +437,7 @@ fn write_serialize(w: &mut dyn IndentWrite, value_expr: &str, format: &Format) -
 // ---------------------------------------------------------------------------
 
 /// Renders a TypeScript type expression for `format` without requiring a
-/// language tag — the mapping is fixed for TypeScript regardless of encoding.
+/// language tag — the mapping is fixed for TypeScript.
 fn quote_type(format: &Format) -> String {
     match format {
         Format::TypeName(type_) => type_.format(ToUpperCamelCase::to_upper_camel_case, "."),

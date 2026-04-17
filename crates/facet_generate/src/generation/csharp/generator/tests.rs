@@ -10,7 +10,7 @@
 //! - External namespace rooting under module (`Payments` → `Company.Models.Payments`)
 //! - Root-to-dotted promotion (`Root` inside `Company.Models` → `Named("Company.Models")`)
 //! - Preamble (`using` directives + `namespace` declaration)
-//! - Encoding-specific imports (JSON adds `System.Text.Json.Serialization`,
+//! - Plugin-specific imports (JSON adds `System.Text.Json.Serialization`,
 //!   Bincode adds `Facet.Runtime.Bincode`)
 
 use std::sync::Arc;

@@ -90,14 +90,6 @@ pub type ExternalPackages =
 /// Track documentation to be attached to particular definitions.
 pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
 
-/// Track custom code to be added to particular definitions (use with care!).
-#[deprecated(
-    since = "0.16.0",
-    note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
-)]
-pub type CustomCode =
-    BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
-
 /// Errors that can occur during code generation and installation.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -317,9 +309,6 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
-    /// Whether to add extensions to the generated types.
-    #[builder(default = false, setter(custom))]
-    pub add_extensions: bool,
 }
 
 impl Config {
@@ -333,12 +322,6 @@ impl Config {
 }
 
 impl ConfigBuilder {
-    #[must_use]
-    pub const fn add_extensions(&mut self) -> &mut Self {
-        self.add_extensions = Some(true);
-        self
-    }
-
     /// # Panics
     /// If any required fields are not initialized.
     #[must_use]

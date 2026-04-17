@@ -169,8 +169,7 @@ function deserializeTupleArray<T>(
 impl EmitterPlugin<TypeScript> for BincodePlugin {
     /// Returns the `import { Serializer, Deserializer }` statement needed by
     /// the generated serialize/deserialize methods. The import path is resolved
-    /// from `config.external_packages` the same way the module emitter used to
-    /// resolve it via `has_encoding()`.
+    /// from `config.external_packages`.
     fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
         let import_path = config.external_packages.get(SERDE_NAMESPACE).map_or_else(
             || "./serde".to_string(),
@@ -451,7 +450,7 @@ fn write_serialize(w: &mut dyn IndentWrite, value_expr: &str, format: &Format) -
 // ---------------------------------------------------------------------------
 
 /// Renders a TypeScript type expression for `format` without requiring a
-/// language tag — the mapping is fixed for TypeScript regardless of encoding.
+/// language tag — the mapping is fixed for TypeScript regardless of plugin.
 fn quote_type(format: &Format) -> String {
     match format {
         Format::TypeName(type_) => type_.format(ToUpperCamelCase::to_upper_camel_case, "."),
