@@ -1,6 +1,6 @@
 //! Snapshot tests for the C# emitter — **JSON encoding**.
 //!
-//! Mirrors [`super::tests`] but with [`Encoding::Json`]. Generated types
+//! Mirrors [`super::tests`] but with [`JsonPlugin`]. Generated types
 //! include `[JsonPropertyName]` attributes on fields,
 //! `[JsonConverter(typeof(JsonStringEnumConverter))]` on unit enums,
 //! `[JsonPolymorphic]`/`[JsonDerivedType]` on variant hierarchies, and
@@ -16,8 +16,8 @@ use std::sync::Arc;
 use facet::Facet;
 
 use super::*;
-use crate as fg;
-use crate::emit;
+use crate::generation::json::JsonPlugin;
+use crate::{self as fg, emit};
 
 #[test]
 fn unit_struct() {
@@ -26,7 +26,7 @@ fn unit_struct() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit!(UnitStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(UnitStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @"
 
     /// line 1
@@ -50,7 +50,7 @@ fn newtype_struct() {
     #[derive(Facet)]
     struct NewType(String);
 
-    let actual = emit!(NewType as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(NewType as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class NewType : ObservableObject {
@@ -76,7 +76,7 @@ fn tuple_struct() {
     #[derive(Facet)]
     struct TupleStruct(String, i32);
 
-    let actual = emit!(TupleStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(TupleStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class TupleStruct : ObservableObject {
@@ -123,7 +123,7 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit!(StructWithFields as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(StructWithFields as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class StructWithFields : ObservableObject {
@@ -209,7 +209,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit!(Outer as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(Outer as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class Inner1 : ObservableObject {
@@ -294,7 +294,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -322,7 +322,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -350,7 +350,7 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -382,7 +382,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit!(EnumWithUnitVariants as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(EnumWithUnitVariants as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -403,7 +403,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @"
 
     [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -422,7 +422,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -453,7 +453,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -487,7 +487,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -520,7 +520,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -553,7 +553,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyEnum as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
@@ -592,7 +592,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -629,7 +629,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -664,7 +664,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -699,7 +699,7 @@ fn struct_with_nested_generics() {
         complex: Vec<Option<HashMap<String, Vec<bool>>>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -742,7 +742,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -777,7 +777,7 @@ fn struct_with_btreemap_field() {
         int_to_bool: BTreeMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -809,7 +809,7 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -841,7 +841,7 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -874,7 +874,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -906,7 +906,7 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -938,7 +938,7 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -974,7 +974,7 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -1018,7 +1018,7 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {
@@ -1057,7 +1057,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Json).unwrap();
+    let actual = emit!(MyStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject {

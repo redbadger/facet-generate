@@ -4,13 +4,16 @@
 //! producing a single TypeScript source file from a [`Registry`]. It carries
 //! It delegates writing to the emitter layer.
 
-use std::io::{Result, Write};
+use std::{
+    io::{Result, Write},
+    sync::Arc,
+};
 
 use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, typescript::emitter::TypeScript,
+        module::Module, plugin::EmitterPlugin, typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -22,11 +25,16 @@ use crate::{
 pub struct TypeScriptCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Plugins that control encoding-specific code generation.
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
 impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        TypeScriptCodeGenerator::new(config)
+        Self {
+            config,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -35,10 +43,22 @@ impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
 }
 
 impl<'a> TypeScriptCodeGenerator<'a> {
-    /// Create a TypeScript code generator for the given config.
+    /// Create a TypeScript code generator with no plugins (plain types only).
+    ///
+    /// Call [`with_plugins`](Self::with_plugins) to enable serialization.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+        Self {
+            config,
+            plugins: vec![],
+        }
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
+        self.plugins = plugins;
+        self
     }
 
     /// Produce a complete TypeScript source file for the types in `registry`.
@@ -52,7 +72,10 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = TypeScript::new(&config, registry);
+        let mut lang = TypeScript::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

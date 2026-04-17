@@ -23,16 +23,19 @@
 //! `Option(T)` → `T?`, tuples → `(T1, T2, …)`, `TupleArray` → `T[]`,
 //! `Unit` → `Unit` (custom readonly record struct).
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`CSharp`] language tag carries the active [`Encoding`]. When encoding
-//! is `Json`, types get `System.Text.Json` annotations (`[JsonPropertyName]`,
-//! `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
-//! `JsonSerde` static helper methods. When encoding is `Bincode`, types
-//! implement `IFacetSerializable`/`IFacetDeserializable<T>` interfaces with
-//! hand-written `Serialize`/`Deserialize` methods and convenience
-//! `BincodeSerialize`/`BincodeDeserialize` wrappers. When encoding is `None`,
-//! only plain MVVM type declarations are emitted.
+//! The [`CSharp`] language tag carries a list of [`EmitterPlugin`]s. All
+//! encoding-specific behaviour is delegated to those plugins — the emitter
+//! itself contains no encoding checks. For example:
+//!
+//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonPropertyName]`,
+//!   `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
+//!   `JsonSerde` static helper methods.
+//! - `BincodePlugin` supplies `IFacetSerializable`/`IFacetDeserializable<T>`
+//!   interface implementations with `Serialize`/`Deserialize` methods and
+//!   `BincodeSerialize`/`BincodeDeserialize` wrappers.
+//! - With no plugins, only plain MVVM type declarations are emitted.
 //!
 //! # Feature helpers via `FacetHelpers.cs`
 //!
@@ -51,10 +54,10 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use std::collections::BTreeSet;
-use std::io::Result;
-use std::io::Write;
-use std::sync::Arc;
+use std::{
+    io::{Result, Write},
+    sync::Arc,
+};
 
 use crate::Registry;
 
@@ -62,10 +65,8 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::csharp::CSharpBincodePlugin,
+        CodeGeneratorConfig, Container, Emitter,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
         plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
@@ -74,36 +75,45 @@ use crate::{
     },
 };
 
-/// Language tag for C#, carrying the active [`Encoding`] and a plugin list
-/// built from it.
+/// Language tag for C#.
 ///
 /// Passed to every [`Emitter`](super::super::Emitter) implementation.
 /// All encoding-specific behaviour is delegated to plugins — the emitter
 /// itself contains no encoding checks.
 #[derive(Debug, Clone)]
 pub struct CSharp {
+    /// The code-generator configuration (namespace, feature flags, etc.).
+    pub(crate) config: CodeGeneratorConfig,
     /// Plugins to apply during code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl CSharp {
-    /// Create a [`CSharp`] language tag for the given config and registry.
+    /// Create a [`CSharp`] language tag with no plugins.
     ///
-    /// - [`Encoding::Bincode`] → includes `CSharpBincodePlugin` (carries
-    ///   the precomputed set of C-style enum names needed for dispatch)
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction.
     #[must_use]
-    pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => {
-                let c_style_enums = collect_c_style_enums(registry);
-                vec![Arc::new(CSharpBincodePlugin { c_style_enums })]
-            }
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+    pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the code-generator configuration.
+    #[must_use]
+    pub const fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
+    }
+
+    /// Append a plugin to this language tag's plugin list.
+    ///
+    /// Useful for adding custom plugins on top of the defaults returned by
+    /// [`new`](Self::new).
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
     }
 
     /// Access the plugin list.
@@ -182,26 +192,10 @@ impl Emitter<CSharp> for Container<'_> {
 /// `{Enum}Bincode` helper class instead of instance methods.
 ///
 /// We collect bare type names (`String`) rather than full
-/// [`QualifiedTypeName`]s because [`update_qualified_names`] rewrites the
+/// [`QualifiedTypeName`]s because `update_qualified_names` rewrites the
 /// namespace on `Format::TypeName` references without touching registry keys.
 /// Within a single module the bare name is unambiguous (types are grouped by
-/// namespace via [`module::split`]).
-fn collect_c_style_enums(registry: &Registry) -> BTreeSet<String> {
-    registry
-        .iter()
-        .filter_map(|(name, format)| {
-            if let ContainerFormat::Enum(variants, _) = format
-                && variants
-                    .values()
-                    .all(|v| matches!(v.value, VariantFormat::Unit))
-            {
-                return Some(name.name.clone());
-            }
-            None
-        })
-        .collect()
-}
-
+/// namespace via `module::split`).
 impl Emitter<CSharp> for Named<Format> {
     /// Write a field declaration without plugin annotations.
     ///
@@ -260,7 +254,7 @@ fn write_sealed_record<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let record_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -296,7 +290,7 @@ fn write_class<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let class_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -343,7 +337,7 @@ fn write_enum<W: IndentWrite>(
     lang: &CSharp,
 ) -> Result<()> {
     let enum_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
 
@@ -384,7 +378,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     lang: &CSharp,
 ) -> Result<()> {
     let base_name = name.to_upper_camel_case();
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
 

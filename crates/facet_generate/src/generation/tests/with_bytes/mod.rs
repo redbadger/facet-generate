@@ -7,7 +7,8 @@ use tempfile::tempdir;
 use crate::{
     self as fg,
     generation::{
-        Encoding, kotlin,
+        bincode::BincodePlugin,
+        kotlin,
         tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
     },
     reflect, source_dir,
@@ -36,7 +37,7 @@ fn test() {
         match target {
             TargetLanguage::Kotlin => {
                 kotlin::Installer::new("com.example", tmp_path)
-                    .encoding(Encoding::Bincode)
+                    .plugin(BincodePlugin)
                     .generate(&registry)
                     .unwrap();
             }

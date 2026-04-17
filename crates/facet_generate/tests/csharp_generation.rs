@@ -5,7 +5,7 @@ use std::process::Command;
 use facet::Facet;
 use facet_generate as fg;
 use facet_generate::{
-    generation::{Encoding, csharp},
+    generation::{bincode::BincodePlugin, csharp, json::JsonPlugin},
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -31,7 +31,7 @@ fn test_that_csharp_code_compiles_with_bincode() {
     let dir = tempdir().unwrap();
 
     csharp::Installer::new("Example.Testing", &dir)
-        .encoding(Encoding::Bincode)
+        .plugin(BincodePlugin)
         .generate(&registry)
         .unwrap();
 
@@ -44,7 +44,7 @@ fn test_that_csharp_code_compiles_with_json() {
     let dir = tempdir().unwrap();
 
     csharp::Installer::new("Example.Testing", &dir)
-        .encoding(Encoding::Json)
+        .plugin(JsonPlugin)
         .generate(&registry)
         .unwrap();
 
@@ -74,7 +74,6 @@ fn test_that_csharp_code_compiles_without_serialization() {
     let dir = tempdir().unwrap();
 
     csharp::Installer::new("Example.Testing", &dir)
-        .encoding(Encoding::None)
         .generate(&registry)
         .unwrap();
 

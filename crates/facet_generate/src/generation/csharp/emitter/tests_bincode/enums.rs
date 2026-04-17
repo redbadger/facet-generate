@@ -7,7 +7,7 @@
 use facet::Facet;
 
 use super::super::*;
-use crate::emit;
+use crate::{emit, generation::bincode::BincodePlugin};
 
 #[test]
 fn enum_with_unit_variants() {
@@ -20,7 +20,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit!(EnumWithUnitVariants as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(EnumWithUnitVariants as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public enum EnumWithUnitVariants {
@@ -89,7 +89,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public enum MyEnum {
@@ -154,7 +154,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
@@ -225,7 +225,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
@@ -316,7 +316,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
@@ -412,7 +412,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
@@ -487,7 +487,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyEnum as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public abstract record MyEnum : IFacetSerializable, IFacetDeserializable<MyEnum> {
@@ -628,7 +628,7 @@ fn c_style_enum_field_uses_static_bincode_helpers() {
         color: Color,
     }
 
-    let actual = emit!(Painted as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(Painted as CSharp with BincodePlugin).unwrap();
     assert!(
         actual.contains("ColorBincode.Serialize(Color, serializer)"),
         "c-style enum serialize should dispatch to static helper\n{actual}"

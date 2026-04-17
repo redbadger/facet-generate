@@ -1,59 +1,26 @@
-//! `EmitterPlugin<Kotlin>` implementation for the Kotlin-specific bincode plugin.
+//! `EmitterPlugin<Kotlin>` implementation for the bincode plugin.
 //!
 //! Provides bincode-specific imports, feature helper snippets, and type-body
 //! generation (serialize / deserialize method bodies) for Kotlin code
 //! generation.
 //!
-//! Unlike the language-agnostic [`BincodePlugin`](super::BincodePlugin), this
-//! module defines [`KotlinBincodePlugin`], which carries the JVM package names
-//! (`serde_package`, `bincode_package`) needed to generate the correct import
-//! statements for the Kotlin serde/bincode runtime libraries.
+//! The JVM package names (`serde_package`, `bincode_package`) needed to
+//! generate the correct import statements are computed on-the-fly from the
+//! [`CodeGeneratorConfig`] passed to every [`EmitterPlugin`] method.
 
 use std::io::{self, Result, Write};
 
 use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
+use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
     kotlin::Kotlin,
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
-
-// ---------------------------------------------------------------------------
-// KotlinBincodePlugin
-// ---------------------------------------------------------------------------
-
-/// Kotlin-specific bincode plugin.
-///
-/// Carries the resolved JVM package names for the serde and bincode runtime
-/// libraries so that the correct `import` statements can be generated.
-///
-/// Use [`from_config`](Self::from_config) to construct an instance with
-/// package names resolved from the code-generator configuration.
-#[derive(Debug, Clone)]
-pub struct KotlinBincodePlugin {
-    /// Resolved serde package name (e.g. `"com.novi.serde"`).
-    pub(crate) serde_package: String,
-    /// Resolved bincode package name (e.g. `"com.novi.bincode"`).
-    pub(crate) bincode_package: String,
-}
-
-impl KotlinBincodePlugin {
-    /// Create a new `KotlinBincodePlugin` with package names resolved from the
-    /// given config (specifically `config.external_packages`).
-    #[must_use]
-    pub fn from_config(config: &CodeGeneratorConfig) -> Self {
-        let serde_package = resolve_package(config, SERDE_NAMESPACE, "com.novi.serde");
-        let bincode_package = resolve_package(config, BINCODE_NAMESPACE, "com.novi.bincode");
-        Self {
-            serde_package,
-            bincode_package,
-        }
-    }
-}
 
 /// Look up the package path for `namespace` in the config's external packages.
 /// Falls back to `default` when no override is configured.
@@ -734,14 +701,36 @@ fn write_sealed_interface_body<W: IndentWrite>(
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
 
-impl EmitterPlugin<Kotlin> for KotlinBincodePlugin {
+impl EmitterPlugin<Kotlin> for BincodePlugin {
+    /// Returns the serde and bincode Kotlin runtime sources to be written
+    /// into the output directory alongside the generated code.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        static SERDE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/kotlin/com/novi/serde");
+        static BINCODE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/kotlin/com/novi/bincode");
+
+        let mut files: Vec<RuntimeFile> = SERDE
+            .files()
+            .map(|f| RuntimeFile {
+                relative_path: format!("com/novi/serde/{}", f.path().display()),
+                contents: f.contents().to_vec(),
+            })
+            .collect();
+        files.extend(BINCODE.files().map(|f| RuntimeFile {
+            relative_path: format!("com/novi/bincode/{}", f.path().display()),
+            contents: f.contents().to_vec(),
+        }));
+        files
+    }
+
     /// Bincode / serde imports for a Kotlin module.
     ///
     /// Returns the base set of imports that every bincode-enabled module
     /// needs, plus feature-specific imports (e.g. `Bytes`, `Int128`).
     fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
-        let bp = &self.bincode_package;
-        let sp = &self.serde_package;
+        let bp = resolve_package(config, BINCODE_NAMESPACE, "com.novi.bincode");
+        let sp = resolve_package(config, SERDE_NAMESPACE, "com.novi.serde");
 
         let mut imports = vec![
             format!("import {bp}.BincodeDeserializer"),
@@ -933,7 +922,7 @@ mod tests {
     #[test]
     fn base_imports_are_present() {
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BincodeSerializer")));
@@ -946,7 +935,7 @@ mod tests {
     #[test]
     fn bytes_feature_adds_import() {
         let cfg = make_config(&[Feature::Bytes]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("Bytes")));
@@ -955,7 +944,7 @@ mod tests {
     #[test]
     fn bigint_feature_adds_imports() {
         let cfg = make_config(&[Feature::BigInt]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BigInteger")));
@@ -965,7 +954,7 @@ mod tests {
     #[test]
     fn module_helpers_emit_list_of_t() {
         let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         let mut buf = Vec::new();
         {
@@ -985,7 +974,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -993,7 +982,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
         assert!(plugin.has_type_body(&ctx));
     }
 
@@ -1004,7 +993,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         // Non-all-unit enum → sealed interface
         let mut variants = BTreeMap::new();
@@ -1022,7 +1011,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -1043,7 +1032,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         // All-unit enum → enum class
         let mut variants = BTreeMap::new();
@@ -1061,7 +1050,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -1080,7 +1069,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("UnitStruct".to_string());
         let format = ContainerFormat::UnitStruct(Doc::default());
@@ -1088,7 +1077,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -1110,7 +1099,7 @@ mod tests {
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         let name = QualifiedTypeName::root("MyStruct".to_string());
         let fields = vec![
@@ -1122,7 +1111,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {
@@ -1148,7 +1137,7 @@ mod tests {
         use std::collections::BTreeMap;
 
         let cfg = make_config(&[]);
-        let plugin = &KotlinBincodePlugin::from_config(&cfg) as &dyn EmitterPlugin<Kotlin>;
+        let plugin = &BincodePlugin as &dyn EmitterPlugin<Kotlin>;
 
         let mut variants = BTreeMap::new();
         variants.insert(
@@ -1165,7 +1154,7 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &cfg);
 
         let mut buf = Vec::new();
         {

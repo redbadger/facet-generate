@@ -12,7 +12,6 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     implementation(files("com.example2.other"))
 }
 

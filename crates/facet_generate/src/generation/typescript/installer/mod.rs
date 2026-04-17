@@ -25,15 +25,23 @@ use std::{
     fs::{File, create_dir_all},
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use serde_json::{Value, json};
 
+use std::collections::BTreeSet;
+
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SERDE_NAMESPACE, SourceInstaller, module, typescript::TypeScriptCodeGenerator,
+        CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
+        SERDE_NAMESPACE, SourceInstaller,
+        bincode::BincodePlugin,
+        json::JsonPlugin,
+        module,
+        plugin::EmitterPlugin,
+        typescript::{TypeScript, TypeScriptCodeGenerator},
     },
 };
 
@@ -51,13 +59,13 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
 }
 
 impl Installer {
     /// Create a new installer for the given package name and output directory.
     ///
-    /// Use the builder methods [`encoding`](Self::encoding) and
+    /// Use the builder methods [`plugin`](Self::plugin) and
     /// [`external_packages`](Self::external_packages) to configure, then call
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
@@ -66,18 +74,16 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
-            encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
-    /// Set the encoding for serialization/deserialization.
+    /// Add a plugin to be used during code generation.
     ///
-    /// When set to anything other than [`Encoding::None`], the appropriate
-    /// runtimes (serde + encoding-specific) are installed automatically by
-    /// [`generate`](Self::generate).
+    /// When multiple plugins are added, they are invoked in the order they were registered.
     #[must_use]
-    pub const fn encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
+    pub fn plugin<P: EmitterPlugin<TypeScript> + 'static>(mut self, plugin: P) -> Self {
+        self.plugins.push(std::sync::Arc::new(plugin));
         self
     }
 
@@ -102,18 +108,36 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
-        // Install runtimes if an encoding is configured,
-        // unless an external package provides them
-        if !self.encoding.is_none() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
-            self.install_serde_runtime()?;
-            if self.encoding == Encoding::Bincode {
-                self.install_bincode_runtime()?;
+        // Build a lang tag to get the active plugins, then use them to install
+        // runtime files (replacing the old encoding-based install_serde/bincode calls).
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
+        config.update_from(registry);
+        let lang = {
+            let mut base = TypeScript::new(&config, registry);
+            for p in &self.plugins {
+                base = base.with_plugin(p.clone());
+            }
+            base
+        };
+
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            let mut written: BTreeSet<String> = BTreeSet::new();
+            for plugin in lang.plugins() {
+                for file in plugin.runtime_files() {
+                    if written.insert(file.relative_path.clone()) {
+                        let dest = self.install_dir.join(&file.relative_path);
+                        if let Some(parent) = dest.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        std::fs::write(&dest, &file.contents)?;
+                    }
+                }
             }
         }
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m.config().clone().with_encoding(self.encoding);
+            let config = m.config().clone();
             self.install_module(&config, &module_registry)?;
         }
 
@@ -124,13 +148,55 @@ impl Installer {
         Ok(())
     }
 
-    fn install_runtime(&self, source_dir: &include_dir::Dir, path: &str) -> Result<(), Error> {
-        let dir_path = self.install_dir.join(path);
-        create_dir_all(&dir_path)?;
-        for entry in source_dir.files() {
-            let file_name = entry.path().to_string_lossy();
-            let mut file = File::create(dir_path.join(file_name.as_ref()))?;
-            file.write_all(entry.contents())?;
+    /// Installs the serde TypeScript runtime sources into the output directory.
+    ///
+    /// Delegates to the JSON plugin's [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files)
+    /// which embeds the serde sources via `include_dir!`.  Most callers should
+    /// prefer [`generate`](Self::generate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
+        let config = CodeGeneratorConfig::new(self.package_name.clone());
+        let lang = TypeScript::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(JsonPlugin));
+        for plugin in lang.plugins() {
+            for file in plugin.runtime_files() {
+                let dest = self.install_dir.join(&file.relative_path);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&dest, &file.contents)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Installs the bincode TypeScript runtime sources into the output directory.
+    ///
+    /// Delegates to the bincode plugin's `runtime_files`, writing only the
+    /// `bincode/` files.  Most callers should prefer [`generate`](Self::generate).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any file I/O fails.
+    pub fn install_bincode_runtime(&self) -> Result<(), Error> {
+        let config = CodeGeneratorConfig::new(self.package_name.clone());
+        let lang = TypeScript::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(BincodePlugin));
+        for plugin in lang.plugins() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("bincode/"))
+            {
+                let dest = self.install_dir.join(&file.relative_path);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&dest, &file.contents)?;
+            }
         }
         Ok(())
     }
@@ -217,22 +283,11 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator = TypeScriptCodeGenerator::new(&updated_config);
+        let generator =
+            TypeScriptCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> Result<(), Error> {
-        static SERDE_DIR: include_dir::Dir<'static> =
-            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
-        self.install_runtime(&SERDE_DIR, "serde")
-    }
-
-    fn install_bincode_runtime(&self) -> Result<(), Error> {
-        static BINCODE_DIR: include_dir::Dir<'static> =
-            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/bincode");
-        self.install_runtime(&BINCODE_DIR, "bincode")
     }
 
     /// Write `package.json` to the output directory.

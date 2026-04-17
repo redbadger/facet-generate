@@ -24,9 +24,9 @@ use std::io;
 use heck::ToUpperCamelCase;
 
 use crate::generation::{
-    CodeGeneratorConfig, Feature,
+    CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, Newlines, with_block},
-    plugin::{EmitContext, EmitterPlugin, VariantInfo},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile, VariantInfo},
     typescript::TypeScript,
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
@@ -167,6 +167,49 @@ function deserializeTupleArray<T>(
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<TypeScript> for BincodePlugin {
+    /// Returns the `import { Serializer, Deserializer }` statement needed by
+    /// the generated serialize/deserialize methods. The import path is resolved
+    /// from `config.external_packages`.
+    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let import_path = config.external_packages.get(SERDE_NAMESPACE).map_or_else(
+            || "./serde".to_string(),
+            |path| match &path.location {
+                PackageLocation::Path(_) => {
+                    let name = &path.for_namespace;
+                    path.module_name
+                        .as_ref()
+                        .map_or_else(|| name.clone(), |mod_name| format!("{name}/{mod_name}"))
+                }
+                PackageLocation::Url(_) => path.for_namespace.clone(),
+            },
+        );
+        vec![format!(
+            r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
+        )]
+    }
+
+    /// Returns the serde and bincode TypeScript runtime sources to be written
+    /// into the output directory alongside the generated code.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        static SERDE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
+        static BINCODE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/bincode");
+
+        let mut files: Vec<RuntimeFile> = SERDE
+            .files()
+            .map(|f| RuntimeFile {
+                relative_path: format!("serde/{}", f.path().display()),
+                contents: f.contents().to_vec(),
+            })
+            .collect();
+        files.extend(BINCODE.files().map(|f| RuntimeFile {
+            relative_path: format!("bincode/{}", f.path().display()),
+            contents: f.contents().to_vec(),
+        }));
+        files
+    }
+
     fn module_helpers(
         &self,
         w: &mut dyn IndentWrite,
@@ -407,7 +450,7 @@ fn write_serialize(w: &mut dyn IndentWrite, value_expr: &str, format: &Format) -
 // ---------------------------------------------------------------------------
 
 /// Renders a TypeScript type expression for `format` without requiring a
-/// language tag — the mapping is fixed for TypeScript regardless of encoding.
+/// language tag — the mapping is fixed for TypeScript regardless of plugin.
 fn quote_type(format: &Format) -> String {
     match format {
         Format::TypeName(type_) => type_.format(ToUpperCamelCase::to_upper_camel_case, "."),
@@ -744,7 +787,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         assert!(plugin.has_type_body(&ctx));
     }
@@ -763,7 +807,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -792,7 +837,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -833,7 +879,8 @@ mod tests {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(
@@ -887,7 +934,8 @@ mod tests {
             fields: &variant_fields,
             parent_name: "Result",
         };
-        let ctx = EmitContext::for_variant(&container, variant_info);
+        let config = CodeGeneratorConfig::new("test".to_string());
+        let ctx = EmitContext::for_variant(&container, &config, variant_info);
 
         let out = render(|w| plugin.type_body(w, &ctx));
         assert!(

@@ -9,22 +9,29 @@
 //!
 //! | Area | What is tested |
 //! |------|----------------|
-//! | Serde imports | Bincode encoding triggers `import Serde`; `Encoding::None` does not |
+//! | Serde imports | `BincodePlugin` triggers `import Serde`; no plugin does not |
 //! | External definitions | External namespaces appear as `import` statements |
-//! | Encoding config | Encoding propagates through to generated output |
-//! | Feature helpers | Complex types (e.g. `Seq`) trigger trait helper emission when encoding is active |
+//! | Plugin config | Plugins propagate through to generated output |
+//! | Feature helpers | Complex types (e.g. `Seq`) trigger trait helper emission when a plugin is active |
 
 use std::collections::BTreeMap;
 
+use std::sync::Arc;
+
 use crate::{
-    generation::{CodeGeneratorConfig, Encoding},
+    generation::{CodeGeneratorConfig, bincode::BincodePlugin, plugin::EmitterPlugin},
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
 };
 
 use super::*;
+use crate::generation::swift::emitter::Swift;
 
-fn generate(config: &CodeGeneratorConfig, registry: &Registry) -> String {
-    let generator = SwiftCodeGenerator::new(config);
+fn generate(
+    config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
+    registry: &Registry,
+) -> String {
+    let generator = SwiftCodeGenerator::new(config).with_plugins(plugins);
     let mut output = Vec::new();
     generator.output(&mut output, registry).unwrap();
     String::from_utf8(output).unwrap()
@@ -32,7 +39,7 @@ fn generate(config: &CodeGeneratorConfig, registry: &Registry) -> String {
 
 #[test]
 fn test_no_encoding_does_not_import_serde() {
-    let config = CodeGeneratorConfig::new("MyPackage".to_string()).with_encoding(Encoding::None);
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
     let fields = vec![Named {
@@ -45,7 +52,7 @@ fn test_no_encoding_does_not_import_serde() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, &registry);
+    let output = generate(&config, vec![], &registry);
 
     assert!(
         !output.contains("import Serde"),
@@ -55,7 +62,7 @@ fn test_no_encoding_does_not_import_serde() {
 
 #[test]
 fn test_bincode_encoding_has_serde_import() {
-    let config = CodeGeneratorConfig::new("MyPackage".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
     let fields = vec![Named {
@@ -68,7 +75,7 @@ fn test_bincode_encoding_has_serde_import() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("import Serde"),
@@ -82,7 +89,6 @@ fn test_preamble_includes_external_definition_imports() {
     external_definitions.insert("another_target".to_string(), vec!["Child".to_string()]);
 
     let config = CodeGeneratorConfig::new("MyPackage".to_string())
-        .with_encoding(Encoding::Bincode)
         .with_external_definitions(external_definitions);
 
     let mut registry = Registry::new();
@@ -91,7 +97,7 @@ fn test_preamble_includes_external_definition_imports() {
         ContainerFormat::UnitStruct(Doc::new()),
     );
 
-    let output = generate(&config, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("import AnotherTarget"),
@@ -105,7 +111,7 @@ fn test_preamble_includes_external_definition_imports() {
 
 #[test]
 fn test_trait_helpers_emitted_for_complex_types() {
-    let config = CodeGeneratorConfig::new("MyPackage".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
     let fields = vec![Named {
@@ -118,7 +124,7 @@ fn test_trait_helpers_emitted_for_complex_types() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, &registry);
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
         output.contains("func serializeArray<T, S: Serializer>"),
@@ -132,7 +138,7 @@ fn test_trait_helpers_emitted_for_complex_types() {
 
 #[test]
 fn test_no_trait_helpers_without_encoding() {
-    let config = CodeGeneratorConfig::new("MyPackage".to_string()).with_encoding(Encoding::None);
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
     let fields = vec![Named {
@@ -145,7 +151,7 @@ fn test_no_trait_helpers_without_encoding() {
         ContainerFormat::Struct(fields, Doc::new()),
     );
 
-    let output = generate(&config, &registry);
+    let output = generate(&config, vec![], &registry);
 
     assert!(
         !output.contains("func serializeArray"),

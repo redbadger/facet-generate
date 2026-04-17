@@ -6,8 +6,7 @@
 use facet::Facet;
 
 use super::super::*;
-use crate as fg;
-use crate::emit;
+use crate::{self as fg, emit, generation::bincode::BincodePlugin};
 
 #[test]
 fn unit_struct() {
@@ -16,7 +15,7 @@ fn unit_struct() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit!(UnitStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(UnitStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     /// line 1
@@ -65,7 +64,7 @@ fn newtype_struct() {
     #[derive(Facet)]
     struct NewType(String);
 
-    let actual = emit!(NewType as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(NewType as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class NewType : ObservableObject, IFacetSerializable, IFacetDeserializable<NewType> {
@@ -119,7 +118,7 @@ fn tuple_struct() {
     #[derive(Facet)]
     struct TupleStruct(String, i32);
 
-    let actual = emit!(TupleStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(TupleStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class TupleStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<TupleStruct> {
@@ -196,7 +195,7 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit!(StructWithFields as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(StructWithFields as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class StructWithFields : ObservableObject, IFacetSerializable, IFacetDeserializable<StructWithFields> {
@@ -340,7 +339,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit!(Outer as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(Outer as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class Inner1 : ObservableObject, IFacetSerializable, IFacetDeserializable<Inner1> {
@@ -543,7 +542,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -602,7 +601,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -663,7 +662,7 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -730,7 +729,7 @@ fn struct_with_bytes_field() {
         header: Vec<u8>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {
@@ -801,7 +800,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::Bincode).unwrap();
+    let actual = emit!(MyStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     public partial class MyStruct : ObservableObject, IFacetSerializable, IFacetDeserializable<MyStruct> {

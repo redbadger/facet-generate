@@ -3,22 +3,27 @@
 //! [`KotlinCodeGenerator`] implements [`CodeGenerator`] and is the entry point for
 //! producing a single Kotlin source file from a [`Registry`].
 
+use std::{
+    io::{Result, Write},
+    sync::Arc,
+};
+
 use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, config::PackageLocation,
-        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module,
+        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module, plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
-use std::io::{Result, Write};
 
 /// Kotlin code generator — holds a reference to the shared
 /// [`CodeGeneratorConfig`] and implements [`CodeGenerator`].
 pub struct KotlinCodeGenerator<'a> {
-    /// Language-independent configuration (encoding, module name, external
-    /// packages, etc.).
+    /// Language-independent configuration (module name, external packages, etc.).
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Plugins applied during code generation.
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>,
 }
 
 impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
@@ -36,10 +41,23 @@ impl<'a> CodeGenerator<'a> for KotlinCodeGenerator<'a> {
 }
 
 impl<'a> KotlinCodeGenerator<'a> {
-    /// Create a Kotlin code generator for the given config
+    /// Create a Kotlin code generator for the given config with no plugins
+    /// (plain type declarations only, no serialize/deserialize methods).
+    ///
+    /// Call [`with_plugins`](Self::with_plugins) to enable serialization.
     #[must_use]
     pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            plugins: vec![],
+        }
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>) -> Self {
+        self.plugins = plugins;
+        self
     }
 
     /// Produce a complete Kotlin source file for the given `registry`.
@@ -53,7 +71,10 @@ impl<'a> KotlinCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Kotlin::new(&config, registry);
+        let mut lang = Kotlin::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

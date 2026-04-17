@@ -5,11 +5,6 @@
 //! Configuration that controls code-generation behaviour independent of the
 //! target language.
 //!
-//! The most important knob is [`Encoding`]: it decides whether generated types
-//! are plain data classes (`None`) or also get `serialize` / `deserialize`
-//! methods (`Json` or `Bincode`). When serialization is enabled, the installer
-//! copies the corresponding runtime support files alongside the generated code.
-//!
 //! Cross-module relationships are handled by [`ExternalDefinitions`] (which
 //! types live in other modules) and [`ExternalPackages`] (where to import them
 //! from), so generators can emit `import` / `using` statements instead of
@@ -22,11 +17,9 @@
 //! There are two configuration levels:
 //!
 //! - [`Config`] / [`ConfigBuilder`] — the public API entry point (package
-//!   name, output directory, encoding, external packages).
+//!   name, output directory, external packages).
 //! - [`CodeGeneratorConfig`] — the internal, per-module config that generators
-//!   and [`Emitter`](super::Emitter) implementations receive. Generators copy
-//!   the [`Encoding`] from here into the language tag so that emitters can
-//!   access it via the `lang` parameter without needing the full config.
+//!   and [`Emitter`](super::Emitter) implementations receive.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -40,23 +33,16 @@ use thiserror::Error;
 use crate::{
     Registry,
     generation::indent::IndentConfig,
-    reflection::format::{Format, FormatHolder, Namespace},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, VariantFormat},
 };
 
 /// Code generation options meant to be supported by all languages.
 #[derive(Clone, Debug)]
-#[expect(
-    deprecated,
-    reason = "CodeGeneratorConfig still contains the deprecated CustomCode field for backwards compatibility"
-)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
-    pub encoding: Encoding,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
-    /// **Deprecated since 0.16.0:** `custom_code` was only used by the Java generator, which is deprecated. Use Kotlin instead.
-    pub custom_code: CustomCode,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
     /// The indentation style used when writing generated source code.
@@ -71,21 +57,10 @@ pub struct CodeGeneratorConfig {
     /// External namespaces actually referenced via `Format::TypeName` in the registry.
     /// Populated by `update_from`. Used to generate namespace import statements.
     pub referenced_namespaces: BTreeSet<String>,
-}
-
-/// The wire format to target when generating serialization code.
-///
-/// - `None` — generate type declarations only, with no serialization support.
-/// - `Json` — generate JSON `serialize` / `deserialize` methods and install
-///   the JSON serde runtime.
-/// - `Bincode` — generate binary `serialize` / `bincodeDeserialize` methods
-///   and install the Bincode runtime.
-#[derive(Clone, Copy, Default, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize)]
-pub enum Encoding {
-    #[default]
-    None,
-    Json,
-    Bincode,
+    /// Names of all enums in the registry whose every variant is a unit variant.
+    /// Populated by `update_from`. Used by the C# Bincode plugin to dispatch
+    /// enum-typed fields through `{TypeName}Bincode.Serialize(...)` helpers.
+    pub unit_variant_enums: BTreeSet<String>,
 }
 
 /// Container or leaf types in the registry that need a runtime support file
@@ -104,23 +79,6 @@ pub enum Feature {
     TupleArray,
 }
 
-impl Encoding {
-    #[must_use]
-    pub fn is_none(self) -> bool {
-        self == Self::None
-    }
-
-    #[must_use]
-    pub fn is_json(self) -> bool {
-        self == Self::Json
-    }
-
-    #[must_use]
-    pub fn is_bincode(self) -> bool {
-        self == Self::Bincode
-    }
-}
-
 /// Track type definitions provided by other modules (key = `module`, value = `type names`).
 pub type ExternalDefinitions =
     BTreeMap</* module */ String, /* type names */ Vec<String>>;
@@ -131,14 +89,6 @@ pub type ExternalPackages =
 
 /// Track documentation to be attached to particular definitions.
 pub type DocComments = BTreeMap</* qualified name */ Vec<String>, /* comment */ String>;
-
-/// Track custom code to be added to particular definitions (use with care!).
-#[deprecated(
-    since = "0.16.0",
-    note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
-)]
-pub type CustomCode =
-    BTreeMap</* qualified name */ Vec<String>, /* custom code */ String>;
 
 /// Errors that can occur during code generation and installation.
 #[derive(Debug, Error)]
@@ -162,7 +112,7 @@ pub enum Error {
 /// the third layer of the pipeline — after [`CodeGenerator`](super::CodeGenerator)
 /// produces the source text and [`Emitter`](super::Emitter) renders each
 /// AST node, the installer places everything into the output directory and
-/// copies any runtime files required by the chosen [`Encoding`].
+/// writes any runtime files declared by the active plugins.
 pub trait SourceInstaller {
     /// Create a module exposing the container types contained in the registry.
     fn install_module(
@@ -171,37 +121,26 @@ pub trait SourceInstaller {
         registry: &Registry,
     ) -> std::result::Result<(), Error>;
 
-    /// Install the serde runtime.
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error>;
-
-    /// Install the bincode runtime.
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error>;
-
     /// Install a package manifest.
     fn install_manifest(&self, _module_name: &str) -> std::result::Result<(), Error> {
         Ok(())
     }
 }
 
-#[expect(
-    deprecated,
-    reason = "impl references the deprecated CustomCode type and with_custom_code method"
-)]
 impl CodeGeneratorConfig {
     /// Default config for the given module name.
     #[must_use]
-    pub fn new(module_name: String) -> Self {
+    pub const fn new(module_name: String) -> Self {
         Self {
             module_name,
-            encoding: Encoding::default(),
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
-            custom_code: BTreeMap::new(),
             package_manifest: true,
             features: BTreeSet::new(),
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
+            unit_variant_enums: BTreeSet::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -222,23 +161,11 @@ impl CodeGeneratorConfig {
         self
     }
 
-    /// Which encoding to use.
-    #[must_use]
-    pub const fn with_encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
-        self
-    }
-
     /// Which indentation style to use when writing generated source code.
     #[must_use]
     pub const fn with_indent(mut self, indent: IndentConfig) -> Self {
         self.indent = indent;
         self
-    }
-
-    #[must_use]
-    pub fn has_encoding(&self) -> bool {
-        !self.encoding.is_none()
     }
 
     /// Container names provided by other modules.
@@ -256,17 +183,6 @@ impl CodeGeneratorConfig {
             *comment = format!("{}\n", comment.trim());
         }
         self.comments = comments;
-        self
-    }
-
-    /// Custom code attached to particular entity.
-    #[must_use]
-    #[deprecated(
-        since = "0.16.0",
-        note = "custom_code was only used by the Java generator, which is deprecated. Use Kotlin instead."
-    )]
-    pub fn with_custom_code(mut self, code: CustomCode) -> Self {
-        self.custom_code = code;
         self
     }
 
@@ -354,24 +270,21 @@ impl CodeGeneratorConfig {
                 .expect("failed to parse registry");
         }
 
-        for name in registry.keys() {
+        for (name, format) in registry {
             if let Namespace::Named(ns) = &name.namespace
                 && ns != &self.module_name
             {
                 let entry = self.external_definitions.entry(ns.to_owned()).or_default();
                 entry.push(name.name.clone());
             }
-        }
-    }
-}
 
-impl Encoding {
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Json => "json",
-            Self::Bincode => "bincode",
+            if let ContainerFormat::Enum(variants, _) = format
+                && variants
+                    .values()
+                    .all(|v| matches!(v.value, VariantFormat::Unit))
+            {
+                self.unit_variant_enums.insert(name.name.clone());
+            }
         }
     }
 }
@@ -396,14 +309,6 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
-    /// The encoding to use for serialization/deserialization.
-    /// When set to anything other than `Encoding::None`, the appropriate
-    /// runtimes will be installed automatically.
-    #[builder(default, setter(custom))]
-    pub encoding: Encoding,
-    /// Whether to add extensions to the generated types.
-    #[builder(default = false, setter(custom))]
-    pub add_extensions: bool,
 }
 
 impl Config {
@@ -417,18 +322,6 @@ impl Config {
 }
 
 impl ConfigBuilder {
-    #[must_use]
-    pub const fn encoding(&mut self, encoding: Encoding) -> &mut Self {
-        self.encoding = Some(encoding);
-        self
-    }
-
-    #[must_use]
-    pub const fn add_extensions(&mut self) -> &mut Self {
-        self.add_extensions = Some(true);
-        self
-    }
-
     /// # Panics
     /// If any required fields are not initialized.
     #[must_use]

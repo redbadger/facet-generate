@@ -1,9 +1,12 @@
-//! Code generation — transforms a [`Registry`] into source code for target
-//! languages.
+#![allow(clippy::too_long_first_doc_paragraph)]
+//! Code generation — transforms a [`Registry`] into source code.
 //!
-//! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`) behind a
-//! feature flag. The generation pipeline has three layers:
+//! Each language has its own submodule (`kotlin`, `csharp`, `swift`, `typescript`)
+//! behind a feature flag.
 //!
+//! ## Generation pipeline
+//!
+//! The generation pipeline has three layers:
 //! - **Generator** ([`CodeGenerator`]) — top-level entry point that writes a complete output file
 //!   from a registry.
 //! - **Emitter** ([`Emitter`]) — walks the [`Format`](crate::reflection::format::Format) AST
@@ -12,7 +15,8 @@
 //! - **Installer** — (language-specific) scaffolds project files, package manifests, and
 //!   generated source into an output directory.
 //!
-//! Shared infrastructure:
+//! ## Shared infrastructure
+//!
 //! - [`CodeGeneratorConfig`] — configuration (package name, encoding, custom types, etc.)
 //! - [`indent`] — indentation-aware writer
 //! - [`module`] — splits a registry by namespace into separate output modules
@@ -27,28 +31,26 @@ pub mod module;
 /// Plugin infrastructure for extending code generation.
 pub mod plugin;
 
-/// Internal bincode plugin — provides bincode-specific imports and helpers
-/// through the plugin trait. Will eventually move to a separate crate.
-pub(crate) mod bincode;
+/// Bincode serialization plugin — provides bincode-specific imports and helpers
+/// through the plugin trait.
+pub mod bincode;
 
-/// Internal JSON plugin — provides JSON-specific imports, annotations, and
-/// helpers through the plugin trait. Will eventually move to a separate crate.
-pub(crate) mod json;
+/// JSON serialization plugin — provides JSON-specific imports, annotations, and
+/// helpers through the plugin trait.
+pub mod json;
 
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
 pub mod csharp;
-/// Support for code-generation in Java.
-///
-/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
-#[cfg(feature = "java")]
-pub mod java;
+
 /// Support for code-generation in Kotlin
 #[cfg(feature = "kotlin")]
 pub mod kotlin;
+
 /// Support for code-generation in Swift
 #[cfg(feature = "swift")]
 pub mod swift;
+
 /// Support for code-generation in TypeScript
 #[cfg(feature = "typescript")]
 pub mod typescript;
@@ -113,11 +115,10 @@ impl<'a> From<(&'a QualifiedTypeName, &'a ContainerFormat)> for Container<'a> {
 /// 1. **Dispatch** — A single AST type (e.g. [`Container`], [`Module`](module::Module),
 ///    `Named<Format>`) can implement `Emitter<L>` once per language, and the compiler
 ///    resolves the correct implementation from the tag alone.
-/// 2. **Configuration** — Language tags carry per-invocation settings such as the
-///    target [`Encoding`] (None / Json / Bincode) and a list of
-///    [`EmitterPlugin`](plugin::EmitterPlugin)s, so implementations can
-///    conditionally emit serialization methods and delegate to plugins at
-///    well-defined extension points.
+/// 2. **Configuration** — Language tags carry per-invocation settings such as a list of
+///    [`EmitterPlugin`](plugin::EmitterPlugin)s (e.g. `BincodePlugin` or `JsonPlugin`),
+///    so implementations can conditionally emit serialization methods and delegate to
+///    plugins at well-defined extension points.
 ///
 /// # Typical implementors
 ///

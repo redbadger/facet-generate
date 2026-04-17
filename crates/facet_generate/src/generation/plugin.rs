@@ -52,6 +52,13 @@ pub struct EmitContext<'a> {
     /// The top-level container (struct or enum) being emitted.
     pub container: &'a Container<'a>,
 
+    /// The fully-populated [`CodeGeneratorConfig`] for the current module.
+    ///
+    /// Available to plugins so they can read derived data (e.g.
+    /// `unit_variant_enums`, `features`, `external_packages`) without
+    /// needing to cache it at construction time.
+    pub config: &'a CodeGeneratorConfig,
+
     /// When the current emission site is a variant inside an enum /
     /// sealed interface, this carries the variant-specific details.
     /// `None` for top-level types.
@@ -61,18 +68,24 @@ pub struct EmitContext<'a> {
 impl<'a> EmitContext<'a> {
     /// Create a context for a top-level type (no variant).
     #[must_use]
-    pub const fn top_level(container: &'a Container<'a>) -> Self {
+    pub const fn top_level(container: &'a Container<'a>, config: &'a CodeGeneratorConfig) -> Self {
         Self {
             container,
+            config,
             variant: None,
         }
     }
 
     /// Create a context for a variant inside a sealed interface / enum.
     #[must_use]
-    pub const fn for_variant(container: &'a Container<'a>, variant: VariantInfo<'a>) -> Self {
+    pub const fn for_variant(
+        container: &'a Container<'a>,
+        config: &'a CodeGeneratorConfig,
+        variant: VariantInfo<'a>,
+    ) -> Self {
         Self {
             container,
+            config,
             variant: Some(variant),
         }
     }

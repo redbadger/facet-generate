@@ -31,8 +31,7 @@
 //!   `bincodeSerialize` / `bincodeDeserialize` wrappers.
 //! - `JsonPlugin` supplies the same `serialize` / `deserialize` methods and
 //!   `jsonSerialize` / `jsonDeserialize` wrappers.
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
@@ -63,13 +62,12 @@ use indoc::formatdoc;
 
 use heck::ToUpperCamelCase as _;
 
+use crate::generation::CodeGeneratorConfig;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding,
-        bincode::BincodePlugin,
+        Container, Emitter,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
         plugin::{EmitContext, EmitterPlugin},
         swift::generator::{compute_equatable_types, compute_hashable_types},
@@ -79,7 +77,7 @@ use crate::{
 
 /// Language tag for Swift code generation.
 ///
-/// Carries the active [`Encoding`] and the sets of type names (within the
+/// Carries the active `Encoding` and the sets of type names (within the
 /// current module) that are known to be able to synthesize `Hashable` and
 /// `Equatable` conformance respectively. Both sets are computed by a
 /// preprocessing pass — see
@@ -90,6 +88,8 @@ use crate::{
 /// removed.
 #[derive(Debug, Clone)]
 pub struct Swift {
+    /// The code-generator configuration for the current module.
+    pub(crate) config: CodeGeneratorConfig,
     /// Type names (root-namespace) that can synthesize `Hashable` conformance.
     pub(crate) hashable_types: BTreeSet<String>,
     /// Type names (root-namespace) that can synthesize or manually implement
@@ -99,30 +99,39 @@ pub struct Swift {
 }
 
 impl Swift {
-    /// Create a Swift language tag with computed type sets and plugins for
-    /// the encoding specified in `config`.
+    /// Create a Swift language tag with computed type sets and an empty plugin
+    /// list. Plugins are added by the code generator (which holds the encoding)
+    /// or explicitly via [`with_plugin`](Self::with_plugin).
     ///
-    /// - [`Encoding::Bincode`] → includes `BincodePlugin`
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// The `hashable_types` and `equatable_types` sets are computed from the
+    /// registry via fixed-point analysis and are unrelated to plugin selection.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
         Self {
+            config: config.clone(),
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
-            plugins,
+            plugins: vec![],
         }
+    }
+
+    /// Access the code-generator configuration.
+    #[must_use]
+    pub const fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Access the plugin list.
     #[must_use]
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
+    }
+
+    /// Add a plugin to this language tag (builder-style).
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
     }
 }
 
@@ -600,7 +609,7 @@ fn struct_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -684,7 +693,7 @@ fn enum_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container);
+    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }

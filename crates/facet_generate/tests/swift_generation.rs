@@ -12,13 +12,17 @@ use facet_generate as fg;
 use facet_generate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, SourceInstaller,
-        swift::{Installer as SwiftInstaller, SwiftCodeGenerator, normalize_path},
+        CodeGeneratorConfig, SourceInstaller,
+        bincode::BincodePlugin,
+        plugin::EmitterPlugin,
+        swift::{
+            Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator, normalize_path,
+        },
     },
     reflect,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs::File, io::Write, process::Command};
+use std::{collections::BTreeMap, fs::File, io::Write, process::Command, sync::Arc};
 use tempfile::{TempDir, tempdir};
 
 // ---------------------------------------------------------------------------
@@ -134,20 +138,46 @@ struct Test {
 
 fn test_that_swift_code_compiles_with_config(
     config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn EmitterPlugin<SwiftLang>>>,
 ) -> (TempDir, std::path::PathBuf) {
-    test_that_swift_code_compiles_with_config_and_registry(config, &get_swift_registry())
+    test_that_swift_code_compiles_with_config_and_registry(config, &get_swift_registry(), plugins)
 }
 
 fn test_that_swift_code_compiles_with_config_and_registry(
     config: &CodeGeneratorConfig,
     registry: &Registry,
+    plugins: Vec<Arc<dyn EmitterPlugin<SwiftLang>>>,
 ) -> (TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("Sources/Testing")).unwrap_or(());
     let serde_package_path = std::env::current_dir().unwrap().join("runtime/swift");
     let mut file = File::create(dir.path().join("Package.swift")).unwrap();
 
-    if config.has_encoding() {
+    if plugins.is_empty() {
+        write!(
+            file,
+            r#"// swift-tools-version:6.0
+
+import PackageDescription
+
+let package = Package(
+    name: "Testing",
+    platforms: [.macOS(.v15)],
+    products: [
+        .library(
+            name: "Testing",
+            targets: ["Testing"]),
+    ],
+    targets: [
+        .target(
+            name: "Testing",
+            dependencies: []),
+    ]
+)
+"#
+        )
+        .unwrap();
+    } else {
         write!(
             file,
             r#"// swift-tools-version:6.0
@@ -175,36 +205,12 @@ let package = Package(
             normalize_path(serde_package_path.to_str().unwrap())
         )
         .unwrap();
-    } else {
-        write!(
-            file,
-            r#"// swift-tools-version:6.0
-
-import PackageDescription
-
-let package = Package(
-    name: "Testing",
-    platforms: [.macOS(.v15)],
-    products: [
-        .library(
-            name: "Testing",
-            targets: ["Testing"]),
-    ],
-    targets: [
-        .target(
-            name: "Testing",
-            dependencies: []),
-    ]
-)
-"#
-        )
-        .unwrap();
     }
 
     let source_path = dir.path().join("Sources/Testing/Testing.swift");
     let mut source = File::create(&source_path).unwrap();
 
-    let generator = SwiftCodeGenerator::new(config);
+    let generator = SwiftCodeGenerator::new(config).with_plugins(plugins);
     generator.output(&mut source, registry).unwrap();
 
     // Disable the index store: it's not needed for compilation checks, and on
@@ -231,16 +237,17 @@ fn set_of_tuple_errors() {
         items: std::collections::HashSet<(String, i32)>,
     }
 
+    use facet_generate::generation::bincode::BincodePlugin;
     use facet_generate::generation::swift::Swift;
     use facet_generate::generation::{
         Container,
         indent::{IndentConfig, IndentedWriter},
     };
+    use std::sync::Arc;
 
     let registry = reflect!(MyStruct).unwrap();
-    let config = facet_generate::generation::CodeGeneratorConfig::new(String::new())
-        .with_encoding(Encoding::Bincode);
-    let lang = Swift::new(&config, &registry);
+    let config = CodeGeneratorConfig::new("test".to_string());
+    let lang = Swift::new(&config, &registry).with_plugin(Arc::new(BincodePlugin));
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
@@ -265,16 +272,17 @@ fn map_with_tuple_key_errors() {
         data: std::collections::HashMap<(String, i32), bool>,
     }
 
+    use facet_generate::generation::bincode::BincodePlugin;
     use facet_generate::generation::swift::Swift;
     use facet_generate::generation::{
         Container,
         indent::{IndentConfig, IndentedWriter},
     };
+    use std::sync::Arc;
 
     let registry = reflect!(MyStruct).unwrap();
-    let config = facet_generate::generation::CodeGeneratorConfig::new(String::new())
-        .with_encoding(Encoding::Bincode);
-    let lang = Swift::new(&config, &registry);
+    let config = CodeGeneratorConfig::new("test".to_string());
+    let lang = Swift::new(&config, &registry).with_plugin(Arc::new(BincodePlugin));
     let mut out = Vec::new();
     let mut w = IndentedWriter::new(&mut out, IndentConfig::Space(4));
     let result: std::io::Result<()> = (|| {
@@ -294,8 +302,11 @@ fn map_with_tuple_key_errors() {
 
 #[test]
 fn test_that_swift_code_compiles() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
-    test_that_swift_code_compiles_with_config(&config);
+    let config = CodeGeneratorConfig::new("Testing".to_string());
+    test_that_swift_code_compiles_with_config(
+        &config,
+        vec![Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<SwiftLang>>],
+    );
 }
 
 #[test]
@@ -319,13 +330,16 @@ fn test_that_swift_code_compiles_without_serialization() {
 
     let registry = reflect!(Parent).unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string());
-    test_that_swift_code_compiles_with_config_and_registry(&config, &registry);
+    test_that_swift_code_compiles_with_config_and_registry(&config, &registry, vec![]);
 }
 
 #[test]
 fn test_that_swift_code_compiles_with_bincode() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
-    test_that_swift_code_compiles_with_config(&config);
+    let config = CodeGeneratorConfig::new("Testing".to_string());
+    test_that_swift_code_compiles_with_config(
+        &config,
+        vec![Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<SwiftLang>>],
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -346,9 +360,9 @@ fn test_that_swift_code_compiles_with_bincode() {
 /// * Asserts that `swift run` exits successfully.
 fn assert_swift_conformance_runs(registry: &Registry, main_swift: &str) {
     let dir = tempdir().unwrap();
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("Testing".to_string());
 
-    let mut installer = SwiftInstaller::new(&config.module_name, dir.path());
+    let mut installer = SwiftInstaller::new(&config.module_name, dir.path()).plugin(BincodePlugin);
     installer.install_module(&config, registry).unwrap();
     installer.install_serde_runtime().unwrap();
 
@@ -551,9 +565,12 @@ fn test_swift_code_with_external_definitions() {
 
 #[test]
 fn test_that_swift_code_follow_case_convention() {
-    let config = CodeGeneratorConfig::new("Testing".to_string()).with_encoding(Encoding::Bincode);
+    let config = CodeGeneratorConfig::new("Testing".to_string());
 
-    let (_dir, source_path) = test_that_swift_code_compiles_with_config(&config);
+    let (_dir, source_path) = test_that_swift_code_compiles_with_config(
+        &config,
+        vec![Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<SwiftLang>>],
+    );
     // Case convention were correctly followed.
     let content = std::fs::read_to_string(source_path).unwrap();
 

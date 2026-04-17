@@ -10,7 +10,7 @@ use crate::generation::{
     CodeGeneratorConfig, Feature,
     indent::IndentWrite,
     kotlin::Kotlin,
-    plugin::{EmitContext, EmitterPlugin},
+    plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, VariantFormat};
 
@@ -39,6 +39,28 @@ private object BigIntegerSerializer : KSerializer<BigInteger> {
 "#;
 
 impl EmitterPlugin<Kotlin> for JsonPlugin {
+    /// Returns the serde Kotlin runtime sources needed for JSON encoding.
+    fn runtime_files(&self) -> Vec<RuntimeFile> {
+        static SERDE: include_dir::Dir<'static> =
+            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/kotlin/com/novi/serde");
+        SERDE
+            .files()
+            .map(|f| RuntimeFile {
+                relative_path: format!("com/novi/serde/{}", f.path().display()),
+                contents: f.contents().to_vec(),
+            })
+            .collect()
+    }
+
+    /// Returns the kotlinx-serialization-json Gradle dependency needed for
+    /// JSON encoding.
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![
+            r#"    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")"#
+                .to_string(),
+        ]
+    }
+
     /// JSON / kotlinx.serialization imports for a Kotlin module.
     ///
     /// Returns the base `Serializable` and `SerialName` imports, plus
@@ -193,13 +215,14 @@ mod tests {
         use crate::generation::Container;
         use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
 
+        let config = make_config(&[]);
         let name = QualifiedTypeName::root("Foo".to_string());
         let format = ContainerFormat::Struct(vec![], Doc::default());
         let container = Container {
             name: &name,
             format: &format,
         };
-        let ctx = EmitContext::top_level(&container);
+        let ctx = EmitContext::top_level(&container, &config);
         let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
         let annotations = plugin.type_annotations(&ctx);
 
