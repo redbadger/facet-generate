@@ -272,10 +272,10 @@ fn struct_with_fields_of_primitive_types() {
             serializer.serialize_i32(i32)
             serializer.serialize_i64(i64)
             serializer.serialize_i128(i128)
-            serializer.serialize_u8(u8)
-            serializer.serialize_u16(u16)
-            serializer.serialize_u32(u32)
-            serializer.serialize_u64(u64)
+            serializer.serialize_u8(u8.toByte())
+            serializer.serialize_u16(u16.toShort())
+            serializer.serialize_u32(u32.toInt())
+            serializer.serialize_u64(u64.toLong())
             serializer.serialize_u128(u128)
             serializer.serialize_f32(f32)
             serializer.serialize_f64(f64)
@@ -300,10 +300,10 @@ fn struct_with_fields_of_primitive_types() {
                 val i32 = deserializer.deserialize_i32()
                 val i64 = deserializer.deserialize_i64()
                 val i128 = deserializer.deserialize_i128()
-                val u8 = deserializer.deserialize_u8()
-                val u16 = deserializer.deserialize_u16()
-                val u32 = deserializer.deserialize_u32()
-                val u64 = deserializer.deserialize_u64()
+                val u8 = deserializer.deserialize_u8().toUByte()
+                val u16 = deserializer.deserialize_u16().toUShort()
+                val u32 = deserializer.deserialize_u32().toUInt()
+                val u64 = deserializer.deserialize_u64().toULong()
                 val u128 = deserializer.deserialize_u128()
                 val f32 = deserializer.deserialize_f32()
                 val f64 = deserializer.deserialize_f64()
@@ -588,7 +588,7 @@ fn struct_with_field_that_is_a_3_tuple() {
             serializer.increase_container_depth()
             serializer.serialize_str(one.first)
             serializer.serialize_i32(one.second)
-            serializer.serialize_u16(one.third)
+            serializer.serialize_u16(one.third.toShort())
             serializer.decrease_container_depth()
         }
 
@@ -604,7 +604,7 @@ fn struct_with_field_that_is_a_3_tuple() {
                 val one = run {
                     val first = deserializer.deserialize_str()
                     val second = deserializer.deserialize_i32()
-                    val third = deserializer.deserialize_u16()
+                    val third = deserializer.deserialize_u16().toUShort()
                     Triple(first, second, third)
                 }
                 deserializer.decrease_container_depth()
@@ -648,7 +648,7 @@ fn struct_with_field_that_is_a_4_tuple() {
             serializer.increase_container_depth()
             serializer.serialize_str(one.component1())
             serializer.serialize_i32(one.component2())
-            serializer.serialize_u16(one.component3())
+            serializer.serialize_u16(one.component3().toShort())
             serializer.serialize_f32(one.component4())
             serializer.decrease_container_depth()
         }
@@ -665,7 +665,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                 val one = run {
                     val v0 = deserializer.deserialize_str()
                     val v1 = deserializer.deserialize_i32()
-                    val v2 = deserializer.deserialize_u16()
+                    val v2 = deserializer.deserialize_u16().toUShort()
                     val v3 = deserializer.deserialize_f32()
                     NTuple4(v0, v1, v2, v3)
                 }
@@ -1031,7 +1031,7 @@ fn enum_with_tuple_variants() {
                 serializer.serialize_variant_index(1)
                 serializer.serialize_bool(field0)
                 serializer.serialize_f64(field1)
-                serializer.serialize_u8(field2)
+                serializer.serialize_u8(field2.toByte())
                 serializer.decrease_container_depth()
             }
 
@@ -1040,7 +1040,7 @@ fn enum_with_tuple_variants() {
                     deserializer.increase_container_depth()
                     val field0 = deserializer.deserialize_bool()
                     val field1 = deserializer.deserialize_f64()
-                    val field2 = deserializer.deserialize_u8()
+                    val field2 = deserializer.deserialize_u8().toUByte()
                     deserializer.decrease_container_depth()
                     return Variant2(field0, field1, field2)
                 }
@@ -1785,7 +1785,7 @@ fn struct_with_array_field() {
             fun deserialize(deserializer: Deserializer): MyStruct {
                 deserializer.increase_container_depth()
                 val fixedArray = buildList(5) { repeat(5) { add(deserializer.deserialize_i32()) } }
-                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8()) } }
+                val byteArray = buildList(32) { repeat(32) { add(deserializer.deserialize_u8().toUByte()) } }
                 val stringArray = buildList(3) { repeat(3) { add(deserializer.deserialize_str()) } }
                 deserializer.decrease_container_depth()
                 return MyStruct(fixedArray, byteArray, stringArray)
@@ -2506,7 +2506,7 @@ fn struct_with_bytes_field_and_slice() {
             serializer.serialize_bytes(header)
             optionalBytes.serializeOptionOf(serializer) { level1 ->
                 level1.serialize(serializer) {
-                    serializer.serialize_u8(it)
+                    serializer.serialize_u8(it.toByte())
                 }
             }
             serializer.decrease_container_depth()
@@ -2527,7 +2527,7 @@ fn struct_with_bytes_field_and_slice() {
                 val optionalBytes =
                     deserializer.deserializeOptionOf {
                         deserializer.deserializeListOf {
-                            deserializer.deserialize_u8()
+                            deserializer.deserialize_u8().toUByte()
                         }
                     }
                 deserializer.decrease_container_depth()
