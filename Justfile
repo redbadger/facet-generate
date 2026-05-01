@@ -20,6 +20,16 @@ test:
     @echo '{{ style("command") }}test:{{ NORMAL }}'
     cargo nextest run --all-features
 
+# runs Swift runtime tests (macOS and Linux only)
+[unix]
+swift-test:
+    @echo '{{ style("command") }}swift-test:{{ NORMAL }}'
+    swift test --package-path crates/facet_generate/runtime/swift
+
+[windows]
+swift-test:
+    @echo '{{ style("command") }}swift-test: skipped on Windows{{ NORMAL }}'
+
 # runs tests with snapshot review (interactive, for local dev)
 test-review:
     @echo '{{ style("command") }}test-review:{{ NORMAL }}'
@@ -50,7 +60,7 @@ docs:
     cargo rustdoc --all-features -p facet_generate -- -D warnings
 
 # CI pipeline: check, build, test (matches .github/workflows/build.yaml)
-ci: check docs build test
+ci: check docs build test swift-test
 
 update-rust-deps:
     @echo '{{ style("command") }}update-rust-deps:{{ NORMAL }}'

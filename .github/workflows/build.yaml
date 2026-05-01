@@ -78,3 +78,7 @@ jobs:
 
       - name: Test
         run: just test
+
+      - name: Swift runtime tests
+        if: runner.os != 'Windows'
+        run: just swift-test
