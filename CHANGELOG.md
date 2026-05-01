@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.17.0] - 2026-04-19
+
+This is a major release that introduces a new **plugin-based emitter architecture**, removes Java code generation entirely, drops Deno support for TypeScript, and brings significant improvements to Swift native type generation.
+
+### 💥 Breaking Changes
+
+- **New plugin-based emitter architecture** — emitters are now built around an `EmitterPlugin<Lang>` trait, enabling modular and composable code generation per language [#88](https://github.com/redbadger/facet-generate/pull/88)
+- **Removed Java code generation** — Java support has been fully removed as it had diverged too far; use Kotlin instead
+- **Dropped Deno support for TypeScript** — modern Deno works with Node packages, so dedicated Deno support is no longer needed [#89](https://github.com/redbadger/facet-generate/pull/89)
+- **Removed `Encoding` from plugins** — encoding is no longer part of the plugin configuration
+- **Renamed `CodeGen` to `CodeGenerator`** — and associated implementors [#86](https://github.com/redbadger/facet-generate/pull/86)
+
+### 🚀 Features
+
+- feat(plugins): Introduce `EmitterPlugin<Lang>` trait with plugin store for modular emitter composition [#88](https://github.com/redbadger/facet-generate/pull/88)
+- feat(plugins): Migrate Kotlin, Swift, TypeScript, and C# emitters to plugin-based architecture
+- feat(plugins): Plugin-based configuration system replacing the previous encoding-based approach
+- feat(writer): Child `IndentedWriter` support for nested code generation
+- feat(swift): Detect `Hashable`, `Equatable`, and `Indirect` conformance automatically [#91](https://github.com/redbadger/facet-generate/pull/91)
+- feat(swift): Remove remaining wrapper types (`Slice`, `Int128`, `UInt128`) in favour of native Swift types [#91](https://github.com/redbadger/facet-generate/pull/91)
+- feat(swift): Add compilation conformance tests
+- feat(swift): Use automatic test discovery on Linux with Swift 6
+
+### 🐛 Bug Fixes
+
+- fix(swift): Problem with Tuple handling in JSON serialization [#90](https://github.com/redbadger/facet-generate/pull/90)
+- fix(csharp): Conform C-style enum discovery to new `Language` model
+- fix: Don't strip comments for Bincode
+- fix: Error on bad namespace attribute [#82](https://github.com/redbadger/facet-generate/pull/82)
+
+### ⚙️ Miscellaneous Tasks
+
+- chore: Rename `CodeGen` to `CodeGenerator` and associated implementors [#86](https://github.com/redbadger/facet-generate/pull/86)
+- chore: Pass `Language` by reference throughout emitters
+- chore: Inline Kotlin feature-based code into relevant plugins
+- chore: Improve docs and fix warnings [#82](https://github.com/redbadger/facet-generate/pull/82)
+
 ## [0.16.0] - 2026-03-13
 
 This is a major release with several breaking changes, including a new simplified public API, and an upgrade to facet v0.44. It also introduces C# code generation (still experimental), deprecates Java in favor of Kotlin and removes BCS support.
