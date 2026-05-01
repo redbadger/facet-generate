@@ -144,7 +144,7 @@ fn check<'a, L: CodeGenerator<'a>>(
 /// e.g.
 /// ```rust
 /// test! {
-///    UnitStruct, AnotherType for java, swift, typescript
+///    UnitStruct, AnotherType for kotlin, swift, typescript
 /// }
 /// ```
 #[macro_export]
@@ -168,7 +168,6 @@ macro_rules! test {
 
     (@generate_tests [$($ty:ident),*] $language:ident $(, $rest:ident)*) => {
         #[test]
-        #[allow(deprecated)]
         fn $language() -> Result<()> {
             let registry = RegistryBuilder::new()
                 $(.add_type::<$ty>().unwrap())*
@@ -190,17 +189,14 @@ macro_rules! test {
 
     (@generate_tests [$($ty:ident),*]) => {};
 
-    (@package java) => { "com.example" };
     (@package kotlin) => { "com.example" };
     (@package swift) => { "ExamplePackage" };
     (@package typescript) => { "example_package" };
 
-    (@out java) => { "output.java" };
     (@out kotlin) => { "output.kt" };
     (@out swift) => { "output.swift" };
     (@out typescript) => { "output.ts" };
 
-    (@gen java) => { java::JavaCodeGenerator };
     (@gen kotlin) => { kotlin::KotlinCodeGenerator };
     (@gen swift) => { swift::SwiftCodeGenerator };
     (@gen typescript) => { typescript::TypeScriptCodeGenerator };

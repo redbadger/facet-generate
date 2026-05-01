@@ -8,12 +8,15 @@
 //! - Bincode runtime file installation (serde interfaces, serializer,
 //!   deserializer, error types)
 //! - JSON runtime installation (`JsonSerde.cs`)
-//! - No-encoding skips serde/bincode runtimes
-//! - Core `Unit.cs` always present regardless of encoding
+//! - No plugins skips serde/bincode runtimes
+//! - Core `Unit.cs` always present regardless of plugins
 
 use crate::{
     Registry,
-    generation::{Encoding, ExternalPackage, PackageLocation, csharp::Installer},
+    generation::{
+        ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp::Installer,
+        json::JsonPlugin,
+    },
 };
 
 #[test]
@@ -88,7 +91,7 @@ fn test_make_manifest_with_external_packages() {
 #[test]
 fn test_generate_bincode_installs_runtime_files() {
     let install_dir = tempfile::tempdir().unwrap();
-    let installer = Installer::new("Example.Types", install_dir.path()).encoding(Encoding::Bincode);
+    let installer = Installer::new("Example.Types", install_dir.path()).plugin(BincodePlugin);
     let registry = Registry::new();
 
     installer.generate(&registry).unwrap();
@@ -193,7 +196,7 @@ fn test_generate_no_encoding_skips_runtime_files() {
 #[test]
 fn test_generate_json_encoding_installs_serde_but_not_bincode() {
     let install_dir = tempfile::tempdir().unwrap();
-    let installer = Installer::new("Example.Types", install_dir.path()).encoding(Encoding::Json);
+    let installer = Installer::new("Example.Types", install_dir.path()).plugin(JsonPlugin);
     let registry = Registry::new();
 
     installer.generate(&registry).unwrap();

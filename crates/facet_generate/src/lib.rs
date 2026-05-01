@@ -6,9 +6,10 @@
 //! — and, optionally, serialization code to move data across the boundary. Writing these by
 //! hand is tedious and error-prone; this crate automates it.
 //!
-//! Optionally, when an [`Encoding`](generation::Encoding) such as Bincode or JSON is
-//! configured, the generated types include `serialize` / `deserialize` methods and the
-//! appropriate runtime library is installed alongside the generated code.
+//! Optionally, when a plugin such as [`BincodePlugin`](generation::bincode::BincodePlugin) or
+//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated types include
+//! `serialize` / `deserialize` methods and the appropriate runtime library is installed
+//! alongside the generated code.
 //!
 //! # Modules
 //!
@@ -74,33 +75,31 @@
 //!
 //! ## 3. Generate code
 //!
-//! Pass the [`Registry`] to a language-specific installer, optionally configure an
-//! [`Encoding`](generation::Encoding), and call `generate()`:
+//! Pass the [`Registry`] to a language-specific installer, optionally add plugins for
+//! serialization support, and call `generate()`:
 //!
 //! ```rust,ignore
-//! use facet_generate::generation::{self, Encoding};
-//! use generation::{kotlin, swift, typescript};
-//! use generation::typescript::InstallTarget;
+//! use facet_generate::generation::{bincode::BincodePlugin, kotlin, swift, typescript};
 //!
 //! // Swift package with Bincode serialization
 //! swift::Installer::new("MyPackage", &out_dir)
-//!     .encoding(Encoding::Bincode)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
 //! // Kotlin package with Bincode serialization
 //! kotlin::Installer::new("com.example", &out_dir)
-//!     .encoding(Encoding::Bincode)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
-//! // TypeScript (Node) with Bincode serialization
-//! typescript::Installer::new("my-package", &out_dir, InstallTarget::Node)
-//!     .encoding(Encoding::Bincode)
+//! // TypeScript with Bincode serialization
+//! typescript::Installer::new("my-package", &out_dir)
+//!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //! ```
 //!
 //! Each installer writes a ready-to-build project to `out_dir` — type definitions plus,
-//! when encoding is configured, the appropriate serialization runtime. Omit
-//! `.encoding(...)` to generate plain type definitions without any serialization code.
+//! when a serialization plugin is configured, the appropriate runtime. Omit
+//! `.plugin(...)` to generate plain type definitions without any serialization code.
 //!
 //! ## Key attributes
 //!
@@ -198,12 +197,19 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 
 /// Test/convenience macro: reflects the given types and emits code for each
-/// container using the specified language tag and encoding.
+/// container using the specified language tag, optionally with plugins.
 ///
 /// Returns `anyhow::Result<String>` containing the generated source.
 ///
 /// ```ignore
-/// let code = emit!(MyStruct, MyEnum as Kotlin with Encoding::Json)?;
+/// // Plain type declarations (no serialization)
+/// let code = emit!(MyStruct, MyEnum as Kotlin)?;
+///
+/// // With a plugin (e.g. bincode serialization)
+/// let code = emit!(MyStruct, MyEnum as Kotlin with BincodePlugin)?;
+///
+/// // With multiple plugins
+/// let code = emit!(MyStruct as Swift with BincodePlugin, MyCustomPlugin)?;
 /// ```
 ///
 /// This skips the [`Module`](generation::module::Module) header (no `package`
@@ -212,56 +218,25 @@ pub type Registry = BTreeMap<QualifiedTypeName, ContainerFormat>;
 #[cfg(test)]
 #[macro_export]
 macro_rules! emit {
-    ($($ty:ident),* as $language:ident with $encoding:path) => {
+    ($($ty:ident),* as $language:ident) => {
+        emit!($($ty),* as $language with)
+    };
+    ($($ty:ident),* as $language:ident with $($plugin:expr),* $(,)?) => {
         || -> anyhow::Result<String> {
-            use $crate::generation::{Container, CodeGeneratorConfig, indent::IndentedWriter};
+            use $crate::generation::{Container, Emitter as _, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
-            let cfg = CodeGeneratorConfig::new("test".to_string()).with_encoding($encoding);
-            let mut w = IndentedWriter::new(&mut out, cfg.indent);
+            let mut cfg = CodeGeneratorConfig::new("test".to_string());
             let registry = $crate::reflect!($($ty),*)?;
-            let lang = $language::new(&cfg, &registry);
+            cfg.update_from(&registry);
+            let mut w = IndentedWriter::new(&mut out, cfg.indent);
+            let lang = $language::new(&cfg, &registry)
+                $(.with_plugin(Arc::new($plugin)))*;
             for container in registry.iter().map(Container::from) {
                 writeln!(&mut w)?;
                 container.write(&mut w, &lang)?;
             }
-            let out = String::from_utf8(out)?;
-
-            Ok(out)
-        }()
-    };
-}
-
-/// **Deprecated since 0.16.0:** The Java generator is deprecated. Use the Kotlin generator instead.
-#[cfg(test)]
-#[macro_export]
-#[deprecated(
-    since = "0.16.0",
-    note = "The Java generator is deprecated. Use the Kotlin generator instead."
-)]
-macro_rules! emit_java {
-    ($($ty:ident),* as $encoding:path) => {
-        #[allow(deprecated)]
-        || -> anyhow::Result<String> {
-            use $crate::generation::{Encoding, indent::IndentedWriter};
-            let mut out = Vec::new();
-            let config = $crate::generation::CodeGeneratorConfig::new("com.example".to_string())
-                .with_encoding($encoding);
-            let w = IndentedWriter::new(&mut out, config.indent);
-            let generator = $crate::generation::java::JavaCodeGenerator::new(&config);
-            let mut emitter = $crate::generation::java::emitter::JavaEmitter {
-                out: w,
-                generator: &generator,
-                current_namespace: Vec::new(),
-                current_reserved_names: HashMap::new(),
-            };
-            let registry = $crate::reflect!($($ty),*)?;
-            for (name, format) in &registry {
-                emitter.output_container(&name.name, format).unwrap();
-            }
-            let out = String::from_utf8(out)?;
-
-            Ok(out)
+            Ok(String::from_utf8(out)?)
         }()
     };
 }

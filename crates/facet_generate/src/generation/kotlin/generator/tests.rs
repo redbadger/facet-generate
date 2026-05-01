@@ -24,7 +24,7 @@
 use super::*;
 use crate::{
     generation::{
-        CodeGeneratorConfig, Encoding,
+        CodeGeneratorConfig,
         config::{ExternalPackage, PackageLocation},
     },
     reflection::format::{
@@ -39,15 +39,13 @@ fn create_test_config(
 ) -> CodeGeneratorConfig {
     CodeGeneratorConfig::new(module_name.to_string())
         .with_external_definitions(external_definitions)
-        .with_encoding(Encoding::None)
 }
 
 fn create_test_config_with_external_packages(
     module_name: &str,
     external_packages: BTreeMap<String, ExternalPackage>,
 ) -> CodeGeneratorConfig {
-    let mut config =
-        CodeGeneratorConfig::new(module_name.to_string()).with_encoding(Encoding::None);
+    let mut config = CodeGeneratorConfig::new(module_name.to_string());
     config.external_packages = external_packages;
     config
 }
@@ -777,7 +775,7 @@ fn test_deserialization_uses_fully_qualified_names() {
     // Test that deserialization code uses fully qualified type names
     use crate::{
         generation::{
-            CodeGeneratorConfig, Encoding,
+            CodeGeneratorConfig,
             config::{ExternalPackage, PackageLocation},
             kotlin::KotlinCodeGenerator,
         },
@@ -797,8 +795,7 @@ fn test_deserialization_uses_fully_qualified_names() {
         },
     );
 
-    let mut config =
-        CodeGeneratorConfig::new("com.example.main".to_string()).with_encoding(Encoding::Bincode);
+    let mut config = CodeGeneratorConfig::new("com.example.main".to_string());
     config.external_packages = external_packages;
 
     // Create a registry with types that reference external types
@@ -836,7 +833,9 @@ fn test_deserialization_uses_fully_qualified_names() {
     registry.insert(struct_qualified_name, struct_container);
 
     // Generate the Kotlin code
-    let code_generator = KotlinCodeGenerator::new(&config);
+    let code_generator = KotlinCodeGenerator::new(&config).with_plugins(vec![std::sync::Arc::new(
+        crate::generation::bincode::BincodePlugin,
+    )]);
     let mut output = Vec::new();
     code_generator.output(&mut output, &registry).unwrap();
     let generated_code = String::from_utf8(output).unwrap();

@@ -6,13 +6,14 @@
 use std::{
     collections::BTreeSet,
     io::{Result, Write},
+    sync::Arc,
 };
 
 use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, swift::emitter::Swift,
+        module::Module, plugin::EmitterPlugin, swift::emitter::Swift,
     },
     reflection::format::{
         ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
@@ -26,11 +27,16 @@ use crate::{
 pub struct SwiftCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Pre-built plugins supplied by the caller (e.g. from the installer).
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
 }
 
 impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        SwiftCodeGenerator::new(config)
+        Self {
+            config,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: std::io::Write>(
@@ -43,10 +49,22 @@ impl<'a> CodeGenerator<'a> for SwiftCodeGenerator<'a> {
 }
 
 impl<'a> SwiftCodeGenerator<'a> {
-    /// Create a Swift code generator for the given config.
+    /// Create a Swift code generator with no encoding (plain types only).
+    ///
+    /// Call [`with_plugins`](Self::with_plugins) to enable serialization.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+        Self {
+            config,
+            plugins: vec![],
+        }
+    }
+
+    /// Set the pre-built plugin list, returning the modified generator.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>) -> Self {
+        self.plugins = plugins;
+        self
     }
 
     /// Produce a complete Swift source file for `registry`.
@@ -60,7 +78,10 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut config = self.config.clone();
         config.update_from(registry);
 
-        let lang = Swift::new(&config, registry);
+        let mut lang = Swift::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

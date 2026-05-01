@@ -1,6 +1,6 @@
 //! Snapshot tests for the C# emitter — **no serialization**.
 //!
-//! Every test uses the [`emit!`] macro with [`Encoding::None`], producing
+//! Every test uses the [`emit!`] macro with no plugins, producing
 //! plain MVVM types verified against `insta` inline snapshots.
 //!
 //! # Output shapes
@@ -27,6 +27,7 @@ use std::sync::Arc;
 use facet::Facet;
 
 use super::*;
+
 use crate::{self as fg, emit};
 
 #[test]
@@ -36,7 +37,7 @@ fn unit_struct() {
     /// line 2
     struct UnitStruct;
 
-    let actual = emit!(UnitStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(UnitStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     /// line 1
@@ -50,7 +51,7 @@ fn newtype_struct() {
     #[derive(Facet)]
     struct NewType(String);
 
-    let actual = emit!(NewType as CSharp with Encoding::None).unwrap();
+    let actual = emit!(NewType as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class NewType : ObservableObject {
@@ -67,7 +68,7 @@ fn tuple_struct() {
     /// line 2
     struct TupleStruct(String, i32);
 
-    let actual = emit!(TupleStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(TupleStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     /// line 1
@@ -104,7 +105,7 @@ fn struct_with_fields_of_primitive_types() {
         string: String,
     }
 
-    let actual = emit!(StructWithFields as CSharp with Encoding::None).unwrap();
+    let actual = emit!(StructWithFields as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class StructWithFields : ObservableObject {
@@ -164,7 +165,7 @@ fn struct_with_fields_of_user_types() {
         three: Inner3,
     }
 
-    let actual = emit!(Outer as CSharp with Encoding::None).unwrap();
+    let actual = emit!(Outer as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class Inner1 : ObservableObject {
@@ -202,7 +203,7 @@ fn struct_with_field_that_is_a_2_tuple() {
         one: (String, i32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -219,7 +220,7 @@ fn struct_with_field_that_is_a_3_tuple() {
         one: (String, i32, u16),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -236,7 +237,7 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -257,7 +258,7 @@ fn enum_with_unit_variants() {
         Variant3,
     }
 
-    let actual = emit!(EnumWithUnitVariants as CSharp with Encoding::None).unwrap();
+    let actual = emit!(EnumWithUnitVariants as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public enum EnumWithUnitVariants {
@@ -277,7 +278,7 @@ fn enum_with_unit_struct_variants() {
         Variant1 {},
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public enum MyEnum {
@@ -295,7 +296,7 @@ fn enum_with_1_tuple_variants() {
         Variant1(String),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public abstract record MyEnum {
@@ -315,7 +316,7 @@ fn enum_with_newtype_variants() {
         Variant2(i32),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public abstract record MyEnum {
@@ -337,7 +338,7 @@ fn enum_with_tuple_variants() {
         Variant2(bool, f64, u8),
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public abstract record MyEnum {
@@ -358,7 +359,7 @@ fn enum_with_struct_variants() {
         Variant1 { field1: String, field2: i32 },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public abstract record MyEnum {
@@ -380,7 +381,7 @@ fn enum_with_mixed_variants() {
         Struct { field: bool },
     }
 
-    let actual = emit!(MyEnum as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyEnum as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public abstract record MyEnum {
@@ -405,7 +406,7 @@ fn struct_with_vec_field() {
         nested_items: Vec<Vec<String>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -429,7 +430,7 @@ fn struct_with_option_field() {
         optional_bool: Option<bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -451,7 +452,7 @@ fn struct_with_hashmap_field() {
         int_to_bool: HashMap<i32, bool>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -476,7 +477,7 @@ fn struct_with_nested_types() {
         fixed_array: [i32; 4],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -508,7 +509,7 @@ fn struct_with_array_field() {
         string_array: [String; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -531,7 +532,7 @@ fn struct_with_bytes_field() {
         name: String,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -555,7 +556,7 @@ fn struct_with_bytes_field_and_slice() {
         optional_bytes: Option<Vec<u8>>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -578,7 +579,7 @@ fn struct_with_btreemap_field() {
         map: BTreeMap<String, i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -596,7 +597,7 @@ fn struct_with_hashset_field() {
         int_set: HashSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -616,7 +617,7 @@ fn struct_with_btreeset_field() {
         int_set: BTreeSet<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -637,7 +638,7 @@ fn struct_with_box_field() {
         boxed_int: Box<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -657,7 +658,7 @@ fn struct_with_rc_field() {
         rc_int: Rc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -677,7 +678,7 @@ fn struct_with_arc_field() {
         arc_int: Arc<i32>,
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -701,7 +702,7 @@ fn struct_with_mixed_collections_and_pointers() {
         array_of_boxes: [Box<i32>; 3],
     }
 
-    let actual = emit!(MyStruct as CSharp with Encoding::None).unwrap();
+    let actual = emit!(MyStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class MyStruct : ObservableObject {
@@ -734,7 +735,7 @@ fn struct_with_external_namespace_type() {
         many_children: Vec<Child>,
     }
 
-    let actual = emit!(Parent as CSharp with Encoding::None).unwrap();
+    let actual = emit!(Parent as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
     public partial class Parent : ObservableObject {

@@ -7,7 +7,7 @@
 
 use std::{fs, io::Write as _, process::Command};
 
-use facet_generate::generation::{Encoding, csharp};
+use facet_generate::generation::{bincode::BincodePlugin, csharp};
 use tempfile::tempdir;
 
 pub mod common;
@@ -60,7 +60,7 @@ fn test_csharp_bincode_runtime_on_simple_data() {
     let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
-        .encoding(Encoding::Bincode)
+        .plugin(BincodePlugin)
         .generate(&registry)
         .unwrap();
 
@@ -144,7 +144,7 @@ fn test_csharp_bincode_runtime_on_supported_types() {
     let dir = dir.path().to_path_buf().join("testing");
 
     csharp::Installer::new("Example.Testing", &dir)
-        .encoding(Encoding::Bincode)
+        .plugin(BincodePlugin)
         .generate(&registry)
         .unwrap();
 

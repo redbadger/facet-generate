@@ -35,11 +35,9 @@ fn single_namespace() {
         Module(
             CodeGeneratorConfig {
                 module_name: "Root",
-                encoding: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -47,6 +45,7 @@ fn single_namespace() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {
@@ -177,7 +176,6 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "Root",
-                encoding: None,
                 external_definitions: {
                     "one": [
                         "ChildOne",
@@ -188,7 +186,6 @@ fn root_namespace_with_two_child_namespaces() {
                 },
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -196,6 +193,7 @@ fn root_namespace_with_two_child_namespaces() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {
@@ -240,11 +238,9 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "one",
-                encoding: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -252,6 +248,7 @@ fn root_namespace_with_two_child_namespaces() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {
@@ -303,11 +300,9 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "two",
-                encoding: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -315,6 +310,7 @@ fn root_namespace_with_two_child_namespaces() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {
@@ -393,7 +389,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
         Module(
             CodeGeneratorConfig {
                 module_name: "App",
-                encoding: None,
                 external_definitions: {
                     "api": [
                         "GrandChild",
@@ -401,7 +396,6 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 },
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -409,6 +403,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {
@@ -461,11 +456,9 @@ fn same_namespace_with_external_dependency_bug_regression() {
         Module(
             CodeGeneratorConfig {
                 module_name: "api",
-                encoding: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
-                custom_code: {},
                 package_manifest: true,
                 features: {},
                 indent: Space(
@@ -473,6 +466,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 ),
                 used_format_types: {},
                 referenced_namespaces: {},
+                unit_variant_enums: {},
             },
         ): {
             QualifiedTypeName {

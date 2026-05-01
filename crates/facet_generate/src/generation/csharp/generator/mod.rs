@@ -7,11 +7,13 @@
 
 use std::io::{Result, Write};
 
+use std::sync::Arc;
+
 use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
-        indent::IndentedWriter, module::Module,
+        indent::IndentedWriter, module::Module, plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -23,11 +25,16 @@ use crate::{
 pub struct CSharpCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// Pre-built plugins to apply during code generation.
+    pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
 impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
-        CSharpCodeGenerator::new(config)
+        Self {
+            config,
+            plugins: vec![],
+        }
     }
 
     fn write_output<W: Write>(&mut self, writer: &mut W, registry: &Registry) -> Result<()> {
@@ -36,10 +43,22 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
 }
 
 impl<'a> CSharpCodeGenerator<'a> {
-    /// Create a C# code generator for the given config.
+    /// Create a C# code generator with no plugins.
+    ///
+    /// Call [`with_plugins`](Self::with_plugins) to add serialization plugins.
     #[must_use]
-    pub const fn new(config: &'a CodeGeneratorConfig) -> Self {
-        Self { config }
+    pub fn new(config: &'a CodeGeneratorConfig) -> Self {
+        Self {
+            config,
+            plugins: vec![],
+        }
+    }
+
+    /// Set pre-built plugins, returning the modified generator.
+    #[must_use]
+    pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>) -> Self {
+        self.plugins = plugins;
+        self
     }
 
     /// Output type definitions for `registry`.
@@ -54,7 +73,10 @@ impl<'a> CSharpCodeGenerator<'a> {
         config.update_from(registry);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        let lang = CSharp::new(&config, &updated_registry);
+        let mut lang = CSharp::new(&config, &updated_registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
 
         Module::new(&config).write(w, &lang)?;
 

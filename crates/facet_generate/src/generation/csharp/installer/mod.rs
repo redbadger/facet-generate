@@ -21,9 +21,11 @@
 //!    external packages.
 
 use std::{
+    collections::BTreeSet,
     fmt::Write as _,
     io::Write as _,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use heck::ToUpperCamelCase as _;
@@ -32,23 +34,25 @@ use indoc::writedoc;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Encoding, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SourceInstaller, csharp::CSharpCodeGenerator, module,
+        CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
+        SourceInstaller,
+        csharp::{CSharp, CSharpCodeGenerator},
+        module,
+        plugin::EmitterPlugin,
     },
 };
-
 /// Installer for generated source files in C#.
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    encoding: Encoding,
+    plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
 impl Installer {
     /// Create a new installer for the given package name and output directory.
     ///
-    /// Use the builder methods [`encoding`](Self::encoding) and
+    /// Use the builder methods [`plugin`](Self::plugin) and
     /// [`external_packages`](Self::external_packages) to configure, then call
     /// [`generate`](Self::generate) to produce the output.
     #[must_use]
@@ -57,14 +61,17 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
-            encoding: Encoding::default(),
+            plugins: vec![],
         }
     }
 
-    /// Set the encoding for serialization/deserialization.
+    /// Add a plugin to be used during code generation.
     #[must_use]
-    pub const fn encoding(mut self, encoding: Encoding) -> Self {
-        self.encoding = encoding;
+    pub fn plugin<P: crate::generation::plugin::EmitterPlugin<CSharp> + 'static>(
+        mut self,
+        plugin: P,
+    ) -> Self {
+        self.plugins.push(std::sync::Arc::new(plugin));
         self
     }
 
@@ -81,7 +88,7 @@ impl Installer {
     /// Generate all code for the given registry.
     ///
     /// This method:
-    /// 1. Installs the appropriate runtimes based on the configured encoding
+    /// 1. Installs the appropriate runtimes based on the active plugins
     /// 2. Splits the registry by namespace and installs each module
     /// 3. Writes the package manifest
     ///
@@ -89,22 +96,42 @@ impl Installer {
     ///
     /// Returns an error if any file operation or code generation step fails.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        // Unit.cs is always required (even with no plugins) because Format::Unit
+        // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
-        if !self.encoding.is_none() {
-            self.install_serde_runtime()?;
-            match self.encoding {
-                Encoding::Json => self.install_json_runtime()?,
-                Encoding::Bincode => self.install_bincode_runtime()?,
-                Encoding::None => {}
+
+        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
+        config.update_from(registry);
+
+        // Install plugin runtime files.
+        if !self.plugins.is_empty() {
+            let lang = {
+                let mut base = CSharp::new(&config, registry);
+                for p in &self.plugins {
+                    base = base.with_plugin(p.clone());
+                }
+                base
+            };
+
+            // Unit.cs was already written above; skip it when iterating plugin files.
+            let mut written: BTreeSet<String> =
+                BTreeSet::from(["Facet/Runtime/Serde/Unit.cs".to_string()]);
+            for plugin in lang.plugins() {
+                for file in plugin.runtime_files() {
+                    if written.insert(file.relative_path.clone()) {
+                        let dest = self.install_dir.join(&file.relative_path);
+                        if let Some(parent) = dest.parent() {
+                            std::fs::create_dir_all(parent)?;
+                        }
+                        let mut f = std::fs::File::create(&dest)?;
+                        f.write_all(&file.contents)?;
+                    }
+                }
             }
         }
 
         for (m, module_registry) in module::split(&self.package_name, registry) {
-            let config = m
-                .config()
-                .clone()
-                .with_parent(&self.package_name)
-                .with_encoding(self.encoding);
+            let config = m.config().clone().with_parent(&self.package_name);
             self.install_module(&config, &module_registry)?;
         }
 
@@ -202,101 +229,7 @@ impl Installer {
     fn install_core_runtime(&self) -> std::result::Result<(), Error> {
         self.install_runtime_file(
             "Facet/Runtime/Serde/Unit.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public readonly record struct Unit;
-",
-        )?;
-        Ok(())
-    }
-
-    fn install_json_runtime(&self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Json/JsonSerde.cs",
-            r#"using System;
-using System.Collections.ObjectModel;
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
-using Facet.Runtime.Serde;
-
-namespace Facet.Runtime.Json;
-
-public static class JsonSerde
-{
-    internal static readonly JsonSerializerOptions Options = new()
-    {
-        Converters =
-        {
-            new JsonStringEnumConverter(),
-            new ObservableCollectionJsonConverterFactory()
-        }
-    };
-
-    public static string Serialize<T>(T value)
-    {
-        if (value is null)
-        {
-            throw new ArgumentNullException(nameof(value));
-        }
-
-        return JsonSerializer.Serialize(value, Options);
-    }
-
-    public static T Deserialize<T>(string input)
-    {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            throw new DeserializationError("Cannot deserialize empty input");
-        }
-
-        var value = JsonSerializer.Deserialize<T>(input, Options);
-        if (value is null)
-        {
-            throw new DeserializationError($"Deserialization produced null for {typeof(T).Name}");
-        }
-
-        return value;
-    }
-}
-
-internal sealed class ObservableCollectionJsonConverterFactory : JsonConverterFactory
-{
-    public override bool CanConvert(Type typeToConvert)
-    {
-        return typeToConvert.IsGenericType &&
-               typeToConvert.GetGenericTypeDefinition() == typeof(ObservableCollection<>);
-    }
-
-    public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
-    {
-        var elementType = typeToConvert.GetGenericArguments()[0];
-        var converterType = typeof(ObservableCollectionJsonConverter<>).MakeGenericType(elementType);
-        return (JsonConverter)Activator.CreateInstance(converterType)!;
-    }
-
-    private sealed class ObservableCollectionJsonConverter<T> : JsonConverter<ObservableCollection<T>>
-    {
-        public override ObservableCollection<T> Read(
-            ref Utf8JsonReader reader,
-            Type typeToConvert,
-            JsonSerializerOptions options)
-        {
-            var list = JsonSerializer.Deserialize<List<T>>(ref reader, options)
-                ?? throw new DeserializationError("Failed to deserialize collection");
-            return new ObservableCollection<T>(list);
-        }
-
-        public override void Write(
-            Utf8JsonWriter writer,
-            ObservableCollection<T> value,
-            JsonSerializerOptions options)
-        {
-            JsonSerializer.Serialize(writer, (IEnumerable<T>)value, options);
-        }
-    }
-}
-"#,
+            include_str!("runtime/core/Unit.cs"),
         )?;
         Ok(())
     }
@@ -349,175 +282,10 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = CSharpCodeGenerator::new(&updated_config);
+        let generator =
+            CSharpCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
-        Ok(())
-    }
-
-    fn install_serde_runtime(&mut self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/ISerializer.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public interface ISerializer
-{
-    void IncreaseContainerDepth();
-
-    void DecreaseContainerDepth();
-
-    void SerializeUnit(Unit value);
-
-    void SerializeBool(bool value);
-
-    void SerializeI8(sbyte value);
-
-    void SerializeI16(short value);
-
-    void SerializeI32(int value);
-
-    void SerializeI64(long value);
-
-    void SerializeI128(Int128 value);
-
-    void SerializeU8(byte value);
-
-    void SerializeU16(ushort value);
-
-    void SerializeU32(uint value);
-
-    void SerializeU64(ulong value);
-
-    void SerializeU128(UInt128 value);
-
-    void SerializeF32(float value);
-
-    void SerializeF64(double value);
-
-    void SerializeChar(char value);
-
-    void SerializeStr(string value);
-
-    void SerializeBytes(byte[] value);
-
-    void SerializeLen(ulong value);
-
-    void SerializeVariantIndex(uint value);
-
-    void SerializeOptionTag(bool value);
-
-    byte[] GetBytes();
-
-    int GetBufferOffset();
-}
-",
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/IDeserializer.cs",
-            r"namespace Facet.Runtime.Serde;
-
-public interface IDeserializer
-{
-    void IncreaseContainerDepth();
-
-    void DecreaseContainerDepth();
-
-    Unit DeserializeUnit();
-
-    bool DeserializeBool();
-
-    sbyte DeserializeI8();
-
-    short DeserializeI16();
-
-    int DeserializeI32();
-
-    long DeserializeI64();
-
-    Int128 DeserializeI128();
-
-    byte DeserializeU8();
-
-    ushort DeserializeU16();
-
-    uint DeserializeU32();
-
-    ulong DeserializeU64();
-
-    UInt128 DeserializeU128();
-
-    float DeserializeF32();
-
-    double DeserializeF64();
-
-    char DeserializeChar();
-
-    string DeserializeStr();
-
-    byte[] DeserializeBytes();
-
-    ulong DeserializeLen();
-
-    uint DeserializeVariantIndex();
-
-    bool DeserializeOptionTag();
-
-    int GetBufferOffset();
-}
-",
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/DeserializationError.cs",
-            r"using System;
-
-namespace Facet.Runtime.Serde;
-
-public sealed class DeserializationError : Exception
-{
-    public DeserializationError(string message) : base(message)
-    {
-    }
-}
-",
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Serde/SerializationError.cs",
-            r"using System;
-
-namespace Facet.Runtime.Serde;
-
-public sealed class SerializationError : Exception
-{
-    public SerializationError(string message) : base(message)
-    {
-    }
-}
-",
-        )?;
-        Ok(())
-    }
-
-    fn install_bincode_runtime(&self) -> std::result::Result<(), Error> {
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/BincodeSerializer.cs",
-            include_str!("runtime/bincode/BincodeSerializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/BincodeDeserializer.cs",
-            include_str!("runtime/bincode/BincodeDeserializer.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/IFacetSerializable.cs",
-            include_str!("runtime/bincode/IFacetSerializable.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/IFacetDeserializable.cs",
-            include_str!("runtime/bincode/IFacetDeserializable.cs"),
-        )?;
-        self.install_runtime_file(
-            "Facet/Runtime/Bincode/FacetHelpers.cs",
-            include_str!("runtime/bincode/FacetHelpers.cs"),
-        )?;
         Ok(())
     }
 

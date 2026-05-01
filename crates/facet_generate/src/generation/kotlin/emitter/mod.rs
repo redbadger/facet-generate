@@ -21,18 +21,17 @@
 //! for example `I32` → `Int`, `Seq(T)` → `List<T>`, `Option(T)` → `T?`,
 //! tuples of size 2/3 → `Pair`/`Triple`, and larger tuples to `NTupleN<…>`.
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`Kotlin`] language tag carries the active [`Encoding`] and a list of
-//! [`EmitterPlugin`]s. All encoding-specific behaviour is delegated to those
-//! plugins — the emitter itself contains no encoding checks. For example:
+//! The [`Kotlin`] language tag carries a list of [`EmitterPlugin`]s. All
+//! encoding-specific behaviour is delegated to those plugins — the emitter
+//! itself contains no encoding checks. For example:
 //!
 //! - `JsonPlugin` supplies `@Serializable` / `@SerialName` type annotations
 //!   and inline `@SerialName` annotations for all-unit enum class variants.
 //! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
 //!   convenience `bincodeSerialize` / `bincodeDeserialize` wrappers.
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
@@ -57,10 +56,8 @@ use heck::ToLowerCamelCase;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, Feature,
-        bincode::kotlin::KotlinBincodePlugin,
+        CodeGeneratorConfig, Container, Emitter, Feature,
         indent::{IndentWrite, Newlines},
-        json::JsonPlugin,
         module::Module,
         plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
@@ -93,29 +90,38 @@ inline fun <T> buildList(builderAction: MutableList<T>.() -> Unit): List<T> {
 /// Language tag for Kotlin code generation.
 ///
 /// Passed as the `L` parameter to every [`Emitter<L>`](super::super::Emitter)
-/// call. Carries the target [`Encoding`] so emitters can conditionally
-/// produce serialization code.
+/// call. Carries a plugin list that controls all encoding-specific behaviour.
 #[derive(Debug, Clone)]
 pub struct Kotlin {
+    pub(crate) config: CodeGeneratorConfig,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl Kotlin {
-    /// Create a Kotlin language tag, building the appropriate plugins for the
-    /// encoding specified in `config`.
+    /// Create a Kotlin language tag with no default plugins.
     ///
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::Bincode`] → includes `KotlinBincodePlugin` (resolves JVM
-    ///   package names from `config.external_packages`)
-    /// - [`Encoding::None`] → no plugins
+    /// Use [`with_plugin`](Self::with_plugin) to attach plugins.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(KotlinBincodePlugin::from_config(config))],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the generator config.
+    #[must_use]
+    pub const fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
+    }
+
+    /// Add a plugin to this language tag, returning the modified tag.
+    ///
+    /// Plugins are invoked in the order they are added.
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
     }
 
     /// Access the plugin list.
@@ -146,8 +152,8 @@ impl Emitter<Kotlin> for Module {
         for feature in features {
             match feature {
                 Feature::BigInt => {
-                    // `import java.math.BigInteger` is needed for all encodings,
-                    // including `Encoding::None` where no plugin runs.
+                    // `import java.math.BigInteger` is needed regardless of plugins,
+                    // including when no plugin runs.
                     // Plugin-specific BigInt imports (JSON KSerializer, Bincode
                     // Int128) are added by their respective plugins.
                     imports.push("import java.math.BigInteger".to_string());
@@ -506,6 +512,7 @@ fn data_object<W: IndentWrite>(
         let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
             EmitContext::for_variant(
                 &temp_container,
+                &lang.config,
                 VariantInfo {
                     name,
                     index,
@@ -515,7 +522,7 @@ fn data_object<W: IndentWrite>(
                 },
             )
         } else {
-            EmitContext::top_level(&temp_container)
+            EmitContext::top_level(&temp_container, &lang.config)
         };
         write_plugin_body(w, lang, &ctx)?;
     }
@@ -568,6 +575,7 @@ fn data_class<W: IndentWrite>(
         let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
             EmitContext::for_variant(
                 &temp_container,
+                &lang.config,
                 VariantInfo {
                     name,
                     index,
@@ -577,7 +585,7 @@ fn data_class<W: IndentWrite>(
                 },
             )
         } else {
-            EmitContext::top_level(&temp_container)
+            EmitContext::top_level(&temp_container, &lang.config)
         };
         write_plugin_body(w, lang, &ctx)?;
     }
@@ -615,7 +623,7 @@ fn enum_class<W: IndentWrite>(
 
     // Plugin type body (e.g. JSON serialName accessor)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -647,7 +655,7 @@ fn sealed_interface<W: IndentWrite>(
 
     // Plugin type body preamble (before variants)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body_preamble(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -663,7 +671,7 @@ fn sealed_interface<W: IndentWrite>(
 
     // Plugin type body (after variants)
     {
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
@@ -702,7 +710,7 @@ fn write_plugin_annotations<W: IndentWrite>(w: &mut W, name: &str, lang: &Kotlin
         name: &temp_name,
         format: &temp_format,
     };
-    let ctx = EmitContext::top_level(&temp_container);
+    let ctx = EmitContext::top_level(&temp_container, &lang.config);
     for plugin in lang.plugins() {
         for annotation in plugin.type_annotations(&ctx) {
             writeln!(w, "{annotation}")?;

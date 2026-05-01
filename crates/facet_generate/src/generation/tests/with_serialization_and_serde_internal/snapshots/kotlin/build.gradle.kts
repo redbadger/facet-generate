@@ -11,9 +11,7 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-
-}
+dependencies {}
 
 tasks.withType<Jar> {
     manifest {

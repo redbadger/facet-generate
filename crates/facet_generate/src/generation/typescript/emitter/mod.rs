@@ -23,13 +23,12 @@
 //! `Option(T)` → `Optional<T>` (i.e. `T | null`), `Map(K,V)` → `Map<K, V>`,
 //! tuples → `[A, B]` (via `Tuple<[…]>`), fixed-size arrays → `ListTuple<[T]>`.
 //!
-//! # Encoding-dependent output
+//! # Plugin-dependent output
 //!
-//! The [`TypeScript`] language tag carries the active [`Encoding`] and a list
-//! of [`EmitterPlugin`]s. All encoding-specific behaviour — serialize /
-//! deserialize methods and feature helper snippets — is delegated to those
-//! plugins. With no plugins (`Encoding::None`), only plain type declarations
-//! are emitted.
+//! The [`TypeScript`] language tag carries a list of [`EmitterPlugin`]s.
+//! All encoding-specific behaviour — serialize / deserialize methods and
+//! feature helper snippets — is delegated to those plugins. With no plugins,
+//! only plain type declarations are emitted.
 //!
 //! # Plugins
 //!
@@ -38,8 +37,7 @@
 //! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies the same
 //!   interface for JSON (the TypeScript Serializer/Deserializer API is
 //!   identical for both encodings).
-//! - With no plugins (`Encoding::None`), only plain type declarations are
-//!   emitted.
+//! - With no plugins, only plain type declarations are emitted.
 
 #[cfg(test)]
 use std::collections::BTreeSet;
@@ -53,42 +51,41 @@ use heck::ToUpperCamelCase;
 
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, Encoding, PackageLocation, SERDE_NAMESPACE,
-        bincode::BincodePlugin,
+        CodeGeneratorConfig, Container, Emitter, PackageLocation,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
-        json::JsonPlugin,
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
 };
 
 /// Language tag for TypeScript code generation.
 ///
-/// Carries the active [`Encoding`] (None / Bincode / Json) and the plugin
-/// list built from it. Emitter implementations consult the plugins at each
-/// extension point; the encoding field is retained for the module-level
-/// `Serializer`/`Deserializer` import check.
+/// Carries a plugin list that controls all encoding-specific behaviour
+/// (serialize/deserialize methods, feature helpers, imports). Use
+/// [`with_plugin`](Self::with_plugin) to add plugins.
 #[derive(Debug, Clone)]
 pub struct TypeScript {
+    pub(crate) config: CodeGeneratorConfig,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
 impl TypeScript {
-    /// Create a TypeScript language tag, building the appropriate plugins for
-    /// the encoding specified in `config`.
+    /// Create a TypeScript language tag with no plugins.
     ///
-    /// - [`Encoding::Bincode`] → includes `BincodePlugin`
-    /// - [`Encoding::Json`] → includes `JsonPlugin`
-    /// - [`Encoding::None`] → no plugins
+    /// To add plugins, call [`with_plugin`](Self::with_plugin) after construction.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, _registry: &crate::Registry) -> Self {
-        let plugins: Vec<Arc<dyn EmitterPlugin<Self>>> = match config.encoding {
-            Encoding::Bincode => vec![Arc::new(BincodePlugin)],
-            Encoding::Json => vec![Arc::new(JsonPlugin)],
-            Encoding::None => vec![],
-        };
-        Self { plugins }
+        Self {
+            config: config.clone(),
+            plugins: vec![],
+        }
+    }
+
+    /// Access the config.
+    #[must_use]
+    pub const fn config(&self) -> &CodeGeneratorConfig {
+        &self.config
     }
 
     /// Access the plugin list.
@@ -96,27 +93,18 @@ impl TypeScript {
     pub fn plugins(&self) -> &[Arc<dyn EmitterPlugin<Self>>] {
         &self.plugins
     }
+
+    /// Add a plugin to this language tag, returning the modified tag.
+    ///
+    /// Plugins are invoked in the order they were added.
+    #[must_use]
+    pub fn with_plugin(mut self, plugin: Arc<dyn EmitterPlugin<Self>>) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
 }
 
 impl Module {
-    fn ts_serde_import_path(&self) -> String {
-        self.config()
-            .external_packages
-            .get(SERDE_NAMESPACE)
-            .map_or_else(
-                || "./serde".to_string(),
-                |path| match &path.location {
-                    PackageLocation::Path(_) => {
-                        let name = &path.for_namespace;
-                        path.module_name
-                            .as_ref()
-                            .map_or_else(|| name.clone(), |mod_name| format!("{name}/{mod_name}"))
-                    }
-                    PackageLocation::Url(_) => path.for_namespace.clone(),
-                },
-            )
-    }
-
     fn ts_namespace_import_path(&self, namespace: &str) -> String {
         self.config().external_packages.get(namespace).map_or_else(
             || format!("../{namespace}"),
@@ -141,12 +129,10 @@ impl Emitter<TypeScript> for Module {
             ..
         } = self.config();
 
-        if self.config().has_encoding() {
-            let import_path = self.ts_serde_import_path();
-            writeln!(
-                w,
-                r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
-            )?;
+        // Plugin imports (e.g. `import { Serializer, Deserializer }` from the
+        // bincode or json plugin).
+        for import in collect_from_plugins(lang.plugins(), |p| p.imports(self.config())) {
+            writeln!(w, "{import}")?;
         }
 
         // Write namespace imports (e.g. `import * as Foo from "../foo";`)
@@ -199,12 +185,12 @@ impl Emitter<TypeScript> for Container<'_> {
 
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &[], doc, lang)
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 let fields = vec![Named::new(format.as_ref(), "value".to_string())];
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
             }
             ContainerFormat::TupleStruct(formats, doc) => {
@@ -213,11 +199,11 @@ impl Emitter<TypeScript> for Container<'_> {
                     .enumerate()
                     .map(|(i, f)| Named::new(f, format!("field{i}")))
                     .collect();
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
             }
             ContainerFormat::Struct(fields, doc) => {
-                let ctx = EmitContext::top_level(self);
+                let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, fields, doc, lang)
             }
             ContainerFormat::Enum(variants, doc) => {
@@ -384,7 +370,7 @@ fn output_variant<W: IndentWrite>(
         fields: &fields,
         parent_name: base,
     };
-    let ctx = EmitContext::for_variant(parent, variant_info);
+    let ctx = EmitContext::for_variant(parent, &lang.config, variant_info);
     output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
 }
 
@@ -402,7 +388,7 @@ fn output_enum_container<W: IndentWrite>(
     {
         let mut w = w.block(Newlines::BOTH)?;
         // Plugin type bodies (abstract serialize + static deserialize switch).
-        let ctx = EmitContext::top_level(container);
+        let ctx = EmitContext::top_level(container, &lang.config);
         for plugin in lang.plugins() {
             plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }

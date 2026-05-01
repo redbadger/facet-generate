@@ -2,8 +2,6 @@
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, and TypeScript. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
-> **Note:** A Java generator is also available but deprecated — use Kotlin for Android targets.
-
 ## Usage
 
 ```sh
@@ -56,37 +54,28 @@ let registry = RegistryBuilder::new()
     .build()?;
 ```
 
-To generate code from the registry, use a language-specific `Installer`. Configure it with an encoding and call `generate()` — the installer takes care of splitting by namespace, installing runtimes, generating each module, and writing the package manifest.
-
-When an encoding like Bincode is configured, the appropriate **runtimes** — small serialization libraries in the target language — are installed automatically alongside the generated code.
+To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` to include `serialize`/`deserialize` methods and install the appropriate runtime library; omit `.plugin(...)` for plain type definitions only.
 
 ```rust
-use facet_generate::generation::Encoding;
+use facet_generate::generation::bincode::BincodePlugin;
 
 // Swift
 swift::Installer::new("MyPackage", &out_dir)
-    .encoding(Encoding::Bincode)
+    .plugin(BincodePlugin)
     .generate(&registry)?;
 
 // Kotlin
 kotlin::Installer::new("com.example", &out_dir)
-    .encoding(Encoding::Bincode)
+    .plugin(BincodePlugin)
     .generate(&registry)?;
 
 // TypeScript
-typescript::Installer::new("example", &out_dir, InstallTarget::Node)
-    .encoding(Encoding::Bincode)
+typescript::Installer::new("example", &out_dir)
+    .plugin(BincodePlugin)
     .generate(&registry)?;
 ```
 
-To generate type definitions only (without serialization), simply omit the encoding:
-
-```rust
-swift::Installer::new("MyPackage", &out_dir)
-    .generate(&registry)?;
-```
-
-When configured with an encoding such as `Encoding::Bincode`, the generated types include `serialize` and `deserialize` methods alongside the type definitions. Without an encoding (the default), only the type definitions are generated. For the types above with Bincode, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly):
+With `BincodePlugin`, the generated types include `serialize` and `deserialize` methods. For the types above, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly):
 
 ### Swift
 

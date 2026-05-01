@@ -10,24 +10,14 @@ use ignore::WalkBuilder;
 /// Target languages included in snapshot integration tests. Used to loop over languages
 /// in a single test, dispatching to the appropriate installer for each.
 pub enum TargetLanguage {
-    #[deprecated(
-        since = "0.16.0",
-        note = "The Java generator is deprecated. Use Kotlin instead."
-    )]
-    Java,
     Kotlin,
     Swift,
     TypeScript,
 }
 
-#[expect(
-    deprecated,
-    reason = "Display must handle all variants including deprecated TargetLanguage::Java"
-)]
 impl Display for TargetLanguage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Java => write!(f, "Java"),
             Self::Kotlin => write!(f, "Kotlin"),
             Self::Swift => write!(f, "Swift"),
             Self::TypeScript => write!(f, "TypeScript"),
@@ -35,46 +25,14 @@ impl Display for TargetLanguage {
     }
 }
 
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod basic;
 mod with_bytes;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_namespaces_as_external;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_namespaces_as_internal;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_serialization;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_serialization_and_namespaces_as_external;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_serialization_and_serde_external;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_serialization_and_serde_internal;
-#[expect(
-    deprecated,
-    reason = "snapshot tests cover the deprecated Java generator"
-)]
 mod with_serialization_and_serde_local;
 
 fn read_files_and_create_expect_dirs(

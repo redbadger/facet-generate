@@ -1,10 +1,8 @@
 //! Internal JSON plugin — provides JSON-specific imports, type annotations,
-//! and module helpers through the [`EmitterPlugin`] trait.
+//! and module helpers through the `EmitterPlugin` trait.
 //!
-//! This module is the counterpart to [`super::bincode`] and is the second
-//! step toward extracting all encoding-specific code-generation into separate
-//! plugin crates. For now it lives inside the core crate so it can share
-//! types and feature constants.
+//! This module is the counterpart to `super::bincode`. It lives inside the
+//! core crate so it can share types and feature constants.
 //!
 //! # What the plugin handles
 //!
