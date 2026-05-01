@@ -78,54 +78,151 @@ class SerdeTests: XCTestCase {
         XCTAssertEqual(result, 9_223_372_036_854_775_807, "should be same")
     }
 
+    // MARK: - UInt128
+
     func testSerializeU128() throws {
-        let serializer = BincodeSerializer()
-        XCTAssertNoThrow(
-            try serializer.serialize_u128(value: UInt128.max))
+        // max: all bits set — low 8 bytes then high 8 bytes, both 0xFF
+        let serMax = BincodeSerializer()
+        try serMax.serialize_u128(value: UInt128(high: UInt64.max, low: UInt64.max))
         XCTAssertEqual(
-            serializer.get_bytes(),
-            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255],
-            "the array should be same")
+            serMax.get_bytes(),
+            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255])
 
-        let serializer2 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer2.serialize_u128(value: 1))
+        // one: low word = 1, high word = 0
+        let serOne = BincodeSerializer()
+        try serOne.serialize_u128(value: UInt128(high: 0, low: 1))
         XCTAssertEqual(
-            serializer2.get_bytes(), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            "the array should be same")
+            serOne.get_bytes(),
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
-        let serializer3 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer3.serialize_u128(value: 0))
+        // zero
+        let serZero = BincodeSerializer()
+        try serZero.serialize_u128(value: UInt128(high: 0, low: 0))
         XCTAssertEqual(
-            serializer3.get_bytes(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            "the array should be same")
+            serZero.get_bytes(),
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     }
 
+    func testDeserializeU128() throws {
+        // max
+        let desMax = BincodeDeserializer(
+            input: [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255])
+        let max = try desMax.deserialize_u128()
+        XCTAssertEqual(max.low, UInt64.max)
+        XCTAssertEqual(max.high, UInt64.max)
+
+        // one
+        let desOne = BincodeDeserializer(
+            input: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        let one = try desOne.deserialize_u128()
+        XCTAssertEqual(one.low, 1)
+        XCTAssertEqual(one.high, 0)
+
+        // zero
+        let desZero = BincodeDeserializer(
+            input: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        let zero = try desZero.deserialize_u128()
+        XCTAssertEqual(zero.low, 0)
+        XCTAssertEqual(zero.high, 0)
+    }
+
+    func testRoundTripU128() throws {
+        let values: [UInt128] = [
+            UInt128(high: 0, low: 0),
+            UInt128(high: 0, low: 1),
+            UInt128(high: 1, low: 0),
+            UInt128(high: UInt64.max, low: UInt64.max),
+            UInt128(high: 0xDEAD_BEEF_CAFE_BABE, low: 0x0102_0304_0506_0708),
+        ]
+        for value in values {
+            let serializer = BincodeSerializer()
+            try serializer.serialize_u128(value: value)
+            let deserializer = BincodeDeserializer(input: serializer.get_bytes())
+            let result = try deserializer.deserialize_u128()
+            XCTAssertEqual(result.high, value.high, "high mismatch for \(value)")
+            XCTAssertEqual(result.low, value.low, "low mismatch for \(value)")
+        }
+    }
+
+    // MARK: - Int128
+
     func testSerializeI128() throws {
-        let serializer = BincodeSerializer()
-        XCTAssertNoThrow(try serializer.serialize_i128(value: -1))
+        // -1 in two's complement: all 128 bits set
+        // high = Int64(-1), low = UInt64.max
+        let serNeg1 = BincodeSerializer()
+        try serNeg1.serialize_i128(value: Int128(high: -1, low: UInt64.max))
         XCTAssertEqual(
-            serializer.get_bytes(),
-            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255],
-            "the array should be same")
+            serNeg1.get_bytes(),
+            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255])
 
-        let serializer2 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer2.serialize_i128(value: 1))
+        // +1: high = 0, low = 1
+        let serPos1 = BincodeSerializer()
+        try serPos1.serialize_i128(value: Int128(high: 0, low: 1))
         XCTAssertEqual(
-            serializer2.get_bytes(), [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            "the array should be same")
+            serPos1.get_bytes(),
+            [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 
-        let serializer3 = BincodeSerializer()
-        XCTAssertNoThrow(
-            try serializer3.serialize_i128(value: Int128.max))
+        // max: high = Int64.max, low = UInt64.max
+        let serMax = BincodeSerializer()
+        try serMax.serialize_i128(value: Int128(high: Int64.max, low: UInt64.max))
         XCTAssertEqual(
-            serializer3.get_bytes(),
-            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127],
-            "the array should be same")
+            serMax.get_bytes(),
+            [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127])
 
-        let serializer4 = BincodeSerializer()
-        XCTAssertNoThrow(try serializer4.serialize_i128(value: Int128.min))
+        // min: high = Int64.min, low = 0
+        let serMin = BincodeSerializer()
+        try serMin.serialize_i128(value: Int128(high: Int64.min, low: 0))
         XCTAssertEqual(
-            serializer4.get_bytes(), [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80],
-            "the array should be same")
+            serMin.get_bytes(),
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80])
+    }
+
+    func testDeserializeI128() throws {
+        // -1
+        let desNeg1 = BincodeDeserializer(
+            input: [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255])
+        let neg1 = try desNeg1.deserialize_i128()
+        XCTAssertEqual(neg1.low, UInt64.max)
+        XCTAssertEqual(neg1.high, -1)
+
+        // +1
+        let desPos1 = BincodeDeserializer(
+            input: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        let pos1 = try desPos1.deserialize_i128()
+        XCTAssertEqual(pos1.low, 1)
+        XCTAssertEqual(pos1.high, 0)
+
+        // max
+        let desMax = BincodeDeserializer(
+            input: [255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127])
+        let max = try desMax.deserialize_i128()
+        XCTAssertEqual(max.low, UInt64.max)
+        XCTAssertEqual(max.high, Int64.max)
+
+        // min
+        let desMin = BincodeDeserializer(
+            input: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x80])
+        let min = try desMin.deserialize_i128()
+        XCTAssertEqual(min.low, 0)
+        XCTAssertEqual(min.high, Int64.min)
+    }
+
+    func testRoundTripI128() throws {
+        let values: [Int128] = [
+            Int128(high: 0, low: 0),
+            Int128(high: 0, low: 1),
+            Int128(high: -1, low: UInt64.max),
+            Int128(high: Int64.max, low: UInt64.max),
+            Int128(high: Int64.min, low: 0),
+            Int128(high: 0x1234_5678_9ABC_DEF0, low: 0xFEDC_BA98_7654_3210),
+        ]
+        for value in values {
+            let serializer = BincodeSerializer()
+            try serializer.serialize_i128(value: value)
+            let deserializer = BincodeDeserializer(input: serializer.get_bytes())
+            let result = try deserializer.deserialize_i128()
+            XCTAssertEqual(result.high, value.high, "high mismatch for \(value)")
+            XCTAssertEqual(result.low, value.low, "low mismatch for \(value)")
+        }
     }
 }
