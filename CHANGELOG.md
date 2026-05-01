@@ -29,6 +29,7 @@ This is a major release that introduces a new **plugin-based emitter architectur
 
 ### 🐛 Bug Fixes
 
+- fix(swift): Handling of 128-bit integers (`Int128`, `UInt128`) [#97](https://github.com/redbadger/facet-generate/pull/97)
 - fix(swift): Problem with Tuple handling in JSON serialization [#90](https://github.com/redbadger/facet-generate/pull/90)
 - fix(csharp): Conform C-style enum discovery to new `Language` model
 - fix: Don't strip comments for Bincode
@@ -36,6 +37,7 @@ This is a major release that introduces a new **plugin-based emitter architectur
 
 ### ⚙️ Miscellaneous Tasks
 
+- chore(ci): Run swift tests on Unix only [#97](https://github.com/redbadger/facet-generate/pull/97)
 - chore: Rename `CodeGen` to `CodeGenerator` and associated implementors [#86](https://github.com/redbadger/facet-generate/pull/86)
 - chore: Pass `Language` by reference throughout emitters
 - chore: Inline Kotlin feature-based code into relevant plugins

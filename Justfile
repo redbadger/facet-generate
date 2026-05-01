@@ -2,6 +2,9 @@
 
 set windows-shell := ["pwsh", "-c"]
 
+# Extract the workspace version from Cargo.toml
+version := `grep -m1 '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/'`
+
 # default target for local development
 default: dev
 
@@ -67,3 +70,12 @@ update-rust-deps:
     cargo update
     cargo upgrade --incompatible allow
     cargo update
+
+# publish both crates to crates.io in dependency order, then tag and push
+# Note: run `cargo login` first if you haven't already
+publish:
+    @echo '{{ style("command") }}publish v{{ version }}:{{ NORMAL }}'
+    cargo publish -p facet-generate-attrs
+    cargo publish -p facet_generate
+    git tag -a "v{{ version }}" -m "Release v{{ version }}"
+    git push origin "v{{ version }}"
