@@ -86,13 +86,8 @@ public class BinarySerializer: Serializer {
     }
 
     public func serialize_u128(value: UInt128) throws {
-        // Use raw byte access to avoid requiring BinaryInteger conformance,
-        // which is gated behind macOS 15 / iOS 18.
-        // On little-endian (ARM64) the memory layout matches Bincode's encoding.
-        var v = value
-        withUnsafeBytes(of: &v) { ptr in
-            output.append(contentsOf: ptr)
-        }
+        try serialize_u64(value: value.low)
+        try serialize_u64(value: value.high)
     }
 
     public func serialize_i8(value: Int8) throws {
@@ -112,13 +107,8 @@ public class BinarySerializer: Serializer {
     }
 
     public func serialize_i128(value: Int128) throws {
-        // Use raw byte access to avoid requiring BinaryInteger conformance,
-        // which is gated behind macOS 15 / iOS 18.
-        // On little-endian (ARM64) the memory layout matches Bincode's encoding.
-        var v = value
-        withUnsafeBytes(of: &v) { ptr in
-            output.append(contentsOf: ptr)
-        }
+        try serialize_u64(value: value.low)
+        try serialize_u64(value: UInt64(bitPattern: value.high))
     }
 
     public func serialize_option_tag(value: Bool) throws {
