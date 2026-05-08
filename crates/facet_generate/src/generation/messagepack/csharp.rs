@@ -1,7 +1,7 @@
 //! `EmitterPlugin<CSharp>` implementation for [`MessagePackPlugin`].
 //!
 //! Provides MessagePack-specific code generation for C# types using
-//! `Nerdbank.MessagePack` with a per-module PolyType witness class.
+//! `Nerdbank.MessagePack` with a per-module `PolyType` witness class.
 //!
 //! # What this plugin handles
 //!
@@ -201,7 +201,7 @@ impl EmitterPlugin<CSharp> for MessagePackPlugin {
         writeln!(w, "internal partial class FacetMessagePackWitness;")
     }
 
-    /// Emits MessagePack converter annotations on enum types.
+    /// Emits `MessagePack` converter annotations on enum types.
     ///
     /// - All-unit enum → `[MessagePackConverter(typeof(EnumAsStringConverter<T>))]`
     /// - Non-unit enum → `[MessagePackConverter(typeof(TypeNameConverter))]`
@@ -268,9 +268,10 @@ fn write_msgpack_helpers(w: &mut dyn IndentWrite, type_name: &str) -> io::Result
 ///
 /// Wire format:
 /// - Unit variant    → bare string `"VariantName"`
-/// - NewType variant → 1-element map `{"VariantName": value}`
+/// - `NewType` variant → 1-element map `{"VariantName": value}`
 /// - Tuple variant   → 1-element map `{"VariantName": [v0, v1, …]}`
 /// - Struct variant  → 1-element map `{"VariantName": {"field": v, …}}`
+#[allow(clippy::too_many_lines)]
 fn write_enum_converter(
     w: &mut dyn IndentWrite,
     enum_name: &str,
@@ -403,7 +404,7 @@ fn write_enum_converter(
                     )?;
                     with_block(w, Newlines::BOTH, |w| {
                         // Declare locals for each field
-                        for field in fields.iter() {
+                        for field in fields {
                             let ty = to_csharp_type(&field.value);
                             let fname = field.name.to_lower_camel_case();
                             if is_value_type(&field.value) {
@@ -418,7 +419,7 @@ fn write_enum_converter(
                             writeln!(w, "var key = reader.ReadString()!;")?;
                             writeln!(w, "switch (key)")?;
                             with_block(w, Newlines::BOTH, |w| {
-                                for field in fields.iter() {
+                                for field in fields {
                                     let fname = field.name.to_lower_camel_case();
                                     let expr = read_expr(&field.value);
                                     writeln!(w, r#"case "{fname}": {fname} = {expr}; break;"#)?;

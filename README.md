@@ -1,6 +1,6 @@
 # `facet_generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
-Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, and TypeScript. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
+Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, TypeScript, and C#. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode), JSON, and [MessagePack](https://msgpack.org/) encodings.
 
 ## Usage
 
@@ -183,6 +183,181 @@ export class HttpHeader {
     const value = deserializer.deserializeStr();
     return new HttpHeader(name,value);
   }
+}
+```
+
+## MessagePack
+
+`MessagePackPlugin` generates MessagePack serialization using [rmp-serde](https://crates.io/crates/rmp-serde) on the Rust side and idiomatic native libraries on each target:
+
+| Language | Library | Version |
+|---|---|---|
+| Kotlin | `com.ensarsarajcic.kotlinx:serialization-msgpack` | `0.5.7` |
+| Swift | `hirotakan/MessagePacker` (Codable-based) | `0.4.7` |
+| TypeScript | `@msgpack/msgpack` | `^3.1.3` |
+| C# | `Nerdbank.MessagePack` + `PolyType` | `1.1.*` / `1.2.*` |
+
+### Installer usage
+
+```rust
+use facet_generate::generation::messagepack::MessagePackPlugin;
+
+// Swift
+swift::Installer::new("MyPackage", &out_dir)
+    .plugin(MessagePackPlugin)
+    .generate(&registry)?;
+
+// Kotlin
+kotlin::Installer::new("com.example", &out_dir)
+    .plugin(MessagePackPlugin)
+    .generate(&registry)?;
+
+// TypeScript
+typescript::Installer::new("example", &out_dir)
+    .plugin(MessagePackPlugin)
+    .generate(&registry)?;
+
+// C#
+csharp::Installer::new("MyApp", &out_dir)
+    .plugin(MessagePackPlugin)
+    .generate(&registry)?;
+```
+
+On the Rust side, **always use `rmp_serde::to_vec_named`** (not the default `to_vec`) so that struct fields are encoded as named maps rather than positional arrays:
+
+```rust
+// Serialize
+let bytes: Vec<u8> = rmp_serde::to_vec_named(&value)?;
+
+// Deserialize
+let value: MyType = rmp_serde::from_slice(&bytes)?;
+```
+
+Add `rmp-serde = "1.3"` to your `Cargo.toml` dependencies.
+
+### Generated code
+
+Showing `HttpHeader` as a representative example — all types are generated similarly.
+
+#### Kotlin
+
+`@Serializable` and `@SerialName` annotations hook into `kotlinx-serialization-msgpack`. No hand-written serialize/deserialize methods are generated:
+
+```kotlin
+@Serializable
+@SerialName("HttpHeader")
+data class HttpHeader(
+    val name: String,
+    val value: String,
+)
+```
+
+Encode and decode with:
+
+```kotlin
+val bytes: ByteArray = MsgPack.encodeToByteArray(header)
+val decoded: HttpHeader = MsgPack.decodeFromByteArray(bytes)
+```
+
+#### Swift
+
+Types gain `Codable` conformance (for `MessagePacker`) and two convenience wrappers:
+
+```swift
+public struct HttpHeader: Hashable, Codable {
+    @Indirect public var name: String
+    @Indirect public var value: String
+
+    public init(name: String, value: String) {
+        self.name = name
+        self.value = value
+    }
+
+    public func msgPackSerialize() throws -> Data {
+        return try MessagePackEncoder().encode(self)
+    }
+
+    public static func msgPackDeserialize(input: Data) throws -> HttpHeader {
+        return try MessagePackDecoder().decode(HttpHeader.self, from: input)
+    }
+}
+```
+
+#### TypeScript
+
+Types are pure classes with no added methods — encoding is handled by module-level generic helpers emitted once per module:
+
+```typescript
+import { encode, decode } from "@msgpack/msgpack";
+
+export const msgPackEncode = <T>(value: T): Uint8Array => encode(value);
+export const msgPackDecode = <T>(bytes: Uint8Array): T => decode(bytes) as T;
+
+// Generated type — plain class, no serialize/deserialize methods:
+export class HttpHeader {
+    constructor (public name: str, public value: str) {
+    }
+}
+```
+
+Usage:
+
+```typescript
+const bytes = msgPackEncode(header);
+const decoded = msgPackDecode<HttpHeader>(bytes);
+```
+
+#### C#
+
+A per-module witness class is emitted once, providing [PolyType](https://github.com/eiriktsarpalis/PolyType) shape information to [Nerdbank.MessagePack](https://github.com/AArnott/Nerdbank.MessagePack):
+
+```csharp
+[GenerateShapeFor<HttpResult>]
+[GenerateShapeFor<HttpResponse>]
+[GenerateShapeFor<HttpHeader>]
+[GenerateShapeFor<HttpError>]
+internal partial class FacetMessagePackWitness;
+```
+
+Each type gains `MessagePackSerialize` / `MessagePackDeserialize` convenience methods:
+
+```csharp
+public partial class HttpHeader : ObservableObject {
+    [ObservableProperty]
+    private string _name;
+    [ObservableProperty]
+    private string _value;
+
+    public byte[] MessagePackSerialize()
+        => MessagePackSerde.Serialize<HttpHeader, FacetMessagePackWitness>(this);
+
+    public static HttpHeader MessagePackDeserialize(byte[] input)
+        => MessagePackSerde.Deserialize<HttpHeader, FacetMessagePackWitness>(input);
+}
+```
+
+Non-unit enums get a private `TypeNameConverter` nested class that exactly matches rmp-serde's externally-tagged wire format — a bare string for unit variants and a one-element map `{"VariantName": payload}` for all others. This enables full round-trip compatibility with `rmp_serde::to_vec_named` across all variant shapes (unit, newtype, tuple, struct).
+
+### Wire format compatibility
+
+| Rust type | rmp-serde wire format | All target libs |
+|---|---|---|
+| `struct Foo { x: i32 }` | `{"x": 42}` (named map) | ✅ |
+| `enum E { Unit }` | `"Unit"` (bare string) | ✅ |
+| `enum E { New(T) }` | `{"New": value}` | ✅ |
+| `enum E { Tup(A, B) }` | `{"Tup": [a, b]}` | ✅ |
+| `enum E { St { x } }` | `{"St": {"x": v}}` | ✅ |
+
+For `Vec<u8>` byte fields annotated with `#[facet(fg::bytes)]`, also add `#[serde(with = "serde_bytes")]` so rmp-serde encodes them as MessagePack `bin` (not an array of integers):
+
+```rust
+#[derive(Facet, serde::Serialize, serde::Deserialize)]
+pub struct HttpResponse {
+    pub status: u16,
+    pub headers: Vec<HttpHeader>,
+    #[facet(fg::bytes)]
+    #[serde(with = "serde_bytes")]
+    pub body: Vec<u8>,
 }
 ```
 

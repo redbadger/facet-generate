@@ -61,11 +61,11 @@ impl EmitterPlugin<Swift> for MessagePackPlugin {
         writeln!(w)?;
         writedoc!(
             w,
-            r#"
+            r"
             public static func msgPackDeserialize(input: Data) throws -> {name} {{
                 return try MessagePackDecoder().decode({name}.self, from: input)
             }}
-            "#
+            "
         )
     }
 

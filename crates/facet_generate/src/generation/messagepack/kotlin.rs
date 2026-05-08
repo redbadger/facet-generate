@@ -26,7 +26,7 @@ impl EmitterPlugin<Kotlin> for MessagePackPlugin {
         vec![]
     }
 
-    /// MessagePack / kotlinx.serialization imports for a Kotlin module.
+    /// `MessagePack` / kotlinx.serialization imports for a Kotlin module.
     ///
     /// Returns the base `Serializable` and `SerialName` imports.
     /// Unlike the JSON plugin, no BigInt-specific imports are needed.

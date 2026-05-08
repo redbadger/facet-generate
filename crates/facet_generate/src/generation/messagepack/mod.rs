@@ -1,6 +1,6 @@
 //! MessagePack serialization plugin — provides MessagePack-specific imports,
 //! annotations, type bodies, and manifest dependencies through the
-//! [`EmitterPlugin`](super::plugin::EmitterPlugin) trait.
+//! `EmitterPlugin` trait.
 //!
 //! # What the plugin handles
 //!

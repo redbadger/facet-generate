@@ -1,4 +1,4 @@
-//! Snapshot tests for the C# emitter — **MessagePack encoding**.
+//! Snapshot tests for the C# emitter — **`MessagePack` encoding**.
 //!
 //! Mirrors [`tests_json`](super::tests_json) but uses [`MessagePackPlugin`].
 //!
@@ -7,7 +7,7 @@
 //!   plus a private nested `TypeNameConverter` class in the type body
 //! - Unit-only enums get `[MessagePackConverter(typeof(EnumAsStringConverter<T>))]`
 //! - All non-unit types get `MessagePackSerialize`/`MessagePackDeserialize` helpers
-//! - Field annotations (`[JsonPropertyName]`) are absent (MessagePack uses property names directly)
+//! - Field annotations (`[JsonPropertyName]`) are absent (`MessagePack` uses property names directly)
 
 #![allow(clippy::too_many_lines)]
 

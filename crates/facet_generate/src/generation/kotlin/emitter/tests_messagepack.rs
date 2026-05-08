@@ -1,10 +1,10 @@
-//! Snapshot tests for the Kotlin emitter — **MessagePack encoding**.
+//! Snapshot tests for the Kotlin emitter — **`MessagePack` encoding**.
 //!
 //! Mirrors the structure of [`tests`](super::tests) but uses `MessagePackPlugin`
 //! so that every generated type carries `kotlinx.serialization` annotations:
 //! `@Serializable`, `@SerialName`, and `@Contextual` where appropriate.
 //!
-//! Unlike Bincode, MessagePack encoding does not emit hand-written `serialize`/
+//! Unlike Bincode, `MessagePack` encoding does not emit hand-written `serialize`/
 //! `deserialize` methods — it relies on the `kotlinx.serialization` compiler
 //! plugin. These tests verify that the correct annotations and serializer
 //! class references are placed on each type and variant.

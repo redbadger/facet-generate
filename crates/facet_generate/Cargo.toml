@@ -30,7 +30,7 @@ anyhow.workspace = true
 expect-test.workspace = true
 facet = { workspace = true, features = ["chrono", "url", "bytes"] }
 ignore = "0.4"
-insta = { version = "1.46.3", features = ["yaml", "json"] }
+insta = { version = "1.47.2", features = ["yaml", "json"] }
 maplit = "1.0.2"
 strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"

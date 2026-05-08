@@ -1,9 +1,9 @@
-//! Snapshot tests for the TypeScript emitter — **MessagePack encoding**.
+//! Snapshot tests for the TypeScript emitter — **`MessagePack` encoding**.
 //!
 //! Mirrors the structure of [`tests_json`](super::tests_json) but uses
 //! [`MessagePackPlugin`].
 //!
-//! Unlike the JSON and Bincode plugins, the MessagePack plugin for TypeScript
+//! Unlike the JSON and Bincode plugins, the `MessagePack` plugin for TypeScript
 //! uses `@msgpack/msgpack` to encode/decode plain JS objects directly — no
 //! hand-written `serialize`/`deserialize` methods are generated per type.
 //! Instead, module-level `msgPackEncode`/`msgPackDecode` generic helpers are
@@ -13,7 +13,7 @@
 //! As a result, the per-type output here is **identical to the no-plugin
 //! output** — pure class declarations with constructors only. These tests
 //! exist to guard against accidental regressions (e.g. someone adding
-//! per-type body content to the MessagePack TypeScript plugin).
+//! per-type body content to the `MessagePack` TypeScript plugin).
 
 #![allow(clippy::too_many_lines)]
 use super::*;

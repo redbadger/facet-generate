@@ -1,4 +1,4 @@
-//! Snapshot tests for the Swift emitter — **MessagePack encoding**.
+//! Snapshot tests for the Swift emitter — **`MessagePack` encoding**.
 //!
 //! Mirrors [`tests_json`](super::tests_json) but uses [`MessagePackPlugin`].
 //!
