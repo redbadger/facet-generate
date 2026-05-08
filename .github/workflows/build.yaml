@@ -55,7 +55,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('src/generation/csharp/installer/mod.rs') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('crates/facet_generate/src/generation/csharp/installer/mod.rs', 'crates/facet_generate/src/generation/messagepack/csharp.rs') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
 
@@ -70,15 +70,31 @@ jobs:
         with:
           deno-version: v2.x
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.deno/npm
+            ${{ runner.os == 'Windows' && format('{0}/deno/npm', env.LOCALAPPDATA) || '' }}
+          key: ${{ runner.os }}-deno-npm-${{ hashFiles('**/messagepack/typescript.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-npm-
+
       - name: Setup Additional Languages for codegen tests (swift)
+        if: runner.os != 'Windows'
         uses: SwiftyLab/setup-swift@latest
+        with:
+          swift-version: "6.0"
+
+      - if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~/.swiftpm/cache
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/messagepack/swift.rs', '**/swift/installer/mod.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
 
       - name: Install nextest
         uses: taiki-e/install-action@nextest
 
       - name: Test
         run: just test
-
-      - name: Swift runtime tests
-        if: runner.os != 'Windows'
-        run: just swift-test
