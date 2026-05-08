@@ -5,7 +5,9 @@ use std::process::Command;
 use facet::Facet;
 use facet_generate as fg;
 use facet_generate::{
-    generation::{bincode::BincodePlugin, csharp, json::JsonPlugin},
+    generation::{
+        bincode::BincodePlugin, csharp, json::JsonPlugin, messagepack::MessagePackPlugin,
+    },
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -32,6 +34,19 @@ fn test_that_csharp_code_compiles_with_bincode() {
 
     csharp::Installer::new("Example.Testing", &dir)
         .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
+#[test]
+fn test_that_csharp_code_compiles_with_messagepack() {
+    let registry = common::get_msgpack_registry();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(MessagePackPlugin)
         .generate(&registry)
         .unwrap();
 

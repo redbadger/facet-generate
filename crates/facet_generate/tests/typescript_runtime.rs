@@ -82,3 +82,79 @@ Deno.test("bincode serialization matches deserialization", () => {{
         .unwrap();
     assert!(status.success());
 }
+
+#[test]
+fn test_typescript_msgpack_runtime_self_roundtrip() {
+    use common::MsgPackStruct;
+    use facet_generate::generation::messagepack::MessagePackPlugin;
+    use facet_generate::reflect;
+
+    let registry = reflect!(MsgPackStruct).unwrap();
+    let dir = tempdir().unwrap();
+    let dir_path = dir.path();
+
+    // Generate TypeScript code with MessagePackPlugin
+    typescript::Installer::new("testing", dir_path)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    // Write deno.json import map so bare npm specifier resolves
+    std::fs::write(
+        dir_path.join("deno.json"),
+        r#"{ "imports": { "@msgpack/msgpack": "npm:@msgpack/msgpack" } }"#,
+    )
+    .unwrap();
+
+    // Write the Deno test file
+    let test_path = dir_path.join("test_msgpack.ts");
+    let mut test_file = File::create(&test_path).unwrap();
+    writeln!(
+        test_file,
+        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+import {{ MsgPackStruct, msgPackEncode, msgPackDecode }} from "./testing.ts";
+
+Deno.test("msgpack self-roundtrip for MsgPackStruct", () => {{
+    // x is u32 (uint32 = number), y is u64 (uint64 = bigint).
+    // @msgpack/msgpack v3 does not encode JS BigInt by default; the library
+    // throws "Unrecognized object: [object BigInt]" when it encounters one.
+    // Using `99 as unknown as bigint` satisfies TypeScript's type checker
+    // (the constructor expects bigint) while keeping the runtime value as a
+    // plain number that encode() can handle without error.
+    const original = new MsgPackStruct(42, 99 as unknown as bigint);
+
+    // Encode the object as MessagePack bytes
+    const encoded: Uint8Array = msgPackEncode(original);
+
+    // Decode back to a plain JS object (not a class instance)
+    const decoded = msgPackDecode<MsgPackStruct>(encoded);
+
+    // x is uint32 (number) — direct comparison
+    assertEquals(decoded.x, 42, "x should be 42");
+
+    // y was a plain number at runtime; Number() is safe for both number and bigint
+    assertEquals(Number(decoded.y), 99, "y should be 99");
+
+    // Re-encode the decoded object and verify byte-level identity (structural roundtrip)
+    const reEncoded: Uint8Array = msgPackEncode(decoded);
+    assertEquals(encoded, reEncoded, "re-encoded bytes should match original encoding");
+}});
+"#
+    )
+    .unwrap();
+
+    let status = Command::new("deno")
+        .current_dir(dir_path)
+        .arg("test")
+        .arg("--sloppy-imports")
+        // The installer writes a package.json alongside the generated .ts file;
+        // Deno 2 sees the package.json and expects a local node_modules directory
+        // to be populated via `deno install`.  Setting node-modules-dir=none
+        // tells Deno to use its global npm cache instead, so the test works
+        // without a prior `deno install` step.
+        .arg("--node-modules-dir=none")
+        .arg(&test_path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

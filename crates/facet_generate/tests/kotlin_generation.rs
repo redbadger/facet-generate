@@ -21,13 +21,38 @@
 
 use std::process::Command;
 
-use facet_generate::{generation::kotlin, reflect};
+use facet_generate::{
+    generation::{kotlin, messagepack::MessagePackPlugin},
+    reflect,
+};
 use tempfile::tempdir;
 
 pub mod common;
 
 fn gradle_command() -> Command {
     Command::new("gradle")
+}
+
+#[test]
+fn test_that_kotlin_code_compiles_with_messagepack() {
+    let registry = common::get_msgpack_registry();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let args = ["--configuration-cache"];
+
+    let status = gradle_command()
+        .args(args)
+        .arg("build")
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    assert!(status.success());
 }
 
 #[test]

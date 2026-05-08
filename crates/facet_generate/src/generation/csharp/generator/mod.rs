@@ -87,6 +87,11 @@ impl<'a> CSharpCodeGenerator<'a> {
             container.write(w, &lang)?;
         }
 
+        // Emit module-level helpers (e.g. FacetMessagePackWitness for MessagePack).
+        for plugin in lang.plugins() {
+            plugin.module_helpers(w, &config)?;
+        }
+
         Ok(())
     }
 

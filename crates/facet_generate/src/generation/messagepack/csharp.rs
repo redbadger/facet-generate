@@ -106,21 +106,61 @@ fn to_csharp_type(format: &Format) -> String {
     }
 }
 
-/// Emit a read expression: `context.GetConverter<T>().Read(ref reader, context)`,
-/// with appropriate null-handling suffix.
+/// Emit a read expression for the given format.
+///
+/// For scalar primitives we use the direct `reader.ReadXxx()` methods (as
+/// recommended by the Nerdbank.MessagePack custom-converter docs).  For all
+/// other types we delegate to `context.GetConverter<T>(null).Read(…)`.
 fn read_expr(format: &Format) -> String {
-    let ty = to_csharp_type(format);
-    if is_value_type(format) {
-        format!("context.GetConverter<{ty}>().Read(ref reader, context).GetValueOrDefault()")
-    } else {
-        format!("context.GetConverter<{ty}>().Read(ref reader, context)!")
+    match format {
+        Format::Bool => "reader.ReadBoolean()".to_string(),
+        Format::I8 => "reader.ReadSByte()".to_string(),
+        Format::I16 => "reader.ReadInt16()".to_string(),
+        Format::I32 => "reader.ReadInt32()".to_string(),
+        Format::I64 => "reader.ReadInt64()".to_string(),
+        Format::U8 => "reader.ReadByte()".to_string(),
+        Format::U16 => "reader.ReadUInt16()".to_string(),
+        Format::U32 => "reader.ReadUInt32()".to_string(),
+        Format::U64 => "reader.ReadUInt64()".to_string(),
+        Format::F32 => "reader.ReadSingle()".to_string(),
+        Format::F64 => "reader.ReadDouble()".to_string(),
+        Format::Str => "reader.ReadString()!".to_string(),
+        _ => {
+            let ty = to_csharp_type(format);
+            if is_value_type(format) {
+                format!(
+                    "context.GetConverter<{ty}>(null).Read(ref reader, context).GetValueOrDefault()"
+                )
+            } else {
+                format!("context.GetConverter<{ty}>(null).Read(ref reader, context)!")
+            }
+        }
     }
 }
 
-/// Emit a write expression: `context.GetConverter<T>().Write(ref writer, value, context);`
+/// Emit a write expression for the given format.
+///
+/// For scalar primitives we call `writer.Write(value)` directly.  For all
+/// other types we delegate to `context.GetConverter<T>(null).Write(…)`.
 fn write_expr(format: &Format, value_expr: &str) -> String {
-    let ty = to_csharp_type(format);
-    format!("context.GetConverter<{ty}>().Write(ref writer, {value_expr}, context);")
+    match format {
+        Format::Bool
+        | Format::I8
+        | Format::I16
+        | Format::I32
+        | Format::I64
+        | Format::U8
+        | Format::U16
+        | Format::U32
+        | Format::U64
+        | Format::F32
+        | Format::F64
+        | Format::Str => format!("writer.Write({value_expr});"),
+        _ => {
+            let ty = to_csharp_type(format);
+            format!("context.GetConverter<{ty}>(null).Write(ref writer, {value_expr}, context);")
+        }
+    }
 }
 
 /// Returns true if the container's enum format contains only unit variants.
@@ -179,7 +219,7 @@ impl EmitterPlugin<CSharp> for MessagePackPlugin {
         vec![
             r#"    <PackageReference Include="Nerdbank.MessagePack" Version="1.1.*" />"#
                 .to_string(),
-            r#"    <PackageReference Include="PolyType" Version="1.2.*" />"#.to_string(),
+            r#"    <PackageReference Include="PolyType" Version="1.3.*" />"#.to_string(),
         ]
     }
 
@@ -288,7 +328,7 @@ fn write_enum_converter(
 
     writeln!(
         w,
-        "private sealed class {enum_name}Converter : MessagePackConverter<{enum_name}>"
+        "internal sealed class {enum_name}Converter : MessagePackConverter<{enum_name}>"
     )?;
     with_block(w, Newlines::BOTH, |w| {
         // ----------------------------------------------------------------
@@ -424,7 +464,7 @@ fn write_enum_converter(
                                     let expr = read_expr(&field.value);
                                     writeln!(w, r#"case "{fname}": {fname} = {expr}; break;"#)?;
                                 }
-                                writeln!(w, "default: reader.Skip(); break;")
+                                writeln!(w, "default: reader.Skip(context); break;")
                             })
                         })?;
                         let args = fields

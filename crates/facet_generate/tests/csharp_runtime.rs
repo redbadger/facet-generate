@@ -7,7 +7,7 @@
 
 use std::{fs, io::Write as _, process::Command};
 
-use facet_generate::generation::{bincode::BincodePlugin, csharp};
+use facet_generate::generation::{bincode::BincodePlugin, csharp, messagepack::MessagePackPlugin};
 use tempfile::tempdir;
 
 pub mod common;
@@ -130,6 +130,169 @@ catch (Exception)
 Console.WriteLine("Simple data roundtrip: PASSED");
 "#,
         quote_bytes(&reference),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
+#[test]
+fn test_csharp_msgpack_runtime_on_simple_data() {
+    let registry = common::get_simple_registry();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let reference = rmp_serde::to_vec_named(&Test {
+        a: vec![4, 6],
+        b: (-3, 5),
+        c: Choice::C { x: 7 },
+    })
+    .unwrap();
+
+    make_executable(&dir, "Example.Testing");
+
+    let program_path = dir.join("Program.cs");
+    let mut program = fs::File::create(program_path).unwrap();
+    writeln!(
+        program,
+        r#"using System;
+using System.Linq;
+using Example.Testing;
+using Facet.Runtime.Serde;
+using Facet.Runtime.MessagePack;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] input = {0};
+var value = Test.MessagePackDeserialize(input);
+
+// Verify deserialized values
+Assert(value.A.Count == 2, "A should have 2 elements");
+Assert(value.A[0] == 4, "A[0] should be 4");
+Assert(value.A[1] == 6, "A[1] should be 6");
+Assert(value.B == (-3L, 5UL), "B should be (-3, 5)");
+Assert(value.C is Choice.C, "C should be Choice.C variant");
+var c = (Choice.C)value.C;
+Assert(c.X == 7, "C.X should be 7");
+
+// Roundtrip: re-serialize and check bytes match
+var output = value.MessagePackSerialize();
+Assert(input.SequenceEqual(output), "Roundtrip failed: serialized bytes don't match");
+
+// Verify error on extra bytes
+byte[] tooLong = input.Concat(new byte[] {{ 0 }}).ToArray();
+try
+{{
+    Test.MessagePackDeserialize(tooLong);
+    Assert(false, "Should have thrown on extra bytes");
+}}
+catch (Exception)
+{{
+    // expected
+}}
+
+Console.WriteLine("Simple data roundtrip: PASSED");
+"#,
+        quote_bytes(&reference),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
+#[test]
+#[ignore = "slow"]
+fn test_csharp_msgpack_runtime_on_supported_types() {
+    let registry = common::get_msgpack_registry();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let positive_encodings = common::get_msgpack_positive_samples()
+        .iter()
+        .map(|bytes| quote_bytes(bytes))
+        .collect::<Vec<_>>()
+        .join(",\n        ");
+
+    make_executable(&dir, "Example.Testing");
+
+    let program_path = dir.join("Program.cs");
+    let mut program = fs::File::create(program_path).unwrap();
+    writeln!(
+        program,
+        r#"using System;
+using System.Linq;
+using Example.Testing;
+using Facet.Runtime.Serde;
+using Facet.Runtime.MessagePack;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[][] positiveInputs = new byte[][] {{
+        {positive_encodings}
+}};
+
+int passed = 0;
+for (int i = 0; i < positiveInputs.Length; i++)
+{{
+    byte[] input = positiveInputs[i];
+    var value = MsgPackSerdeData.MessagePackDeserialize(input);
+    var output = value.MessagePackSerialize();
+    Assert(
+        input.SequenceEqual(output),
+        $"Roundtrip failed for sample {{i}}: input length={{input.Length}}, output length={{output.Length}}"
+    );
+
+    // Self-equality via byte comparison: deserialize twice, serialize both,
+    // check bytes match.
+    var value2 = MsgPackSerdeData.MessagePackDeserialize(input);
+    var output2 = value2.MessagePackSerialize();
+    Assert(
+        output.SequenceEqual(output2),
+        $"Self-equality (via bytes) failed for sample {{i}}"
+    );
+
+    // Mutation testing: flip the high bit of each byte (up to 40) and verify
+    // that deserialization either fails or produces a different value.
+    for (int j = 0; j < Math.Min(40, input.Length); j++)
+    {{
+        byte[] mutated = (byte[])input.Clone();
+        mutated[j] ^= 0x80;
+        try
+        {{
+            var mutatedValue = MsgPackSerdeData.MessagePackDeserialize(mutated);
+            var mutatedOutput = mutatedValue.MessagePackSerialize();
+            Assert(
+                !input.SequenceEqual(mutatedOutput),
+                $"Mutated byte {{j}} should give different serialized output for sample {{i}}"
+            );
+        }}
+        catch (Exception)
+        {{
+            // Deserialization failure on mutated input is acceptable
+        }}
+    }}
+
+    passed++;
+}}
+
+Console.WriteLine($"Supported types roundtrip + mutation: {{passed}}/{{positiveInputs.Length}} PASSED");
+"#,
     )
     .unwrap();
 

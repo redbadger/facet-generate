@@ -358,7 +358,7 @@ fn enum_with_1_tuple_variants() {
     public abstract record MyEnum {
         public sealed record Variant1(string Value) : MyEnum;
 
-        private sealed class MyEnumConverter : MessagePackConverter<MyEnum>
+        internal sealed class MyEnumConverter : MessagePackConverter<MyEnum>
         {
             public override MyEnum? Read(ref MessagePackReader reader, SerializationContext context)
             {
@@ -369,7 +369,7 @@ fn enum_with_1_tuple_variants() {
                     var tag = reader.ReadString()!;
                     return tag switch
                     {
-                        "Variant1" => new Variant1(context.GetConverter<string>().Read(ref reader, context)!),
+                        "Variant1" => new Variant1(reader.ReadString()!),
                         _ => throw new MessagePackSerializationException($"Unknown variant for MyEnum: {tag}"),
                     };
                 }
@@ -384,7 +384,7 @@ fn enum_with_1_tuple_variants() {
                     case Variant1 v:
                         writer.WriteMapHeader(1);
                         writer.Write("Variant1");
-                        context.GetConverter<string>().Write(ref writer, v.Value, context);
+                        writer.Write(v.Value);
                         break;
                 }
             }
@@ -418,7 +418,7 @@ fn enum_with_newtype_variants() {
 
         public sealed record Variant2(int Value) : MyEnum;
 
-        private sealed class MyEnumConverter : MessagePackConverter<MyEnum>
+        internal sealed class MyEnumConverter : MessagePackConverter<MyEnum>
         {
             public override MyEnum? Read(ref MessagePackReader reader, SerializationContext context)
             {
@@ -429,8 +429,8 @@ fn enum_with_newtype_variants() {
                     var tag = reader.ReadString()!;
                     return tag switch
                     {
-                        "Variant1" => new Variant1(context.GetConverter<string>().Read(ref reader, context)!),
-                        "Variant2" => new Variant2(context.GetConverter<int>().Read(ref reader, context).GetValueOrDefault()),
+                        "Variant1" => new Variant1(reader.ReadString()!),
+                        "Variant2" => new Variant2(reader.ReadInt32()),
                         _ => throw new MessagePackSerializationException($"Unknown variant for MyEnum: {tag}"),
                     };
                 }
@@ -445,12 +445,12 @@ fn enum_with_newtype_variants() {
                     case Variant1 v:
                         writer.WriteMapHeader(1);
                         writer.Write("Variant1");
-                        context.GetConverter<string>().Write(ref writer, v.Value, context);
+                        writer.Write(v.Value);
                         break;
                     case Variant2 v:
                         writer.WriteMapHeader(1);
                         writer.Write("Variant2");
-                        context.GetConverter<int>().Write(ref writer, v.Value, context);
+                        writer.Write(v.Value);
                         break;
                 }
             }
@@ -484,7 +484,7 @@ fn enum_with_tuple_variants() {
 
         public sealed record Variant2(bool Field0, double Field1, byte Field2) : MyEnum;
 
-        private sealed class MyEnumConverter : MessagePackConverter<MyEnum>
+        internal sealed class MyEnumConverter : MessagePackConverter<MyEnum>
         {
             public override MyEnum? Read(ref MessagePackReader reader, SerializationContext context)
             {
@@ -507,8 +507,8 @@ fn enum_with_tuple_variants() {
             {
                 var len = reader.ReadArrayHeader();
                 _ = len;
-                var field0 = context.GetConverter<string>().Read(ref reader, context)!;
-                var field1 = context.GetConverter<int>().Read(ref reader, context).GetValueOrDefault();
+                var field0 = reader.ReadString()!;
+                var field1 = reader.ReadInt32();
                 return new Variant1(field0, field1);
             }
 
@@ -516,9 +516,9 @@ fn enum_with_tuple_variants() {
             {
                 var len = reader.ReadArrayHeader();
                 _ = len;
-                var field0 = context.GetConverter<bool>().Read(ref reader, context).GetValueOrDefault();
-                var field1 = context.GetConverter<double>().Read(ref reader, context).GetValueOrDefault();
-                var field2 = context.GetConverter<byte>().Read(ref reader, context).GetValueOrDefault();
+                var field0 = reader.ReadBoolean();
+                var field1 = reader.ReadDouble();
+                var field2 = reader.ReadByte();
                 return new Variant2(field0, field1, field2);
             }
 
@@ -531,16 +531,16 @@ fn enum_with_tuple_variants() {
                         writer.WriteMapHeader(1);
                         writer.Write("Variant1");
                         writer.WriteArrayHeader(2);
-                        context.GetConverter<string>().Write(ref writer, v.Field0, context);
-                        context.GetConverter<int>().Write(ref writer, v.Field1, context);
+                        writer.Write(v.Field0);
+                        writer.Write(v.Field1);
                         break;
                     case Variant2 v:
                         writer.WriteMapHeader(1);
                         writer.Write("Variant2");
                         writer.WriteArrayHeader(3);
-                        context.GetConverter<bool>().Write(ref writer, v.Field0, context);
-                        context.GetConverter<double>().Write(ref writer, v.Field1, context);
-                        context.GetConverter<byte>().Write(ref writer, v.Field2, context);
+                        writer.Write(v.Field0);
+                        writer.Write(v.Field1);
+                        writer.Write(v.Field2);
                         break;
                 }
             }
@@ -571,7 +571,7 @@ fn enum_with_struct_variants() {
     public abstract record MyEnum {
         public sealed record Variant1(string Field1, int Field2) : MyEnum;
 
-        private sealed class MyEnumConverter : MessagePackConverter<MyEnum>
+        internal sealed class MyEnumConverter : MessagePackConverter<MyEnum>
         {
             public override MyEnum? Read(ref MessagePackReader reader, SerializationContext context)
             {
@@ -599,9 +599,9 @@ fn enum_with_struct_variants() {
                     var key = reader.ReadString()!;
                     switch (key)
                     {
-                        case "field1": field1 = context.GetConverter<string>().Read(ref reader, context)!; break;
-                        case "field2": field2 = context.GetConverter<int>().Read(ref reader, context).GetValueOrDefault(); break;
-                        default: reader.Skip(); break;
+                        case "field1": field1 = reader.ReadString()!; break;
+                        case "field2": field2 = reader.ReadInt32(); break;
+                        default: reader.Skip(context); break;
                     }
                 }
                 return new Variant1(field1!, field2);
@@ -617,9 +617,9 @@ fn enum_with_struct_variants() {
                         writer.Write("Variant1");
                         writer.WriteMapHeader(2);
                         writer.Write("field1");
-                        context.GetConverter<string>().Write(ref writer, v.Field1, context);
+                        writer.Write(v.Field1);
                         writer.Write("field2");
-                        context.GetConverter<int>().Write(ref writer, v.Field2, context);
+                        writer.Write(v.Field2);
                         break;
                 }
             }
@@ -659,7 +659,7 @@ fn enum_with_mixed_variants() {
 
         public sealed record Struct(bool Field) : MyEnum;
 
-        private sealed class MyEnumConverter : MessagePackConverter<MyEnum>
+        internal sealed class MyEnumConverter : MessagePackConverter<MyEnum>
         {
             public override MyEnum? Read(ref MessagePackReader reader, SerializationContext context)
             {
@@ -679,7 +679,7 @@ fn enum_with_mixed_variants() {
                     var tag = reader.ReadString()!;
                     return tag switch
                     {
-                        "NewType" => new NewType(context.GetConverter<string>().Read(ref reader, context)!),
+                        "NewType" => new NewType(reader.ReadString()!),
                         "Tuple" => ReadTuple(ref reader, context),
                         "Struct" => ReadStruct(ref reader, context),
                         _ => throw new MessagePackSerializationException($"Unknown variant for MyEnum: {tag}"),
@@ -692,8 +692,8 @@ fn enum_with_mixed_variants() {
             {
                 var len = reader.ReadArrayHeader();
                 _ = len;
-                var field0 = context.GetConverter<string>().Read(ref reader, context)!;
-                var field1 = context.GetConverter<int>().Read(ref reader, context).GetValueOrDefault();
+                var field0 = reader.ReadString()!;
+                var field1 = reader.ReadInt32();
                 return new Tuple(field0, field1);
             }
 
@@ -706,8 +706,8 @@ fn enum_with_mixed_variants() {
                     var key = reader.ReadString()!;
                     switch (key)
                     {
-                        case "field": field = context.GetConverter<bool>().Read(ref reader, context).GetValueOrDefault(); break;
-                        default: reader.Skip(); break;
+                        case "field": field = reader.ReadBoolean(); break;
+                        default: reader.Skip(context); break;
                     }
                 }
                 return new Struct(field);
@@ -722,21 +722,21 @@ fn enum_with_mixed_variants() {
                     case NewType v:
                         writer.WriteMapHeader(1);
                         writer.Write("NewType");
-                        context.GetConverter<string>().Write(ref writer, v.Value, context);
+                        writer.Write(v.Value);
                         break;
                     case Tuple v:
                         writer.WriteMapHeader(1);
                         writer.Write("Tuple");
                         writer.WriteArrayHeader(2);
-                        context.GetConverter<string>().Write(ref writer, v.Field0, context);
-                        context.GetConverter<int>().Write(ref writer, v.Field1, context);
+                        writer.Write(v.Field0);
+                        writer.Write(v.Field1);
                         break;
                     case Struct v:
                         writer.WriteMapHeader(1);
                         writer.Write("Struct");
                         writer.WriteMapHeader(1);
                         writer.Write("field");
-                        context.GetConverter<bool>().Write(ref writer, v.Field, context);
+                        writer.Write(v.Field);
                         break;
                 }
             }

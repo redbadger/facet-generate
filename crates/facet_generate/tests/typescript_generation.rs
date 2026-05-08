@@ -115,6 +115,39 @@ fn test_typescript_manifest_generation() {
 }
 
 #[test]
+fn test_typescript_code_generates_with_messagepack() {
+    use common::MsgPackStruct;
+    use facet_generate::generation::messagepack::MessagePackPlugin;
+    use facet_generate::reflect;
+
+    let dir = tempdir().unwrap();
+    let registry = reflect!(MsgPackStruct).unwrap();
+
+    typescript::Installer::new("testing", dir.path())
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    // Check that msgPackEncode/msgPackDecode were generated
+    let source = std::fs::read_to_string(dir.path().join("testing.ts")).unwrap();
+    assert!(
+        source.contains("msgPackEncode"),
+        "missing msgPackEncode in generated source:\n{source}"
+    );
+    assert!(
+        source.contains("msgPackDecode"),
+        "missing msgPackDecode in generated source:\n{source}"
+    );
+
+    // Check that package.json has the @msgpack/msgpack dependency
+    let pkg = std::fs::read_to_string(dir.path().join("package.json")).unwrap();
+    assert!(
+        pkg.contains("@msgpack/msgpack"),
+        "missing @msgpack/msgpack in package.json:\n{pkg}"
+    );
+}
+
+#[test]
 fn test_typescript_code_generation_file_layout() {
     let dir = tempdir().unwrap();
     let registry = common::get_registry();

@@ -182,6 +182,7 @@ impl Installer {
     /// Builds the SPM manifest with targets (one per namespace plus any
     /// runtime targets), inter-target dependency edges, external package
     /// dependencies, and a library product exposing the top-level targets.
+    #[allow(clippy::too_many_lines)]
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
         let mut all_targets = self.targets.clone();
