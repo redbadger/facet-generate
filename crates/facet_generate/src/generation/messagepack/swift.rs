@@ -36,7 +36,7 @@ use super::MessagePackPlugin;
 
 impl EmitterPlugin<Swift> for MessagePackPlugin {
     fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
-        vec!["MessagePacker".to_string()]
+        vec!["Foundation".to_string(), "MessagePacker".to_string()]
     }
 
     fn type_conformances(&self, _ctx: &EmitContext) -> Vec<String> {
@@ -108,6 +108,10 @@ mod tests {
         let cfg = CodeGeneratorConfig::new("test".to_string());
         let plugin = &MessagePackPlugin as &dyn EmitterPlugin<Swift>;
         let imports = plugin.imports(&cfg);
+        assert!(
+            imports.contains(&"Foundation".to_string()),
+            "imports should contain 'Foundation', got: {imports:?}"
+        );
         assert!(
             imports.contains(&"MessagePacker".to_string()),
             "imports should contain 'MessagePacker', got: {imports:?}"

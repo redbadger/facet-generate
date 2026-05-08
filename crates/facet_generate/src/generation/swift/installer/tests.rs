@@ -85,13 +85,13 @@ fn manifest_with_serde_as_target() {
         products: [
             .library(
                 name: "MyPackage",
-                targets: ["MyPackage"]
+                targets: ["MyPackage", "Serde"]
             )
         ],
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
             .target(
                 name: "Serde",
@@ -151,7 +151,7 @@ fn manifest_with_serde_as_a_remote_dependency() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -206,7 +206,7 @@ fn manifest_with_serde_as_a_local_dependency() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -253,11 +253,11 @@ fn manifest_with_namespaces() {
         targets: [
             .target(
                 name: "AnotherTarget",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
             .target(
                 name: "MyPackage",
-                dependencies: ["AnotherTarget", "Serde"]
+                dependencies: ["AnotherTarget"]
             ),
         ]
     )
@@ -304,11 +304,11 @@ fn manifest_with_disjoint_namespaces() {
         targets: [
             .target(
                 name: "AnotherNamespace",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -415,7 +415,7 @@ fn manifest_with_namespaces_and_dependencies() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["AnotherPackage", "Serde"]
+                dependencies: ["AnotherPackage"]
             ),
         ]
     )
@@ -478,7 +478,7 @@ fn manifest_with_disjoint_namespaces_and_dependencies() {
         targets: [
             .target(
                 name: "MyPackage",
-                dependencies: ["Serde"]
+                dependencies: []
             ),
         ]
     )
@@ -546,7 +546,7 @@ fn external_dependencies_collected_across_multiple_types_in_same_namespace() {
         targets: [
             .target(
                 name: "App",
-                dependencies: ["Api", "Serde"]
+                dependencies: ["Api"]
             ),
         ]
     )
@@ -617,11 +617,11 @@ fn external_dependency_references_local_dependency() {
         targets: [
             .target(
                 name: "App",
-                dependencies: ["ExternalDependency", "LocalDependency", "Serde"]
+                dependencies: ["ExternalDependency", "LocalDependency"]
             ),
             .target(
                 name: "LocalDependency",
-                dependencies: ["ExternalDependency", "Serde"]
+                dependencies: ["ExternalDependency"]
             ),
         ]
     )
@@ -665,7 +665,7 @@ fn manifest_with_messagepack_plugin() {
         targets: [
             .target(
                 name: "Testing",
-                dependencies: ["MessagePacker", "Serde"]
+                dependencies: ["MessagePacker"]
             ),
         ]
     )

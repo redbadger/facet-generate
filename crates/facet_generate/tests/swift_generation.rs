@@ -342,15 +342,6 @@ fn test_that_swift_code_compiles_with_bincode() {
     );
 }
 
-/// `MessagePack` compile test.
-///
-/// Generates Swift source for a struct-only registry using `SwiftCodeGenerator`
-/// directly (rather than `Installer::generate()`, which currently adds a
-/// spurious `Serde` dependency for non-bincode plugins) and writes a correct
-/// `Package.swift` with the remote `MessagePacker` SPM dependency.
-///
-/// Only a flat struct (`MsgPackPrimitiveTypes`) is used because Swift can only
-/// auto-synthesize `Codable` for structs and enums with no associated values.
 #[test]
 fn test_that_swift_code_compiles_with_messagepack() {
     use common::MsgPackPrimitiveTypes;
@@ -360,40 +351,10 @@ fn test_that_swift_code_compiles_with_messagepack() {
     let registry = reflect!(MsgPackPrimitiveTypes).unwrap();
     let config = CodeGeneratorConfig::new("Testing".to_string());
 
-    // Generate the Swift source file directly.
-    std::fs::create_dir_all(dir.path().join("Sources/Testing")).unwrap();
-    let source_path = dir.path().join("Sources/Testing/Testing.swift");
-    let mut source = File::create(&source_path).unwrap();
-    // Foundation is needed for `Data` used in msgPackSerialize / msgPackDeserialize.
-    writeln!(source, "import Foundation").unwrap();
-    SwiftCodeGenerator::new(&config)
-        .with_plugins(vec![
-            Arc::new(MessagePackPlugin) as Arc<dyn EmitterPlugin<SwiftLang>>
-        ])
-        .output(&mut source, &registry)
+    SwiftInstaller::new(&config.module_name, dir.path())
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
         .unwrap();
-
-    // Write a Package.swift with the correct MessagePacker URL dependency.
-    let pkg_contents = r#"// swift-tools-version:6.0
-import PackageDescription
-let package = Package(
-    name: "Testing",
-    platforms: [.macOS(.v15)],
-    products: [
-        .library(name: "Testing", targets: ["Testing"]),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/hirotakan/MessagePacker.git", from: "0.4.7"),
-    ],
-    targets: [
-        .target(
-            name: "Testing",
-            dependencies: ["MessagePacker"]
-        ),
-    ]
-)
-"#;
-    std::fs::write(dir.path().join("Package.swift"), pkg_contents).unwrap();
 
     let status = Command::new("swift")
         .current_dir(dir.path())

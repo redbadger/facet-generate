@@ -5,7 +5,9 @@
 pub mod common;
 
 use common::{Choice, Test};
-use facet_generate::generation::{CodeGeneratorConfig, bincode::BincodePlugin, swift};
+use facet_generate::generation::{
+    CodeGeneratorConfig, bincode::BincodePlugin, messagepack::MessagePackPlugin, swift,
+};
 use std::{fs::File, io::Write as _, path::Path, process::Command};
 
 #[test]
@@ -199,68 +201,6 @@ for input in positive_inputs {{
 }
 
 // ---------------------------------------------------------------------------
-// Helpers for MessagePack tests
-// ---------------------------------------------------------------------------
-
-/// Generate a correct `MessagePack` Swift library package into `lib_dir`.
-///
-/// Uses `SwiftCodeGenerator` directly instead of `Installer::generate()`,
-/// because `install_module` unconditionally adds a `"Serde"` target
-/// dependency for any plugin — including `MessagePackPlugin` which has no Serde
-/// runtime — producing a broken `Package.swift`.  This helper writes
-/// the source and a correct `Package.swift` by hand.
-fn generate_msgpack_lib(
-    lib_dir: &std::path::Path,
-    registry: &facet_generate::Registry,
-    package_name: &str,
-) {
-    use facet_generate::generation::{
-        CodeGeneratorConfig,
-        messagepack::MessagePackPlugin,
-        plugin::EmitterPlugin,
-        swift::{Swift as SwiftLang, SwiftCodeGenerator},
-    };
-    use std::sync::Arc;
-
-    let config = CodeGeneratorConfig::new(package_name.to_string());
-
-    // Write the generated Swift source (with Foundation prepended for Data).
-    let sources_dir = lib_dir.join(format!("Sources/{package_name}"));
-    std::fs::create_dir_all(&sources_dir).unwrap();
-    let mut source = File::create(sources_dir.join(format!("{package_name}.swift"))).unwrap();
-    writeln!(source, "import Foundation").unwrap();
-    SwiftCodeGenerator::new(&config)
-        .with_plugins(vec![
-            Arc::new(MessagePackPlugin) as Arc<dyn EmitterPlugin<SwiftLang>>
-        ])
-        .output(&mut source, registry)
-        .unwrap();
-
-    // Write a Package.swift that correctly depends only on MessagePacker.
-    let pkg = format!(
-        r#"// swift-tools-version: 5.8
-import PackageDescription
-let package = Package(
-    name: "{package_name}",
-    products: [
-        .library(name: "{package_name}", targets: ["{package_name}"]),
-    ],
-    dependencies: [
-        .package(url: "https://github.com/hirotakan/MessagePacker.git", from: "0.4.7"),
-    ],
-    targets: [
-        .target(
-            name: "{package_name}",
-            dependencies: ["MessagePacker"]
-        ),
-    ]
-)
-"#
-    );
-    std::fs::write(lib_dir.join("Package.swift"), pkg).unwrap();
-}
-
-// ---------------------------------------------------------------------------
 // MessagePack runtime tests
 //
 // MessagePackEncoder uses Swift's Codable synthesis, which keys struct fields
@@ -281,7 +221,10 @@ fn test_swift_msgpack_runtime_on_simple_data() {
     let app_dir = dir.path().join("app");
 
     let registry = reflect!(MsgPackPrimitiveTypes).unwrap();
-    generate_msgpack_lib(&lib_dir, &registry, "Testing");
+    swift::Installer::new("Testing", &lib_dir)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
 
     std::fs::create_dir_all(app_dir.join("Sources/main")).unwrap();
 
@@ -355,7 +298,10 @@ fn test_swift_msgpack_runtime_on_supported_types() {
     let app_dir = dir.path().join("app");
 
     let registry = reflect!(MsgPackPrimitiveTypes).unwrap();
-    generate_msgpack_lib(&lib_dir, &registry, "Testing");
+    swift::Installer::new("Testing", &lib_dir)
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
 
     std::fs::create_dir_all(app_dir.join("Sources/main")).unwrap();
 

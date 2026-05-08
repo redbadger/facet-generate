@@ -336,14 +336,17 @@ impl SourceInstaller for Installer {
 
         let module_name = config.module_name().to_upper_camel_case();
 
+        // Check before taking the mutable borrow below to satisfy the borrow checker.
+        // Only depend on the Serde target if the Serde runtime was actually installed
+        // (i.e. a plugin wrote Sources/Serde/ files into this package).
+        let has_serde = self.targets.contains_key("Serde");
+
         let targets = self.targets.entry(module_name.clone()).or_default();
         for target in config.external_definitions.keys() {
             targets.insert(target.to_upper_camel_case());
         }
 
-        // Depend on the Serde target when the installer has plugins
-        // (i.e. serialization code will be generated).
-        if !self.plugins.is_empty() {
+        if has_serde {
             targets.insert("Serde".to_string());
         }
 
