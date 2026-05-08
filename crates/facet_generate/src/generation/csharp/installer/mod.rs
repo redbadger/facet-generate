@@ -181,6 +181,10 @@ impl Installer {
             }
         }
 
+        for plugin in &self.plugins {
+            package_references.extend(plugin.manifest_dependencies());
+        }
+
         let package_refs = package_references.join("\n");
         let mut manifest = String::new();
         writedoc!(

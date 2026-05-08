@@ -15,7 +15,7 @@ use crate::{
     Registry,
     generation::{
         ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp::Installer,
-        json::JsonPlugin,
+        json::JsonPlugin, messagepack::MessagePackPlugin,
     },
 };
 
@@ -238,4 +238,34 @@ fn test_generate_json_encoding_installs_serde_but_not_bincode() {
             .exists()
     );
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
+}
+
+#[test]
+fn test_make_manifest_with_messagepack_plugin_includes_nuget_refs() {
+    let installer = Installer::new("Example.Test", "/tmp").plugin(MessagePackPlugin);
+    let manifest = installer.make_manifest("Example.Test");
+
+    assert!(
+        manifest.contains("Nerdbank.MessagePack"),
+        "manifest should contain Nerdbank.MessagePack NuGet reference, got:\n{manifest}"
+    );
+    assert!(
+        manifest.contains("PolyType"),
+        "manifest should contain PolyType NuGet reference, got:\n{manifest}"
+    );
+}
+
+#[test]
+fn test_make_manifest_without_plugins_excludes_messagepack_refs() {
+    let installer = Installer::new("Example.Test", "/tmp");
+    let manifest = installer.make_manifest("Example.Test");
+
+    assert!(
+        !manifest.contains("Nerdbank.MessagePack"),
+        "manifest without plugins must not contain Nerdbank.MessagePack, got:\n{manifest}"
+    );
+    assert!(
+        !manifest.contains("PolyType"),
+        "manifest without plugins must not contain PolyType, got:\n{manifest}"
+    );
 }

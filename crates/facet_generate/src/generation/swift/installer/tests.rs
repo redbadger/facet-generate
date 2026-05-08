@@ -18,7 +18,7 @@ use crate as fg;
 use crate::{
     generation::{
         ExternalPackage, PackageLocation, SourceInstaller as _, bincode::BincodePlugin,
-        module::split, swift::installer::Installer,
+        messagepack::MessagePackPlugin, module::split, swift::installer::Installer,
     },
     reflect,
 };
@@ -626,4 +626,77 @@ fn external_dependency_references_local_dependency() {
         ]
     )
     "#);
+}
+
+#[test]
+fn manifest_with_messagepack_plugin() {
+    #[derive(Facet)]
+    struct SimpleStruct {
+        pub x: u32,
+    }
+
+    let registry = reflect!(SimpleStruct).unwrap();
+
+    let package_name = "Testing";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new(package_name, install_dir.path())
+        .plugin(MessagePackPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Testing",
+        products: [
+            .library(
+                name: "Testing",
+                targets: ["Testing"]
+            )
+        ],
+        dependencies: [
+            .package(url: "https://github.com/hirotakan/MessagePacker.git", from: "0.4.7")
+        ],
+        targets: [
+            .target(
+                name: "Testing",
+                dependencies: ["MessagePacker", "Serde"]
+            ),
+        ]
+    )
+    "#);
+
+    // The dependencies section must include the MessagePacker package.
+    assert!(
+        manifest.contains("MessagePacker"),
+        "Expected 'MessagePacker' in the manifest dependencies section:\n{manifest}"
+    );
+
+    // The Testing target's dependencies list must contain "MessagePacker".
+    assert!(
+        manifest.contains(r#""MessagePacker""#),
+        "Expected '\"MessagePacker\"' in the Testing target's dependencies:\n{manifest}"
+    );
+}
+
+#[test]
+fn spm_package_name_from_dep_extracts_name() {
+    assert_eq!(
+        super::spm_package_name_from_dep(
+            r#".package(url: "https://github.com/hirotakan/MessagePacker.git", from: "0.4.7")"#
+        ),
+        Some("MessagePacker".to_string())
+    );
+    assert_eq!(
+        super::spm_package_name_from_dep(
+            r#".package(url: "https://github.com/foo/MyLib.git", from: "1.0.0")"#
+        ),
+        Some("MyLib".to_string())
+    );
+    assert_eq!(super::spm_package_name_from_dep("garbage"), None);
 }

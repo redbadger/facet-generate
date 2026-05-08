@@ -252,7 +252,13 @@ impl Installer {
             .collect::<Vec<_>>()
             .join(", ");
 
-        if self.external_packages.is_empty() {
+        let plugin_deps: Vec<String> = self
+            .plugins
+            .iter()
+            .flat_map(|p| p.manifest_dependencies())
+            .collect();
+
+        if self.external_packages.is_empty() && plugin_deps.is_empty() {
             formatdoc! {r#"
                 // swift-tools-version: 5.8
                 import PackageDescription
@@ -273,15 +279,18 @@ impl Installer {
                 targets = format!("\n{}\n    ", targets.join("\n"))
             }
         } else {
-            let external_packages = self
+            let mut all_dep_entries: Vec<String> = self
                 .external_packages
                 .values()
                 .cloned()
                 .map(|d| ExternalPackage::to_swift(d, 2))
-                .collect::<Vec<_>>()
-                .join(",\n");
+                .collect();
 
-            let dependencies_section = format!("\n{external_packages}\n    ");
+            for dep in &plugin_deps {
+                all_dep_entries.push(format!("        {dep}"));
+            }
+
+            let dependencies_section = format!("\n{}\n    ", all_dep_entries.join(",\n"));
             formatdoc! {r#"
                 // swift-tools-version: 5.8
                 import PackageDescription
@@ -337,6 +346,16 @@ impl SourceInstaller for Installer {
             targets.insert("Serde".to_string());
         }
 
+        // Extract any SPM package names contributed by plugins and add them
+        // as target dependencies so the generated target can see them.
+        for plugin in &self.plugins {
+            for dep in plugin.manifest_dependencies() {
+                if let Some(name) = spm_package_name_from_dep(&dep) {
+                    targets.insert(name);
+                }
+            }
+        }
+
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;
         let source_path = dir_path.join(format!("{module_name}.swift"));
@@ -363,6 +382,22 @@ impl SourceInstaller for Installer {
 
         Ok(())
     }
+}
+
+/// Extracts the SPM package name from a `.package(url: "...", from: "...")` string.
+///
+/// # Examples
+///
+/// ```text
+/// .package(url: "https://github.com/hirotakan/MessagePacker.git", from: "0.4.7")
+/// → Some("MessagePacker")
+/// ```
+fn spm_package_name_from_dep(dep: &str) -> Option<String> {
+    let url_start = dep.find('"')? + 1;
+    let url_end = dep[url_start..].find('"')? + url_start;
+    let url = &dep[url_start..url_end];
+    let last = url.split('/').next_back()?;
+    Some(last.trim_end_matches(".git").to_string())
 }
 
 #[cfg(test)]

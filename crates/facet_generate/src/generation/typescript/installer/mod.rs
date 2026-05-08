@@ -214,39 +214,55 @@ impl Installer {
             "version": "0.1.0"
         });
 
-        // Add dependencies if we have external packages
-        if !self.external_packages.is_empty() {
-            let mut dependencies = BTreeMap::new();
+        // Build the full dependencies map from external packages and plugins
+        let mut dependencies: BTreeMap<String, String> = BTreeMap::new();
 
-            for external_package in self.external_packages.values() {
-                let (name, version) = match &external_package.location {
-                    PackageLocation::Path(path) => (
-                        external_package.for_namespace.clone(),
-                        format!("file:{path}"),
-                    ),
-                    PackageLocation::Url(url) => (
-                        {
-                            // Extract package name from URL
-                            let parts: Vec<&str> = url.split('/').collect();
-                            if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
-                                // Scoped package: @scope/package-name
-                                format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
-                            } else if let Some(last_segment) = parts.last() {
-                                // Regular package: package-name
-                                (*last_segment).to_string()
-                            } else {
-                                url.clone()
-                            }
-                        },
-                        external_package
-                            .version
-                            .clone()
-                            .unwrap_or_else(|| "*".to_string()),
-                    ),
-                };
-                dependencies.insert(name, version);
+        for external_package in self.external_packages.values() {
+            let (name, version) = match &external_package.location {
+                PackageLocation::Path(path) => (
+                    external_package.for_namespace.clone(),
+                    format!("file:{path}"),
+                ),
+                PackageLocation::Url(url) => (
+                    {
+                        // Extract package name from URL
+                        let parts: Vec<&str> = url.split('/').collect();
+                        if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
+                            // Scoped package: @scope/package-name
+                            format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
+                        } else if let Some(last_segment) = parts.last() {
+                            // Regular package: package-name
+                            (*last_segment).to_string()
+                        } else {
+                            url.clone()
+                        }
+                    },
+                    external_package
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "*".to_string()),
+                ),
+            };
+            dependencies.insert(name, version);
+        }
+
+        // Collect plugin manifest dependencies and merge them into the map
+        for plugin in &self.plugins {
+            for dep_str in plugin.manifest_dependencies() {
+                // Wrap in braces to make it a valid JSON object, then merge entries
+                let fragment = format!("{{{dep_str}}}");
+                if let Ok(serde_json::Value::Object(map)) =
+                    serde_json::from_str::<serde_json::Value>(&fragment)
+                {
+                    for (k, v) in map {
+                        dependencies.insert(k, v.as_str().unwrap_or("*").to_string());
+                    }
+                }
             }
+        }
 
+        // Only emit the dependencies section when there is something to emit
+        if !dependencies.is_empty() {
             manifest["dependencies"] = json!(dependencies);
         }
 

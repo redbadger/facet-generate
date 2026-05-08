@@ -16,6 +16,7 @@ use facet::Facet;
 
 use crate as fg;
 use crate::{
+    generation::messagepack::MessagePackPlugin,
     generation::{ExternalPackage, PackageLocation, SourceInstaller as _, module::split},
     reflect,
 };
@@ -301,4 +302,54 @@ fn manifest_with_scoped_package() {
       "version": "0.1.0"
     }
     "#);
+}
+
+#[test]
+fn manifest_with_msgpack_plugin() {
+    let package_name = "my-package";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let installer = Installer::new(package_name, install_dir.path()).plugin(MessagePackPlugin);
+
+    let manifest = installer.make_manifest(package_name);
+
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "dependencies": {
+        "@msgpack/msgpack": "^3.1.3"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      },
+      "name": "my-package",
+      "version": "0.1.0"
+    }
+    "#);
+}
+
+#[test]
+fn manifest_without_plugins_has_no_dependencies() {
+    // Regression: an installer with no plugins and no external packages must
+    // not emit a "dependencies" field at all.
+    let package_name = "my-package";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let installer = Installer::new(package_name, install_dir.path());
+
+    let manifest = installer.make_manifest(package_name);
+
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      },
+      "name": "my-package",
+      "version": "0.1.0"
+    }
+    "#);
+
+    assert!(
+        manifest.get("dependencies").is_none(),
+        "expected no dependencies field, got: {manifest}"
+    );
 }
