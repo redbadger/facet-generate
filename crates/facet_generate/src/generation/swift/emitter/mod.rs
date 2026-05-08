@@ -569,12 +569,38 @@ fn struct_<W: IndentWrite>(
     let all_equatable_auto = fields.iter().all(|f| is_equatable_auto(&f.value, lang));
     let all_can_eq = fields.iter().all(|f| can_use_eq_operator(&f.value, lang));
 
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let extra_conformances: Vec<String> = lang
+        .plugins()
+        .iter()
+        .flat_map(|p| p.type_conformances(&ctx))
+        .collect();
+
     if !has_plugins {
         write!(w, "public struct {name} ")?;
     } else if all_hashable {
-        write!(w, "public struct {name}: Hashable ")?;
+        if extra_conformances.is_empty() {
+            write!(w, "public struct {name}: Hashable ")?;
+        } else {
+            let all = std::iter::once("Hashable".to_string())
+                .chain(extra_conformances.iter().cloned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(w, "public struct {name}: {all} ")?;
+        }
     } else if all_equatable_auto || all_can_eq {
-        write!(w, "public struct {name}: Equatable ")?;
+        if extra_conformances.is_empty() {
+            write!(w, "public struct {name}: Equatable ")?;
+        } else {
+            let all = std::iter::once("Equatable".to_string())
+                .chain(extra_conformances.iter().cloned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(w, "public struct {name}: {all} ")?;
+        }
+    } else if !extra_conformances.is_empty() {
+        let all = extra_conformances.join(", ");
+        write!(w, "public struct {name}: {all} ")?;
     } else {
         write!(w, "public struct {name} ")?;
     }
@@ -609,7 +635,6 @@ fn struct_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -677,12 +702,38 @@ fn enum_<W: IndentWrite>(
         .values()
         .all(|v| variant_can_use_eq_operator(&v.value, lang));
 
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let extra_conformances: Vec<String> = lang
+        .plugins()
+        .iter()
+        .flat_map(|p| p.type_conformances(&ctx))
+        .collect();
+
     if !has_plugins {
         write!(w, "indirect public enum {name} ")?;
     } else if all_hashable {
-        write!(w, "indirect public enum {name}: Hashable ")?;
+        if extra_conformances.is_empty() {
+            write!(w, "indirect public enum {name}: Hashable ")?;
+        } else {
+            let all = std::iter::once("Hashable".to_string())
+                .chain(extra_conformances.iter().cloned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(w, "indirect public enum {name}: {all} ")?;
+        }
     } else if all_equatable_auto || all_can_eq {
-        write!(w, "indirect public enum {name}: Equatable ")?;
+        if extra_conformances.is_empty() {
+            write!(w, "indirect public enum {name}: Equatable ")?;
+        } else {
+            let all = std::iter::once("Equatable".to_string())
+                .chain(extra_conformances.iter().cloned())
+                .collect::<Vec<_>>()
+                .join(", ");
+            write!(w, "indirect public enum {name}: {all} ")?;
+        }
+    } else if !extra_conformances.is_empty() {
+        let all = extra_conformances.join(", ");
+        write!(w, "indirect public enum {name}: {all} ")?;
     } else {
         write!(w, "indirect public enum {name} ")?;
     }
@@ -693,7 +744,6 @@ fn enum_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -812,3 +862,5 @@ mod tests;
 mod tests_bincode;
 #[cfg(test)]
 mod tests_json;
+#[cfg(test)]
+mod tests_messagepack;

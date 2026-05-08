@@ -21,3 +21,4 @@ public indirect enum Indirect<T> {
 
 extension Indirect: Equatable where T: Equatable {}
 extension Indirect: Hashable where T: Hashable {}
+extension Indirect: Codable where T: Codable {}
