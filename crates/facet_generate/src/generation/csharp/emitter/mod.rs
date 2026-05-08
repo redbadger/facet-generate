@@ -532,3 +532,5 @@ mod tests;
 mod tests_bincode;
 #[cfg(test)]
 mod tests_json;
+#[cfg(test)]
+mod tests_messagepack;
