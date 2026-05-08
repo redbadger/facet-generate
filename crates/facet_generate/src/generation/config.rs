@@ -61,6 +61,10 @@ pub struct CodeGeneratorConfig {
     /// Populated by `update_from`. Used by the C# Bincode plugin to dispatch
     /// enum-typed fields through `{TypeName}Bincode.Serialize(...)` helpers.
     pub unit_variant_enums: BTreeSet<String>,
+    /// Simple names of all top-level types declared in this module.
+    /// Populated by `update_from`. Used by the `MessagePack` plugin to emit
+    /// a witness class listing all serialisable types.
+    pub entry_types: Vec<String>,
 }
 
 /// Container or leaf types in the registry that need a runtime support file
@@ -141,6 +145,7 @@ impl CodeGeneratorConfig {
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
             unit_variant_enums: BTreeSet::new(),
+            entry_types: Vec::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -286,6 +291,18 @@ impl CodeGeneratorConfig {
                 self.unit_variant_enums.insert(name.name.clone());
             }
         }
+
+        // Collect simple names of all types in this module.
+        let external: std::collections::HashSet<&str> = self
+            .external_definitions
+            .values()
+            .flat_map(|v| v.iter().map(String::as_str))
+            .collect();
+        self.entry_types = registry
+            .keys()
+            .filter(|name| !external.contains(name.name.as_str()))
+            .map(|name| name.name.clone())
+            .collect();
     }
 }
 

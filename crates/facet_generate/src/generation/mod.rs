@@ -39,6 +39,10 @@ pub mod bincode;
 /// helpers through the plugin trait.
 pub mod json;
 
+/// MessagePack serialization plugin — provides MessagePack-specific imports,
+/// annotations, and helpers through the plugin trait.
+pub mod messagepack;
+
 /// Support for code-generation in C#
 #[cfg(feature = "csharp")]
 pub mod csharp;
