@@ -583,3 +583,218 @@ pub fn get_swift_positive_samples() -> Vec<Vec<u8>> {
         .map(|v| bincode::serialize(v).unwrap())
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// MessagePack-compatible test fixture
+//
+// Differences from `SwiftSerdeData`:
+//   - No u128 / i128 (not in the MessagePack spec)
+//   - No char (no portable encoding across Kotlin/Swift/TS)
+//   - No BTreeMap<u64, ()> intset (non-string map keys are not portable)
+//   - No ComplexMap (tuple keys)
+//   - f32 / f64 are direct (non-Option) fields with bit-exact values
+//   - f_bytes has both #[facet(fg::bytes)] and #[serde(with = "serde_bytes")]
+// ---------------------------------------------------------------------------
+
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum MsgPackSerdeData {
+    PrimitiveTypes(MsgPackPrimitiveTypes),
+    OtherTypes(MsgPackOtherTypes),
+    UnitVariant,
+    NewTypeVariant(String),
+    TupleVariant(u32, u64),
+    StructVariant {
+        f0: MsgPackUnitStruct,
+        f1: MsgPackNewTypeStruct,
+        f2: MsgPackTupleStruct,
+        f3: MsgPackStruct,
+    },
+    ListWithMutualRecursion(MsgPackList<Box<Self>>),
+    TreeWithMutualRecursion(Tree<Box<Self>>),
+    TupleArray([u32; 3]),
+    UnitVector(Vec<()>),
+    SimpleList(MsgPackSimpleList),
+    CStyleEnum(MsgPackCStyleEnum),
+    EmptyStructVariant {},
+}
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[allow(clippy::struct_field_names)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MsgPackPrimitiveTypes {
+    pub f_bool: bool,
+    pub f_u8: u8,
+    pub f_u16: u16,
+    pub f_u32: u32,
+    pub f_u64: u64,
+    pub f_i8: i8,
+    pub f_i16: i16,
+    pub f_i32: i32,
+    pub f_i64: i64,
+    pub f_f32: f32,
+    pub f_f64: f64,
+}
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[allow(clippy::struct_field_names)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MsgPackOtherTypes {
+    pub f_string: String,
+    #[facet(fg::bytes)]
+    #[serde(with = "serde_bytes")]
+    pub f_bytes: Vec<u8>,
+    pub f_option: Option<MsgPackStruct>,
+    pub f_unit: (),
+    pub f_seq: Vec<MsgPackStruct>,
+    pub f_opt_seq: Option<Vec<i32>>,
+    pub f_tuple: (u8, u16),
+    pub f_stringmap: BTreeMap<String, u32>,
+    pub f_nested_seq: Vec<Vec<MsgPackStruct>>,
+}
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MsgPackUnitStruct;
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MsgPackNewTypeStruct(pub u64);
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MsgPackTupleStruct(pub u32, pub u64);
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MsgPackStruct {
+    pub x: u32,
+    pub y: u64,
+}
+
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum MsgPackList<T> {
+    Empty,
+    Node(T, Box<Self>),
+}
+
+#[allow(dead_code)]
+#[allow(clippy::unsafe_derive_deserialize)]
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MsgPackSimpleList(pub Option<Box<Self>>);
+
+#[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum MsgPackCStyleEnum {
+    A,
+    B,
+    C,
+    D,
+    E = 10,
+}
+
+/// Registry used for `MessagePack` compilation and runtime tests.
+pub fn get_msgpack_registry() -> Registry {
+    reflect!(MsgPackSerdeData).unwrap()
+}
+
+/// Sample values covering every variant of [`MsgPackSerdeData`] at least once.
+#[allow(clippy::too_many_lines)]
+pub fn get_msgpack_sample_values() -> Vec<MsgPackSerdeData> {
+    vec![
+        // PrimitiveTypes — typical values
+        MsgPackSerdeData::PrimitiveTypes(MsgPackPrimitiveTypes {
+            f_bool: false,
+            f_u8: 6,
+            f_u16: 5,
+            f_u32: 4,
+            f_u64: 3,
+            f_i8: 1,
+            f_i16: 0,
+            f_i32: -1,
+            f_i64: -2,
+            f_f32: 0.5_f32,
+            f_f64: -1.25_f64,
+        }),
+        // PrimitiveTypes — boundary values
+        MsgPackSerdeData::PrimitiveTypes(MsgPackPrimitiveTypes {
+            f_bool: true,
+            f_u8: u8::MAX,
+            f_u16: u16::MAX,
+            f_u32: u32::MAX,
+            f_u64: u64::MAX,
+            f_i8: i8::MIN,
+            f_i16: i16::MIN,
+            f_i32: i32::MIN,
+            f_i64: i64::MIN,
+            f_f32: -1.25_f32,
+            f_f64: 0.5_f64,
+        }),
+        // OtherTypes — non-empty fields
+        MsgPackSerdeData::OtherTypes(MsgPackOtherTypes {
+            f_string: "test".to_string(),
+            f_bytes: b"bytes".to_vec(),
+            f_option: Some(MsgPackStruct { x: 2, y: 3 }),
+            f_unit: (),
+            f_seq: vec![MsgPackStruct { x: 1, y: 3 }],
+            f_opt_seq: Some(vec![1, -2, 3]),
+            f_tuple: (4, 5),
+            f_stringmap: {
+                let mut m = BTreeMap::new();
+                m.insert("foo".to_string(), 1u32);
+                m
+            },
+            f_nested_seq: vec![vec![MsgPackStruct { x: 4, y: 5 }]],
+        }),
+        // OtherTypes — empty / None fields
+        MsgPackSerdeData::OtherTypes(MsgPackOtherTypes {
+            f_string: String::new(),
+            f_bytes: b"".to_vec(),
+            f_option: None,
+            f_unit: (),
+            f_seq: Vec::new(),
+            f_opt_seq: None,
+            f_tuple: (0, 0),
+            f_stringmap: BTreeMap::new(),
+            f_nested_seq: vec![],
+        }),
+        MsgPackSerdeData::UnitVariant,
+        MsgPackSerdeData::NewTypeVariant("test.\u{10348}".to_string()),
+        MsgPackSerdeData::TupleVariant(3, 6),
+        MsgPackSerdeData::StructVariant {
+            f0: MsgPackUnitStruct,
+            f1: MsgPackNewTypeStruct(1),
+            f2: MsgPackTupleStruct(2, 3),
+            f3: MsgPackStruct { x: 4, y: 5 },
+        },
+        MsgPackSerdeData::ListWithMutualRecursion(MsgPackList::Empty),
+        MsgPackSerdeData::TreeWithMutualRecursion(Tree {
+            value: Box::new(MsgPackSerdeData::UnitVariant),
+            children: vec![],
+        }),
+        MsgPackSerdeData::TupleArray([0, 2, 3]),
+        MsgPackSerdeData::UnitVector(vec![(); 3]),
+        MsgPackSerdeData::SimpleList(MsgPackSimpleList(Some(Box::new(MsgPackSimpleList(None))))),
+        MsgPackSerdeData::CStyleEnum(MsgPackCStyleEnum::C),
+        MsgPackSerdeData::EmptyStructVariant {},
+    ]
+}
+
+/// Serialize each sample value with `rmp_serde` using **named maps** (`to_vec_named`).
+/// This is the canonical wire format that all target `MessagePack` libraries must match.
+pub fn get_msgpack_positive_samples() -> Vec<Vec<u8>> {
+    get_msgpack_sample_values()
+        .iter()
+        .map(|v| rmp_serde::to_vec_named(v).unwrap())
+        .collect()
+}

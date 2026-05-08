@@ -7,9 +7,9 @@
 
 use crate::common::{
     get_alternate_sample_value_with_container_depth, get_alternate_sample_with_container_depth,
-    get_positive_samples, get_registry, get_sample_value_with_container_depth,
-    get_sample_value_with_long_sequence, get_sample_values, get_sample_with_container_depth,
-    get_sample_with_long_sequence, get_simple_registry,
+    get_msgpack_positive_samples, get_msgpack_sample_values, get_positive_samples, get_registry,
+    get_sample_value_with_container_depth, get_sample_value_with_long_sequence, get_sample_values,
+    get_sample_with_container_depth, get_sample_with_long_sequence, get_simple_registry,
 };
 
 pub mod common;
@@ -438,5 +438,26 @@ fn test_bincode_get_positive_samples() {
     assert_eq!(samples.len(), 17);
     for sample in samples {
         assert!(bincode::deserialize::<common::SerdeData>(&sample).is_ok());
+    }
+}
+
+#[test]
+fn test_get_msgpack_sample_values() {
+    let samples = get_msgpack_sample_values();
+    assert!(
+        samples.len() >= 14,
+        "expected at least 14 samples, got {}",
+        samples.len()
+    );
+}
+
+#[test]
+fn test_rmp_serde_get_msgpack_positive_samples() {
+    let samples = get_msgpack_positive_samples();
+    for sample in &samples {
+        assert!(
+            rmp_serde::from_slice::<common::MsgPackSerdeData>(sample).is_ok(),
+            "failed to deserialize sample"
+        );
     }
 }
