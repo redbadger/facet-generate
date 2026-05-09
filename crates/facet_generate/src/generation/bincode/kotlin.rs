@@ -775,6 +775,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                     imports.push(format!("import {sp}.Bytes"));
                 }
                 Feature::Uuid => {
+                    imports.push(format!("import {sp}.Bytes"));
                     imports.push("import java.util.UUID".to_string());
                 }
                 Feature::BigInt => {

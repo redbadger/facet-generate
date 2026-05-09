@@ -2,6 +2,7 @@ package com.example
 
 import com.novi.bincode.BincodeDeserializer
 import com.novi.bincode.BincodeSerializer
+import com.novi.serde.Bytes
 import com.novi.serde.DeserializationError
 import com.novi.serde.Deserializer
 import com.novi.serde.Serializer

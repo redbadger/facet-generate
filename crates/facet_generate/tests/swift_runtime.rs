@@ -206,6 +206,84 @@ let package = Package(
     assert!(status.success());
 }
 
+#[test]
+fn test_swift_bincode_runtime_on_uuid_data() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = CodeGeneratorConfig::new("Testing".to_string());
+    let registry = common::get_uuid_registry();
+    let mut installer =
+        swift::Installer::new(&config.module_name, dir.path()).plugin(BincodePlugin);
+    installer.install_module(&config, &registry).unwrap();
+    installer.install_serde_runtime().unwrap();
+
+    let reference = common::get_uuid_reference_bytes();
+    let id_str = common::UUID_ID.to_string();
+    let parent_id_str = common::UUID_PARENT_ID.to_string();
+
+    std::fs::create_dir_all(dir.path().join("Sources/main")).unwrap();
+    let main_path = dir.path().join("Sources/main/main.swift");
+    let mut main = File::create(main_path).unwrap();
+    writeln!(
+        main,
+        r#"
+import Foundation
+import Serde
+import Testing
+
+let input: [UInt8] = [{bytes}]
+let value = try UuidData.bincodeDeserialize(input: input)
+
+let expectedId = UUID(uuidString: "{id}")!
+let expectedParentId = UUID(uuidString: "{parent_id}")!
+assert(value.id == expectedId, "id mismatch: \(value.id)")
+assert(value.parentId == expectedParentId, "parentId mismatch: \(String(describing: value.parentId))")
+
+let output = try value.bincodeSerialize()
+assert(input == output, "roundtrip failed: \(input) != \(output)")
+
+print("UUID roundtrip: PASSED")
+"#,
+        bytes = reference.iter().map(|x| format!("{x}")).collect::<Vec<_>>().join(", "),
+        id = id_str,
+        parent_id = parent_id_str,
+    )
+    .unwrap();
+
+    let mut file = File::create(dir.path().join("Package.swift")).unwrap();
+    write!(
+        file,
+        r#"// swift-tools-version:6.0
+
+import PackageDescription
+
+let package = Package(
+    name: "Testing",
+    platforms: [.macOS(.v15)],
+    targets: [
+        .target(
+            name: "Serde",
+            dependencies: []),
+        .target(
+            name: "Testing",
+            dependencies: ["Serde"]),
+        .target(
+            name: "main",
+            dependencies: ["Serde", "Testing"]
+        ),
+    ]
+)
+"#
+    )
+    .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .arg("run")
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
 fn quote_bytes(bytes: &[u8]) -> String {
     format!(
         "[{}]",

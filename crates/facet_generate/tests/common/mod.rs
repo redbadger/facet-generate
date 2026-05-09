@@ -508,6 +508,38 @@ pub enum SwiftList<T> {
 #[derive(Facet, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SwiftSimpleList(pub Option<Box<Self>>);
 
+// ---------------------------------------------------------------------------
+// UUID round-trip fixtures
+// ---------------------------------------------------------------------------
+
+/// Two well-known RFC 4122 UUIDs used as pinned test vectors.
+/// Using `uuid!` gives a compile-time constant so the bytes are deterministic.
+pub const UUID_ID: uuid::Uuid = uuid::uuid!("550e8400-e29b-41d4-a716-446655440000");
+pub const UUID_PARENT_ID: uuid::Uuid = uuid::uuid!("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+
+/// A struct with a required and an optional UUID field.
+#[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct UuidData {
+    pub id: uuid::Uuid,
+    pub parent_id: Option<uuid::Uuid>,
+}
+
+/// Returns a registry containing only [`UuidData`].
+pub fn get_uuid_registry() -> Registry {
+    reflect!(UuidData).unwrap()
+}
+
+/// Serialize the canonical UUID test value with bincode.
+/// The resulting bytes are used as the reference wire encoding in all
+/// language round-trip tests.
+pub fn get_uuid_reference_bytes() -> Vec<u8> {
+    bincode::serialize(&UuidData {
+        id: UUID_ID,
+        parent_id: Some(UUID_PARENT_ID),
+    })
+    .unwrap()
+}
+
 /// Registry used for Swift compilation and runtime tests.
 ///
 /// Excludes `ComplexMap(BTreeMap<([u32; 2], [u8; 4]), ()>)` because native

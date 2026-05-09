@@ -9,6 +9,75 @@ use std::{fs::File, io::Write, process::Command, sync::Arc};
 use tempfile::tempdir;
 
 #[test]
+fn test_typescript_runtime_bincode_uuid_roundtrip() {
+    let registry = common::get_uuid_registry();
+    let dir = tempdir().unwrap();
+    let dir_path = dir.path();
+    std::fs::create_dir_all(dir_path).unwrap();
+
+    let mut installer = typescript::Installer::new("main", dir_path);
+    installer.install_serde_runtime().unwrap();
+    installer.install_bincode_runtime().unwrap();
+
+    let source_path = dir_path.join("test.ts");
+    let mut source = File::create(&source_path).unwrap();
+
+    writeln!(
+        source,
+        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
+"#
+    )
+    .unwrap();
+
+    let config = CodeGeneratorConfig::new("main".to_string());
+    let generator = typescript::TypeScriptCodeGenerator::new(&config)
+        .with_plugins(vec![Arc::new(BincodePlugin)]);
+    generator.output(&mut source, &registry).unwrap();
+
+    let reference = common::get_uuid_reference_bytes();
+    let id_str = common::UUID_ID.to_string();
+    let parent_id_str = common::UUID_PARENT_ID.to_string();
+
+    writeln!(
+        source,
+        r#"
+Deno.test("UUID bincode roundtrip", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  const deserializer = new BincodeDeserializer(expectedBytes);
+  const value: UuidData = UuidData.deserialize(deserializer);
+
+  assertEquals(value.id, "{id}" as Uuid, "id should match");
+  assertEquals(value.parent_id, "{parent_id}" as Uuid, "parent_id should match");
+
+  const serializer = new BincodeSerializer();
+  value.serialize(serializer);
+  const output = serializer.getBytes();
+
+  assertEquals(output, expectedBytes, "roundtrip bytes should match");
+}});
+"#,
+        bytes = reference
+            .iter()
+            .map(|x| format!("{x}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+        id = id_str,
+        parent_id = parent_id_str,
+    )
+    .unwrap();
+
+    let status = Command::new("deno")
+        .current_dir(dir_path)
+        .arg("test")
+        .arg("--sloppy-imports")
+        .arg(&source_path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+#[test]
 fn test_typescript_runtime_bincode_serialization() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
