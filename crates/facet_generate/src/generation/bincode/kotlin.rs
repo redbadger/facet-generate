@@ -125,6 +125,32 @@ fun <T> Deserializer.deserializeSetOf(deserializeElement: (Deserializer) -> T): 
 }
 ";
 
+const FEATURE_UUID: &str = r#"fun UUID.serialize(serializer: Serializer) {
+    val bytes = ByteArray(16)
+    val msb = mostSignificantBits
+    val lsb = leastSignificantBits
+    for (i in 0..7) {
+        bytes[i]     = (msb ushr (56 - i * 8) and 0xff).toByte()
+        bytes[8 + i] = (lsb ushr (56 - i * 8) and 0xff).toByte()
+    }
+    serializer.serialize_bytes(Bytes(bytes))
+}
+
+fun Deserializer.deserializeUuid(): UUID {
+    val bytes = deserialize_bytes().content
+    if (bytes.size != 16) {
+        throw DeserializationError("UUID must be 16 bytes, got ${bytes.size}")
+    }
+    var msb = 0L
+    var lsb = 0L
+    for (i in 0..7) {
+        msb = (msb shl 8) or (bytes[i].toLong() and 0xff)
+        lsb = (lsb shl 8) or (bytes[8 + i].toLong() and 0xff)
+    }
+    return UUID(msb, lsb)
+}
+"#;
+
 fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
     writedoc!(
         w,
@@ -182,6 +208,7 @@ fn write_serialize<W: IndentWrite>(
         Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
         Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
+        Format::Uuid => writeln!(w, "{field_name}.serialize(serializer)"),
 
         Format::Option(inner_format) => {
             write!(w, "{field_name}.serializeOptionOf(serializer) ")?;
@@ -304,6 +331,7 @@ fn write_deserialize<W: IndentWrite>(
         Format::Char => write!(w, "deserializer.deserialize_char()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
         Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
+        Format::Uuid => write!(w, "deserializer.deserializeUuid()"),
         Format::Seq(format) => {
             write!(w, "deserializer.deserializeListOf ")?;
             write_deserialize_lambda(w, format)
@@ -746,6 +774,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 Feature::Bytes => {
                     imports.push(format!("import {sp}.Bytes"));
                 }
+                Feature::Uuid => {
+                    imports.push("import java.util.UUID".to_string());
+                }
                 Feature::BigInt => {
                     // BigInteger is JVM-only; kept for backward compat.
                     imports.push("import java.math.BigInteger".to_string());
@@ -788,6 +819,10 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 }
                 Feature::MapOfT => {
                     write!(w, "{FEATURE_MAP_OF_T}")?;
+                    writeln!(w)?;
+                }
+                Feature::Uuid => {
+                    write!(w, "{FEATURE_UUID}")?;
                     writeln!(w)?;
                 }
                 // BigInt and Bytes add imports (handled above); TupleArray is

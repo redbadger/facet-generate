@@ -162,6 +162,50 @@ function deserializeTupleArray<T>(
 }
 ";
 
+const FEATURE_UUID: &str = r"export type Uuid = string & { readonly __uuid: unique symbol };
+
+const HEX = '0123456789abcdef';
+
+function uuidStringToBytes(value: Uuid): Uint8Array {
+    const hex = (value as string).replace(/-/g, '');
+    if (hex.length !== 32) {
+        throw new Error(`Invalid UUID: ${value}`);
+    }
+    const bytes = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+        const hi = HEX.indexOf(hex[i * 2].toLowerCase());
+        const lo = HEX.indexOf(hex[i * 2 + 1].toLowerCase());
+        if (hi < 0 || lo < 0) {
+            throw new Error(`Invalid UUID: ${value}`);
+        }
+        bytes[i] = (hi << 4) | lo;
+    }
+    return bytes;
+}
+
+function bytesToUuidString(bytes: Uint8Array): Uuid {
+    if (bytes.length !== 16) {
+        throw new Error(`UUID must be 16 bytes, got ${bytes.length}`);
+    }
+    let s = '';
+    for (let i = 0; i < 16; i++) {
+        s += HEX[(bytes[i] >> 4) & 0xf] + HEX[bytes[i] & 0xf];
+        if (i === 3 || i === 5 || i === 7 || i === 9) {
+            s += '-';
+        }
+    }
+    return s as Uuid;
+}
+
+function serializeUuid(value: Uuid, serializer: Serializer): void {
+    serializer.serializeBytes(uuidStringToBytes(value));
+}
+
+function deserializeUuid(deserializer: Deserializer): Uuid {
+    return bytesToUuidString(deserializer.deserializeBytes());
+}
+";
+
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
@@ -236,6 +280,10 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
                 Feature::TupleArray => {
                     writeln!(w)?;
                     write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                }
+                Feature::Uuid => {
+                    writeln!(w)?;
+                    write!(w, "{FEATURE_UUID}")?;
                 }
                 Feature::BigInt | Feature::Bytes => {}
             }
@@ -390,6 +438,7 @@ fn write_serialize(w: &mut dyn IndentWrite, value_expr: &str, format: &Format) -
         Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
         Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
         Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
+        Format::Uuid => writeln!(w, "serializeUuid({value_expr}, serializer);"),
         Format::Option(inner) => {
             write!(
                 w,
@@ -471,6 +520,7 @@ fn quote_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "str".to_string(),
         Format::Bytes => "bytes".to_string(),
+        Format::Uuid => "Uuid".to_string(),
         Format::Option(inner) => format!("Optional<{}>", quote_type(inner)),
         Format::Seq(inner) | Format::Set(inner) => format!("Seq<{}>", quote_type(inner)),
         Format::Map { key, value } => {
@@ -515,6 +565,7 @@ fn deserialize_primitive_expr(format: &Format) -> String {
         Format::Char => "deserializer.deserializeChar()".to_string(),
         Format::Str => "deserializer.deserializeStr()".to_string(),
         Format::Bytes => "deserializer.deserializeBytes()".to_string(),
+        Format::Uuid => "deserializeUuid(deserializer)".to_string(),
         _ => panic!("deserialize_primitive_expr called with non-primitive format"),
     }
 }
@@ -541,6 +592,7 @@ const fn is_primitive_or_named(format: &Format) -> bool {
             | Format::Char
             | Format::Str
             | Format::Bytes
+            | Format::Uuid
     )
 }
 

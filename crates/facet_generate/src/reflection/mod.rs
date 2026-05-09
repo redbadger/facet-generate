@@ -1636,6 +1636,7 @@ fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
         }),
         Type::User(UserType::Opaque) => match shape.type_identifier {
             "String" | "DateTime<Utc>" => Some(Format::Str),
+            "Uuid" => Some(Format::Uuid),
             _ => None,
         },
         // Handle () unit type which in facet 0.44.1 appears as User(Struct(Tuple, []))

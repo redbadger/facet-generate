@@ -476,6 +476,7 @@ fn csharp_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
+        Format::Uuid => "Guid".to_string(),
         Format::Option(inner) => format!("{}?", csharp_type(inner)),
         Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
         Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),

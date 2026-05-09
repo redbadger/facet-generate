@@ -167,7 +167,8 @@ pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
         | Format::F64
         | Format::Char
         | Format::Str
-        | Format::Bytes => true,
+        | Format::Bytes
+        | Format::Uuid => true,
 
         Format::Option(inner)
         | Format::Set(inner)
@@ -246,7 +247,8 @@ fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
         | Format::F64
         | Format::Char
         | Format::Str
-        | Format::Bytes => true,
+        | Format::Bytes
+        | Format::Uuid => true,
         Format::Option(inner) | Format::Set(inner) => is_equatable_auto(inner, lang),
         Format::Seq(inner) | Format::TupleArray { content: inner, .. } => {
             is_equatable_auto(inner, lang)
@@ -381,6 +383,7 @@ impl Emitter<Swift> for Format {
             Self::Char => write!(w, "Character"),
             Self::Str => write!(w, "String"),
             Self::Bytes => write!(w, "[UInt8]"),
+            Self::Uuid => write!(w, "UUID"),
 
             Self::Option(format) => {
                 format.write(w, lang)?;

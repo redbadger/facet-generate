@@ -34,6 +34,7 @@ mod with_serialization_and_namespaces_as_external;
 mod with_serialization_and_serde_external;
 mod with_serialization_and_serde_internal;
 mod with_serialization_and_serde_local;
+mod with_uuid;
 
 fn read_files_and_create_expect_dirs(
     tmp_path: impl AsRef<Path>,

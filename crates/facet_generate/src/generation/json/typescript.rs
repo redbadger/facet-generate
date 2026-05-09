@@ -162,6 +162,23 @@ function deserializeTupleArray<T>(
 }
 ";
 
+const FEATURE_UUID: &str = r"export type Uuid = string & { readonly __uuid: unique symbol };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function serializeUuid(value: Uuid, serializer: Serializer): void {
+    serializer.serializeStr(value as string);
+}
+
+function deserializeUuid(deserializer: Deserializer): Uuid {
+    const s = deserializer.deserializeStr();
+    if (!UUID_RE.test(s)) {
+        throw new Error(`Invalid UUID string: ${s}`);
+    }
+    return s.toLowerCase() as Uuid;
+}
+";
+
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
@@ -223,6 +240,10 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
                 Feature::TupleArray => {
                     writeln!(w)?;
                     write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                }
+                Feature::Uuid => {
+                    writeln!(w)?;
+                    write!(w, "{FEATURE_UUID}")?;
                 }
                 Feature::BigInt | Feature::Bytes => {}
             }
@@ -377,6 +398,7 @@ fn write_serialize(w: &mut dyn IndentWrite, value_expr: &str, format: &Format) -
         Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
         Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
         Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
+        Format::Uuid => writeln!(w, "serializeUuid({value_expr}, serializer);"),
         Format::Option(inner) => {
             write!(
                 w,
@@ -458,6 +480,7 @@ fn quote_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "str".to_string(),
         Format::Bytes => "bytes".to_string(),
+        Format::Uuid => "Uuid".to_string(),
         Format::Option(inner) => format!("Optional<{}>", quote_type(inner)),
         Format::Seq(inner) | Format::Set(inner) => format!("Seq<{}>", quote_type(inner)),
         Format::Map { key, value } => {
@@ -502,6 +525,7 @@ fn deserialize_primitive_expr(format: &Format) -> String {
         Format::Char => "deserializer.deserializeChar()".to_string(),
         Format::Str => "deserializer.deserializeStr()".to_string(),
         Format::Bytes => "deserializer.deserializeBytes()".to_string(),
+        Format::Uuid => "deserializeUuid(deserializer)".to_string(),
         _ => panic!("deserialize_primitive_expr called with non-primitive format"),
     }
 }
@@ -528,6 +552,7 @@ const fn is_primitive_or_named(format: &Format) -> bool {
             | Format::Char
             | Format::Str
             | Format::Bytes
+            | Format::Uuid
     )
 }
 

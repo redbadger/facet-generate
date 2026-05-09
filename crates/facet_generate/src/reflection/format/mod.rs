@@ -215,6 +215,13 @@ pub enum Format {
     Char,
     Str,
     Bytes,
+    /// A UUID. On the wire this is identical to `Bytes` (16 raw bytes,
+    /// length-prefixed) for non-human-readable encoders (e.g. bincode), and a
+    /// lowercase hyphenated string for human-readable encoders (e.g. JSON).
+    /// Foreign-language emitters map this to the native UUID type for the
+    /// target language (e.g. `Foundation.UUID` in Swift, `java.util.UUID` in
+    /// Kotlin, `System.Guid` in C#, branded `string` in TypeScript).
+    Uuid,
 
     /// The format of `Option<T>`.
     Option(Box<Self>),
@@ -597,7 +604,8 @@ impl FormatHolder for Format {
             | Self::F64
             | Self::Char
             | Self::Str
-            | Self::Bytes => (),
+            | Self::Bytes
+            | Self::Uuid => (),
 
             Self::Option(format)
             | Self::Seq(format)
@@ -649,7 +657,8 @@ impl FormatHolder for Format {
             | Self::F64
             | Self::Char
             | Self::Str
-            | Self::Bytes => (),
+            | Self::Bytes
+            | Self::Uuid => (),
 
             Self::Option(format)
             | Self::Seq(format)
@@ -712,6 +721,7 @@ impl Format {
                 | Self::Char
                 | Self::Str
                 | Self::Bytes
+                | Self::Uuid
         )
     }
 

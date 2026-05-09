@@ -20,7 +20,7 @@ use std::io;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
-    CodeGeneratorConfig,
+    CodeGeneratorConfig, Feature,
     csharp::CSharp,
     indent::{IndentWrite, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
@@ -72,11 +72,20 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
     }
 
     /// Returns `using` directives for JSON support.
-    fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
-        vec![
+    ///
+    /// Always includes `Facet.Runtime.Json` and `System.Text.Json.Serialization`.
+    /// When `Feature::Uuid` is active, also adds `System` so that `Guid`
+    /// resolves — `System.Text.Json` serializes `Guid` as a hyphenated
+    /// lowercase UUID string automatically.
+    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut imports = vec![
             "using Facet.Runtime.Json;".to_string(),
             "using System.Text.Json.Serialization;".to_string(),
-        ]
+        ];
+        if config.features.contains(&Feature::Uuid) {
+            imports.push("using System;".to_string());
+        }
+        imports
     }
 
     /// Emits JSON type-level annotations.

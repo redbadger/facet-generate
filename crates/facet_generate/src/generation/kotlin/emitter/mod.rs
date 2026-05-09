@@ -409,6 +409,7 @@ impl Emitter<Kotlin> for Format {
             Self::F64 => write!(w, "Double"),
             Self::Char | Self::Str => write!(w, "String"),
             Self::Bytes => write!(w, "Bytes"),
+            Self::Uuid => write!(w, "UUID"),
 
             Self::Option(format) => {
                 format.write(w, lang)?;
