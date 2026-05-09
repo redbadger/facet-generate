@@ -19,7 +19,7 @@
 
 use std::{
     fs,
-    io::Write as _,
+    io::{self, Write as _},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -64,6 +64,17 @@ fn quote_bytes_kotlin(bytes: &[u8]) -> String {
 
 #[test]
 fn test_kotlin_bincode_runtime_on_uuid_data() {
+    // Skip gracefully when kotlinc is not on PATH (e.g. Windows CI runners
+    // that have Gradle but not the standalone kotlinc compiler).
+    match Command::new("kotlinc").arg("-version").output() {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("kotlinc not found on PATH — skipping runtime test");
+            return;
+        }
+        Err(e) => panic!("failed to probe kotlinc: {e}"),
+        Ok(_) => {}
+    }
+
     let registry = common::get_uuid_registry();
     let dir = tempdir().unwrap();
     let dir = dir.path().to_path_buf().join("testing");
