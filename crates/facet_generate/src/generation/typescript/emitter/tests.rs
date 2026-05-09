@@ -854,7 +854,7 @@ fn type_in_root_and_named_namespace() {
     }
     ");
     insta::assert_snapshot!(root, @r#"
-    import * as Other from "../other";
+    import * as Other from "./other";
     type str = string;
 
     export class Child {
