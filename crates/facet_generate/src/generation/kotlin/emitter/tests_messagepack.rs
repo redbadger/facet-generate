@@ -220,6 +220,7 @@ fn struct_with_field_that_is_a_2_tuple() {
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
+        @Serializable(with = PairAsArraySerializer::class)
         val one: Pair<String, Int>,
     )
     "#);
@@ -238,6 +239,7 @@ fn struct_with_field_that_is_a_3_tuple() {
     @Serializable
     @SerialName("MyStruct")
     data class MyStruct(
+        @Serializable(with = TripleAsArraySerializer::class)
         val one: Triple<String, Int, UShort>,
     )
     "#);

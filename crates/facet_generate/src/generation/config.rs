@@ -81,6 +81,10 @@ pub enum Feature {
     OptionOfT,
     SetOfT,
     TupleArray,
+    /// Set when the registry contains at least one `Pair<A, B>` or
+    /// `Triple<A, B, C>` field (Rust 2- or 3-tuples).  Plugins use this
+    /// flag to conditionally emit the array-serializer imports.
+    Tuples,
 }
 
 /// Track type definitions provided by other modules (key = `module`, value = `type names`).
@@ -228,6 +232,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::TupleArray { .. } => {
                             self.features.insert(Feature::TupleArray);
+                        }
+                        Format::Tuple(formats) if formats.len() == 2 || formats.len() == 3 => {
+                            self.features.insert(Feature::Tuples);
                         }
                         _ => (),
                     }

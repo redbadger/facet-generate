@@ -224,7 +224,7 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
                     writeln!(w)?;
                     write!(w, "{FEATURE_TUPLE_ARRAY}")?;
                 }
-                Feature::BigInt | Feature::Bytes => {}
+                Feature::BigInt | Feature::Bytes | Feature::Tuples => {}
             }
         }
         Ok(())

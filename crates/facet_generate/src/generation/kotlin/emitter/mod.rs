@@ -59,7 +59,7 @@ use crate::{
         CodeGeneratorConfig, Container, Emitter, Feature,
         indent::{IndentWrite, Newlines},
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, VariantInfo},
+        plugin::{EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
 };
@@ -549,11 +549,35 @@ fn data_class<W: IndentWrite>(
 
     write_plugin_annotations(w, name, lang)?;
 
-    writeln!(w, "data class {name}(")?;
+    // Build the emit context up-front so it is available both for per-field
+    // annotations and for the plugin type body below.
+    let temp_name = QualifiedTypeName::root(name.to_string());
+    let temp_format = ContainerFormat::Struct(fields.to_vec(), Doc::default());
+    let temp_container = Container {
+        name: &temp_name,
+        format: &temp_format,
+    };
+    let variant_format = VariantFormat::Struct(fields.to_vec());
+    let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
+        EmitContext::for_variant(
+            &temp_container,
+            &lang.config,
+            VariantInfo {
+                name,
+                index,
+                format: &variant_format,
+                fields,
+                parent_name,
+            },
+        )
+    } else {
+        EmitContext::top_level(&temp_container, &lang.config)
+    };
 
+    writeln!(w, "data class {name}(")?;
     w.indent();
     for field in fields {
-        field.write(w, lang)?;
+        write_field(w, field, lang, &ctx)?;
     }
     w.unindent();
 
@@ -563,34 +587,23 @@ fn data_class<W: IndentWrite>(
         write!(w, " : {interface}")?;
     }
 
-    // Plugin type body
-    {
-        let temp_name = QualifiedTypeName::root(name.to_string());
-        let temp_format = ContainerFormat::Struct(fields.to_vec(), Doc::default());
-        let temp_container = Container {
-            name: &temp_name,
-            format: &temp_format,
-        };
-        let variant_format = VariantFormat::Struct(fields.to_vec());
-        let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
-            EmitContext::for_variant(
-                &temp_container,
-                &lang.config,
-                VariantInfo {
-                    name,
-                    index,
-                    format: &variant_format,
-                    fields,
-                    parent_name,
-                },
-            )
-        } else {
-            EmitContext::top_level(&temp_container, &lang.config)
-        };
-        write_plugin_body(w, lang, &ctx)?;
-    }
+    write_plugin_body(w, lang, &ctx)?;
 
     Ok(())
+}
+
+/// Emits a single field declaration, prefixed by any per-field annotations
+/// returned by the active plugins (e.g. `@Serializable(with = ...)`).
+fn write_field<W: IndentWrite>(
+    w: &mut W,
+    field: &Named<Format>,
+    lang: &Kotlin,
+    ctx: &EmitContext,
+) -> Result<()> {
+    for annotation in collect_from_plugins(lang.plugins(), |p| p.field_annotations(field, ctx)) {
+        writeln!(w, "{annotation}")?;
+    }
+    field.write(w, lang)
 }
 
 /// Emits a Kotlin `enum class` — used when all variants are unit variants.
