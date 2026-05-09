@@ -115,13 +115,10 @@ fn test_typescript_msgpack_runtime_self_roundtrip() {
 import {{ MsgPackStruct, msgPackEncode, msgPackDecode }} from "./testing.ts";
 
 Deno.test("msgpack self-roundtrip for MsgPackStruct", () => {{
-    // x is u32 (uint32 = number), y is u64 (uint64 = bigint).
-    // @msgpack/msgpack v3 does not encode JS BigInt by default; the library
-    // throws "Unrecognized object: [object BigInt]" when it encounters one.
-    // Using `99 as unknown as bigint` satisfies TypeScript's type checker
-    // (the constructor expects bigint) while keeping the runtime value as a
-    // plain number that encode() can handle without error.
-    const original = new MsgPackStruct(42, 99 as unknown as bigint);
+    // x is u32 (uint32 -> number), y is u64 (uint64 -> bigint). The generated
+    // helpers pass `useBigInt64: true` to @msgpack/msgpack so BigInt values
+    // round-trip as MessagePack int64 / uint64 without throwing.
+    const original = new MsgPackStruct(42, 99n);
 
     // Encode the object as MessagePack bytes
     const encoded: Uint8Array = msgPackEncode(original);
@@ -129,11 +126,8 @@ Deno.test("msgpack self-roundtrip for MsgPackStruct", () => {{
     // Decode back to a plain JS object (not a class instance)
     const decoded = msgPackDecode<MsgPackStruct>(encoded);
 
-    // x is uint32 (number) — direct comparison
     assertEquals(decoded.x, 42, "x should be 42");
-
-    // y was a plain number at runtime; Number() is safe for both number and bigint
-    assertEquals(Number(decoded.y), 99, "y should be 99");
+    assertEquals(decoded.y, 99n, "y should be 99n");
 
     // Re-encode the decoded object and verify byte-level identity (structural roundtrip)
     const reEncoded: Uint8Array = msgPackEncode(decoded);

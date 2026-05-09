@@ -35,14 +35,19 @@ impl EmitterPlugin<TypeScript> for MessagePackPlugin {
         w: &mut dyn IndentWrite,
         _config: &CodeGeneratorConfig,
     ) -> io::Result<()> {
+        // `useBigInt64: true` lets the underlying library round-trip
+        // JavaScript `BigInt` values as MessagePack int64 / uint64, which is
+        // required because the generator maps Rust `u64` / `i64` to TypeScript
+        // `bigint`. Without this option `@msgpack/msgpack` v3 throws at
+        // runtime when it encounters a `BigInt`.
         writeln!(w)?;
         writeln!(
             w,
-            "export const msgPackEncode = <T>(value: T): Uint8Array => encode(value);"
+            "export const msgPackEncode = <T>(value: T): Uint8Array =>\n    encode(value, {{ useBigInt64: true }});"
         )?;
         writeln!(
             w,
-            "export const msgPackDecode = <T>(bytes: Uint8Array): T => decode(bytes) as T;"
+            "export const msgPackDecode = <T>(bytes: Uint8Array): T =>\n    decode(bytes, {{ useBigInt64: true }}) as T;"
         )?;
         Ok(())
     }
