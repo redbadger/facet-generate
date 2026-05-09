@@ -1,5 +1,6 @@
 #![allow(dead_code, clippy::unsafe_derive_deserialize)]
 #![cfg(feature = "swift")]
+#![cfg(not(target_os = "windows"))]
 // Copyright (c) Facebook, Inc. and its affiliates
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
