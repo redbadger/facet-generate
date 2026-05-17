@@ -124,7 +124,7 @@ impl CSharp {
 }
 
 impl Emitter<CSharp> for Module {
-    fn write<W: Write>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
+    fn write<W: IndentWrite>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
         let CodeGeneratorConfig { module_name, .. } = self.config();
         writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
         writeln!(w, "using Facet.Runtime.Serde;")?;
@@ -138,6 +138,13 @@ impl Emitter<CSharp> for Module {
         }
         writeln!(w)?;
         writeln!(w, "namespace {};", namespace_name(module_name))?;
+        // Plugin module helpers (e.g. UuidSerde from BincodePlugin).
+        // These are emitted per-module file rather than into a shared runtime
+        // file because they reference types (e.g. Guid) that may not be in
+        // scope in the shared runtime namespace.
+        for plugin in lang.plugins() {
+            plugin.module_helpers(w, self.config())?;
+        }
         writeln!(w)
     }
 }
@@ -476,6 +483,7 @@ fn csharp_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
+        Format::Uuid => "Guid".to_string(),
         Format::Option(inner) => format!("{}?", csharp_type(inner)),
         Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
         Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),

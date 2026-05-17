@@ -97,6 +97,7 @@ mod test_skip_by_language;
 mod test_type_alias;
 mod test_unit_enum_case_name_support;
 mod test_unit_enum_serde_other;
+mod test_uuid;
 mod test_visibility_modifiers;
 mod unit_enum_decorator;
 mod unit_enum_is_properly_named_with_serde_overrides;
@@ -192,12 +193,15 @@ macro_rules! test {
     (@package kotlin) => { "com.example" };
     (@package swift) => { "ExamplePackage" };
     (@package typescript) => { "example_package" };
+    (@package csharp) => { "Example" };
 
     (@out kotlin) => { "output.kt" };
     (@out swift) => { "output.swift" };
     (@out typescript) => { "output.ts" };
+    (@out csharp) => { "output.cs" };
 
     (@gen kotlin) => { kotlin::KotlinCodeGenerator };
     (@gen swift) => { swift::SwiftCodeGenerator };
     (@gen typescript) => { typescript::TypeScriptCodeGenerator };
+    (@gen csharp) => { csharp::CSharpCodeGenerator };
 }

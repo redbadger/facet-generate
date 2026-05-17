@@ -54,6 +54,58 @@ fn quote_bytes(bytes: &[u8]) -> String {
 }
 
 #[test]
+fn test_csharp_bincode_runtime_on_uuid_data() {
+    let registry = common::get_uuid_registry();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let reference = common::get_uuid_reference_bytes();
+    let id_str = common::UUID_ID.to_string();
+    let parent_id_str = common::UUID_PARENT_ID.to_string();
+
+    make_executable(&dir, "Example.Testing");
+
+    let program_path = dir.join("Program.cs");
+    let mut program = std::fs::File::create(program_path).unwrap();
+    writeln!(
+        program,
+        r#"using System;
+using System.Linq;
+using Example.Testing;
+using Facet.Runtime.Serde;
+using Facet.Runtime.Bincode;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] input = {bytes};
+var value = UuidData.BincodeDeserialize(input);
+
+Assert(value.Id == new Guid("{id}"), $"Id should be {id}, got {{value.Id}}");
+Assert(value.ParentId == new Guid("{parent_id}"), $"ParentId should be {parent_id}, got {{value.ParentId}}");
+
+var output = value.BincodeSerialize();
+Assert(input.SequenceEqual(output), $"Roundtrip failed: {{input.Length}} bytes in, {{output.Length}} bytes out");
+
+Console.WriteLine("UUID roundtrip: PASSED");
+"#,
+        bytes = quote_bytes(&reference),
+        id = id_str,
+        parent_id = parent_id_str,
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
+#[test]
 fn test_csharp_bincode_runtime_on_simple_data() {
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();

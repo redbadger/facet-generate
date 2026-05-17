@@ -28,7 +28,7 @@ use super::BincodePlugin;
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
-    CodeGeneratorConfig,
+    CodeGeneratorConfig, Feature,
     csharp::CSharp,
     indent::{IndentWrite, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
@@ -36,6 +36,40 @@ use crate::generation::{
 use crate::reflection::format::{
     ContainerFormat, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
 };
+
+// ---------------------------------------------------------------------------
+// Feature helper snippets
+// ---------------------------------------------------------------------------
+
+/// C# UUID serialization helper class.
+///
+/// Emitted once per module (via `module_helpers`) when `Feature::Uuid` is
+/// active.  Uses the .NET 5+ `bigEndian: true` overloads of
+/// `Guid.TryWriteBytes` / `new Guid(bytes, bigEndian: true)` to produce
+/// RFC 4122 byte order, matching Rust's `uuid::Uuid::as_bytes()` wire
+/// format.
+const FEATURE_UUID: &str = r#"internal static class UuidSerde
+{
+    public static void Serialize(Guid value, ISerializer serializer)
+    {
+        // .NET 5+: bigEndian: true produces RFC 4122 byte order,
+        // matching Rust's uuid::Uuid::as_bytes() wire format.
+        Span<byte> bytes = stackalloc byte[16];
+        value.TryWriteBytes(bytes, bigEndian: true, out _);
+        serializer.SerializeBytes(bytes.ToArray());
+    }
+
+    public static Guid Deserialize(IDeserializer deserializer)
+    {
+        var bytes = deserializer.DeserializeBytes();
+        if (bytes.Length != 16)
+        {
+            throw new DeserializationError($"UUID must be 16 bytes, got {bytes.Length}");
+        }
+        return new Guid(bytes, bigEndian: true);
+    }
+}
+"#;
 
 impl EmitterPlugin<CSharp> for BincodePlugin {
     /// Returns the core, serde, and bincode C# runtime sources to be written
@@ -104,9 +138,32 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
         ]
     }
 
-    /// Returns the single `using` directive needed for bincode support.
-    fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
-        vec!["using Facet.Runtime.Bincode;".to_string()]
+    /// Returns `using` directives needed for bincode support.
+    ///
+    /// Always includes `Facet.Runtime.Bincode`.  When `Feature::Uuid` is
+    /// active, also adds `System` so that `Guid` resolves.
+    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut imports = vec!["using Facet.Runtime.Bincode;".to_string()];
+        if config.features.contains(&Feature::Uuid) {
+            imports.push("using System;".to_string());
+        }
+        imports
+    }
+
+    /// Emits the `UuidSerde` helper class when `Feature::Uuid` is active.
+    ///
+    /// C# puts collection-type helpers (`FacetHelpers`) into a shared runtime
+    /// file, so only UUID needs a per-module snippet.
+    fn module_helpers(
+        &self,
+        w: &mut dyn IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> io::Result<()> {
+        if config.features.contains(&Feature::Uuid) {
+            write!(w, "{FEATURE_UUID}")?;
+            writeln!(w)?;
+        }
+        Ok(())
     }
 
     /// Injects `IFacetSerializable` and `IFacetDeserializable<T>` conformances.
@@ -623,6 +680,7 @@ fn write_serialize_expr(
         Format::Char => write!(w, "{ser}.SerializeChar({val})"),
         Format::Str => write!(w, "{ser}.SerializeStr({val})"),
         Format::Bytes => write!(w, "{ser}.SerializeBytes({val})"),
+        Format::Uuid => write!(w, "UuidSerde.Serialize({val}, {ser})"),
         Format::Option(inner) => {
             let helper = option_serialize_helper(inner);
             write!(w, "FacetHelpers.{helper}({val}, {ser}, ")?;
@@ -693,6 +751,7 @@ fn write_deserialize_expr(
         Format::Char => write!(w, "{de}.DeserializeChar()"),
         Format::Str => write!(w, "{de}.DeserializeStr()"),
         Format::Bytes => write!(w, "{de}.DeserializeBytes()"),
+        Format::Uuid => write!(w, "UuidSerde.Deserialize({de})"),
         Format::Option(inner) => {
             let helper = option_deserialize_helper(inner);
             write!(w, "FacetHelpers.{helper}({de}, ")?;
@@ -933,6 +992,7 @@ fn csharp_type(format: &Format) -> String {
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
+        Format::Uuid => "Guid".to_string(),
         Format::Option(inner) => format!("{}?", csharp_type(inner)),
         Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
         Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),
@@ -997,6 +1057,7 @@ const fn is_csharp_value_type(format: &Format) -> bool {
             | Format::F32
             | Format::F64
             | Format::Char
+            | Format::Uuid
             | Format::Tuple(_)
     )
 }

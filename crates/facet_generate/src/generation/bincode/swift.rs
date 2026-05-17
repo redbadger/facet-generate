@@ -143,6 +143,34 @@ func deserializeSet<T: Hashable, D: Deserializer>(
 }
 ";
 
+const FEATURE_UUID: &str = r#"func serializeUuid<S: Serializer>(
+    value: UUID,
+    serializer: S
+) throws {
+    let u = value.uuid
+    let bytes: [UInt8] = [
+        u.0,  u.1,  u.2,  u.3,  u.4,  u.5,  u.6,  u.7,
+        u.8,  u.9,  u.10, u.11, u.12, u.13, u.14, u.15,
+    ]
+    try serializer.serialize_bytes(value: bytes)
+}
+
+func deserializeUuid<D: Deserializer>(
+    deserializer: D
+) throws -> UUID {
+    let bytes = try deserializer.deserialize_bytes()
+    guard bytes.count == 16 else {
+        throw DeserializationError.invalidInput(issue: "UUID must be 16 bytes, got \(bytes.count)")
+    }
+    return UUID(uuid: (
+        bytes[0],  bytes[1],  bytes[2],  bytes[3],
+        bytes[4],  bytes[5],  bytes[6],  bytes[7],
+        bytes[8],  bytes[9],  bytes[10], bytes[11],
+        bytes[12], bytes[13], bytes[14], bytes[15]
+    ))
+}
+"#;
+
 const FEATURE_TUPLE_ARRAY: &str = r"func serializeTupleArray<T, S: Serializer>(
     value: [T],
     serializer: S,
@@ -187,8 +215,12 @@ impl EmitterPlugin<Swift> for BincodePlugin {
             .collect()
     }
 
-    fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
-        vec!["Serde".to_string()]
+    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut imports = vec!["Serde".to_string()];
+        if config.features.contains(&Feature::Uuid) {
+            imports.push("Foundation".to_string());
+        }
+        imports
     }
 
     fn module_helpers(
@@ -217,6 +249,10 @@ impl EmitterPlugin<Swift> for BincodePlugin {
                 Feature::TupleArray => {
                     writeln!(w)?;
                     write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                }
+                Feature::Uuid => {
+                    writeln!(w)?;
+                    write!(w, "{FEATURE_UUID}")?;
                 }
                 _ => {}
             }
@@ -569,6 +605,12 @@ fn write_format_serialize(
                 write_format_serialize(w, content, "item")
             })
         }
+        Format::Uuid => {
+            writeln!(
+                w,
+                "try serializeUuid(value: {value_expr}, serializer: serializer)"
+            )
+        }
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
             writeln!(w, "try serializer.serialize_{t}(value: {value_expr})")
@@ -676,6 +718,7 @@ fn write_deserialize_expr(w: &mut dyn IndentWrite, format: &Format) -> io::Resul
             w.unindent();
             write!(w, "}}")
         }
+        Format::Uuid => write!(w, "try deserializeUuid(deserializer: deserializer)"),
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
             write!(w, "try deserializer.deserialize_{t}()")

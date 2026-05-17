@@ -232,7 +232,8 @@ fn fmt_can_be_hashable(
         | Format::F64
         | Format::Char
         | Format::Str
-        | Format::Bytes => true,
+        | Format::Bytes
+        | Format::Uuid => true,
         Format::Option(inner)
         | Format::Set(inner)
         | Format::Seq(inner)
@@ -366,7 +367,8 @@ fn fmt_can_be_equatable(
         | Format::F64
         | Format::Char
         | Format::Str
-        | Format::Bytes => true,
+        | Format::Bytes
+        | Format::Uuid => true,
         Format::Option(inner)
         | Format::Set(inner)
         | Format::Seq(inner)

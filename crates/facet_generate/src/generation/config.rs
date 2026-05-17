@@ -77,6 +77,7 @@ pub enum Feature {
     OptionOfT,
     SetOfT,
     TupleArray,
+    Uuid,
 }
 
 /// Track type definitions provided by other modules (key = `module`, value = `type names`).
@@ -209,6 +210,9 @@ impl CodeGeneratorConfig {
                         Format::Bytes => {
                             self.features.insert(Feature::Bytes);
                         }
+                        Format::Uuid => {
+                            self.features.insert(Feature::Uuid);
+                        }
                         Format::Seq(..) => {
                             self.features.insert(Feature::ListOfT);
                         }
@@ -254,6 +258,7 @@ impl CodeGeneratorConfig {
                         Format::Char => "char",
                         Format::Str => "str",
                         Format::Bytes => "bytes",
+                        Format::Uuid => "uuid",
                         Format::Option(_) => "option",
                         Format::Seq(_) | Format::Set(_) => "seq",
                         Format::Map { .. } => "map",

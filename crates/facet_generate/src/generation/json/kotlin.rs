@@ -38,6 +38,17 @@ private object BigIntegerSerializer : KSerializer<BigInteger> {
 }
 "#;
 
+/// The `UUID` JSON helper — a custom `KSerializer<java.util.UUID>` that
+/// round-trips `UUID` values through JSON string literals.
+const FEATURE_UUID: &str = r#"private object UUIDSerializer : KSerializer<java.util.UUID> {
+    override val descriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
+    override fun deserialize(decoder: Decoder): java.util.UUID = java.util.UUID.fromString(decoder.decodeString())
+    override fun serialize(encoder: Encoder, value: java.util.UUID) = encoder.encodeString(value.toString())
+}
+
+typealias UUID = @Serializable(with = UUIDSerializer::class) java.util.UUID
+"#;
+
 impl EmitterPlugin<Kotlin> for JsonPlugin {
     /// Returns the serde Kotlin runtime sources needed for JSON encoding.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
@@ -71,6 +82,17 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
             "import kotlinx.serialization.SerialName".to_string(),
         ];
 
+        // UUID JSON-specific imports
+        if config.features.contains(&Feature::Uuid) {
+            imports.extend([
+                "import kotlinx.serialization.KSerializer".to_string(),
+                "import kotlinx.serialization.descriptors.PrimitiveKind".to_string(),
+                "import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor".to_string(),
+                "import kotlinx.serialization.encoding.Decoder".to_string(),
+                "import kotlinx.serialization.encoding.Encoder".to_string(),
+            ]);
+        }
+
         // BigInt JSON-specific imports
         if config.features.contains(&Feature::BigInt) {
             imports.extend([
@@ -98,6 +120,10 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
         w: &mut dyn IndentWrite,
         config: &CodeGeneratorConfig,
     ) -> io::Result<()> {
+        if config.features.contains(&Feature::Uuid) {
+            write!(w, "{FEATURE_UUID}")?;
+            writeln!(w)?;
+        }
         if config.features.contains(&Feature::BigInt) {
             write!(w, "{FEATURE_BIGINT}")?;
             writeln!(w)?;

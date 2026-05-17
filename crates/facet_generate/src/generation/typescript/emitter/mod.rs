@@ -240,6 +240,7 @@ impl Emitter<TypeScript> for Format {
             Self::Char => write!(w, "char"),
             Self::Str => write!(w, "str"),
             Self::Bytes => write!(w, "bytes"),
+            Self::Uuid => write!(w, "Uuid"),
 
             Self::Option(format) => {
                 write!(w, "Optional<")?;
