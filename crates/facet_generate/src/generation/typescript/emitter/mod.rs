@@ -107,7 +107,7 @@ impl TypeScript {
 impl Module {
     fn ts_namespace_import_path(&self, namespace: &str) -> String {
         self.config().external_packages.get(namespace).map_or_else(
-            || format!("../{namespace}"),
+            || format!("./{namespace}"),
             |path| match &path.location {
                 PackageLocation::Path(_) => {
                     let name = &path.for_namespace;
@@ -135,7 +135,7 @@ impl Emitter<TypeScript> for Module {
             writeln!(w, "{import}")?;
         }
 
-        // Write namespace imports (e.g. `import * as Foo from "../foo";`)
+        // Write namespace imports (e.g. `import * as Foo from "./foo";`)
         let mut import_paths: BTreeMap<String, String> = BTreeMap::new();
         for namespace in referenced_namespaces {
             let import_path = self.ts_namespace_import_path(namespace);

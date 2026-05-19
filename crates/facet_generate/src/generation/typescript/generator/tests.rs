@@ -232,7 +232,7 @@ fn output_adds_import_for_external_namespace() {
     )));
 
     let output = render_output(&config, vec![], &registry);
-    assert!(output.contains(r#"import * as Other from "../other";"#));
+    assert!(output.contains(r#"import * as Other from "./other";"#));
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn output_does_not_import_current_module() {
     )));
 
     let output = render_output(&config, vec![], &registry);
-    assert!(!output.contains(r#"import * as Root from "../root";"#));
+    assert!(!output.contains(r#"import * as Root from "./root";"#));
 }
 
 #[test]
@@ -267,7 +267,7 @@ fn output_uses_external_package_path_for_namespace() {
 
     let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
-    assert!(!output.contains(r#"import * as Other from "../other";"#));
+    assert!(!output.contains(r#"import * as Other from "./other";"#));
 }
 
 #[test]
@@ -340,7 +340,7 @@ fn output_external_package_takes_priority_over_relative_import() {
 
     let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
-    assert!(!output.contains(r#"import * as Other from "../other";"#));
+    assert!(!output.contains(r#"import * as Other from "./other";"#));
 }
 
 #[test]
@@ -352,7 +352,7 @@ fn output_falls_back_to_relative_import_without_external_package() {
     )));
 
     let output = render_output(&config, vec![], &registry);
-    assert!(output.contains(r#"import * as Legacy from "../legacy";"#));
+    assert!(output.contains(r#"import * as Legacy from "./legacy";"#));
 }
 
 #[test]
@@ -500,7 +500,7 @@ fn output_mixed_external_and_local_references() {
 
     let output = render_output(&config, vec![], &registry);
     assert!(output.contains(r#"import * as Other from "shared-types";"#));
-    assert!(!output.contains(r#"import * as Root from "../root";"#));
+    assert!(!output.contains(r#"import * as Root from "./root";"#));
     assert!(output.contains("public local_root: LocalRoot"));
     assert!(output.contains("public local_namespaced: LocalNamespaced"));
     assert!(output.contains("public external: Other.Child"));
