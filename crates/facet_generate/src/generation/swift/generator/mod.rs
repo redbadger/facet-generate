@@ -157,7 +157,6 @@ pub fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
             }
         }
     }
-
     known
 }
 
@@ -242,7 +241,12 @@ fn fmt_can_be_hashable(
         }
         Format::Variable(_)
         | Format::Unit  // Void does not conform to Hashable in Swift
-        | Format::Map { .. } => false, // [K: V] is never Hashable
+        => false,
+         // [K: V] is Hashable iff K is hashable and V is hashable
+        Format::Map { key, value } => {
+            fmt_can_be_hashable(key, known, local_names) && 
+            fmt_can_be_hashable(value, known, local_names)
+        },
         // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
         Format::Tuple(formats) => {
             formats.len() == 1 && fmt_can_be_hashable(&formats[0], known, local_names)

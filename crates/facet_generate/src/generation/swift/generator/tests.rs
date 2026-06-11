@@ -162,3 +162,181 @@ fn test_no_trait_helpers_without_encoding() {
         "No encoding means no trait helpers: {output}"
     );
 }
+
+#[test]
+fn test_map_with_hashable_k_v_implement_hashable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+    let fields = vec![Named {
+        name: "items".to_string(),
+        doc: Doc::new(),
+        value: Format::Map {
+            key: Box::new(Format::Str),
+            value: Box::new(Format::Str),
+        },
+    }];
+    registry.insert(
+        QualifiedTypeName::root("MyStruct".to_string()),
+        ContainerFormat::Struct(fields, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct MyStruct: Hashable {"),
+        "Struct is not hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_struct_with_hashable_scalar_implements_hashable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+    let fields = vec![Named {
+        name: "items".to_string(),
+        doc: Doc::new(),
+        value: Format::U8,
+    }];
+    registry.insert(
+        QualifiedTypeName::root("MyStruct".to_string()),
+        ContainerFormat::Struct(fields, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct MyStruct: Hashable {"),
+        "Struct is not hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_struct_with_hashable_map_implements_hashable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+    let fields = vec![Named {
+        name: "items".to_string(),
+        doc: Doc::new(),
+        value: Format::Map {
+            key: Box::new(Format::Str),
+            value: Box::new(Format::Str),
+        },
+    }];
+    registry.insert(
+        QualifiedTypeName::root("MyStruct".to_string()),
+        ContainerFormat::Struct(fields, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct MyStruct: Hashable {"),
+        "Struct is not hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_enum_with_hashable_variants_implements_hashable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+    let mut variants = BTreeMap::new();
+
+    let str_variant = Named {
+        name: "StrVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::Str)),
+    };
+
+    variants.insert(0, str_variant);
+
+    let map_variant = Named {
+        name: "MapVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::Map {
+            key: Box::new(Format::Str),
+            value: Box::new(Format::Str),
+        })),
+    };
+    variants.insert(1, map_variant);
+
+    registry.insert(
+        QualifiedTypeName::root("MyEnum".to_string()),
+        ContainerFormat::Enum(variants, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("indirect public enum MyEnum: Hashable {"),
+        "MyEnum is not hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_with_enum_and_struct_variant_implements_hashable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+
+    let fields = vec![
+        Named {
+            name: "str_item".to_string(),
+            doc: Doc::new(),
+            value: Format::Str,
+        },
+        Named {
+            name: "str_map".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::Str),
+                value: Box::new(Format::Str),
+            },
+        },
+        Named {
+            name: "str_option".to_string(),
+            doc: Doc::new(),
+            value: Format::Option(Box::new(Format::Str)),
+        },
+    ];
+
+    registry.insert(
+        QualifiedTypeName::root("MyStruct".to_string()),
+        ContainerFormat::Struct(fields, Doc::new()),
+    );
+
+    let mut variants = BTreeMap::new();
+
+    let str_variant = Named {
+        name: "StrVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::Str)),
+    };
+
+    variants.insert(0, str_variant);
+
+    let struct_variant = Named {
+        name: "StructVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::TypeName(QualifiedTypeName {
+            namespace: Namespace::Root,
+            name: "MyStruct".to_string(),
+        }))),
+    };
+    variants.insert(1, struct_variant);
+
+    registry.insert(
+        QualifiedTypeName::root("MyEnum".to_string()),
+        ContainerFormat::Enum(variants, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("indirect public enum MyEnum: Hashable {"),
+        "MyEnum is not hashable:\n{output}"
+    );
+}

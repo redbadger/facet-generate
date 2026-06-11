@@ -1318,8 +1318,7 @@ fn struct_with_hashmap_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Hashable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1388,8 +1387,7 @@ fn struct_with_nested_generics() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Hashable {
         public var optionalList: [String]?
         public var listOfOptionals: [Int32?]
         public var mapToList: [String: [Bool]]
@@ -1581,8 +1579,7 @@ fn struct_with_btreemap_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Hashable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1938,8 +1935,7 @@ fn struct_with_mixed_collections_and_pointers() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Hashable {
         public var vecOfSets: [Set<String>]
         public var optionalBtree: [String: Int32]?
         public var boxedVec: [String]

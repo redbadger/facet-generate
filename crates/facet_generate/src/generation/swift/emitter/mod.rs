@@ -145,7 +145,11 @@ pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
     match format {
         Format::Variable(_)
         | Format::Unit  // Void does not conform to Hashable in Swift
-        | Format::Map { .. } => false, // [K: V] is never Hashable
+         => false,
+        Format::Map { key, value } => {
+            // [K: V] is Hashable iff K is hashable and V is hashable
+            is_hashable(key, lang) && is_hashable(value, lang)
+        }, 
 
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.hashable_types.contains(&qtn.name),
