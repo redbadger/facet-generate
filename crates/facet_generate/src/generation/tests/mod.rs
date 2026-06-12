@@ -1,10 +1,11 @@
 use std::{
+    collections::HashSet,
     fmt::{self, Display, Formatter},
     fs,
     path::{Path, PathBuf},
 };
 
-use expect_test::ExpectFile;
+use expect_test::{ExpectFile, expect_file};
 use ignore::WalkBuilder;
 
 /// Target languages included in snapshot integration tests. Used to loop over languages
@@ -61,6 +62,47 @@ fn read_files_and_create_expect_dirs(
         }
     }
     files
+}
+
+pub fn check_roots(sut_root: impl AsRef<Path>, snapshot_root: impl AsRef<Path>) {
+    let mut all_expected_paths = all_files_and_folders(&snapshot_root);
+
+    for (actual, expected) in read_files_and_create_expect_dirs(sut_root, &snapshot_root) {
+        check(&actual, &expect_file!(&expected));
+        all_expected_paths.remove(expected.as_path());
+    }
+
+    assert!(
+        all_expected_paths.is_empty(),
+        "missing expected files from the snapshots:\n{}",
+        all_expected_paths
+            .into_iter()
+            .filter_map(|path| {
+                let to_string = path.display().to_string();
+                (!to_string.is_empty()).then_some(to_string)
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+fn all_files_and_folders(root: impl AsRef<Path>) -> HashSet<PathBuf> {
+    WalkBuilder::new(&root)
+        .hidden(false)
+        .follow_links(true)
+        .build()
+        .map(|dir_entry| {
+            dir_entry.map(|entry| {
+                entry
+                    .path()
+                    .to_owned()
+                    .strip_prefix(&root)
+                    .map(|p| p.to_path_buf())
+            })
+        })
+        .collect::<Result<Result<HashSet<_>, _>, _>>()
+        .unwrap()
+        .unwrap()
 }
 
 fn check(actual: &str, expect: &ExpectFile) {
