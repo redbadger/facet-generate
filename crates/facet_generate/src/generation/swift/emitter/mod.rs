@@ -149,7 +149,7 @@ pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
         Format::Map { key, value } => {
             // [K: V] is Hashable iff K is hashable and V is hashable
             is_hashable(key, lang) && is_hashable(value, lang)
-        }, 
+        },
 
         Format::TypeName(qtn) => match &qtn.namespace {
             Namespace::Root => lang.hashable_types.contains(&qtn.name),

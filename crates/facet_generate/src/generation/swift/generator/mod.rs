@@ -244,7 +244,7 @@ fn fmt_can_be_hashable(
         => false,
          // [K: V] is Hashable iff K is hashable and V is hashable
         Format::Map { key, value } => {
-            fmt_can_be_hashable(key, known, local_names) && 
+            fmt_can_be_hashable(key, known, local_names) &&
             fmt_can_be_hashable(value, known, local_names)
         },
         // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
