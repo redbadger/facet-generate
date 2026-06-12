@@ -97,7 +97,7 @@ fn all_files_and_folders(root: impl AsRef<Path>) -> HashSet<PathBuf> {
                     .path()
                     .to_owned()
                     .strip_prefix(&root)
-                    .map(|p| p.to_path_buf())
+                    .map(std::path::Path::to_path_buf)
             })
         })
         .collect::<Result<Result<HashSet<_>, _>, _>>()
