@@ -95,7 +95,7 @@ func deserializeSet<T: Hashable, D: Deserializer>(
     return obj
 }
 
-public struct Child: Hashable {
+public struct Child: Hashable, Equatable {
     public var name: String
 
     public init(name: String) {
@@ -131,7 +131,7 @@ public struct Child: Hashable {
     }
 }
 
-public struct MyStruct: Hashable {
+public struct MyStruct: Hashable, Equatable {
     public var stringToInt: [String: Int32]
     public var mapToList: [String: [Int32]]
     public var optionOfVecOfSet: [Set<String>]?
@@ -209,7 +209,7 @@ public struct MyStruct: Hashable {
     }
 }
 
-indirect public enum Parent: Hashable {
+indirect public enum Parent: Hashable, Equatable {
     case child(Child)
 
     public func serialize<S: Serializer>(serializer: S) throws {

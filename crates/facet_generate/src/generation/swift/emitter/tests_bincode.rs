@@ -34,10 +34,9 @@ fn unit_struct_1() {
 
     let actual = emit!(UnitStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
     /// line 1
     /// line 2
-    public struct UnitStruct: Hashable {
+    public struct UnitStruct: Hashable, Equatable {
         public init() {
         }
 
@@ -79,10 +78,9 @@ fn unit_struct_2() {
 
     let actual = emit!(UnitStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
     /// line 1
     /// line 2
-    public struct UnitStruct: Hashable {
+    public struct UnitStruct: Hashable, Equatable {
         public init() {
         }
 
@@ -124,10 +122,9 @@ fn newtype_struct() {
 
     let actual = emit!(NewType as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
     /// line 1
     /// line 2
-    public struct NewType: Hashable {
+    public struct NewType: Hashable, Equatable {
         public var value: String
 
         public init(value: String) {
@@ -174,10 +171,9 @@ fn tuple_struct() {
 
     let actual = emit!(TupleStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
     /// line 1
     /// line 2
-    public struct TupleStruct: Hashable {
+    public struct TupleStruct: Hashable, Equatable {
         public var field0: String
         public var field1: Int32
 
@@ -372,8 +368,7 @@ fn struct_with_fields_of_user_types() {
 
     let actual = emit!(Outer as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct Inner1: Hashable {
+    public struct Inner1: Hashable, Equatable {
         public var field1: String
 
         public init(field1: String) {
@@ -409,7 +404,7 @@ fn struct_with_fields_of_user_types() {
         }
     }
 
-    public struct Inner2: Hashable {
+    public struct Inner2: Hashable, Equatable {
         public var value: String
 
         public init(value: String) {
@@ -445,7 +440,7 @@ fn struct_with_fields_of_user_types() {
         }
     }
 
-    public struct Inner3: Hashable {
+    public struct Inner3: Hashable, Equatable {
         public var field0: String
         public var field1: Int32
 
@@ -485,7 +480,7 @@ fn struct_with_fields_of_user_types() {
         }
     }
 
-    public struct Outer: Hashable {
+    public struct Outer: Hashable, Equatable {
         public var one: Inner1
         public var two: Inner2
         public var three: Inner3
@@ -723,10 +718,9 @@ fn enum_with_unit_variants() {
 
     let actual = emit!(EnumWithUnitVariants as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
     /// line one
     /// line two
-    indirect public enum EnumWithUnitVariants: Hashable {
+    indirect public enum EnumWithUnitVariants: Hashable, Equatable {
         /// variant one
         case variant1
         /// variant two
@@ -793,8 +787,7 @@ fn enum_with_unit_struct_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case variant1
 
         public func serialize<S: Serializer>(serializer: S) throws {
@@ -846,8 +839,7 @@ fn enum_with_1_tuple_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case variant1(String)
 
         public func serialize<S: Serializer>(serializer: S) throws {
@@ -902,8 +894,7 @@ fn enum_with_newtype_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case variant1(String)
         case variant2(Int32)
 
@@ -966,8 +957,7 @@ fn enum_with_tuple_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case variant1(String, Int32)
         case variant2(Bool, Double, UInt8)
 
@@ -1035,8 +1025,7 @@ fn enum_with_struct_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case variant1(field1: String, field2: Int32)
 
         public func serialize<S: Serializer>(serializer: S) throws {
@@ -1095,8 +1084,7 @@ fn enum_with_mixed_variants() {
 
     let actual = emit!(MyEnum as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    indirect public enum MyEnum: Hashable {
+    indirect public enum MyEnum: Hashable, Equatable {
         case unit
         case newType(String)
         case tuple(String, Int32)
@@ -1174,8 +1162,7 @@ fn struct_with_vec_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var items: [String]
         public var numbers: [Int32]
         public var nestedItems: [[String]]
@@ -1249,8 +1236,7 @@ fn struct_with_option_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var optionalString: String?
         public var optionalNumber: Int32?
         public var optionalBool: Bool?
@@ -1318,7 +1304,7 @@ fn struct_with_hashmap_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1387,7 +1373,7 @@ fn struct_with_nested_generics() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var optionalList: [String]?
         public var listOfOptionals: [Int32?]
         public var mapToList: [String: [Bool]]
@@ -1510,8 +1496,7 @@ fn struct_with_array_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var fixedArray: [Int32]
         public var byteArray: [UInt8]
         public var stringArray: [String]
@@ -1579,7 +1564,7 @@ fn struct_with_btreemap_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1647,8 +1632,7 @@ fn struct_with_hashset_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var stringSet: Set<String>
         public var intSet: Set<Int32>
 
@@ -1710,8 +1694,7 @@ fn struct_with_btreeset_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var stringSet: Set<String>
         public var intSet: Set<Int32>
 
@@ -1772,8 +1755,7 @@ fn struct_with_box_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var boxedString: String
         public var boxedInt: Int32
 
@@ -1825,8 +1807,7 @@ fn struct_with_rc_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var rcString: String
         public var rcInt: Int32
 
@@ -1878,8 +1859,7 @@ fn struct_with_arc_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var arcString: String
         public var arcInt: Int32
 
@@ -1935,7 +1915,7 @@ fn struct_with_mixed_collections_and_pointers() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var vecOfSets: [Set<String>]
         public var optionalBtree: [String: Int32]?
         public var boxedVec: [String]
@@ -2033,8 +2013,7 @@ fn struct_with_bytes_field() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var data: [UInt8]
         public var name: String
         public var header: [UInt8]
@@ -2094,8 +2073,7 @@ fn struct_with_bytes_field_and_slice() {
 
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct MyStruct: Hashable {
+    public struct MyStruct: Hashable, Equatable {
         public var data: [UInt8]
         public var name: String
         public var header: [UInt8]
@@ -2168,8 +2146,7 @@ fn namespaced_child() {
 
     let actual = emit!(Parent as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-
-    public struct Parent: Hashable {
+    public struct Parent: Hashable, Equatable {
         public var child: [Test.Child]
 
         public init(child: [Test.Child]) {
@@ -2209,7 +2186,7 @@ fn namespaced_child() {
         }
     }
 
-    public struct Child: Hashable {
+    public struct Child: Hashable, Equatable {
         public var test: String
 
         public init(test: String) {

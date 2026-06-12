@@ -1,6 +1,6 @@
 import Serde
 
-public struct Child: Hashable {
+public struct Child: Hashable, Equatable {
     public var name: String
 
     public init(name: String) {
@@ -36,7 +36,7 @@ public struct Child: Hashable {
     }
 }
 
-indirect public enum Parent: Hashable {
+indirect public enum Parent: Hashable, Equatable {
     case child(Child)
 
     public func serialize<S: Serializer>(serializer: S) throws {

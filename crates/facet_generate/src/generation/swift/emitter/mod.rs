@@ -576,15 +576,21 @@ fn struct_<W: IndentWrite>(
     let all_equatable_auto = fields.iter().all(|f| is_equatable_auto(&f.value, lang));
     let all_can_eq = fields.iter().all(|f| can_use_eq_operator(&f.value, lang));
 
-    if !has_plugins {
-        write!(w, "public struct {name} ")?;
-    } else if all_hashable {
-        write!(w, "public struct {name}: Hashable ")?;
-    } else if all_equatable_auto || all_can_eq {
-        write!(w, "public struct {name}: Equatable ")?;
+    let mut implements = vec![];
+
+    if all_hashable {
+        implements.push("Hashable");
+    }
+    if all_equatable_auto || all_can_eq {
+        implements.push("Equatable");
+    }
+
+    if has_plugins && !implements.is_empty() {
+        write!(w, "public struct {name}: {} ", implements.join(", "))?;
     } else {
         write!(w, "public struct {name} ")?;
     }
+
     let mut w = w.block(Newlines::BOTH)?;
 
     for field in fields {
@@ -684,15 +690,21 @@ fn enum_<W: IndentWrite>(
         .values()
         .all(|v| variant_can_use_eq_operator(&v.value, lang));
 
-    if !has_plugins {
-        write!(w, "indirect public enum {name} ")?;
-    } else if all_hashable {
-        write!(w, "indirect public enum {name}: Hashable ")?;
-    } else if all_equatable_auto || all_can_eq {
-        write!(w, "indirect public enum {name}: Equatable ")?;
+    let mut implements = vec![];
+
+    if all_hashable {
+        implements.push("Hashable");
+    }
+    if all_equatable_auto || all_can_eq {
+        implements.push("Equatable");
+    }
+
+    if has_plugins && !implements.is_empty() {
+        write!(w, "indirect public enum {name}: {} ", implements.join(", "))?;
     } else {
         write!(w, "indirect public enum {name} ")?;
     }
+
     let mut w = w.block(Newlines::BOTH)?;
 
     for variant in variants.values() {

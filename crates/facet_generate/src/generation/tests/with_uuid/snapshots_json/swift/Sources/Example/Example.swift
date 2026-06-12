@@ -43,7 +43,7 @@ func deserializeUuid<D: Deserializer>(
     return uuid
 }
 
-public struct StructWithUuid: Hashable {
+public struct StructWithUuid: Hashable, Equatable {
     public var id: UUID
     public var parentId: UUID?
     public var name: String

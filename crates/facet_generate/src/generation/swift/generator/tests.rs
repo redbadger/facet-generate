@@ -164,7 +164,7 @@ fn test_no_trait_helpers_without_encoding() {
 }
 
 #[test]
-fn test_map_with_hashable_k_v_implement_hashable() {
+fn test_map_with_hashable_k_v_implement_hashable_and_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
@@ -184,13 +184,13 @@ fn test_map_with_hashable_k_v_implement_hashable() {
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
-        output.contains("public struct MyStruct: Hashable {"),
-        "Struct is not hashable:\n{output}"
+        output.contains("public struct MyStruct: Hashable, Equatable {"),
+        "Struct is not hashable and equatable:\n{output}"
     );
 }
 
 #[test]
-fn test_struct_with_hashable_scalar_implements_hashable() {
+fn test_struct_with_hashable_scalar_implements_hashable_and_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
@@ -207,13 +207,13 @@ fn test_struct_with_hashable_scalar_implements_hashable() {
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
-        output.contains("public struct MyStruct: Hashable {"),
-        "Struct is not hashable:\n{output}"
+        output.contains("public struct MyStruct: Hashable, Equatable {"),
+        "Struct is not hashable and equatable:\n{output}"
     );
 }
 
 #[test]
-fn test_struct_with_hashable_map_implements_hashable() {
+fn test_struct_with_hashable_map_implements_hashable_and_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
@@ -233,13 +233,13 @@ fn test_struct_with_hashable_map_implements_hashable() {
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
-        output.contains("public struct MyStruct: Hashable {"),
-        "Struct is not hashable:\n{output}"
+        output.contains("public struct MyStruct: Hashable, Equatable {"),
+        "Struct is not hashable and equatable:\n{output}"
     );
 }
 
 #[test]
-fn test_enum_with_hashable_variants_implements_hashable() {
+fn test_enum_with_hashable_variants_implements_hashable_and_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
@@ -271,13 +271,13 @@ fn test_enum_with_hashable_variants_implements_hashable() {
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
-        output.contains("indirect public enum MyEnum: Hashable {"),
+        output.contains("indirect public enum MyEnum: Hashable, Equatable {"),
         "MyEnum is not hashable:\n{output}"
     );
 }
 
 #[test]
-fn test_with_enum_and_struct_variant_implements_hashable() {
+fn test_with_enum_and_struct_variant_implements_hashable_and_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
     let mut registry = Registry::new();
@@ -336,7 +336,7 @@ fn test_with_enum_and_struct_variant_implements_hashable() {
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
 
     assert!(
-        output.contains("indirect public enum MyEnum: Hashable {"),
+        output.contains("indirect public enum MyEnum: Hashable, Equatable {"),
         "MyEnum is not hashable:\n{output}"
     );
 }
