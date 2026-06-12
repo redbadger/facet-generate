@@ -1,6 +1,5 @@
 use std::fs;
 
-use expect_test::expect_file;
 use facet::Facet;
 use tempfile::tempdir;
 
@@ -9,7 +8,7 @@ use crate::{
     generation::{
         bincode::BincodePlugin,
         kotlin,
-        tests::{TargetLanguage, check, read_files_and_create_expect_dirs},
+        tests::{TargetLanguage, check_roots},
     },
     reflect, source_dir,
 };
@@ -44,8 +43,6 @@ fn test() {
             _ => unreachable!(),
         }
 
-        for (actual, expected) in read_files_and_create_expect_dirs(tmp_path, &snapshot_dir) {
-            check(&actual, &expect_file!(&expected));
-        }
+        check_roots(tmp_path, snapshot_dir);
     }
 }
