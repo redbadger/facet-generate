@@ -340,3 +340,139 @@ fn test_with_enum_and_struct_variant_implements_hashable_and_equatable() {
         "MyEnum is not hashable:\n{output}"
     );
 }
+
+#[test]
+fn test_type_cycle_is_hashable_and_equatable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let mut registry = Registry::new();
+
+    let fields = vec![Named {
+        name: "str_item".to_string(),
+        doc: Doc::new(),
+        value: Format::Str,
+    }];
+
+    registry.insert(
+        QualifiedTypeName::root("MyStruct".to_string()),
+        ContainerFormat::Struct(fields, Doc::new()),
+    );
+
+    let mut variants = BTreeMap::new();
+
+    let struct_variant = Named {
+        name: "StructVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::TypeName(QualifiedTypeName {
+            namespace: Namespace::Root,
+            name: "MyStruct".to_string(),
+        }))),
+    };
+
+    let self_enum_variant = Named {
+        name: "EnumVariant".to_string(),
+        doc: Doc::new(),
+        value: VariantFormat::NewType(Box::new(Format::TypeName(QualifiedTypeName {
+            namespace: Namespace::Root,
+            name: "MyEnum".to_string(),
+        }))),
+    };
+    variants.insert(0, struct_variant);
+    variants.insert(1, self_enum_variant);
+
+    registry.insert(
+        QualifiedTypeName::root("MyEnum".to_string()),
+        ContainerFormat::Enum(variants, Doc::new()),
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("indirect public enum MyEnum: Hashable, Equatable {"),
+        "MyEnum is not hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_struct_declaration_easy_order() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+    let fields = vec![
+        Named {
+            name: "items".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::Str),
+                value: Box::new(Format::Str),
+            },
+        },
+        // MyStruct2, it will be added to the registry before MyStruct1
+        Named {
+            name: "struct_2".to_string(),
+            doc: Doc::new(),
+            value: Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "MyStruct2".to_string(),
+            }),
+        },
+    ];
+    let struct1 = ContainerFormat::Struct(fields.clone(), Doc::new());
+    let struct2 = ContainerFormat::Struct(fields, Doc::new());
+
+    let mut registry = Registry::new();
+
+    registry.insert(QualifiedTypeName::root("MyStruct2".to_string()), struct2);
+    registry.insert(QualifiedTypeName::root("MyStruct1".to_string()), struct1);
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct MyStruct1: Hashable, Equatable {"),
+        "MyStruct1 is not hashable and equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct MyStruct2: Hashable, Equatable {"),
+        "MyStruct2 is not hashable and equatable:\n{output}"
+    );
+}
+
+#[test]
+fn test_struct_declaration_inv_order() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+    let fields = vec![
+        Named {
+            name: "items".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::Str),
+                value: Box::new(Format::Str),
+            },
+        },
+        // MyStruct2, will be added to the registry after MyStruct1
+        Named {
+            name: "struct_2".to_string(),
+            doc: Doc::new(),
+            value: Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "MyStruct2".to_string(),
+            }),
+        },
+    ];
+    let struct1 = ContainerFormat::Struct(fields.clone(), Doc::new());
+    let struct2 = ContainerFormat::Struct(fields, Doc::new());
+
+    let mut registry = Registry::new();
+
+    registry.insert(QualifiedTypeName::root("MyStruct1".to_string()), struct1);
+    registry.insert(QualifiedTypeName::root("MyStruct2".to_string()), struct2);
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct MyStruct1: Hashable, Equatable {"),
+        "MyStruct1 is not hashable and equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct MyStruct2: Hashable, Equatable {"),
+        "MyStruct2 is not hashable and equatable:\n{output}"
+    );
+}

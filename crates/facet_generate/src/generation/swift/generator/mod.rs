@@ -135,81 +135,99 @@ impl<'a> SwiftCodeGenerator<'a> {
 /// added to the set.
 pub fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
     // Names of all types defined in this module.
-    let local_names: BTreeSet<String> = registry
+    let local_names: BTreeSet<&str> = registry
         .keys()
         .filter(|k| matches!(k.namespace, Namespace::Root))
-        .map(|k| k.name.clone())
+        .map(|k| k.name.as_ref())
         .collect();
 
     let mut known: BTreeSet<String> = BTreeSet::new();
-    let mut changed = true;
-
-    while changed {
-        changed = false;
-        for (qtn, container) in registry {
-            let name = &qtn.name;
-            if known.contains(name) {
-                continue;
-            }
-            if container_can_be_hashable(container, &known, &local_names) {
-                known.insert(name.clone());
-                changed = true;
-            }
+    for qtn in registry.keys() {
+        if known.contains(&qtn.name) {
+            continue;
         }
+        container_can_be_hashable(registry, &mut known, &vec![&qtn], &local_names);
     }
+
     known
 }
 
 fn container_can_be_hashable(
-    format: &ContainerFormat,
-    known: &BTreeSet<String>,
-    local_names: &BTreeSet<String>,
+    registry: &Registry,
+    known: &mut BTreeSet<String>,
+    parent_type_name: &Vec<&QualifiedTypeName>,
+    local_names: &BTreeSet<&str>,
 ) -> bool {
-    match format {
-        ContainerFormat::UnitStruct(_) => true,
-        ContainerFormat::NewTypeStruct(fmt, _) => fmt_can_be_hashable(fmt, known, local_names),
-        ContainerFormat::TupleStruct(fmts, _) => fmts
-            .iter()
-            .all(|f| fmt_can_be_hashable(f, known, local_names)),
-        ContainerFormat::Struct(nameds, _) => nameds
-            .iter()
-            .all(|n| fmt_can_be_hashable(&n.value, known, local_names)),
-        ContainerFormat::Enum(variants, _) => variants
-            .values()
-            .all(|v| variant_can_be_hashable(&v.value, known, local_names)),
+    let container = &parent_type_name.last().unwrap().name;
+    // Already known to be hashable
+    if known.contains(container) {
+        return true;
     }
+    if let Some(format) = registry.get(parent_type_name.last().unwrap()) {
+        if match format {
+            ContainerFormat::UnitStruct(_) => true,
+            ContainerFormat::NewTypeStruct(fmt, _) => {
+                fmt_can_be_hashable(fmt, registry, known, parent_type_name, local_names)
+            }
+            ContainerFormat::TupleStruct(fmts, _) => fmts
+                .iter()
+                .all(|f| fmt_can_be_hashable(f, registry, known, parent_type_name, local_names)),
+            ContainerFormat::Struct(nameds, _) => nameds.iter().all(|n| {
+                fmt_can_be_hashable(&n.value, registry, known, parent_type_name, local_names)
+            }),
+            ContainerFormat::Enum(variants, _) => variants.values().all(|v| {
+                variant_can_be_hashable(&v.value, registry, known, parent_type_name, local_names)
+            }),
+        } {
+            known.insert(container.clone());
+            return true;
+        }
+    }
+
+    false
 }
 
 fn variant_can_be_hashable(
     format: &VariantFormat,
-    known: &BTreeSet<String>,
-    local_names: &BTreeSet<String>,
+    registry: &Registry,
+    known: &mut BTreeSet<String>,
+    container: &Vec<&QualifiedTypeName>,
+    local_names: &BTreeSet<&str>,
 ) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
         VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => fmt_can_be_hashable(fmt, known, local_names),
+        VariantFormat::NewType(fmt) => {
+            fmt_can_be_hashable(fmt, registry, known, container, local_names)
+        }
         // Enum associated values are separate parameters, not a Swift tuple,
         // so each element is checked individually.
         VariantFormat::Tuple(fmts) => fmts
             .iter()
-            .all(|f| fmt_can_be_hashable(f, known, local_names)),
+            .all(|f| fmt_can_be_hashable(f, registry, known, container, local_names)),
         VariantFormat::Struct(nameds) => nameds
             .iter()
-            .all(|n| fmt_can_be_hashable(&n.value, known, local_names)),
+            .all(|n| fmt_can_be_hashable(&n.value, registry, known, container, local_names)),
     }
 }
 
 fn fmt_can_be_hashable(
     format: &Format,
-    known: &BTreeSet<String>,
-    local_names: &BTreeSet<String>,
+    registry: &Registry,
+    known: &mut BTreeSet<String>,
+    container: &Vec<&QualifiedTypeName>,
+    local_names: &BTreeSet<&str>,
 ) -> bool {
     match format {
         Format::TypeName(qtn) => {
-            if local_names.contains(&qtn.name) {
+            if container.contains(&qtn) {
+                // Cycle to the currently evaluated struct: assume hashable.
+                true
+            }else if local_names.contains(qtn.name.as_str()) {
                 // Same-module type: only hashable if already proven so.
-                known.contains(&qtn.name)
+                let mut subs = container.clone();
+                subs.push(qtn);
+                container_can_be_hashable(registry, known, &subs, local_names)
             } else {
                 // External type: assume hashable.
                 true
@@ -237,19 +255,19 @@ fn fmt_can_be_hashable(
         | Format::Set(inner)
         | Format::Seq(inner)
         | Format::TupleArray { content: inner, .. } => {
-            fmt_can_be_hashable(inner, known, local_names)
+            fmt_can_be_hashable(inner, registry, known, container, local_names)
         }
         Format::Variable(_)
         | Format::Unit  // Void does not conform to Hashable in Swift
         => false,
          // [K: V] is Hashable iff K is hashable and V is hashable
         Format::Map { key, value } => {
-            fmt_can_be_hashable(key, known, local_names) &&
-            fmt_can_be_hashable(value, known, local_names)
+            fmt_can_be_hashable(key,registry,  known, container, local_names) &&
+            fmt_can_be_hashable(value, registry, known, container, local_names)
         },
         // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
         Format::Tuple(formats) => {
-            formats.len() == 1 && fmt_can_be_hashable(&formats[0], known, local_names)
+            formats.len() == 1 && fmt_can_be_hashable(&formats[0], registry, known, container, local_names)
         }
     }
 }
@@ -288,7 +306,7 @@ pub fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
             if known.contains(name) {
                 continue;
             }
-            if container_can_be_equatable(container, &known, &local_names) {
+            if container_can_be_equatable(container, &known, qtn.name.as_str(), &local_names) {
                 known.insert(name.clone());
                 changed = true;
             }
@@ -301,51 +319,60 @@ pub fn compute_equatable_types(registry: &Registry) -> BTreeSet<String> {
 fn container_can_be_equatable(
     format: &ContainerFormat,
     known: &BTreeSet<String>,
+    container: &str,
     local_names: &BTreeSet<String>,
 ) -> bool {
     match format {
         ContainerFormat::UnitStruct(_) => true,
-        ContainerFormat::NewTypeStruct(fmt, _) => fmt_can_be_equatable(fmt, known, local_names),
+        ContainerFormat::NewTypeStruct(fmt, _) => {
+            fmt_can_be_equatable(fmt, known, container, local_names)
+        }
         ContainerFormat::TupleStruct(fmts, _) => fmts
             .iter()
-            .all(|f| fmt_can_be_equatable(f, known, local_names)),
+            .all(|f| fmt_can_be_equatable(f, known, container, local_names)),
         ContainerFormat::Struct(nameds, _) => nameds
             .iter()
-            .all(|n| fmt_can_be_equatable(&n.value, known, local_names)),
+            .all(|n| fmt_can_be_equatable(&n.value, known, container, local_names)),
         ContainerFormat::Enum(variants, _) => variants
             .values()
-            .all(|v| variant_fmt_can_be_equatable(&v.value, known, local_names)),
+            .all(|v| variant_fmt_can_be_equatable(&v.value, known, container, local_names)),
     }
 }
 
 fn variant_fmt_can_be_equatable(
     format: &VariantFormat,
     known: &BTreeSet<String>,
+    container: &str,
+
     local_names: &BTreeSet<String>,
 ) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
         VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => fmt_can_be_equatable(fmt, known, local_names),
+        VariantFormat::NewType(fmt) => fmt_can_be_equatable(fmt, known, container, local_names),
         // Enum associated values are separate parameters, not a Swift tuple,
         // so each element is checked individually.
         VariantFormat::Tuple(fmts) => fmts
             .iter()
-            .all(|f| fmt_can_be_equatable(f, known, local_names)),
+            .all(|f| fmt_can_be_equatable(f, known, container, local_names)),
         VariantFormat::Struct(nameds) => nameds
             .iter()
-            .all(|n| fmt_can_be_equatable(&n.value, known, local_names)),
+            .all(|n| fmt_can_be_equatable(&n.value, known, container, local_names)),
     }
 }
 
 fn fmt_can_be_equatable(
     format: &Format,
     known: &BTreeSet<String>,
+    container: &str,
     local_names: &BTreeSet<String>,
 ) -> bool {
     match format {
         Format::TypeName(qtn) => {
-            if local_names.contains(&qtn.name) {
+            if container == &qtn.name {
+                // Cycle to the currently evaluated struct: assume equatable.
+                true
+            } else if local_names.contains(&qtn.name) {
                 // Same-module type: only equatable if already proven so.
                 known.contains(&qtn.name)
             } else {
@@ -377,18 +404,18 @@ fn fmt_can_be_equatable(
         | Format::Set(inner)
         | Format::Seq(inner)
         | Format::TupleArray { content: inner, .. } => {
-            fmt_can_be_equatable(inner, known, local_names)
+            fmt_can_be_equatable(inner, known, container, local_names)
         }
         // [K: V] IS Equatable when K and V are Equatable.
         Format::Map { key, value } => {
-            fmt_can_be_equatable(key, known, local_names)
-                && fmt_can_be_equatable(value, known, local_names)
+            fmt_can_be_equatable(key, known, container, local_names)
+                && fmt_can_be_equatable(value, known, container, local_names)
         }
         // Multi-element tuples are included: we generate a manual `==` operator
         // for structs/enums that contain them, using Swift's built-in tuple `==`.
         Format::Tuple(formats) => formats
             .iter()
-            .all(|f| fmt_can_be_equatable(f, known, local_names)),
+            .all(|f| fmt_can_be_equatable(f, known, container, local_names)),
     }
 }
 
