@@ -478,6 +478,7 @@ fn test_struct_declaration_inv_order() {
 }
 
 #[test]
+#[allow(clippy::similar_names)]
 fn test_mutual_recursion_equatable() {
     let config = CodeGeneratorConfig::new("MyPackage".to_string());
 
