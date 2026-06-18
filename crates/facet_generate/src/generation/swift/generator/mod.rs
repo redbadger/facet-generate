@@ -194,9 +194,9 @@ fn check_type_hashable(
         ContainerFormat::Struct(fields, _) => fields
             .iter()
             .all(|f| fmt_is_hashable(registry, &f.value, local_names, known, visiting)),
-        ContainerFormat::Enum(variants, _) => variants.values().all(|v| {
-            variant_is_hashable(registry, &v.value, local_names, known, visiting)
-        }),
+        ContainerFormat::Enum(variants, _) => variants
+            .values()
+            .all(|v| variant_is_hashable(registry, &v.value, local_names, known, visiting)),
     };
 
     visiting.remove(name);
@@ -218,9 +218,7 @@ fn variant_is_hashable(
     match format {
         VariantFormat::Variable(_) => false,
         VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => {
-            fmt_is_hashable(registry, fmt, local_names, known, visiting)
-        }
+        VariantFormat::NewType(fmt) => fmt_is_hashable(registry, fmt, local_names, known, visiting),
         VariantFormat::Tuple(fmts) => fmts
             .iter()
             .all(|f| fmt_is_hashable(registry, f, local_names, known, visiting)),
@@ -238,9 +236,7 @@ fn fmt_is_hashable(
     visiting: &mut BTreeSet<String>,
 ) -> bool {
     match format {
-        Format::TypeName(qtn) => {
-            check_type_hashable(registry, qtn, local_names, known, visiting)
-        }
+        Format::TypeName(qtn) => check_type_hashable(registry, qtn, local_names, known, visiting),
         Format::Bool
         | Format::I8
         | Format::I16
@@ -352,9 +348,9 @@ fn check_type_equatable(
         ContainerFormat::Struct(fields, _) => fields
             .iter()
             .all(|f| fmt_is_equatable(registry, &f.value, local_names, known, visiting)),
-        ContainerFormat::Enum(variants, _) => variants.values().all(|v| {
-            variant_is_equatable(registry, &v.value, local_names, known, visiting)
-        }),
+        ContainerFormat::Enum(variants, _) => variants
+            .values()
+            .all(|v| variant_is_equatable(registry, &v.value, local_names, known, visiting)),
     };
 
     visiting.remove(name);
@@ -396,9 +392,7 @@ fn fmt_is_equatable(
     visiting: &mut BTreeSet<String>,
 ) -> bool {
     match format {
-        Format::TypeName(qtn) => {
-            check_type_equatable(registry, qtn, local_names, known, visiting)
-        }
+        Format::TypeName(qtn) => check_type_equatable(registry, qtn, local_names, known, visiting),
         Format::Bool
         | Format::I8
         | Format::I16
