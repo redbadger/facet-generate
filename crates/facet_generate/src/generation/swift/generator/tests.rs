@@ -476,3 +476,58 @@ fn test_struct_declaration_inv_order() {
         "MyStruct2 is not hashable and equatable:\n{output}"
     );
 }
+
+#[test]
+fn test_mutual_recursion_equatable() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+
+    let struct_a_fields = vec![
+        Named {
+            name: "value".to_string(),
+            doc: Doc::new(),
+            value: Format::U32,
+        },
+        Named {
+            name: "other".to_string(),
+            doc: Doc::new(),
+            value: Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "StructB".to_string(),
+            }),
+        },
+    ];
+
+    let struct_b_fields = vec![
+        Named {
+            name: "value".to_string(),
+            doc: Doc::new(),
+            value: Format::U32,
+        },
+        Named {
+            name: "other".to_string(),
+            doc: Doc::new(),
+            value: Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "StructA".to_string(),
+            }),
+        },
+    ];
+
+    let struct_a = ContainerFormat::Struct(struct_a_fields, Doc::new());
+    let struct_b = ContainerFormat::Struct(struct_b_fields, Doc::new());
+
+    let mut registry = Registry::new();
+    registry.insert(QualifiedTypeName::root("StructA".to_string()), struct_a);
+    registry.insert(QualifiedTypeName::root("StructB".to_string()), struct_b);
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct StructA: Hashable, Equatable {"),
+        "StructA should be hashable and equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct StructB: Hashable, Equatable {"),
+        "StructB should be hashable and equatable:\n{output}"
+    );
+}
