@@ -125,115 +125,122 @@ impl<'a> SwiftCodeGenerator<'a> {
 /// Computes the set of type names (within this module) that can synthesize
 /// Swift `Hashable` conformance.
 ///
-/// Uses a monotone fixed-point iteration: on each pass a type is added to
-/// the known-hashable set if all of its fields / variant associated values
-/// are hashable given current knowledge. Iteration stops when a full pass
-/// produces no new additions.
+/// Uses depth-first search with optimistic cycle handling: if a type appears
+/// on the current evaluation stack it is assumed hashable. This correctly
+/// supports self-referential and mutually-recursive types because Swift
+/// permits `Hashable` synthesis for recursive value types as long as all
+/// non-recursive stored properties are themselves `Hashable`.
 ///
 /// External types (not present in the registry) are assumed to be hashable.
-/// Mutually recursive types that form a cycle will conservatively not be
-/// added to the set.
 pub fn compute_hashable_types(registry: &Registry) -> BTreeSet<String> {
-    // Names of all types defined in this module.
     let local_names: BTreeSet<&str> = registry
         .keys()
         .filter(|k| matches!(k.namespace, Namespace::Root))
-        .map(|k| k.name.as_ref())
+        .map(|k| k.name.as_str())
         .collect();
 
     let mut known: BTreeSet<String> = BTreeSet::new();
+    let mut visiting: BTreeSet<String> = BTreeSet::new();
+
     for qtn in registry.keys() {
-        if known.contains(&qtn.name) {
-            continue;
+        if local_names.contains(qtn.name.as_str()) && !known.contains(&qtn.name) {
+            check_type_hashable(registry, qtn, &local_names, &mut known, &mut visiting);
         }
-        container_can_be_hashable(registry, &mut known, &vec![&qtn], &local_names);
     }
 
     known
 }
 
-fn container_can_be_hashable(
+/// Checks whether a type (and transitively all types it references) can
+/// conform to `Hashable`.
+///
+/// On success the type name is inserted into `known` so that subsequent
+/// checks short-circuit.
+fn check_type_hashable(
     registry: &Registry,
-    known: &mut BTreeSet<String>,
-    parent_type_name: &Vec<&QualifiedTypeName>,
+    qtn: &QualifiedTypeName,
     local_names: &BTreeSet<&str>,
+    known: &mut BTreeSet<String>,
+    visiting: &mut BTreeSet<String>,
 ) -> bool {
-    let container = &parent_type_name.last().unwrap().name;
-    // Already known to be hashable
-    if known.contains(container) {
+    let name = &qtn.name;
+
+    if known.contains(name) {
         return true;
     }
-    if let Some(format) = registry.get(parent_type_name.last().unwrap()) {
-        if match format {
-            ContainerFormat::UnitStruct(_) => true,
-            ContainerFormat::NewTypeStruct(fmt, _) => {
-                fmt_can_be_hashable(fmt, registry, known, parent_type_name, local_names)
-            }
-            ContainerFormat::TupleStruct(fmts, _) => fmts
-                .iter()
-                .all(|f| fmt_can_be_hashable(f, registry, known, parent_type_name, local_names)),
-            ContainerFormat::Struct(nameds, _) => nameds.iter().all(|n| {
-                fmt_can_be_hashable(&n.value, registry, known, parent_type_name, local_names)
-            }),
-            ContainerFormat::Enum(variants, _) => variants.values().all(|v| {
-                variant_can_be_hashable(&v.value, registry, known, parent_type_name, local_names)
-            }),
-        } {
-            known.insert(container.clone());
-            return true;
-        }
+    if visiting.contains(name) {
+        // Cycle detected — strongly-connected components are either all
+        // hashable or all non-hashable, so optimism is safe here.
+        return true;
+    }
+    if !local_names.contains(name.as_str()) {
+        return true; // external type
     }
 
-    false
+    let Some(container) = registry.get(qtn) else {
+        return false;
+    };
+
+    visiting.insert(name.clone());
+
+    let result = match container {
+        ContainerFormat::UnitStruct(_) => true,
+        ContainerFormat::NewTypeStruct(fmt, _) => {
+            fmt_is_hashable(registry, fmt, local_names, known, visiting)
+        }
+        ContainerFormat::TupleStruct(fmts, _) => fmts
+            .iter()
+            .all(|f| fmt_is_hashable(registry, f, local_names, known, visiting)),
+        ContainerFormat::Struct(fields, _) => fields
+            .iter()
+            .all(|f| fmt_is_hashable(registry, &f.value, local_names, known, visiting)),
+        ContainerFormat::Enum(variants, _) => variants.values().all(|v| {
+            variant_is_hashable(registry, &v.value, local_names, known, visiting)
+        }),
+    };
+
+    visiting.remove(name);
+
+    if result {
+        known.insert(name.clone());
+    }
+
+    result
 }
 
-fn variant_can_be_hashable(
-    format: &VariantFormat,
+fn variant_is_hashable(
     registry: &Registry,
-    known: &mut BTreeSet<String>,
-    container: &Vec<&QualifiedTypeName>,
+    format: &VariantFormat,
     local_names: &BTreeSet<&str>,
+    known: &mut BTreeSet<String>,
+    visiting: &mut BTreeSet<String>,
 ) -> bool {
     match format {
         VariantFormat::Variable(_) => false,
         VariantFormat::Unit => true,
         VariantFormat::NewType(fmt) => {
-            fmt_can_be_hashable(fmt, registry, known, container, local_names)
+            fmt_is_hashable(registry, fmt, local_names, known, visiting)
         }
-        // Enum associated values are separate parameters, not a Swift tuple,
-        // so each element is checked individually.
         VariantFormat::Tuple(fmts) => fmts
             .iter()
-            .all(|f| fmt_can_be_hashable(f, registry, known, container, local_names)),
-        VariantFormat::Struct(nameds) => nameds
+            .all(|f| fmt_is_hashable(registry, f, local_names, known, visiting)),
+        VariantFormat::Struct(fields) => fields
             .iter()
-            .all(|n| fmt_can_be_hashable(&n.value, registry, known, container, local_names)),
+            .all(|f| fmt_is_hashable(registry, &f.value, local_names, known, visiting)),
     }
 }
 
-fn fmt_can_be_hashable(
-    format: &Format,
+fn fmt_is_hashable(
     registry: &Registry,
-    known: &mut BTreeSet<String>,
-    container: &Vec<&QualifiedTypeName>,
+    format: &Format,
     local_names: &BTreeSet<&str>,
+    known: &mut BTreeSet<String>,
+    visiting: &mut BTreeSet<String>,
 ) -> bool {
     match format {
         Format::TypeName(qtn) => {
-            if container.contains(&qtn) {
-                // Cycle to the currently evaluated struct: assume hashable.
-                true
-            }else if local_names.contains(qtn.name.as_str()) {
-                // Same-module type: only hashable if already proven so.
-                let mut subs = container.clone();
-                subs.push(qtn);
-                container_can_be_hashable(registry, known, &subs, local_names)
-            } else {
-                // External type: assume hashable.
-                true
-            }
+            check_type_hashable(registry, qtn, local_names, known, visiting)
         }
-        // Void is not Hashable
         Format::Bool
         | Format::I8
         | Format::I16
@@ -251,23 +258,20 @@ fn fmt_can_be_hashable(
         | Format::Str
         | Format::Bytes
         | Format::Uuid => true,
+        Format::Variable(_) | Format::Unit => false,
         Format::Option(inner)
         | Format::Set(inner)
         | Format::Seq(inner)
         | Format::TupleArray { content: inner, .. } => {
-            fmt_can_be_hashable(inner, registry, known, container, local_names)
+            fmt_is_hashable(registry, inner, local_names, known, visiting)
         }
-        Format::Variable(_)
-        | Format::Unit  // Void does not conform to Hashable in Swift
-        => false,
-         // [K: V] is Hashable iff K is hashable and V is hashable
         Format::Map { key, value } => {
-            fmt_can_be_hashable(key,registry,  known, container, local_names) &&
-            fmt_can_be_hashable(value, registry, known, container, local_names)
-        },
-        // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
+            fmt_is_hashable(registry, key, local_names, known, visiting)
+                && fmt_is_hashable(registry, value, local_names, known, visiting)
+        }
         Format::Tuple(formats) => {
-            formats.len() == 1 && fmt_can_be_hashable(&formats[0], registry, known, container, local_names)
+            formats.len() == 1
+                && fmt_is_hashable(registry, &formats[0], local_names, known, visiting)
         }
     }
 }
