@@ -3,7 +3,8 @@
 set windows-shell := ["pwsh", "-c"]
 
 # Extract the workspace version from Cargo.toml
-version := `grep -m1 '^version' Cargo.toml | sed 's/version = "\(.*\)"/\1/'`
+version := `grep -m1 '^version' crates/facet_generate/Cargo.toml | sed 's/version = "\(.*\)"/\1/'`
+attrs-version := `grep -m1 '^version' crates/facet-generate-attrs/Cargo.toml | sed 's/version = "\(.*\)"/\1/'`
 
 # default target for local development
 default: dev
@@ -71,11 +72,18 @@ update-rust-deps:
     cargo upgrade --incompatible allow
     cargo update
 
-# publish both crates to crates.io in dependency order, then tag and push
+# publish the attribute macro crate independently (only needed when it changes)
+# Note: run `cargo login` first if you haven't already
+publish-attrs:
+    @echo '{{ style("command") }}publish facet-generate-attrs v{{ attrs-version }}:{{ NORMAL }}'
+    cargo publish -p facet-generate-attrs
+    git tag -a "facet-generate-attrs-v{{ attrs-version }}" -m "Release facet-generate-attrs v{{ attrs-version }}"
+    git push origin "facet-generate-attrs-v{{ attrs-version }}"
+
+# publish the main crate to crates.io, then tag and push
 # Note: run `cargo login` first if you haven't already
 publish:
     @echo '{{ style("command") }}publish v{{ version }}:{{ NORMAL }}'
-    cargo publish -p facet-generate-attrs
     cargo publish -p facet_generate
-    git tag -a "v{{ version }}" -m "Release v{{ version }}"
-    git push origin "v{{ version }}"
+    git tag -a "facet-generate-v{{ version }}" -m "Release facet-generate v{{ version }}"
+    git push origin "facet-generate-v{{ version }}"

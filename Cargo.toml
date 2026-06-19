@@ -3,7 +3,6 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.17.1"
 authors = ["Red Badger Consulting Limited"]
 repository = "https://github.com/redbadger/facet-generate"
 license = "Apache-2.0"
@@ -15,4 +14,4 @@ rust-version = "1.90"
 anyhow = "1.0.102"
 expect-test = "1.5.1"
 facet = "=0.44"
-facet-generate-attrs = { path = "crates/facet-generate-attrs", version = "0.17.1" }
+facet-generate-attrs = { path = "crates/facet-generate-attrs", version = "0.17" }
