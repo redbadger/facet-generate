@@ -625,6 +625,23 @@ fn struct_with_map_fields() {
 }
 
 #[test]
+fn struct_with_map_field_with_non_hashable_value_is_rejected() {
+    // The key (String) is Hashable, but the value is a multi-element native
+    // tuple, which is not Hashable in Swift.
+    #[derive(Facet)]
+    struct MyStruct {
+        map: BTreeMap<String, (i32, i32)>,
+    }
+
+    let error = emit!(MyStruct as Swift).unwrap_err();
+
+    assert!(
+        error.to_string().contains("Map value type is not Hashable"),
+        "expected a Map-value hashability error, got: {error}"
+    );
+}
+
+#[test]
 fn struct_with_hashset_field() {
     // NOTE: HashSet<T> now maps to Set<T> in Kotlin with the new Format::Set variant.
     // This preserves the uniqueness constraint and provides better type safety.
@@ -924,6 +941,78 @@ fn type_in_root_and_named_namespace() {
         public init(child: Child, otherChild: Other.Child) {
             self.child = child
             self.otherChild = otherChild
+        }
+    }
+    ");
+}
+
+#[test]
+fn type_in_root_and_map_in_named_namespace() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    mod other {
+        use crate as fg;
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "other")]
+        pub struct Child {
+            value: std::collections::HashMap<Key, Value>,
+        }
+        #[derive(PartialEq, Eq, Hash, Facet)]
+        #[facet(fg::namespace = "other")]
+        pub struct Key(String);
+        #[derive(Facet)]
+        #[facet(fg::namespace = "other")]
+        pub struct Value(i32);
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        other_map: other::Child,
+    }
+
+    let (other_module, root_module) = emit_two_modules!(SwiftCodeGenerator, Parent, "root");
+
+    // Snapshot the "other" module - types in named namespace should render with bare names internally
+    insta::assert_snapshot!(other_module, @r"
+    public struct Child {
+        public var value: [Key: Value]
+
+        public init(value: [Key: Value]) {
+            self.value = value
+        }
+    }
+
+    public struct Key {
+        public var value: String
+
+        public init(value: String) {
+            self.value = value
+        }
+    }
+
+    public struct Value {
+        public var value: Int32
+
+        public init(value: Int32) {
+            self.value = value
+        }
+    }
+    ");
+
+    // Snapshot the "root" module - references to external namespace should be prefixed
+    insta::assert_snapshot!(root_module, @r"
+    import Other
+
+    public struct Parent {
+        public var otherMap: Other.Child
+
+        public init(otherMap: Other.Child) {
+            self.otherMap = otherMap
         }
     }
     ");

@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use crate::{
     generation::{CodeGeneratorConfig, bincode::BincodePlugin, plugin::EmitterPlugin},
-    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
+    reflection::format::{ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName},
 };
 
 use super::*;
@@ -530,5 +530,335 @@ fn test_mutual_recursion_equatable() {
     assert!(
         output.contains("public struct StructB: Hashable, Equatable {"),
         "StructB should be hashable and equatable:\n{output}"
+    );
+}
+
+#[test]
+fn test_named_namespace_map_key_value_are_hashable() {
+    let config = CodeGeneratorConfig::new("other".to_string());
+
+    let child = ContainerFormat::Struct(
+        vec![Named {
+            name: "value".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "other".to_string(),
+                    "Key".to_string(),
+                ))),
+                value: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "other".to_string(),
+                    "Value".to_string(),
+                ))),
+            },
+        }],
+        Doc::new(),
+    );
+    let key = ContainerFormat::NewTypeStruct(Box::new(Format::Str), Doc::new());
+    let value = ContainerFormat::NewTypeStruct(Box::new(Format::I32), Doc::new());
+
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Child".to_string()),
+        child,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Key".to_string()),
+        key,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Value".to_string()),
+        value,
+    );
+
+    let output = generate(&config, vec![], &registry);
+
+    assert!(
+        output.contains("public var value: [Key: Value]"),
+        "same-module map key/value should render with bare names and not be rejected as non-Hashable:\n{output}"
+    );
+}
+
+#[test]
+fn test_named_namespace_struct_implements_hashable_and_equatable() {
+    let config = CodeGeneratorConfig::new("other".to_string());
+
+    let parent = ContainerFormat::Struct(
+        vec![Named {
+            name: "child".to_string(),
+            doc: Doc::new(),
+            value: Format::TypeName(QualifiedTypeName::namespaced(
+                "other".to_string(),
+                "Child".to_string(),
+            )),
+        }],
+        Doc::new(),
+    );
+    let child = ContainerFormat::NewTypeStruct(Box::new(Format::Str), Doc::new());
+
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Parent".to_string()),
+        parent,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Child".to_string()),
+        child,
+    );
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct Parent: Hashable, Equatable {"),
+        "Parent referencing a same-module Hashable type should be Hashable, Equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct Child: Hashable, Equatable {"),
+        "Child in a named namespace should be Hashable, Equatable:\n{output}"
+    );
+}
+
+/// Builds the post-split `other` registry: `Child { value: [Key: Value] }`
+/// with `Key(String)` and `Value(i32)`, all in namespace `other`.
+fn other_namespace_map_registry() -> Registry {
+    let child = ContainerFormat::Struct(
+        vec![Named {
+            name: "value".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "other".to_string(),
+                    "Key".to_string(),
+                ))),
+                value: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "other".to_string(),
+                    "Value".to_string(),
+                ))),
+            },
+        }],
+        Doc::new(),
+    );
+    let key = ContainerFormat::NewTypeStruct(Box::new(Format::Str), Doc::new());
+    let value = ContainerFormat::NewTypeStruct(Box::new(Format::I32), Doc::new());
+
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Child".to_string()),
+        child,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Key".to_string()),
+        key,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Value".to_string()),
+        value,
+    );
+    registry
+}
+
+#[test]
+fn test_compute_hashable_types_covers_named_namespace() {
+    let registry = other_namespace_map_registry();
+
+    let hashable = compute_hashable_types(&registry);
+
+    for name in ["Child", "Key", "Value"] {
+        assert!(
+            hashable.contains(&QualifiedTypeName::namespaced(
+                "other".to_string(),
+                name.to_string()
+            )),
+            "other::{name} should be computed as hashable, got {hashable:?}"
+        );
+    }
+}
+
+#[test]
+fn test_compute_hashable_types_is_collision_safe() {
+    let root_child = ContainerFormat::Struct(
+        vec![Named {
+            name: "x".to_string(),
+            doc: Doc::new(),
+            value: Format::U32,
+        }],
+        Doc::new(),
+    );
+    // A multi-element native tuple is not Hashable in Swift.
+    let other_child = ContainerFormat::Struct(
+        vec![Named {
+            name: "pair".to_string(),
+            doc: Doc::new(),
+            value: Format::Tuple(vec![Format::U32, Format::U32]),
+        }],
+        Doc::new(),
+    );
+
+    let mut registry = Registry::new();
+    registry.insert(QualifiedTypeName::root("Child".to_string()), root_child);
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Child".to_string()),
+        other_child,
+    );
+
+    let hashable = compute_hashable_types(&registry);
+
+    assert!(
+        hashable.contains(&QualifiedTypeName::root("Child".to_string())),
+        "root Child (scalar field) should be hashable: {hashable:?}"
+    );
+    assert!(
+        !hashable.contains(&QualifiedTypeName::namespaced(
+            "other".to_string(),
+            "Child".to_string()
+        )),
+        "other::Child (tuple field) should not be hashable; same bare name must not leak: {hashable:?}"
+    );
+}
+
+#[test]
+fn test_compute_hashable_types_assumes_external_hashable() {
+    let parent = ContainerFormat::Struct(
+        vec![Named {
+            name: "m".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "external".to_string(),
+                    "Key".to_string(),
+                ))),
+                value: Box::new(Format::Str),
+            },
+        }],
+        Doc::new(),
+    );
+
+    let mut registry = Registry::new();
+    registry.insert(QualifiedTypeName::root("Parent".to_string()), parent);
+
+    let hashable = compute_hashable_types(&registry);
+
+    assert!(
+        hashable.contains(&QualifiedTypeName::root("Parent".to_string())),
+        "Parent keyed by an absent external type should be hashable: {hashable:?}"
+    );
+}
+
+#[test]
+fn test_non_hashable_local_named_map_key_is_rejected() {
+    let config = CodeGeneratorConfig::new("other".to_string());
+
+    let child = ContainerFormat::Struct(
+        vec![Named {
+            name: "m".to_string(),
+            doc: Doc::new(),
+            value: Format::Map {
+                key: Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                    "other".to_string(),
+                    "Bad".to_string(),
+                ))),
+                value: Box::new(Format::Str),
+            },
+        }],
+        Doc::new(),
+    );
+    let bad = ContainerFormat::Struct(
+        vec![Named {
+            name: "pair".to_string(),
+            doc: Doc::new(),
+            value: Format::Tuple(vec![Format::U32, Format::U32]),
+        }],
+        Doc::new(),
+    );
+
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Child".to_string()),
+        child,
+    );
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Bad".to_string()),
+        bad,
+    );
+
+    let generator = SwiftCodeGenerator::new(&config);
+    let mut output = Vec::new();
+    let result = generator.output(&mut output, &registry);
+
+    assert!(
+        result.is_err(),
+        "a local Named map key that is not Hashable must be rejected"
+    );
+}
+
+#[test]
+fn test_self_referential_named_type_is_hashable() {
+    let node = ContainerFormat::Struct(
+        vec![Named {
+            name: "next".to_string(),
+            doc: Doc::new(),
+            value: Format::Option(Box::new(Format::TypeName(QualifiedTypeName::namespaced(
+                "other".to_string(),
+                "Node".to_string(),
+            )))),
+        }],
+        Doc::new(),
+    );
+
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("other".to_string(), "Node".to_string()),
+        node,
+    );
+
+    let hashable = compute_hashable_types(&registry);
+
+    assert!(
+        hashable.contains(&QualifiedTypeName::namespaced(
+            "other".to_string(),
+            "Node".to_string()
+        )),
+        "a self-referential Named type should be hashable via cycle optimism: {hashable:?}"
+    );
+}
+
+#[test]
+fn test_named_namespace_map_struct_implements_hashable_with_plugin() {
+    let config = CodeGeneratorConfig::new("other".to_string());
+    let registry = other_namespace_map_registry();
+
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(
+        output.contains("public struct Child: Hashable, Equatable {"),
+        "Child with a [Key: Value] map of same-module Hashable types should be Hashable, Equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct Key: Hashable, Equatable {"),
+        "Key should be Hashable, Equatable:\n{output}"
+    );
+    assert!(
+        output.contains("public struct Value: Hashable, Equatable {"),
+        "Value should be Hashable, Equatable:\n{output}"
+    );
+}
+
+#[test]
+fn test_named_namespace_map_struct_omits_conformance_without_plugin() {
+    let config = CodeGeneratorConfig::new("other".to_string());
+    let registry = other_namespace_map_registry();
+
+    let output = generate(&config, vec![], &registry);
+
+    // Conformance display is intentionally gated on an active serialization
+    // plugin: plain generation emits bare declarations even for types that
+    // qualify. Changing this should be a deliberate decision, not silent drift.
+    assert!(
+        output.contains("public struct Child {"),
+        "without a plugin, Child should render bare (no conformance suffix):\n{output}"
+    );
+    assert!(
+        !output.contains("public struct Child: "),
+        "without a plugin, Child should not declare any conformance:\n{output}"
     );
 }
