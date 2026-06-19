@@ -185,6 +185,7 @@ impl From<&Variant> for Doc {
 /// `Format::TypeName` closes the loop by referencing back to a `ContainerFormat` in the registry.
 #[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
 #[serde(rename_all = "UPPERCASE")]
+#[non_exhaustive]
 pub enum Format {
     /// A placeholder for a format not yet known at construction time. `Format::unknown()` creates
     /// one of these, and it is also the `Default` value for `Format`. Fields start as variables

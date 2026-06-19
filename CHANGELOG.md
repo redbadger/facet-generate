@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.17.1] - 2026-06-19
+
+### 🚀 Features
+
+- feat(uuid): Add native UUID support for Kotlin, Swift, TypeScript, and C# [#100](https://github.com/redbadger/facet-generate/pull/100)
+
+### 🐛 Bug Fixes
+
+- fix(typescript): Fix import path when using `fg::namespace="other"` [#99](https://github.com/redbadger/facet-generate/pull/99)
+- fix(swift): `Map` is `Hashable` when its key is `Hashable` and its value is `Hashable` [#102](https://github.com/redbadger/facet-generate/pull/102)
+- fix(swift): Generate both `Hashable` and `Equatable` conformances when possible [#102](https://github.com/redbadger/facet-generate/pull/102)
+- fix(swift): Check all `TypeName` fields for `Hashable`/`Equatable` regardless of declaration order [#102](https://github.com/redbadger/facet-generate/pull/102)
+
+### ⚙️ Miscellaneous Tasks
+
+- chore: Mark `Format` and `Feature` as `#[non_exhaustive]` so future variants are not breaking changes
+
+### 📝 Documentation
+
+- Updated README output snippets to reflect current generated code [#103](https://github.com/redbadger/facet-generate/pull/103)
+
 ## [0.17.0] - 2026-04-19
 
 This is a major release that introduces a new **plugin-based emitter architecture**, removes Java code generation entirely, drops Deno support for TypeScript, and brings significant improvements to Swift native type generation.
