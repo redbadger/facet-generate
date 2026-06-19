@@ -76,6 +76,8 @@ update-rust-deps:
 publish:
     @echo '{{ style("command") }}publish v{{ version }}:{{ NORMAL }}'
     cargo publish -p facet-generate-attrs
+    cp ./README.md ./crates/facet_generate/README.md
     cargo publish -p facet_generate
+    rm ./crates/facet_generate/README.md
     git tag -a "v{{ version }}" -m "Release v{{ version }}"
     git push origin "v{{ version }}"

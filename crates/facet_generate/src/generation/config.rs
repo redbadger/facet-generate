@@ -69,6 +69,7 @@ pub struct CodeGeneratorConfig {
 /// Discovered automatically by [`CodeGeneratorConfig::update_from`] and
 /// consumed by [`SourceInstaller`] implementations.
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Ord, PartialOrd, Serialize)]
+#[non_exhaustive]
 pub enum Feature {
     BigInt,
     Bytes,

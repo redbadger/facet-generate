@@ -24,19 +24,19 @@ thiserror = "2.0"
 
 [dev-dependencies]
 bincode = "=1"
-chrono = "0.4.44"
+chrono = "0.4.45"
 difficient = "0.1.0"
 anyhow.workspace = true
 expect-test.workspace = true
 facet = { workspace = true, features = ["chrono", "url", "bytes", "uuid"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 ignore = "0.4"
-insta = { version = "1.47.2", features = ["yaml", "json"] }
+insta = { version = "1.48.0", features = ["yaml", "json"] }
 maplit = "1.0.2"
 strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"
 url = "2.5.8"
-bytes = "1.11"
+bytes = "1.12"
 
 [features]
 default = ["generate"]
