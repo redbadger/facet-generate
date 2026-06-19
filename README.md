@@ -1,6 +1,6 @@
 # `facet_generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
-Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, and TypeScript. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
+Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, TypeScript, and C#. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
 ## Usage
 
@@ -73,16 +73,29 @@ kotlin::Installer::new("com.example", &out_dir)
 typescript::Installer::new("example", &out_dir)
     .plugin(BincodePlugin)
     .generate(&registry)?;
+
+// C#
+csharp::Installer::new("Example", &out_dir)
+    .plugin(BincodePlugin)
+    .generate(&registry)?;
 ```
 
-With `BincodePlugin`, the generated types include `serialize` and `deserialize` methods. For the types above, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly):
+With `BincodePlugin`, the generated types include `serialize` and `deserialize` methods. For the types above, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly).
+
+> [!NOTE]
+> The code blocks below are generated from the real output of the code
+> generators and kept in sync by the `readme` integration test
+> (`crates/facet_generate/tests/readme.rs`). Do not edit them by hand — run
+> `UPDATE_EXPECT=1 cargo test -p facet_generate --test readme` to refresh them.
 
 ### Swift
 
+<!-- generated:swift:start -->
+
 ```swift
-public struct HttpHeader: Hashable {
-    @Indirect public var name: String
-    @Indirect public var value: String
+public struct HttpHeader: Hashable, Equatable {
+    public var name: String
+    public var value: String
 
     public init(name: String, value: String) {
         self.name = name
@@ -121,7 +134,11 @@ public struct HttpHeader: Hashable {
 }
 ```
 
+<!-- generated:swift:end -->
+
 ### Kotlin
+
+<!-- generated:kotlin:start -->
 
 ```kotlin
 data class HttpHeader(
@@ -166,25 +183,88 @@ data class HttpHeader(
 }
 ```
 
+<!-- generated:kotlin:end -->
+
 ### TypeScript
+
+<!-- generated:typescript:start -->
 
 ```typescript
 export class HttpHeader {
-  constructor (public name: str, public value: str) {
-  }
+    constructor (public name: str, public value: str) {
+    }
 
-  public serialize(serializer: Serializer): void {
-    serializer.serializeStr(this.name);
-    serializer.serializeStr(this.value);
-  }
+    public serialize(serializer: Serializer): void {
+        serializer.serializeStr(this.name);
+        serializer.serializeStr(this.value);
+    }
 
-  static deserialize(deserializer: Deserializer): HttpHeader {
-    const name = deserializer.deserializeStr();
-    const value = deserializer.deserializeStr();
-    return new HttpHeader(name,value);
-  }
+    static deserialize(deserializer: Deserializer): HttpHeader {
+        const name = deserializer.deserializeStr();
+        const value = deserializer.deserializeStr();
+        return new HttpHeader(name,value);
+    }
 }
 ```
+
+<!-- generated:typescript:end -->
+
+### C#
+
+<!-- generated:csharp:start -->
+
+```csharp
+public partial class HttpHeader : ObservableObject, IFacetSerializable, IFacetDeserializable<HttpHeader> {
+    [ObservableProperty]
+    private string _name;
+    [ObservableProperty]
+    private string _value;
+
+    public void Serialize(ISerializer serializer)
+    {
+        serializer.IncreaseContainerDepth();
+        serializer.SerializeStr(Name);
+        serializer.SerializeStr(Value);
+        serializer.DecreaseContainerDepth();
+    }
+
+    public static HttpHeader Deserialize(IDeserializer deserializer)
+    {
+        deserializer.IncreaseContainerDepth();
+        var name = deserializer.DeserializeStr();
+        var value = deserializer.DeserializeStr();
+        deserializer.DecreaseContainerDepth();
+        return new HttpHeader {
+            Name = name,
+            Value = value,
+        };
+    }
+
+    public byte[] BincodeSerialize()
+    {
+        var serializer = new BincodeSerializer();
+        Serialize(serializer);
+        return serializer.GetBytes();
+    }
+
+    public static HttpHeader BincodeDeserialize(byte[] input)
+    {
+        if (input is null)
+        {
+            throw new DeserializationError("Cannot deserialize null array");
+        }
+        var deserializer = new BincodeDeserializer(input);
+        var value = Deserialize(deserializer);
+        if (deserializer.GetBufferOffset() < input.Length)
+        {
+            throw new DeserializationError("Some input bytes were not read");
+        }
+        return value;
+    }
+}
+```
+
+<!-- generated:csharp:end -->
 
 ## Facet attributes
 
@@ -195,6 +275,7 @@ Types that are explicitly annotated as belonging to a specific namespace are emi
 * In Swift, namespaces become a separate target in the current package
 * In Kotlin, they are emitted as a child namespace of the package's namespace
 * In TypeScript they are emitted alongside as a separate `.ts` file
+* In C#, each namespace becomes a file-scoped `namespace` written to a directory matching the dotted module path (e.g. `Company.Models.Shared`)
 
 Notes:
 
@@ -363,11 +444,11 @@ struct MyStruct {
 }
 ```
 
-With `#[facet(transparent)]`, `Inner` is unwrapped and `MyStruct.inner` is generated as a plain `i32` / `Int32` / `number` in the target language.
+With `#[facet(transparent)]`, `Inner` is unwrapped and `MyStruct.inner` is generated as a plain `Int32` (Swift) / `Int` (Kotlin) / `number` (TypeScript) / `int` (C#) in the target language.
 
 ### Bytes
 
-In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `Uint8Array` in TypeScript) for `Vec<u8>` and `&'a [u8]`, use the `#[facet(fg::bytes)]` attribute:
+In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `Uint8Array` in TypeScript, `byte[]` in C#) for `Vec<u8>` and `&'a [u8]`, use the `#[facet(fg::bytes)]` attribute:
 
 ```rust
 #[derive(Facet)]
