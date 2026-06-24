@@ -439,15 +439,8 @@ impl Emitter<Swift> for Format {
                         ),
                     ));
                 }
-                if !is_hashable(value, lang) {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        formatdoc!(
-                            "Map value type is not Hashable in Swift; \
-                             native tuples and dictionaries do not conform to Hashable"
-                        ),
-                    ));
-                }
+                // Swift requires K: Hashable for [K: V] to compile, but V need not be Hashable.
+                // If the containing type requires Hashable, that is gated by the all_hashable check.
                 write!(w, "[")?;
                 key.write(w, lang)?;
                 write!(w, ": ")?;

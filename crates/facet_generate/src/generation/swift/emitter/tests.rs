@@ -625,20 +625,25 @@ fn struct_with_map_fields() {
 }
 
 #[test]
-fn struct_with_map_field_with_non_hashable_value_is_rejected() {
+fn struct_with_map_field_with_non_hashable_value_generates_without_hashable() {
     // The key (String) is Hashable, but the value is a multi-element native
-    // tuple, which is not Hashable in Swift.
+    // tuple, which is not Hashable in Swift. The struct should still generate
+    // — it just won't have Hashable conformance.
     #[derive(Facet)]
     struct MyStruct {
         map: BTreeMap<String, (i32, i32)>,
     }
 
-    let error = emit!(MyStruct as Swift).unwrap_err();
+    let actual = emit!(MyStruct as Swift).unwrap();
+    insta::assert_snapshot!(actual, @r"
+    public struct MyStruct {
+        public var map: [String: (Int32, Int32)]
 
-    assert!(
-        error.to_string().contains("Map value type is not Hashable"),
-        "expected a Map-value hashability error, got: {error}"
-    );
+        public init(map: [String: (Int32, Int32)]) {
+            self.map = map
+        }
+    }
+    ");
 }
 
 #[test]
