@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.17.2] - 2026-06-25
+
+### 🐛 Bug Fixes
+
+- fix(swift): Types containing a map field are now only marked as `Hashable` when both the map key and value are `Hashable`; previously a non-hashable value type was not checked, causing the containing type to be incorrectly marked as conformant [#105](https://github.com/redbadger/facet-generate/pull/105)
+- fix(swift): Types in named namespaces are now correctly recognised as `Hashable` [#105](https://github.com/redbadger/facet-generate/pull/105)
+
+### ⚙️ Miscellaneous Tasks
+
+- chore: Update Rust dependencies
+
 ## [0.17.1] - 2026-06-19
 
 ### 🚀 Features
