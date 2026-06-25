@@ -72,7 +72,9 @@ use crate::{
         plugin::{EmitContext, EmitterPlugin},
         swift::generator::{compute_equatable_types, compute_hashable_types},
     },
-    reflection::format::{ContainerFormat, Doc, Format, Named, Namespace, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+    },
 };
 
 /// Language tag for Swift code generation.
@@ -90,11 +92,13 @@ use crate::{
 pub struct Swift {
     /// The code-generator configuration for the current module.
     pub(crate) config: CodeGeneratorConfig,
-    /// Type names (root-namespace) that can synthesize `Hashable` conformance.
-    pub(crate) hashable_types: BTreeSet<String>,
-    /// Type names (root-namespace) that can synthesize or manually implement
-    /// `Equatable` conformance.
-    pub(crate) equatable_types: BTreeSet<String>,
+    /// Qualified names of every type defined in this module's registry.
+    pub(crate) local_types: BTreeSet<QualifiedTypeName>,
+    /// Local types that can synthesize `Hashable` conformance.
+    pub(crate) hashable_types: BTreeSet<QualifiedTypeName>,
+    /// Local types that can synthesize or manually implement `Equatable`
+    /// conformance.
+    pub(crate) equatable_types: BTreeSet<QualifiedTypeName>,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
 }
 
@@ -109,6 +113,7 @@ impl Swift {
     pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
         Self {
             config: config.clone(),
+            local_types: registry.keys().cloned().collect(),
             hashable_types: compute_hashable_types(registry),
             equatable_types: compute_equatable_types(registry),
             plugins: vec![],
@@ -151,10 +156,11 @@ pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
             is_hashable(key, lang) && is_hashable(value, lang)
         },
 
-        Format::TypeName(qtn) => match &qtn.namespace {
-            Namespace::Root => lang.hashable_types.contains(&qtn.name),
-            Namespace::Named(_) => true, // external — assume hashable
-        },
+        // External types (absent from this module's registry) are assumed
+        // hashable; local types must have been computed as hashable.
+        Format::TypeName(qtn) => {
+            !lang.local_types.contains(qtn) || lang.hashable_types.contains(qtn)
+        }
 
         Format::Bool
         | Format::I8
@@ -231,10 +237,11 @@ fn needs_indirect(format: &Format, struct_name: &str) -> bool {
 
 fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
     match format {
-        Format::TypeName(qtn) => match &qtn.namespace {
-            Namespace::Root => lang.equatable_types.contains(&qtn.name),
-            Namespace::Named(_) => true,
-        },
+        // External types (absent from this module's registry) are assumed
+        // equatable; local types must have been computed as equatable.
+        Format::TypeName(qtn) => {
+            !lang.local_types.contains(qtn) || lang.equatable_types.contains(qtn)
+        }
         Format::Variable(_) | Format::Unit => false,
         Format::Bool
         | Format::I8
@@ -358,17 +365,23 @@ impl Emitter<Swift> for Container<'_> {
 // Format emitter
 // ---------------------------------------------------------------------------
 
+/// Renders a type reference for display: same-module and root-namespace types
+/// emit a bare name, while external namespaces are prefixed with the namespace
+/// in `UpperCamelCase` (e.g. `Other.Child`).
+fn render_type_name(qtn: &QualifiedTypeName, config: &CodeGeneratorConfig) -> String {
+    match &qtn.namespace {
+        Namespace::Root => qtn.name.clone(),
+        Namespace::Named(ns) if ns == config.module_name() => qtn.name.clone(),
+        Namespace::Named(ns) => format!("{}.{}", heck::AsUpperCamelCase(ns), qtn.name),
+    }
+}
+
 impl Emitter<Swift> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         match &self {
             Self::Variable(_variable) => unreachable!("placeholders should not get this far"),
             Self::TypeName(qualified_type_name) => {
-                write!(
-                    w,
-                    "{ty}",
-                    ty = qualified_type_name
-                        .format(|ns| heck::AsUpperCamelCase(ns).to_string(), ".")
-                )
+                write!(w, "{}", render_type_name(qualified_type_name, &lang.config))
             }
             Self::Unit => write!(w, "Void"),
             Self::Bool => write!(w, "Bool"),
@@ -426,6 +439,8 @@ impl Emitter<Swift> for Format {
                         ),
                     ));
                 }
+                // Swift requires K: Hashable for [K: V] to compile, but V need not be Hashable.
+                // If the containing type requires Hashable, that is gated by the all_hashable check.
                 write!(w, "[")?;
                 key.write(w, lang)?;
                 write!(w, ": ")?;
