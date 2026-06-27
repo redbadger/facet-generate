@@ -47,16 +47,16 @@ use std::{
     sync::Arc,
 };
 
-use heck::ToUpperCamelCase;
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter, PackageLocation,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
-        plugin::{EmitContext, EmitterPlugin, VariantInfo, collect_from_plugins},
+        plugin::{EmitContext, EmitterPlugin, collect_from_plugins},
     },
-    reflection::format::{ContainerFormat, Doc, Format, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Doc, EnumTagging, Format, Named, VariantFormat},
 };
 
 /// Language tag for TypeScript code generation.
@@ -206,8 +206,8 @@ impl Emitter<TypeScript> for Container<'_> {
                 let ctx = EmitContext::top_level(self, &lang.config);
                 output_struct_or_variant(w, &ctx, name, fields, doc, lang)
             }
-            ContainerFormat::Enum(variants, doc) => {
-                output_enum_container(w, self, name, variants, doc, lang)
+            ContainerFormat::Enum(variants, tagging, doc) => {
+                output_enum_container(w, self, name, variants, tagging, doc, lang)
             }
         }
     }
@@ -304,15 +304,9 @@ fn output_struct_or_variant<W: IndentWrite>(
     doc: &Doc,
     lang: &TypeScript,
 ) -> Result<()> {
-    let variant_base = ctx.variant.as_ref().map(|v| v.parent_name);
-
     writeln!(w)?;
     doc.write(w, lang)?;
-    if let Some(base) = variant_base {
-        write!(w, "export class {base}Variant{name} extends {base} ")?;
-    } else {
-        write!(w, "export class {name} ")?;
-    }
+    write!(w, "export class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
     let args: Vec<String> = fields
@@ -325,13 +319,9 @@ fn output_struct_or_variant<W: IndentWrite>(
     let args = args.join(", ");
     write!(w, "constructor ({args}) ")?;
     {
-        let mut w = w.block(Newlines::BOTH)?;
-        if variant_base.is_some() {
-            writeln!(w, "super();")?;
-        }
+        let _w = w.block(Newlines::BOTH)?;
     }
 
-    // Plugin type bodies (serialize / deserialize methods).
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, ctx)?;
     }
@@ -339,40 +329,167 @@ fn output_struct_or_variant<W: IndentWrite>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn output_variant<W: IndentWrite>(
+fn tag_field_name(tagging: &EnumTagging) -> &str {
+    match tagging {
+        EnumTagging::External => "kind",
+        EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
+    }
+}
+
+fn write_variant_type_expr<W: std::io::Write>(
     w: &mut W,
-    parent: &Container<'_>,
-    base: &str,
-    index: u32,
-    name: &str,
+    variant_name: &str,
     variant: &VariantFormat,
-    doc: &Doc,
+    tag_field: &str,
+    content_field: Option<&str>,
+    is_internal: bool,
     lang: &TypeScript,
 ) -> Result<()> {
-    let fields: Vec<Named<Format>> = match variant {
-        VariantFormat::Unit => Vec::new(),
-        VariantFormat::NewType(format) => {
-            vec![Named::new(format.as_ref(), "value".to_string())]
+    match variant {
+        VariantFormat::Unit => {
+            write!(w, r#"{{ {tag_field}: "{variant_name}" }}"#)?;
         }
-        VariantFormat::Tuple(formats) => formats
-            .iter()
-            .enumerate()
-            .map(|(i, f)| Named::new(f, format!("field{i}")))
-            .collect(),
-        VariantFormat::Struct(fields) => fields.clone(),
-        VariantFormat::Variable(_) => panic!("incorrect value"),
+        VariantFormat::NewType(inner) => {
+            let type_str = quote_type(inner, lang);
+            if let Some(content) = content_field {
+                write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: {type_str} }}"#)?;
+            } else if is_internal && matches!(inner.as_ref(), Format::TypeName(_)) {
+                write!(w, r#"{{ {tag_field}: "{variant_name}" }} & {type_str}"#)?;
+            } else {
+                write!(w, r#"{{ {tag_field}: "{variant_name}"; value: {type_str} }}"#)?;
+            }
+        }
+        VariantFormat::Tuple(formats) => {
+            if let Some(content) = content_field {
+                let types: Vec<String> = formats.iter().map(|f| quote_type(f, lang)).collect();
+                write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: [{}] }}"#, types.join(", "))?;
+            } else {
+                write!(w, r#"{{ {tag_field}: "{variant_name}""#)?;
+                for (i, f) in formats.iter().enumerate() {
+                    write!(w, "; field{i}: {}", quote_type(f, lang))?;
+                }
+                write!(w, " }}")?;
+            }
+        }
+        VariantFormat::Struct(fields) => {
+            if let Some(content) = content_field {
+                write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: {{ "#)?;
+                for field in fields {
+                    write!(w, "{}: {}; ", field.name, quote_type(&field.value, lang))?;
+                }
+                write!(w, "}} }}")?;
+            } else {
+                write!(w, r#"{{ {tag_field}: "{variant_name}""#)?;
+                for field in fields {
+                    write!(w, "; {}: {}", field.name, quote_type(&field.value, lang))?;
+                }
+                write!(w, " }}")?;
+            }
+        }
+        VariantFormat::Variable(_) => panic!("unexpected variable format"),
+    }
+    Ok(())
+}
+
+fn write_variant_constructor<W: std::io::Write>(
+    w: &mut W,
+    enum_name: &str,
+    variant_name: &str,
+    variant: &VariantFormat,
+    tag_field: &str,
+    content_field: Option<&str>,
+    is_internal: bool,
+    lang: &TypeScript,
+) -> Result<()> {
+    let fn_name = format!(
+        "{}{}",
+        enum_name.to_lower_camel_case(),
+        variant_name.to_upper_camel_case(),
+    );
+
+    let (params_str, object_str) = match variant {
+        VariantFormat::Unit => (
+            String::new(),
+            format!(r#"{{ {tag_field}: "{variant_name}" }}"#),
+        ),
+        VariantFormat::NewType(inner) => {
+            let type_str = quote_type(inner, lang);
+            let obj = if let Some(content) = content_field {
+                format!(r#"{{ {tag_field}: "{variant_name}", {content}: value }}"#)
+            } else if is_internal && matches!(inner.as_ref(), Format::TypeName(_)) {
+                format!(r#"{{ {tag_field}: "{variant_name}", ...value }}"#)
+            } else {
+                format!(r#"{{ {tag_field}: "{variant_name}", value }}"#)
+            };
+            (format!("value: {type_str}"), obj)
+        }
+        VariantFormat::Tuple(formats) => {
+            let params: Vec<String> = formats
+                .iter()
+                .enumerate()
+                .map(|(i, f)| format!("field{i}: {}", quote_type(f, lang)))
+                .collect();
+            let field_names: Vec<String> =
+                (0..formats.len()).map(|i| format!("field{i}")).collect();
+            let obj = if let Some(content) = content_field {
+                format!(
+                    r#"{{ {tag_field}: "{variant_name}", {content}: [{}] }}"#,
+                    field_names.join(", ")
+                )
+            } else {
+                format!(
+                    r#"{{ {tag_field}: "{variant_name}", {} }}"#,
+                    field_names.join(", ")
+                )
+            };
+            (params.join(", "), obj)
+        }
+        VariantFormat::Struct(fields) => {
+            let params: Vec<String> = fields
+                .iter()
+                .map(|f| format!("{}: {}", f.name, quote_type(&f.value, lang)))
+                .collect();
+            let field_names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+            let obj = if let Some(content) = content_field {
+                format!(
+                    r#"{{ {tag_field}: "{variant_name}", {content}: {{ {} }} }}"#,
+                    field_names.join(", ")
+                )
+            } else {
+                format!(
+                    r#"{{ {tag_field}: "{variant_name}", {} }}"#,
+                    field_names.join(", ")
+                )
+            };
+            (params.join(", "), obj)
+        }
+        VariantFormat::Variable(_) => panic!("unexpected variable format"),
     };
 
-    let variant_info = VariantInfo {
-        name,
-        index: index as usize,
-        format: variant,
-        fields: &fields,
-        parent_name: base,
-    };
-    let ctx = EmitContext::for_variant(parent, &lang.config, variant_info);
-    output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
+    writeln!(w, "export const {fn_name} = ({params_str}): {enum_name} => ({object_str});")?;
+    Ok(())
+}
+
+fn write_match_function<W: std::io::Write>(
+    w: &mut W,
+    name: &str,
+    variants: &BTreeMap<u32, Named<VariantFormat>>,
+    tag_field: &str,
+) -> Result<()> {
+    writeln!(w, "export function match{name}<R>(value: {name}, cases: {{")?;
+    for (_index, variant) in variants {
+        let vname = &variant.name;
+        writeln!(
+            w,
+            r#"    {vname}: (v: Extract<{name}, {{ {tag_field}: "{vname}" }}>) => R;"#
+        )?;
+    }
+    writeln!(w, "}}): R {{")?;
+    writeln!(
+        w,
+        r#"    return cases[value.{tag_field} as {name}["{tag_field}"]](value as never);"#
+    )?;
+    writeln!(w, "}}")
 }
 
 fn output_enum_container<W: IndentWrite>(
@@ -380,31 +497,43 @@ fn output_enum_container<W: IndentWrite>(
     container: &Container<'_>,
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
+    tagging: &EnumTagging,
     doc: &Doc,
     lang: &TypeScript,
 ) -> Result<()> {
+    let tag_field = tag_field_name(tagging);
+    let content_field: Option<&str> = match tagging {
+        EnumTagging::Adjacent { content, .. } => Some(content.as_str()),
+        _ => None,
+    };
+    let is_internal = matches!(tagging, EnumTagging::Internal { .. });
+
     writeln!(w)?;
     doc.write(w, lang)?;
-    write!(w, "export abstract class {name} ")?;
-    {
-        let mut w = w.block(Newlines::BOTH)?;
-        // Plugin type bodies (abstract serialize + static deserialize switch).
-        let ctx = EmitContext::top_level(container, &lang.config);
-        for plugin in lang.plugins() {
-            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
-        }
+
+    // 1. Union type alias
+    write!(w, "export type {name} =")?;
+    for (_index, variant) in variants {
+        writeln!(w)?;
+        write!(w, "    | ")?;
+        write_variant_type_expr(w, &variant.name, &variant.value, tag_field, content_field, is_internal, lang)?;
     }
-    for (index, variant) in variants {
-        output_variant(
-            w,
-            container,
-            name,
-            *index,
-            &variant.name,
-            &variant.value,
-            &variant.doc,
-            lang,
-        )?;
+    writeln!(w, ";")?;
+
+    // 2. Constructor helpers
+    for (_index, variant) in variants {
+        writeln!(w)?;
+        write_variant_constructor(w, name, &variant.name, &variant.value, tag_field, content_field, is_internal, lang)?;
+    }
+
+    // 3. Match function
+    writeln!(w)?;
+    write_match_function(w, name, variants, tag_field)?;
+
+    // 4. Plugin after_type hook (for standalone serialize/deserialize functions)
+    let ctx = EmitContext::top_level(container, &lang.config);
+    for plugin in lang.plugins() {
+        plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
     }
 
     Ok(())

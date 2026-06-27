@@ -300,7 +300,7 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
             write_variant_type_body(w, variant)
         } else {
             match ctx.container.format {
-                ContainerFormat::Enum(variants, _) => write_enum_type_body(w, ctx.name(), variants),
+                ContainerFormat::Enum(variants, _, _) => write_enum_type_body(w, ctx.name(), variants),
                 _ => write_struct_type_body(w, ctx.name(), &ctx.fields()),
             }
         }
@@ -745,7 +745,7 @@ mod tests {
         indent::{IndentConfig, IndentedWriter},
         plugin::EmitContext,
     };
-    use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, QualifiedTypeName};
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
         let mut cfg = CodeGeneratorConfig::new("test".to_string());
@@ -926,7 +926,7 @@ mod tests {
         variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -973,7 +973,7 @@ mod tests {
         );
 
         let name = QualifiedTypeName::root("Result".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,

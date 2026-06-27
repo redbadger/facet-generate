@@ -284,7 +284,7 @@ impl CodeGeneratorConfig {
                 entry.push(name.name.clone());
             }
 
-            if let ContainerFormat::Enum(variants, _) = format
+            if let ContainerFormat::Enum(variants, _, _) = format
                 && variants
                     .values()
                     .all(|v| matches!(v.value, VariantFormat::Unit))

@@ -912,6 +912,7 @@ fn nested_unit_enum() {
                         namespace: ROOT
                         name: MyUnit
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: MyUnit
@@ -928,6 +929,7 @@ fn nested_unit_enum() {
             C:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1003,6 +1005,7 @@ fn nested_enum_newtype_transparent_with_vec_of_u8_to_bytes() {
                   - BYTES
                   - U32
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: MyWrapper
@@ -1074,6 +1077,7 @@ fn nested_enum_newtype_transparent_with_str() {
                       - SEQ: STR
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: MyWrapper
@@ -1337,6 +1341,7 @@ fn enum_with_unit_variants() {
             Variant2:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1388,6 +1393,7 @@ fn enum_with_newtype_variants() {
             Variant7:
               - NEWTYPE: UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1425,6 +1431,7 @@ fn enum_with_newtype_variants_containing_user_defined_types() {
             Variant2:
               - NEWTYPE: U8
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1460,6 +1467,7 @@ fn enum_with_tuple_struct_variants() {
                   - I8
                   - U32
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1502,6 +1510,7 @@ fn enum_with_tuple_variants_containing_user_defined_types() {
                       namespace: ROOT
                       name: Inner
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1553,6 +1562,7 @@ fn enum_with_inline_struct_variants() {
                     namespace: ROOT
                     name: Inner
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1629,6 +1639,7 @@ fn enum_with_struct_variants_mixed_types() {
                           name: Inner
                       - []
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1663,6 +1674,7 @@ fn enum_with_struct_variant() {
                       - U8
                       - []
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1704,6 +1716,7 @@ fn struct_variant_with_only_opaque() {
             Ignore:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1726,6 +1739,7 @@ fn tuple_variant_with_only_opaque() {
             Ignore:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1776,6 +1790,7 @@ fn struct_variant_with_opaque() {
                       - U32
                       - []
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1799,6 +1814,7 @@ fn tuple_variant_with_opaque() {
               - TUPLE:
                   - STR
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1866,6 +1882,7 @@ fn enum_with_skip_serializing() {
             Variant3:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1912,6 +1929,7 @@ fn map_of_string_and_bool() {
                     KEY: STR
                     VALUE: BOOL
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -1934,6 +1952,7 @@ fn set_of_string() {
               - NEWTYPE:
                   SET: STR
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2111,6 +2130,7 @@ fn complex_map() {
                             SIZE: 4
                     VALUE: UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2244,6 +2264,7 @@ fn own_result_enum() {
             Timeout:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: HttpHeader
@@ -2288,6 +2309,7 @@ fn own_result_enum() {
                     namespace: ROOT
                     name: HttpError
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2337,6 +2359,7 @@ fn enum_rename() {
             Two:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2414,6 +2437,7 @@ fn enum_variant_rename() {
             Id:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2456,6 +2480,7 @@ fn enum_variant_rename_with_rename_all() {
             Id:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2501,6 +2526,7 @@ fn rename_all_enum() {
             someOtherVariant:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2528,6 +2554,7 @@ fn rename_all_enum_with_variant_rename_override() {
             someOtherVariant:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2678,6 +2705,7 @@ fn enum_struct_variant_field_rename() {
                       - STR
                       - []
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -2821,6 +2849,7 @@ fn tree_struct_with_mutual_recursion() {
                     ),
                 },
             },
+            External,
             Doc(
                 [],
             ),
@@ -2923,6 +2952,7 @@ fn tree_enum_with_mutual_recursion() {
                     ),
                 },
             },
+            External,
             Doc(
                 [],
             ),
@@ -3132,6 +3162,7 @@ fn enum_with_ref_variants() {
                     namespace: ROOT
                     name: Inner
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -3239,6 +3270,7 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
                     namespace: ROOT
                     name: (…)
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -3277,6 +3309,7 @@ fn enum_with_tuple_variant_of_user_types_in_a_mod() {
                       namespace: ROOT
                       name: Test2
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test1
@@ -3321,6 +3354,7 @@ fn enum_with_tuple_variant_of_lists_of_user_types() {
                         namespace: ROOT
                         name: Test2
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test1
@@ -3365,6 +3399,7 @@ fn enum_with_tuple_variant_of_option_of_user_types() {
                         namespace: ROOT
                         name: Test2
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test1
@@ -3414,6 +3449,7 @@ fn enum_with_tuple_variant_of_map_of_user_types() {
                           namespace: ROOT
                           name: Test2
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test1
@@ -3458,6 +3494,7 @@ fn enum_with_tuple_variant_of_set_of_user_types() {
                         namespace: ROOT
                         name: Test2
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test1
@@ -3500,6 +3537,7 @@ fn chrono_date_time() {
                       - STR
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: MyStruct

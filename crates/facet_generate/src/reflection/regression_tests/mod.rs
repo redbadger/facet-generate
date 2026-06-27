@@ -7,7 +7,7 @@
 //! Now they should all work correctly, demonstrating that the underlying issues have been resolved.
 
 use crate::reflection::RegistryBuilder;
-use crate::reflection::format::{ContainerFormat, Format, VariantFormat};
+use crate::reflection::format::{ContainerFormat, EnumTagging, Format, VariantFormat};
 
 #[cfg(test)]
 mod tests {
@@ -201,7 +201,7 @@ mod tests {
             },
         );
 
-        let enum_container = ContainerFormat::Enum(variants, Doc::new());
+        let enum_container = ContainerFormat::Enum(variants, EnumTagging::External, Doc::new());
         let type_name = QualifiedTypeName {
             namespace: Namespace::Named("test".to_string()),
             name: "EnumWithUnresolvedVariant".to_string(),

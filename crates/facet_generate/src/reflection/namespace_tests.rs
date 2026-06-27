@@ -155,6 +155,7 @@ fn nested_namespaced_enums() {
                       NAMED: two
                     name: Child
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: one
@@ -168,6 +169,7 @@ fn nested_namespaced_enums() {
                       NAMED: one
                     name: GrandChild
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: one
@@ -177,6 +179,7 @@ fn nested_namespaced_enums() {
             None:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: two
@@ -186,6 +189,7 @@ fn nested_namespaced_enums() {
             Data:
               - NEWTYPE: STR
               - []
+        - EXTERNAL
         - []
     ");
 }
@@ -519,6 +523,7 @@ fn complex_namespaced_enums() {
             Simple:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: events
@@ -949,6 +954,7 @@ fn explicit_namespace_declarations() {
                       NAMED: events
                     name: SystemData
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: events
@@ -1174,6 +1180,7 @@ fn enums_with_explicit_namespace() {
             Empty:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: api
@@ -1525,6 +1532,7 @@ fn enum_variant_field_points_to_type_in_a_namespace() {
                       NAMED: other_namespace
                     name: Child
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: other_namespace
@@ -1569,6 +1577,7 @@ fn enum_struct_variant_field_points_to_type_in_a_namespace() {
                           name: Child
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: other_namespace
@@ -1630,6 +1639,7 @@ fn enum_struct_variant_multiple_fields_with_different_namespaces() {
                       - STR
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: namespace_a
@@ -2066,6 +2076,7 @@ fn enum_with_explicit_none_namespace() {
             Empty:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: data
@@ -2571,6 +2582,7 @@ fn enum_tuple_variant_collection_inheritance() {
                           NAMED: ns2
                         name: Item2
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: ns1
@@ -2641,6 +2653,7 @@ fn enum_struct_variant_collection_inheritance() {
                               name: Item2
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace:
         NAMED: ns1

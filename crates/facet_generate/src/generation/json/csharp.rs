@@ -96,7 +96,7 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
     /// - Everything else → nothing
     fn type_annotations(&self, ctx: &EmitContext) -> Vec<String> {
         match ctx.container.format {
-            ContainerFormat::Enum(variants, _) => {
+            ContainerFormat::Enum(variants, _, _) => {
                 let all_unit = variants
                     .values()
                     .all(|v| matches!(v.value, VariantFormat::Unit));
@@ -133,7 +133,7 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
     /// methods — i.e. everything except all-unit enums (plain C# `enum` types
     /// don't need instance helpers).
     fn has_type_body(&self, ctx: &EmitContext) -> bool {
-        if let ContainerFormat::Enum(variants, _) = ctx.container.format
+        if let ContainerFormat::Enum(variants, _, _) = ctx.container.format
             && variants
                 .values()
                 .all(|v| matches!(v.value, VariantFormat::Unit))
@@ -180,7 +180,7 @@ mod tests {
         indent::{IndentConfig, IndentedWriter},
         plugin::EmitContext,
     };
-    use crate::reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName};
+    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, Format, Named, QualifiedTypeName};
 
     fn render(f: impl FnOnce(&mut dyn IndentWrite) -> io::Result<()>) -> String {
         let mut buf = Vec::new();
@@ -219,7 +219,7 @@ mod tests {
         variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -256,7 +256,7 @@ mod tests {
         );
 
         let name = QualifiedTypeName::root("Result".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -370,7 +370,7 @@ mod tests {
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,

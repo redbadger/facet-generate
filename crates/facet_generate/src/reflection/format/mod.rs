@@ -252,6 +252,25 @@ pub enum Format {
 /// [`Registry`](crate::Registry).
 ///
 /// Each variant holds the [`Format`] nodes that describe
+/// How an enum's variants are tagged during serialization.
+///
+/// Extracted from `#[facet(tag = "...")]` / `#[facet(tag = "...", content = "...")]`
+/// on the Rust source type. Controls the discriminant field name and payload layout
+/// in the generated TypeScript discriminated union.
+#[derive(Serialize, Deserialize, Debug, Eq, Clone, PartialEq)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum EnumTagging {
+    /// No serde tag — the TypeScript discriminant defaults to `kind`.
+    /// Variants render as `{ kind: "VariantName"; ...payload }`.
+    External,
+    /// `#[facet(tag = "X")]` — tag field is inlined with other variant fields.
+    /// Variants render as `{ X: "VariantName"; ...fields }`.
+    Internal { tag: String },
+    /// `#[facet(tag = "X", content = "Y")]` — tag and payload in separate fields.
+    /// Variants render as `{ X: "VariantName"; Y: payload }`.
+    Adjacent { tag: String, content: String },
+}
+
 /// its fields or inner values, plus a [`Doc`] for documentation comments.
 ///
 /// See [`Format`] for how these are referenced from within other containers.
@@ -268,7 +287,7 @@ pub enum ContainerFormat {
     Struct(Vec<Named<Format>>, Doc),
     /// An enum, that is, an enumeration of variants.
     /// Each variant has a unique name and index within the enum.
-    Enum(BTreeMap<u32, Named<VariantFormat>>, Doc),
+    Enum(BTreeMap<u32, Named<VariantFormat>>, EnumTagging, Doc),
 }
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
@@ -547,7 +566,7 @@ impl FormatHolder for ContainerFormat {
                     format.visit(f)?;
                 }
             }
-            Self::Enum(variants, _doc) => {
+            Self::Enum(variants, _tagging, _doc) => {
                 for variant in variants {
                     variant.1.visit(f)?;
                 }
@@ -570,7 +589,7 @@ impl FormatHolder for ContainerFormat {
                     format.visit_mut(f)?;
                 }
             }
-            Self::Enum(variants, _doc) => {
+            Self::Enum(variants, _tagging, _doc) => {
                 for variant in variants {
                     variant.1.visit_mut(f)?;
                 }

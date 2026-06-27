@@ -20,7 +20,9 @@ use std::sync::Arc;
 
 use crate::{
     generation::{CodeGeneratorConfig, bincode::BincodePlugin, plugin::EmitterPlugin},
-    reflection::format::{ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName},
+    reflection::format::{
+        ContainerFormat, Doc, EnumTagging, Format, Named, Namespace, QualifiedTypeName,
+    },
 };
 
 use super::*;
@@ -265,7 +267,7 @@ fn test_enum_with_hashable_variants_implements_hashable_and_equatable() {
 
     registry.insert(
         QualifiedTypeName::root("MyEnum".to_string()),
-        ContainerFormat::Enum(variants, Doc::new()),
+        ContainerFormat::Enum(variants, EnumTagging::External, Doc::new()),
     );
 
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
@@ -330,7 +332,7 @@ fn test_with_enum_and_struct_variant_implements_hashable_and_equatable() {
 
     registry.insert(
         QualifiedTypeName::root("MyEnum".to_string()),
-        ContainerFormat::Enum(variants, Doc::new()),
+        ContainerFormat::Enum(variants, EnumTagging::External, Doc::new()),
     );
 
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
@@ -382,7 +384,7 @@ fn test_type_cycle_is_hashable_and_equatable() {
 
     registry.insert(
         QualifiedTypeName::root("MyEnum".to_string()),
-        ContainerFormat::Enum(variants, Doc::new()),
+        ContainerFormat::Enum(variants, EnumTagging::External, Doc::new()),
     );
 
     let output = generate(&config, vec![Arc::new(BincodePlugin)], &registry);
