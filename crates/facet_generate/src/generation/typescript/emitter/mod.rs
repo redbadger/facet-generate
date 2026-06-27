@@ -484,6 +484,25 @@ fn write_variant_constructor<W: std::io::Write>(
     Ok(())
 }
 
+fn is_js_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => false,
+        Some(c) => {
+            (c.is_alphabetic() || c == '_' || c == '$')
+                && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+        }
+    }
+}
+
+fn js_property_key(s: &str) -> String {
+    if is_js_identifier(s) {
+        s.to_string()
+    } else {
+        format!("\"{s}\"")
+    }
+}
+
 fn write_match_function<W: std::io::Write>(
     w: &mut W,
     name: &str,
@@ -493,9 +512,10 @@ fn write_match_function<W: std::io::Write>(
     writeln!(w, "export function match{name}<R>(value: {name}, cases: {{")?;
     for variant in variants.values() {
         let vname = &variant.name;
+        let key = js_property_key(vname);
         writeln!(
             w,
-            r#"    {vname}: (v: Extract<{name}, {{ {tag_field}: "{vname}" }}>) => R;"#
+            r#"    {key}: (v: Extract<{name}, {{ {tag_field}: "{vname}" }}>) => R;"#
         )?;
     }
     writeln!(w, "}}): R {{")?;

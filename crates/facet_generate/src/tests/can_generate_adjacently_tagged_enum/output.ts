@@ -56,8 +56,8 @@ export const advancedColors2ReallyCoolType = (value: ExplicitlyNamedStruct): Adv
 export function matchAdvancedColors2<R>(value: AdvancedColors2, cases: {
     str: (v: Extract<AdvancedColors2, { type: "str" }>) => R;
     number: (v: Extract<AdvancedColors2, { type: "number" }>) => R;
-    number-array: (v: Extract<AdvancedColors2, { type: "number-array" }>) => R;
-    really-cool-type: (v: Extract<AdvancedColors2, { type: "really-cool-type" }>) => R;
+    "number-array": (v: Extract<AdvancedColors2, { type: "number-array" }>) => R;
+    "really-cool-type": (v: Extract<AdvancedColors2, { type: "really-cool-type" }>) => R;
 }): R {
     return cases[value.type as AdvancedColors2["type"]](value as never);
 }
