@@ -15,3 +15,7 @@ pub enum SomeEnum {
     #[facet(skip)]
     E,
 }
+
+crate::test! {
+    SomeEnum for typescript
+}

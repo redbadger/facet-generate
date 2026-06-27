@@ -18,3 +18,7 @@ pub enum SomeEnum {
     D { field3: Option<bool> },
     E(ExplicitlyNamedStruct),
 }
+
+crate::test! {
+    ExplicitlyNamedStruct, SomeEnum for typescript
+}

@@ -25,3 +25,7 @@ pub enum SomeEnum {
     E(SomeNamedStruct),
     F(Option<SomeNamedStruct>),
 }
+
+crate::test! {
+    SomeResult, SomeNamedStruct, SomeEnum for typescript
+}
