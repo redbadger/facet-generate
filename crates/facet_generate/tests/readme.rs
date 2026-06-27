@@ -1,11 +1,10 @@
 //! Keeps the generated-code examples in the top-level `README.md` in sync with
 //! what the generators actually produce.
 //!
-//! For Swift, Kotlin, and C# we reflect `Point` (a representative struct) and
-//! extract just its declaration. For TypeScript we show the full generated
-//! module (struct + enum), because TypeScript enums now produce a discriminated
-//! union type rather than a class and the declaration-extraction logic does not
-//! handle that format.
+//! For each language we reflect both `Point` (a struct) and `Shape` (an enum)
+//! and emit the full generated module, stripping only language-level preamble
+//! (import/package/using declarations). The result is embedded in the README
+//! inside collapsible `<details>` blocks.
 //!
 //! Each language's output is compared against the fenced code block embedded in
 //! the README between marker comments such as:
@@ -69,7 +68,7 @@ struct Block {
     marker: &'static str,
     /// Language tag for the ```` ```lang ```` fence.
     fence: &'static str,
-    /// The generated source for the `HttpHeader` declaration.
+    /// The generated source code.
     code: String,
 }
 
@@ -142,7 +141,8 @@ fn generate_swift(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "Point")
+    let source = find_source_with_token(dir.path(), "Point").expect("Swift module not found");
+    strip_preamble(&source)
 }
 
 fn generate_kotlin(registry: &Registry) -> String {
@@ -151,27 +151,18 @@ fn generate_kotlin(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "Point")
+    let source = find_source_with_token(dir.path(), "Point").expect("Kotlin module not found");
+    strip_preamble(&source)
 }
 
-/// For TypeScript we show the full generated module (minus import statements)
-/// because enums now produce discriminated union types rather than classes, and
-/// the brace-balanced `extract_declaration` helper cannot handle that format.
 fn generate_typescript(registry: &Registry) -> String {
     let dir = tempfile::tempdir().unwrap();
     typescript::Installer::new("example", dir.path())
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    let source = find_source_with_declaration(dir.path(), "Point")
-        .expect("generated TypeScript module not found");
-    source
-        .lines()
-        .skip_while(|line| line.starts_with("import "))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim_start()
-        .to_string()
+    let source = find_source_with_token(dir.path(), "Point").expect("TypeScript module not found");
+    strip_preamble(&source)
 }
 
 fn generate_csharp(registry: &Registry) -> String {
@@ -180,23 +171,31 @@ fn generate_csharp(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "Point")
+    let source = find_source_with_token(dir.path(), "Point").expect("C# module not found");
+    strip_preamble(&source)
 }
 
-/// Walks `dir`, finds the generated module file that declares `type_name`, and
-/// returns the dedented source for just that declaration (including any
-/// immediately-preceding attribute/doc-comment lines).
-fn extract_declaration(dir: &Path, type_name: &str) -> String {
-    let source = find_source_with_declaration(dir, type_name).unwrap_or_else(|| {
-        panic!(
-            "no generated file declares `{type_name}` under {}",
-            dir.display()
-        )
-    });
-    extract_block(&source, type_name)
+/// Strips language preamble (import / package / using lines and blank lines
+/// between them) from the start of a generated source file.
+fn strip_preamble(source: &str) -> String {
+    source
+        .lines()
+        .skip_while(|line| {
+            let t = line.trim();
+            t.is_empty()
+                || t.starts_with("import ")
+                || t.starts_with("package ")
+                || t.starts_with("using ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim_start()
+        .to_string()
 }
 
-fn find_source_with_declaration(dir: &Path, type_name: &str) -> Option<String> {
+/// Walks `dir` and returns the contents of the first source file that contains
+/// `token` as a word.
+fn find_source_with_token(dir: &Path, token: &str) -> Option<String> {
     let mut stack = vec![dir.to_path_buf()];
     while let Some(path) = stack.pop() {
         let entries = fs::read_dir(&path).ok()?;
@@ -205,87 +204,13 @@ fn find_source_with_declaration(dir: &Path, type_name: &str) -> Option<String> {
             if path.is_dir() {
                 stack.push(path);
             } else if let Ok(contents) = fs::read_to_string(&path)
-                && declares_type(&contents, type_name)
+                && contents.contains(token)
             {
                 return Some(contents);
             }
         }
     }
     None
-}
-
-fn declares_type(source: &str, type_name: &str) -> bool {
-    source.lines().any(|line| is_declaration(line, type_name))
-}
-
-fn is_declaration(line: &str, type_name: &str) -> bool {
-    const KEYWORDS: [&str; 4] = ["struct ", "class ", "interface ", "enum "];
-    KEYWORDS.iter().any(|kw| line.contains(kw)) && line.contains(type_name)
-}
-
-/// Extracts the brace-balanced block declaring `type_name`, including any
-/// directly preceding attribute (`[...]`) or doc-comment (`///`) lines, then
-/// removes common leading indentation.
-fn extract_block(source: &str, type_name: &str) -> String {
-    let lines: Vec<&str> = source.lines().collect();
-    let decl = lines
-        .iter()
-        .position(|line| is_declaration(line, type_name))
-        .expect("declaration line not found");
-
-    // Include directly-preceding attribute / doc-comment lines.
-    let mut start = decl;
-    while start > 0 {
-        let prev = lines[start - 1].trim_start();
-        if prev.starts_with("///") || prev.starts_with('[') {
-            start -= 1;
-        } else {
-            break;
-        }
-    }
-
-    let mut depth = 0i32;
-    let mut seen_brace = false;
-    let mut end = decl;
-    for (offset, line) in lines[decl..].iter().enumerate() {
-        for ch in line.chars() {
-            match ch {
-                '{' => {
-                    depth += 1;
-                    seen_brace = true;
-                }
-                '}' => depth -= 1,
-                _ => {}
-            }
-        }
-        if seen_brace && depth == 0 {
-            end = decl + offset;
-            break;
-        }
-    }
-
-    dedent(&lines[start..=end])
-}
-
-fn dedent(lines: &[&str]) -> String {
-    let indent = lines
-        .iter()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| line.len() - line.trim_start().len())
-        .min()
-        .unwrap_or(0);
-
-    lines
-        .iter()
-        .map(|line| {
-            if line.len() >= indent {
-                &line[indent..]
-            } else {
-                line.trim_start()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 // --- README rewriting -------------------------------------------------------
