@@ -467,7 +467,8 @@ fn write_deserialize_variant_return(
             for (i, f) in formats.iter().enumerate() {
                 write_deserialize(w, Some(&format!("field{i}")), f, config)?;
             }
-            let field_names: Vec<String> = (0..formats.len()).map(|i| format!("field{i}")).collect();
+            let field_names: Vec<String> =
+                (0..formats.len()).map(|i| format!("field{i}")).collect();
             let all_parts: Vec<String> =
                 std::iter::once(format!(r#"{tag_field}: "{variant_name}""#))
                     .chain(field_names)
@@ -545,7 +546,9 @@ fn write_serialize(
                 w,
                 "serializeOption({value_expr}, serializer, (value, serializer) => "
             )?;
-            with_block(w, Newlines::OPEN, |w| write_serialize(w, "value", inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_serialize(w, "value", inner, config)
+            })?;
             writeln!(w, ");")
         }
         Format::Seq(inner) => {
@@ -553,7 +556,9 @@ fn write_serialize(
                 w,
                 "serializeArray({value_expr}, serializer, (item, serializer) => "
             )?;
-            with_block(w, Newlines::OPEN, |w| write_serialize(w, "item", inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_serialize(w, "item", inner, config)
+            })?;
             writeln!(w, ");")
         }
         Format::Set(inner) => {
@@ -561,7 +566,9 @@ fn write_serialize(
                 w,
                 "serializeSet({value_expr}, serializer, (item, serializer) => "
             )?;
-            with_block(w, Newlines::OPEN, |w| write_serialize(w, "item", inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_serialize(w, "item", inner, config)
+            })?;
             writeln!(w, ");")
         }
         Format::Map { key, value } => {
@@ -735,7 +742,9 @@ fn write_deserialize(
                     "return deserializeOption(deserializer, (deserializer) => "
                 )?;
             }
-            with_block(w, Newlines::OPEN, |w| write_deserialize(w, None, inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_deserialize(w, None, inner, config)
+            })?;
             writeln!(w, ");")
         }
 
@@ -751,7 +760,9 @@ fn write_deserialize(
                     "return deserializeArray(deserializer, (deserializer) => "
                 )?;
             }
-            with_block(w, Newlines::OPEN, |w| write_deserialize(w, None, inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_deserialize(w, None, inner, config)
+            })?;
             writeln!(w, ");")
         }
 
@@ -764,7 +775,9 @@ fn write_deserialize(
             } else {
                 write!(w, "return deserializeSet(deserializer, (deserializer) => ")?;
             }
-            with_block(w, Newlines::OPEN, |w| write_deserialize(w, None, inner, config))?;
+            with_block(w, Newlines::OPEN, |w| {
+                write_deserialize(w, None, inner, config)
+            })?;
             writeln!(w, ");")
         }
 
@@ -779,7 +792,11 @@ fn write_deserialize(
             }
             with_block(w, Newlines::OPEN, |w| {
                 if is_primitive_or_named(key) {
-                    writeln!(w, "const key = {};", deserialize_primitive_expr(key, config))?;
+                    writeln!(
+                        w,
+                        "const key = {};",
+                        deserialize_primitive_expr(key, config)
+                    )?;
                 } else {
                     write_deserialize(w, Some("key"), key, config)?;
                 }
@@ -1045,7 +1062,10 @@ mod tests {
         let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.type_body(w, &ctx));
-        assert!(out.is_empty(), "type_body for enum should emit nothing, got:\n{out}");
+        assert!(
+            out.is_empty(),
+            "type_body for enum should emit nothing, got:\n{out}"
+        );
     }
 
     #[test]
@@ -1068,7 +1088,9 @@ mod tests {
 
         let out = render(|w| plugin.after_type(w, &ctx));
         assert!(
-            out.contains("export function serializeMyEnum(value: MyEnum, serializer: Serializer): void"),
+            out.contains(
+                "export function serializeMyEnum(value: MyEnum, serializer: Serializer): void"
+            ),
             "{out}"
         );
         assert!(
@@ -1077,7 +1099,10 @@ mod tests {
         );
         assert!(out.contains(r#"case "Alpha":"#), "{out}");
         assert!(out.contains(r#"case "Beta":"#), "{out}");
-        assert!(out.contains("deserializer.deserializeVariantIndex()"), "{out}");
+        assert!(
+            out.contains("deserializer.deserializeVariantIndex()"),
+            "{out}"
+        );
         assert!(out.contains("case 0:"), "{out}");
         assert!(out.contains("case 1:"), "{out}");
     }
@@ -1096,6 +1121,9 @@ mod tests {
         let ctx = EmitContext::top_level(&container, &config);
 
         let out = render(|w| plugin.after_type(w, &ctx));
-        assert!(out.is_empty(), "after_type for struct should emit nothing, got:\n{out}");
+        assert!(
+            out.is_empty(),
+            "after_type for struct should emit nothing, got:\n{out}"
+        );
     }
 }

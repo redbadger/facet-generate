@@ -180,7 +180,9 @@ mod tests {
         indent::{IndentConfig, IndentedWriter},
         plugin::EmitContext,
     };
-    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, Format, Named, QualifiedTypeName};
+    use crate::reflection::format::{
+        ContainerFormat, Doc, EnumTagging, Format, Named, QualifiedTypeName,
+    };
 
     fn render(f: impl FnOnce(&mut dyn IndentWrite) -> io::Result<()>) -> String {
         let mut buf = Vec::new();

@@ -352,17 +352,27 @@ fn write_variant_type_expr<W: std::io::Write>(
         VariantFormat::NewType(inner) => {
             let type_str = quote_type(inner, lang);
             if let Some(content) = content_field {
-                write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: {type_str} }}"#)?;
+                write!(
+                    w,
+                    r#"{{ {tag_field}: "{variant_name}"; {content}: {type_str} }}"#
+                )?;
             } else if is_internal && matches!(inner.as_ref(), Format::TypeName(_)) {
                 write!(w, r#"{{ {tag_field}: "{variant_name}" }} & {type_str}"#)?;
             } else {
-                write!(w, r#"{{ {tag_field}: "{variant_name}"; value: {type_str} }}"#)?;
+                write!(
+                    w,
+                    r#"{{ {tag_field}: "{variant_name}"; value: {type_str} }}"#
+                )?;
             }
         }
         VariantFormat::Tuple(formats) => {
             if let Some(content) = content_field {
                 let types: Vec<String> = formats.iter().map(|f| quote_type(f, lang)).collect();
-                write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: [{}] }}"#, types.join(", "))?;
+                write!(
+                    w,
+                    r#"{{ {tag_field}: "{variant_name}"; {content}: [{}] }}"#,
+                    types.join(", ")
+                )?;
             } else {
                 write!(w, r#"{{ {tag_field}: "{variant_name}""#)?;
                 for (i, f) in formats.iter().enumerate() {
@@ -391,6 +401,7 @@ fn write_variant_type_expr<W: std::io::Write>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_variant_constructor<W: std::io::Write>(
     w: &mut W,
     enum_name: &str,
@@ -466,7 +477,10 @@ fn write_variant_constructor<W: std::io::Write>(
         VariantFormat::Variable(_) => panic!("unexpected variable format"),
     };
 
-    writeln!(w, "export const {fn_name} = ({params_str}): {enum_name} => ({object_str});")?;
+    writeln!(
+        w,
+        "export const {fn_name} = ({params_str}): {enum_name} => ({object_str});"
+    )?;
     Ok(())
 }
 
@@ -477,7 +491,7 @@ fn write_match_function<W: std::io::Write>(
     tag_field: &str,
 ) -> Result<()> {
     writeln!(w, "export function match{name}<R>(value: {name}, cases: {{")?;
-    for (_index, variant) in variants {
+    for variant in variants.values() {
         let vname = &variant.name;
         writeln!(
             w,
@@ -513,17 +527,34 @@ fn output_enum_container<W: IndentWrite>(
 
     // 1. Union type alias
     write!(w, "export type {name} =")?;
-    for (_index, variant) in variants {
+    for variant in variants.values() {
         writeln!(w)?;
         write!(w, "    | ")?;
-        write_variant_type_expr(w, &variant.name, &variant.value, tag_field, content_field, is_internal, lang)?;
+        write_variant_type_expr(
+            w,
+            &variant.name,
+            &variant.value,
+            tag_field,
+            content_field,
+            is_internal,
+            lang,
+        )?;
     }
     writeln!(w, ";")?;
 
     // 2. Constructor helpers
-    for (_index, variant) in variants {
+    for variant in variants.values() {
         writeln!(w)?;
-        write_variant_constructor(w, name, &variant.name, &variant.value, tag_field, content_field, is_internal, lang)?;
+        write_variant_constructor(
+            w,
+            name,
+            &variant.name,
+            &variant.value,
+            tag_field,
+            content_field,
+            is_internal,
+            lang,
+        )?;
     }
 
     // 3. Match function
