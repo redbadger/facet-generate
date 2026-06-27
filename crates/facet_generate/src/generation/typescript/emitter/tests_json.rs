@@ -413,6 +413,40 @@ fn enum_with_unit_variants() {
     }): R {
         return cases[value.kind as EnumWithUnitVariants["kind"]](value as never);
     }
+
+    export function serializeEnumWithUnitVariants(value: EnumWithUnitVariants, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                break;
+            }
+            case "Variant2": {
+                serializer.serializeVariantIndex(1);
+                break;
+            }
+            case "Variant3": {
+                serializer.serializeVariantIndex(2);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeEnumWithUnitVariants(deserializer: Deserializer): EnumWithUnitVariants {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                return { kind: "Variant1" };
+            }
+            case 1: {
+                return { kind: "Variant2" };
+            }
+            case 2: {
+                return { kind: "Variant3" };
+            }
+            default: throw new Error("Unknown variant index for EnumWithUnitVariants: " + index);
+        }
+    }
     "#);
 }
 
@@ -440,6 +474,26 @@ fn enum_with_unit_struct_variants() {
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                return { kind: "Variant1" };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
+    }
     "#);
 }
 
@@ -465,6 +519,28 @@ fn enum_with_1_tuple_variants() {
         Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
+    }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeStr(value.value);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const value = deserializer.deserializeStr();
+                return { kind: "Variant1", value };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
     }
     "#);
 }
@@ -497,6 +573,37 @@ fn enum_with_newtype_variants() {
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeStr(value.value);
+                break;
+            }
+            case "Variant2": {
+                serializer.serializeVariantIndex(1);
+                serializer.serializeI32(value.value);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const value = deserializer.deserializeStr();
+                return { kind: "Variant1", value };
+            }
+            case 1: {
+                const value = deserializer.deserializeI32();
+                return { kind: "Variant2", value };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
+    }
     "#);
 }
 
@@ -528,6 +635,43 @@ fn enum_with_tuple_variants() {
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeStr(value.field0);
+                serializer.serializeI32(value.field1);
+                break;
+            }
+            case "Variant2": {
+                serializer.serializeVariantIndex(1);
+                serializer.serializeBool(value.field0);
+                serializer.serializeF64(value.field1);
+                serializer.serializeU8(value.field2);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const field0 = deserializer.deserializeStr();
+                const field1 = deserializer.deserializeI32();
+                return { kind: "Variant1", field0, field1 };
+            }
+            case 1: {
+                const field0 = deserializer.deserializeBool();
+                const field1 = deserializer.deserializeF64();
+                const field2 = deserializer.deserializeU8();
+                return { kind: "Variant2", field0, field1, field2 };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
+    }
     "#);
 }
 
@@ -553,6 +697,30 @@ fn enum_with_struct_variants() {
         Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
+    }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Variant1": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeStr(value.field1);
+                serializer.serializeI32(value.field2);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const field1 = deserializer.deserializeStr();
+                const field2 = deserializer.deserializeI32();
+                return { kind: "Variant1", field1, field2 };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
     }
     "#);
 }
@@ -594,6 +762,55 @@ fn enum_with_mixed_variants() {
         Struct: (v: Extract<MyEnum, { kind: "Struct" }>) => R;
     }): R {
         return cases[value.kind as MyEnum["kind"]](value as never);
+    }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Unit": {
+                serializer.serializeVariantIndex(0);
+                break;
+            }
+            case "NewType": {
+                serializer.serializeVariantIndex(1);
+                serializer.serializeStr(value.value);
+                break;
+            }
+            case "Tuple": {
+                serializer.serializeVariantIndex(2);
+                serializer.serializeStr(value.field0);
+                serializer.serializeI32(value.field1);
+                break;
+            }
+            case "Struct": {
+                serializer.serializeVariantIndex(3);
+                serializer.serializeBool(value.field);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                return { kind: "Unit" };
+            }
+            case 1: {
+                const value = deserializer.deserializeStr();
+                return { kind: "NewType", value };
+            }
+            case 2: {
+                const field0 = deserializer.deserializeStr();
+                const field1 = deserializer.deserializeI32();
+                return { kind: "Tuple", field0, field1 };
+            }
+            case 3: {
+                const field = deserializer.deserializeBool();
+                return { kind: "Struct", field };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
     }
     "#);
 }
