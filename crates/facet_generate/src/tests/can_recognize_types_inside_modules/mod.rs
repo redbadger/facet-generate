@@ -39,7 +39,7 @@ pub struct OutsideOfModules {
     field: u32,
 }
 
-// TODO: enable swift, typescript (expect files need updating for no-encoding output)
+// TODO: enable swift
 crate::test! {
-    A, AB, ABC, OutsideOfModules for kotlin
+    A, AB, ABC, OutsideOfModules for kotlin, typescript
 }
