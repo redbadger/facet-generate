@@ -25,3 +25,25 @@ export function matchParent<R>(value: Parent, cases: {
 }): R {
     return cases[value.kind as Parent["kind"]](value as never);
 }
+
+export function serializeParent(value: Parent, serializer: Serializer): void {
+    switch (value.kind) {
+        case "Child": {
+            serializer.serializeVariantIndex(0);
+            value.value.serialize(serializer);
+            break;
+        }
+        default: throw new Error("Unknown variant: " + (value as any).kind);
+    }
+}
+
+export function deserializeParent(deserializer: Deserializer): Parent {
+    const index = deserializer.deserializeVariantIndex();
+    switch (index) {
+        case 0: {
+            const value = Child.deserialize(deserializer);
+            return { kind: "Child", value };
+        }
+        default: throw new Error("Unknown variant index for Parent: " + index);
+    }
+}
