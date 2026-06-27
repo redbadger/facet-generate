@@ -40,3 +40,7 @@ pub enum AdvancedColors2 {
     /// Comment on the last element
     ReallyCoolType(ExplicitlyNamedStruct),
 }
+
+crate::test! {
+    ExplicitlyNamedStruct, AdvancedColors, AdvancedColors2 for typescript
+}

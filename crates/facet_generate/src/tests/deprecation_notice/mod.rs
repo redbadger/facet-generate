@@ -58,3 +58,7 @@ pub enum MyExternallyTaggedEnum {
     #[deprecated(note = "Use `VariantB` instead")]
     LegacyVariant(bool),
 }
+
+crate::test! {
+    MyLegacyStruct, MyLegacyAlias, MyLegacyEnum, MyUnitEnum, MyInternallyTaggedEnum, MyExternallyTaggedEnum for typescript
+}

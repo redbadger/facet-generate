@@ -8,3 +8,7 @@ pub struct SomeStruct {
     #[facet(fg::readonly)]
     field_b: Vec<String>,
 }
+
+crate::test! {
+    SomeStruct for typescript
+}

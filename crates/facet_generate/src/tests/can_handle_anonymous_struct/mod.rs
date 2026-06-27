@@ -33,3 +33,7 @@ pub enum EnumWithManyVariants {
     AnotherUnitVariant,
     AnotherAnonVariant { uuid: String, thing: i32 },
 }
+
+crate::test! {
+    AutofilledBy, EnumWithManyVariants for typescript
+}
