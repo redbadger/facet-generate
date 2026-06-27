@@ -166,7 +166,7 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
             return Ok(());
         }
 
-        if let ContainerFormat::Enum(variants, _) = ctx.container.format {
+        if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
             let all_unit = variants
                 .values()
                 .all(|v| matches!(v.value, VariantFormat::Unit));

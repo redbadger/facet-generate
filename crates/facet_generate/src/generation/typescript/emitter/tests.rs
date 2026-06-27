@@ -322,35 +322,30 @@ fn enum_with_unit_variants() {
     }
 
     let actual = emit!(EnumWithUnitVariants as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     /// line one
     /// line two
-    export abstract class EnumWithUnitVariants {
-    }
+    export type EnumWithUnitVariants =
+        | { kind: "Variant1" }
+        | { kind: "Variant2" }
+        | { kind: "Variant3" };
 
-    /// variant one
-    export class EnumWithUnitVariantsVariantVariant1 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
-    }
+    export const enumWithUnitVariantsVariant1 = (): EnumWithUnitVariants => ({ kind: "Variant1" });
 
-    /// variant two
-    export class EnumWithUnitVariantsVariantVariant2 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
-    }
+    export const enumWithUnitVariantsVariant2 = (): EnumWithUnitVariants => ({ kind: "Variant2" });
 
-    /// variant three
-    export class EnumWithUnitVariantsVariantVariant3 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
+    export const enumWithUnitVariantsVariant3 = (): EnumWithUnitVariants => ({ kind: "Variant3" });
+
+    export function matchEnumWithUnitVariants<R>(value: EnumWithUnitVariants, cases: {
+        Variant1: (v: Extract<EnumWithUnitVariants, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<EnumWithUnitVariants, { kind: "Variant2" }>) => R;
+        Variant3: (v: Extract<EnumWithUnitVariants, { kind: "Variant3" }>) => R;
+    }): R {
+        return cases[value.kind as EnumWithUnitVariants["kind"]](value as never);
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -365,18 +360,20 @@ fn enum_with_unit_struct_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Variant1" };
+
+    export const myEnumVariant1 = (): MyEnum => ({ kind: "Variant1" });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor () {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]
@@ -389,18 +386,20 @@ fn enum_with_1_tuple_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Variant1"; value: str };
+
+    export const myEnumVariant1 = (value: str): MyEnum => ({ kind: "Variant1", value });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]
@@ -414,24 +413,24 @@ fn enum_with_newtype_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Variant1"; value: str }
+        | { kind: "Variant2"; value: int32 };
+
+    export const myEnumVariant1 = (value: str): MyEnum => ({ kind: "Variant1", value });
+
+    export const myEnumVariant2 = (value: int32): MyEnum => ({ kind: "Variant2", value });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<MyEnum, { kind: "Variant2" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
-    }
-
-    export class MyEnumVariantVariant2 extends MyEnum {
-        constructor (public value: int32) {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]
@@ -445,24 +444,24 @@ fn enum_with_tuple_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Variant1"; field0: str; field1: int32 }
+        | { kind: "Variant2"; field0: bool; field1: float64; field2: uint8 };
+
+    export const myEnumVariant1 = (field0: str, field1: int32): MyEnum => ({ kind: "Variant1", field0, field1 });
+
+    export const myEnumVariant2 = (field0: bool, field1: float64, field2: uint8): MyEnum => ({ kind: "Variant2", field0, field1, field2 });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<MyEnum, { kind: "Variant2" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public field0: str, public field1: int32) {
-            super();
-        }
-    }
-
-    export class MyEnumVariantVariant2 extends MyEnum {
-        constructor (public field0: bool, public field1: float64, public field2: uint8) {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]
@@ -475,18 +474,20 @@ fn enum_with_struct_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Variant1"; field1: str; field2: int32 };
+
+    export const myEnumVariant1 = (field1: str, field2: int32): MyEnum => ({ kind: "Variant1", field1, field2 });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public field1: str, public field2: int32) {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]
@@ -502,36 +503,32 @@ fn enum_with_mixed_variants() {
     }
 
     let actual = emit!(MyEnum as TypeScript).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
+    export type MyEnum =
+        | { kind: "Unit" }
+        | { kind: "NewType"; value: str }
+        | { kind: "Tuple"; field0: str; field1: int32 }
+        | { kind: "Struct"; field: bool };
+
+    export const myEnumUnit = (): MyEnum => ({ kind: "Unit" });
+
+    export const myEnumNewType = (value: str): MyEnum => ({ kind: "NewType", value });
+
+    export const myEnumTuple = (field0: str, field1: int32): MyEnum => ({ kind: "Tuple", field0, field1 });
+
+    export const myEnumStruct = (field: bool): MyEnum => ({ kind: "Struct", field });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Unit: (v: Extract<MyEnum, { kind: "Unit" }>) => R;
+        NewType: (v: Extract<MyEnum, { kind: "NewType" }>) => R;
+        Tuple: (v: Extract<MyEnum, { kind: "Tuple" }>) => R;
+        Struct: (v: Extract<MyEnum, { kind: "Struct" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
-
-    export class MyEnumVariantUnit extends MyEnum {
-        constructor () {
-            super();
-        }
-    }
-
-    export class MyEnumVariantNewType extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
-    }
-
-    export class MyEnumVariantTuple extends MyEnum {
-        constructor (public field0: str, public field1: int32) {
-            super();
-        }
-    }
-
-    export class MyEnumVariantStruct extends MyEnum {
-        constructor (public field: bool) {
-            super();
-        }
-    }
-    ");
+    "#);
 }
 
 #[test]

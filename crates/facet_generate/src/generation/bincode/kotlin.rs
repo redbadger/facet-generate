@@ -850,7 +850,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
             return Ok(());
         }
 
-        if let ContainerFormat::Enum(variants, _) = ctx.container.format {
+        if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
             let all_unit = variants
                 .values()
                 .all(|v| matches!(v.value, VariantFormat::Unit));
@@ -911,7 +911,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         }
 
         // ---- Top-level enum (enum class / sealed interface) ----
-        if let ContainerFormat::Enum(variants, _) = ctx.container.format {
+        if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
             let all_unit = variants
                 .values()
                 .all(|v| matches!(v.value, VariantFormat::Unit));
@@ -947,6 +947,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
 mod tests {
     use super::*;
     use crate::generation::CodeGeneratorConfig;
+    use crate::reflection::format::EnumTagging;
     use std::collections::BTreeSet;
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
@@ -1042,7 +1043,7 @@ mod tests {
             },
         );
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -1081,7 +1082,7 @@ mod tests {
             },
         );
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -1185,7 +1186,7 @@ mod tests {
             },
         );
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,

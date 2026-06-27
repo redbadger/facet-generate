@@ -234,7 +234,7 @@ impl Emitter<Kotlin> for Container<'_> {
                     data_class(w, name, None, fields, doc, lang, None)?;
                 }
             }
-            ContainerFormat::Enum(variants, doc) => {
+            ContainerFormat::Enum(variants, _, doc) => {
                 let variant_list: Vec<_> = variants.values().cloned().collect();
 
                 let all_unit_variants = variants

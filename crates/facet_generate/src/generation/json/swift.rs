@@ -254,7 +254,7 @@ impl EmitterPlugin<Swift> for JsonPlugin {
 
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
         let name = ctx.name();
-        if let ContainerFormat::Enum(variants, _) = ctx.container.format {
+        if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
             write_enum_type_body(w, name, variants)
         } else {
             write_struct_type_body(w, name, &ctx.fields())
@@ -788,6 +788,7 @@ mod tests {
     use super::*;
     use crate::generation::CodeGeneratorConfig;
     use crate::generation::indent::IndentedWriter;
+    use crate::reflection::format::EnumTagging;
     use std::collections::BTreeSet;
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
@@ -1003,7 +1004,7 @@ mod tests {
             },
         );
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,

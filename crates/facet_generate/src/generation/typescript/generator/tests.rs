@@ -31,7 +31,8 @@ use crate::{
         typescript::TypeScript,
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+        ContainerFormat, Doc, EnumTagging, Format, Named, Namespace, QualifiedTypeName,
+        VariantFormat,
     },
 };
 
@@ -204,12 +205,12 @@ fn update_qualified_names_enum_variants() {
     variants.insert(0, variant);
     registry.insert(
         QualifiedTypeName::root("Event".to_string()),
-        ContainerFormat::Enum(variants, Doc::new()),
+        ContainerFormat::Enum(variants, EnumTagging::External, Doc::new()),
     );
 
     let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
     let (_, container) = updated.iter().next().unwrap();
-    let ContainerFormat::Enum(variants, _) = container else {
+    let ContainerFormat::Enum(variants, _, _) = container else {
         panic!("expected enum");
     };
     let variant = variants.get(&0).unwrap();

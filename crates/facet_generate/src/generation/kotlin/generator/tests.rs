@@ -28,7 +28,7 @@ use crate::{
         config::{ExternalPackage, PackageLocation},
     },
     reflection::format::{
-        ContainerFormat, Doc, Named, Namespace, QualifiedTypeName, VariantFormat,
+        ContainerFormat, Doc, EnumTagging, Named, Namespace, QualifiedTypeName, VariantFormat,
     },
 };
 use std::collections::BTreeMap;
@@ -393,7 +393,7 @@ fn test_update_qualified_names_enum_variants() {
 
     let mut variants = BTreeMap::new();
     variants.insert(0, variant);
-    let enum_container = ContainerFormat::Enum(variants, Doc::new());
+    let enum_container = ContainerFormat::Enum(variants, EnumTagging::External, Doc::new());
     let enum_qualified_name = QualifiedTypeName::root("Event".to_string());
     registry.insert(enum_qualified_name, enum_container);
 
@@ -401,7 +401,7 @@ fn test_update_qualified_names_enum_variants() {
 
     // Check the enum variant type
     let (_, container) = updated_registry.iter().next().unwrap();
-    if let ContainerFormat::Enum(variants, _) = container {
+    if let ContainerFormat::Enum(variants, _, _) = container {
         let variant = variants.get(&0).unwrap();
         if let VariantFormat::NewType(boxed_format) = &variant.value {
             if let Format::TypeName(qualified_name) = boxed_format.as_ref() {

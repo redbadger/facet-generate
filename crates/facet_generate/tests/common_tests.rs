@@ -42,6 +42,7 @@ fn test_get_simple_registry() {
                       - U8
                       - []
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: Test
@@ -91,6 +92,7 @@ fn test_get_registry() {
             E:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: List
@@ -109,6 +111,7 @@ fn test_get_registry() {
                       namespace: ROOT
                       name: List
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: NewTypeStruct
@@ -325,6 +328,7 @@ fn test_get_registry() {
             EmptyStructVariant:
               - UNIT
               - []
+        - EXTERNAL
         - []
     ? namespace: ROOT
       name: SimpleList

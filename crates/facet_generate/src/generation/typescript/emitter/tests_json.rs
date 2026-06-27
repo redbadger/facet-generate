@@ -395,60 +395,23 @@ fn enum_with_unit_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class EnumWithUnitVariants {
-        abstract serialize(serializer: Serializer): void;
+    export type EnumWithUnitVariants =
+        | { kind: "Variant1" }
+        | { kind: "Variant2" }
+        | { kind: "Variant3" };
 
-        static deserialize(deserializer: Deserializer): EnumWithUnitVariants {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return EnumWithUnitVariantsVariantVariant1.load(deserializer);
-                case 1: return EnumWithUnitVariantsVariantVariant2.load(deserializer);
-                case 2: return EnumWithUnitVariantsVariantVariant3.load(deserializer);
-                default: throw new Error("Unknown variant index for EnumWithUnitVariants: " + index);
-            }
-        }
-    }
+    export const enumWithUnitVariantsVariant1 = (): EnumWithUnitVariants => ({ kind: "Variant1" });
 
-    export class EnumWithUnitVariantsVariantVariant1 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
+    export const enumWithUnitVariantsVariant2 = (): EnumWithUnitVariants => ({ kind: "Variant2" });
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-        }
+    export const enumWithUnitVariantsVariant3 = (): EnumWithUnitVariants => ({ kind: "Variant3" });
 
-        static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant1 {
-            return new EnumWithUnitVariantsVariantVariant1();
-        }
-    }
-
-    export class EnumWithUnitVariantsVariantVariant2 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(1);
-        }
-
-        static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant2 {
-            return new EnumWithUnitVariantsVariantVariant2();
-        }
-    }
-
-    export class EnumWithUnitVariantsVariantVariant3 extends EnumWithUnitVariants {
-        constructor () {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(2);
-        }
-
-        static load(deserializer: Deserializer): EnumWithUnitVariantsVariantVariant3 {
-            return new EnumWithUnitVariantsVariantVariant3();
-        }
+    export function matchEnumWithUnitVariants<R>(value: EnumWithUnitVariants, cases: {
+        Variant1: (v: Extract<EnumWithUnitVariants, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<EnumWithUnitVariants, { kind: "Variant2" }>) => R;
+        Variant3: (v: Extract<EnumWithUnitVariants, { kind: "Variant3" }>) => R;
+    }): R {
+        return cases[value.kind as EnumWithUnitVariants["kind"]](value as never);
     }
     "#);
 }
@@ -467,30 +430,15 @@ fn enum_with_unit_struct_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Variant1" };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantVariant1.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumVariant1 = (): MyEnum => ({ kind: "Variant1" });
 
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor () {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant1 {
-            return new MyEnumVariantVariant1();
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
@@ -508,32 +456,15 @@ fn enum_with_1_tuple_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Variant1"; value: str };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantVariant1.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumVariant1 = (value: str): MyEnum => ({ kind: "Variant1", value });
 
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeStr(this.value);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant1 {
-            const value = deserializer.deserializeStr();
-            return new MyEnumVariantVariant1(value);
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
@@ -552,49 +483,19 @@ fn enum_with_newtype_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Variant1"; value: str }
+        | { kind: "Variant2"; value: int32 };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantVariant1.load(deserializer);
-                case 1: return MyEnumVariantVariant2.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumVariant1 = (value: str): MyEnum => ({ kind: "Variant1", value });
 
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
+    export const myEnumVariant2 = (value: int32): MyEnum => ({ kind: "Variant2", value });
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeStr(this.value);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant1 {
-            const value = deserializer.deserializeStr();
-            return new MyEnumVariantVariant1(value);
-        }
-    }
-
-    export class MyEnumVariantVariant2 extends MyEnum {
-        constructor (public value: int32) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(1);
-            serializer.serializeI32(this.value);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant2 {
-            const value = deserializer.deserializeI32();
-            return new MyEnumVariantVariant2(value);
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<MyEnum, { kind: "Variant2" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
@@ -613,55 +514,19 @@ fn enum_with_tuple_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Variant1"; field0: str; field1: int32 }
+        | { kind: "Variant2"; field0: bool; field1: float64; field2: uint8 };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantVariant1.load(deserializer);
-                case 1: return MyEnumVariantVariant2.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumVariant1 = (field0: str, field1: int32): MyEnum => ({ kind: "Variant1", field0, field1 });
 
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public field0: str, public field1: int32) {
-            super();
-        }
+    export const myEnumVariant2 = (field0: bool, field1: float64, field2: uint8): MyEnum => ({ kind: "Variant2", field0, field1, field2 });
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeStr(this.field0);
-            serializer.serializeI32(this.field1);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant1 {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            return new MyEnumVariantVariant1(field0,field1);
-        }
-    }
-
-    export class MyEnumVariantVariant2 extends MyEnum {
-        constructor (public field0: bool, public field1: float64, public field2: uint8) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(1);
-            serializer.serializeBool(this.field0);
-            serializer.serializeF64(this.field1);
-            serializer.serializeU8(this.field2);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant2 {
-            const field0 = deserializer.deserializeBool();
-            const field1 = deserializer.deserializeF64();
-            const field2 = deserializer.deserializeU8();
-            return new MyEnumVariantVariant2(field0,field1,field2);
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+        Variant2: (v: Extract<MyEnum, { kind: "Variant2" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
@@ -679,34 +544,15 @@ fn enum_with_struct_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Variant1"; field1: str; field2: int32 };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantVariant1.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumVariant1 = (field1: str, field2: int32): MyEnum => ({ kind: "Variant1", field1, field2 });
 
-    export class MyEnumVariantVariant1 extends MyEnum {
-        constructor (public field1: str, public field2: int32) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeStr(this.field1);
-            serializer.serializeI32(this.field2);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantVariant1 {
-            const field1 = deserializer.deserializeStr();
-            const field2 = deserializer.deserializeI32();
-            return new MyEnumVariantVariant1(field1,field2);
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Variant1: (v: Extract<MyEnum, { kind: "Variant1" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
@@ -727,83 +573,27 @@ fn enum_with_mixed_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    export abstract class MyEnum {
-        abstract serialize(serializer: Serializer): void;
+    export type MyEnum =
+        | { kind: "Unit" }
+        | { kind: "NewType"; value: str }
+        | { kind: "Tuple"; field0: str; field1: int32 }
+        | { kind: "Struct"; field: bool };
 
-        static deserialize(deserializer: Deserializer): MyEnum {
-            const index = deserializer.deserializeVariantIndex();
-            switch (index) {
-                case 0: return MyEnumVariantUnit.load(deserializer);
-                case 1: return MyEnumVariantNewType.load(deserializer);
-                case 2: return MyEnumVariantTuple.load(deserializer);
-                case 3: return MyEnumVariantStruct.load(deserializer);
-                default: throw new Error("Unknown variant index for MyEnum: " + index);
-            }
-        }
-    }
+    export const myEnumUnit = (): MyEnum => ({ kind: "Unit" });
 
-    export class MyEnumVariantUnit extends MyEnum {
-        constructor () {
-            super();
-        }
+    export const myEnumNewType = (value: str): MyEnum => ({ kind: "NewType", value });
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(0);
-        }
+    export const myEnumTuple = (field0: str, field1: int32): MyEnum => ({ kind: "Tuple", field0, field1 });
 
-        static load(deserializer: Deserializer): MyEnumVariantUnit {
-            return new MyEnumVariantUnit();
-        }
-    }
+    export const myEnumStruct = (field: bool): MyEnum => ({ kind: "Struct", field });
 
-    export class MyEnumVariantNewType extends MyEnum {
-        constructor (public value: str) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(1);
-            serializer.serializeStr(this.value);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantNewType {
-            const value = deserializer.deserializeStr();
-            return new MyEnumVariantNewType(value);
-        }
-    }
-
-    export class MyEnumVariantTuple extends MyEnum {
-        constructor (public field0: str, public field1: int32) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(2);
-            serializer.serializeStr(this.field0);
-            serializer.serializeI32(this.field1);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantTuple {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            return new MyEnumVariantTuple(field0,field1);
-        }
-    }
-
-    export class MyEnumVariantStruct extends MyEnum {
-        constructor (public field: bool) {
-            super();
-        }
-
-        public serialize(serializer: Serializer): void {
-            serializer.serializeVariantIndex(3);
-            serializer.serializeBool(this.field);
-        }
-
-        static load(deserializer: Deserializer): MyEnumVariantStruct {
-            const field = deserializer.deserializeBool();
-            return new MyEnumVariantStruct(field);
-        }
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Unit: (v: Extract<MyEnum, { kind: "Unit" }>) => R;
+        NewType: (v: Extract<MyEnum, { kind: "NewType" }>) => R;
+        Tuple: (v: Extract<MyEnum, { kind: "Tuple" }>) => R;
+        Struct: (v: Extract<MyEnum, { kind: "Struct" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
     }
     "#);
 }
