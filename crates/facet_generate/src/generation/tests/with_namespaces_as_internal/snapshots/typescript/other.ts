@@ -5,11 +5,13 @@ export class OtherChild {
     }
 }
 
-export abstract class OtherParent {
-}
+export type OtherParent =
+    | { kind: "Child"; value: OtherChild };
 
-export class OtherParentVariantChild extends OtherParent {
-    constructor (public value: OtherChild) {
-        super();
-    }
+export const otherParentChild = (value: OtherChild): OtherParent => ({ kind: "Child", value });
+
+export function matchOtherParent<R>(value: OtherParent, cases: {
+    Child: (v: Extract<OtherParent, { kind: "Child" }>) => R;
+}): R {
+    return cases[value.kind as OtherParent["kind"]](value as never);
 }

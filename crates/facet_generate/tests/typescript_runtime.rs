@@ -119,10 +119,11 @@ Deno.test("bincode serialization matches deserialization", () => {{
   const deserializer = new BincodeDeserializer(expectedBytes);
   const deserializedInstance: Test = Test.deserialize(deserializer);
 
+  const expectedChoice: Choice = choiceC(7);
   const expectedInstance: Test = new Test(
     [4, 6],
     [BigInt(-3), BigInt(5)],
-    new ChoiceVariantC(7),
+    expectedChoice,
   );
 
   assertEquals(deserializedInstance, expectedInstance, "Object instances should match");

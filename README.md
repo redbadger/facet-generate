@@ -10,47 +10,24 @@ cargo add facet facet_generate
 
 ```rust
 use facet::Facet;
-use facet_generate as fg;
+use facet_generate::reflection::RegistryBuilder;
 
 #[derive(Facet)]
-#[repr(C)]
-enum HttpResult {
-    Ok(HttpResponse),
-    Err(HttpError),
-}
-
-#[derive(Facet)]
-struct HttpResponse {
-    status: u16,
-    headers: Vec<HttpHeader>,
-    #[facet(fg::bytes)]
-    body: Vec<u8>,
-}
-
-#[derive(Facet)]
-struct HttpHeader {
-    name: String,
-    value: String,
+struct Point {
+    x: f64,
+    y: f64,
 }
 
 #[derive(Facet)]
 #[repr(C)]
-enum HttpError {
-    #[facet(skip)]
-    Http {
-        status: u16,
-        message: String,
-        body: Option<Vec<u8>>,
-    },
-    #[facet(skip)]
-    Json(String),
-    Url(String),
-    Io(String),
-    Timeout,
+enum Shape {
+    Circle { centre: Point, radius: f64 },
+    Rectangle { position: Point, width: f64, height: f64 },
 }
 
+// Point is discovered automatically as a field type of Shape
 let registry = RegistryBuilder::new()
-    .add_type::<HttpResult>()?
+    .add_type::<Shape>()?
     .build()?;
 ```
 
@@ -80,7 +57,7 @@ csharp::Installer::new("Example", &out_dir)
     .generate(&registry)?;
 ```
 
-With `BincodePlugin`, the generated types include `serialize` and `deserialize` methods. For the types above, this generates the following code (showing `HttpHeader` as a representative example — all types are generated similarly).
+With `BincodePlugin`, structs gain `serialize`/`deserialize` methods and enums gain standalone `serializeX`/`deserializeX` functions alongside a discriminated union type, per-variant constructor functions, and an exhaustive `matchX` helper. The examples below show the full generated module for both `Point` (struct) and `Shape` (enum) in each language.
 
 > [!NOTE]
 > The code blocks below are generated from the real output of the code
@@ -88,24 +65,25 @@ With `BincodePlugin`, the generated types include `serialize` and `deserialize` 
 > (`crates/facet_generate/tests/readme.rs`). Do not edit them by hand — run
 > `UPDATE_EXPECT=1 cargo test -p facet_generate --test readme` to refresh them.
 
-### Swift
+<details>
+<summary>Swift</summary>
 
 <!-- generated:swift:start -->
 
 ```swift
-public struct HttpHeader: Hashable, Equatable {
-    public var name: String
-    public var value: String
+public struct Point: Hashable, Equatable {
+    public var x: Double
+    public var y: Double
 
-    public init(name: String, value: String) {
-        self.name = name
-        self.value = value
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
     }
 
     public func serialize<S: Serializer>(serializer: S) throws {
         try serializer.increase_container_depth()
-        try serializer.serialize_str(value: self.name)
-        try serializer.serialize_str(value: self.value)
+        try serializer.serialize_f64(value: self.x)
+        try serializer.serialize_f64(value: self.y)
         try serializer.decrease_container_depth()
     }
 
@@ -115,15 +93,70 @@ public struct HttpHeader: Hashable, Equatable {
         return serializer.get_bytes()
     }
 
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> HttpHeader {
+    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Point {
         try deserializer.increase_container_depth()
-        let name = try deserializer.deserialize_str()
-        let value = try deserializer.deserialize_str()
+        let x = try deserializer.deserialize_f64()
+        let y = try deserializer.deserialize_f64()
         try deserializer.decrease_container_depth()
-        return HttpHeader(name: name, value: value)
+        return Point(x: x, y: y)
     }
 
-    public static func bincodeDeserialize(input: [UInt8]) throws -> HttpHeader {
+    public static func bincodeDeserialize(input: [UInt8]) throws -> Point {
+        let deserializer = BincodeDeserializer.init(input: input);
+        let obj = try deserialize(deserializer: deserializer)
+        if deserializer.get_buffer_offset() < input.count {
+            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+        }
+        return obj
+    }
+}
+
+indirect public enum Shape: Hashable, Equatable {
+    case circle(centre: Point, radius: Double)
+    case rectangle(position: Point, width: Double, height: Double)
+
+    public func serialize<S: Serializer>(serializer: S) throws {
+        try serializer.increase_container_depth()
+        switch self {
+        case .circle(let centre, let radius):
+            try serializer.serialize_variant_index(value: 0)
+            try centre.serialize(serializer: serializer)
+            try serializer.serialize_f64(value: radius)
+        case .rectangle(let position, let width, let height):
+            try serializer.serialize_variant_index(value: 1)
+            try position.serialize(serializer: serializer)
+            try serializer.serialize_f64(value: width)
+            try serializer.serialize_f64(value: height)
+        }
+        try serializer.decrease_container_depth()
+    }
+
+    public func bincodeSerialize() throws -> [UInt8] {
+        let serializer = BincodeSerializer.init();
+        try self.serialize(serializer: serializer)
+        return serializer.get_bytes()
+    }
+
+    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Shape {
+        let index = try deserializer.deserialize_variant_index()
+        try deserializer.increase_container_depth()
+        switch index {
+        case 0:
+            let centre = try Point.deserialize(deserializer: deserializer)
+            let radius = try deserializer.deserialize_f64()
+            try deserializer.decrease_container_depth()
+            return .circle(centre: centre, radius: radius)
+        case 1:
+            let position = try Point.deserialize(deserializer: deserializer)
+            let width = try deserializer.deserialize_f64()
+            let height = try deserializer.deserialize_f64()
+            try deserializer.decrease_container_depth()
+            return .rectangle(position: position, width: width, height: height)
+        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Shape: \(index)")
+        }
+    }
+
+    public static func bincodeDeserialize(input: [UInt8]) throws -> Shape {
         let deserializer = BincodeDeserializer.init(input: input);
         let obj = try deserialize(deserializer: deserializer)
         if deserializer.get_buffer_offset() < input.count {
@@ -136,19 +169,22 @@ public struct HttpHeader: Hashable, Equatable {
 
 <!-- generated:swift:end -->
 
-### Kotlin
+</details>
+
+<details>
+<summary>Kotlin</summary>
 
 <!-- generated:kotlin:start -->
 
 ```kotlin
-data class HttpHeader(
-    val name: String,
-    val value: String,
+data class Point(
+    val x: Double,
+    val y: Double,
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
-        serializer.serialize_str(name)
-        serializer.serialize_str(value)
+        serializer.serialize_f64(x)
+        serializer.serialize_f64(y)
         serializer.decrease_container_depth()
     }
 
@@ -159,16 +195,100 @@ data class HttpHeader(
     }
 
     companion object {
-        fun deserialize(deserializer: Deserializer): HttpHeader {
+        fun deserialize(deserializer: Deserializer): Point {
             deserializer.increase_container_depth()
-            val name = deserializer.deserialize_str()
-            val value = deserializer.deserialize_str()
+            val x = deserializer.deserialize_f64()
+            val y = deserializer.deserialize_f64()
             deserializer.decrease_container_depth()
-            return HttpHeader(name, value)
+            return Point(x, y)
         }
 
         @Throws(DeserializationError::class)
-        fun bincodeDeserialize(input: ByteArray?): HttpHeader {
+        fun bincodeDeserialize(input: ByteArray?): Point {
+            if (input == null) {
+                throw DeserializationError("Cannot deserialize null array")
+            }
+            val deserializer = BincodeDeserializer(input)
+            val value = deserialize(deserializer)
+            if (deserializer.get_buffer_offset() < input.size) {
+                throw DeserializationError("Some input bytes were not read")
+            }
+            return value
+        }
+    }
+}
+
+sealed interface Shape {
+    fun serialize(serializer: Serializer)
+
+    fun bincodeSerialize(): ByteArray {
+        val serializer = BincodeSerializer()
+        serialize(serializer)
+        return serializer.get_bytes()
+    }
+
+    data class Circle(
+        val centre: com.example.Point,
+        val radius: Double,
+    ) : Shape {
+        override fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_variant_index(0)
+            centre.serialize(serializer)
+            serializer.serialize_f64(radius)
+            serializer.decrease_container_depth()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Circle {
+                deserializer.increase_container_depth()
+                val centre = com.example.Point.deserialize(deserializer)
+                val radius = deserializer.deserialize_f64()
+                deserializer.decrease_container_depth()
+                return Circle(centre, radius)
+            }
+        }
+    }
+
+    data class Rectangle(
+        val position: com.example.Point,
+        val width: Double,
+        val height: Double,
+    ) : Shape {
+        override fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_variant_index(1)
+            position.serialize(serializer)
+            serializer.serialize_f64(width)
+            serializer.serialize_f64(height)
+            serializer.decrease_container_depth()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Rectangle {
+                deserializer.increase_container_depth()
+                val position = com.example.Point.deserialize(deserializer)
+                val width = deserializer.deserialize_f64()
+                val height = deserializer.deserialize_f64()
+                deserializer.decrease_container_depth()
+                return Rectangle(position, width, height)
+            }
+        }
+    }
+
+    companion object {
+        @Throws(DeserializationError::class)
+        fun deserialize(deserializer: Deserializer): Shape {
+            val index = deserializer.deserialize_variant_index()
+            return when (index) {
+                0 -> Circle.deserialize(deserializer)
+                1 -> Rectangle.deserialize(deserializer)
+                else -> throw DeserializationError("Unknown variant index for Shape: $index")
+            }
+        }
+
+        @Throws(DeserializationError::class)
+        fun bincodeDeserialize(input: ByteArray?): Shape {
             if (input == null) {
                 throw DeserializationError("Cannot deserialize null array")
             }
@@ -185,58 +305,120 @@ data class HttpHeader(
 
 <!-- generated:kotlin:end -->
 
-### TypeScript
+</details>
+
+<details>
+<summary>TypeScript</summary>
 
 <!-- generated:typescript:start -->
 
 ```typescript
-export class HttpHeader {
-    constructor (public name: str, public value: str) {
+type float64 = number;
+
+export class Point {
+    constructor (public x: float64, public y: float64) {
     }
 
     public serialize(serializer: Serializer): void {
-        serializer.serializeStr(this.name);
-        serializer.serializeStr(this.value);
+        serializer.serializeF64(this.x);
+        serializer.serializeF64(this.y);
     }
 
-    static deserialize(deserializer: Deserializer): HttpHeader {
-        const name = deserializer.deserializeStr();
-        const value = deserializer.deserializeStr();
-        return new HttpHeader(name,value);
+    static deserialize(deserializer: Deserializer): Point {
+        const x = deserializer.deserializeF64();
+        const y = deserializer.deserializeF64();
+        return new Point(x,y);
+    }
+}
+
+export type Shape =
+    | { kind: "Circle"; centre: Point; radius: float64 }
+    | { kind: "Rectangle"; position: Point; width: float64; height: float64 };
+
+export const shapeCircle = (centre: Point, radius: float64): Shape => ({ kind: "Circle", centre, radius });
+
+export const shapeRectangle = (position: Point, width: float64, height: float64): Shape => ({ kind: "Rectangle", position, width, height });
+
+export function matchShape<R>(value: Shape, cases: {
+    Circle: (v: Extract<Shape, { kind: "Circle" }>) => R;
+    Rectangle: (v: Extract<Shape, { kind: "Rectangle" }>) => R;
+}): R {
+    return cases[value.kind as Shape["kind"]](value as never);
+}
+
+export function serializeShape(value: Shape, serializer: Serializer): void {
+    switch (value.kind) {
+        case "Circle": {
+            serializer.serializeVariantIndex(0);
+            value.centre.serialize(serializer);
+            serializer.serializeF64(value.radius);
+            break;
+        }
+        case "Rectangle": {
+            serializer.serializeVariantIndex(1);
+            value.position.serialize(serializer);
+            serializer.serializeF64(value.width);
+            serializer.serializeF64(value.height);
+            break;
+        }
+        default: throw new Error("Unknown variant: " + (value as any).kind);
+    }
+}
+
+export function deserializeShape(deserializer: Deserializer): Shape {
+    const index = deserializer.deserializeVariantIndex();
+    switch (index) {
+        case 0: {
+            const centre = Point.deserialize(deserializer);
+            const radius = deserializer.deserializeF64();
+            return { kind: "Circle", centre, radius };
+        }
+        case 1: {
+            const position = Point.deserialize(deserializer);
+            const width = deserializer.deserializeF64();
+            const height = deserializer.deserializeF64();
+            return { kind: "Rectangle", position, width, height };
+        }
+        default: throw new Error("Unknown variant index for Shape: " + index);
     }
 }
 ```
 
 <!-- generated:typescript:end -->
 
-### C#
+</details>
+
+<details>
+<summary>C#</summary>
 
 <!-- generated:csharp:start -->
 
 ```csharp
-public partial class HttpHeader : ObservableObject, IFacetSerializable, IFacetDeserializable<HttpHeader> {
+namespace Example;
+
+public partial class Point : ObservableObject, IFacetSerializable, IFacetDeserializable<Point> {
     [ObservableProperty]
-    private string _name;
+    private double _x;
     [ObservableProperty]
-    private string _value;
+    private double _y;
 
     public void Serialize(ISerializer serializer)
     {
         serializer.IncreaseContainerDepth();
-        serializer.SerializeStr(Name);
-        serializer.SerializeStr(Value);
+        serializer.SerializeF64(X);
+        serializer.SerializeF64(Y);
         serializer.DecreaseContainerDepth();
     }
 
-    public static HttpHeader Deserialize(IDeserializer deserializer)
+    public static Point Deserialize(IDeserializer deserializer)
     {
         deserializer.IncreaseContainerDepth();
-        var name = deserializer.DeserializeStr();
-        var value = deserializer.DeserializeStr();
+        var x = deserializer.DeserializeF64();
+        var y = deserializer.DeserializeF64();
         deserializer.DecreaseContainerDepth();
-        return new HttpHeader {
-            Name = name,
-            Value = value,
+        return new Point {
+            X = x,
+            Y = y,
         };
     }
 
@@ -247,7 +429,89 @@ public partial class HttpHeader : ObservableObject, IFacetSerializable, IFacetDe
         return serializer.GetBytes();
     }
 
-    public static HttpHeader BincodeDeserialize(byte[] input)
+    public static Point BincodeDeserialize(byte[] input)
+    {
+        if (input is null)
+        {
+            throw new DeserializationError("Cannot deserialize null array");
+        }
+        var deserializer = new BincodeDeserializer(input);
+        var value = Deserialize(deserializer);
+        if (deserializer.GetBufferOffset() < input.Length)
+        {
+            throw new DeserializationError("Some input bytes were not read");
+        }
+        return value;
+    }
+}
+
+public abstract record Shape : IFacetSerializable, IFacetDeserializable<Shape> {
+    public sealed partial record Circle(Point Centre, double Radius) : Shape;
+
+    public sealed partial record Rectangle(Point Position, double Width, double Height) : Shape;
+
+    public abstract void Serialize(ISerializer serializer);
+
+    private static Shape DeserializeCircle(IDeserializer deserializer)
+    {
+        var centre = Point.Deserialize(deserializer);
+        var radius = deserializer.DeserializeF64();
+        return new Circle(centre, radius);
+    }
+
+    public sealed partial record Circle
+    {
+        public override void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeVariantIndex(0);
+            Centre.Serialize(serializer);
+            serializer.SerializeF64(Radius);
+            serializer.DecreaseContainerDepth();
+        }
+
+    }
+    private static Shape DeserializeRectangle(IDeserializer deserializer)
+    {
+        var position = Point.Deserialize(deserializer);
+        var width = deserializer.DeserializeF64();
+        var height = deserializer.DeserializeF64();
+        return new Rectangle(position, width, height);
+    }
+
+    public sealed partial record Rectangle
+    {
+        public override void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeVariantIndex(1);
+            Position.Serialize(serializer);
+            serializer.SerializeF64(Width);
+            serializer.SerializeF64(Height);
+            serializer.DecreaseContainerDepth();
+        }
+
+    }
+    public static Shape Deserialize(IDeserializer deserializer)
+    {
+        var index = deserializer.DeserializeVariantIndex();
+        return index switch
+        {
+            0 => DeserializeCircle(deserializer),
+            1 => DeserializeRectangle(deserializer),
+            _ => throw new DeserializationError("Unknown variant index for Shape: " + index),
+        }
+        ;
+    }
+
+    public byte[] BincodeSerialize()
+    {
+        var serializer = new BincodeSerializer();
+        Serialize(serializer);
+        return serializer.GetBytes();
+    }
+
+    public static Shape BincodeDeserialize(byte[] input)
     {
         if (input is null)
         {
@@ -265,6 +529,8 @@ public partial class HttpHeader : ObservableObject, IFacetSerializable, IFacetDe
 ```
 
 <!-- generated:csharp:end -->
+
+</details>
 
 ## Facet attributes
 

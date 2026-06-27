@@ -195,7 +195,7 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
     /// - Non-unit enum → abstract `Serialize`, per-variant helpers, static `Deserialize`
     /// - Everything else → `Serialize`, `Deserialize`, `BincodeSerialize`, `BincodeDeserialize`
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
-        if let ContainerFormat::Enum(variants_map, _) = ctx.container.format {
+        if let ContainerFormat::Enum(variants_map, _, _) = ctx.container.format {
             if is_all_unit_enum(ctx.container.format) {
                 return Ok(());
             }
@@ -213,7 +213,7 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
 
     /// Emits the `{EnumName}Bincode` static helper class after all-unit enum declarations.
     fn after_type(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
-        if let ContainerFormat::Enum(variants_map, _) = ctx.container.format
+        if let ContainerFormat::Enum(variants_map, _, _) = ctx.container.format
             && is_all_unit_enum(ctx.container.format)
         {
             writeln!(w)?;
@@ -230,7 +230,7 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
 /// Returns `true` when every variant of the given `ContainerFormat::Enum` is
 /// [`VariantFormat::Unit`] (i.e. this is a C-style enum).
 fn is_all_unit_enum(format: &ContainerFormat) -> bool {
-    if let ContainerFormat::Enum(variants, _) = format {
+    if let ContainerFormat::Enum(variants, _, _) = format {
         variants
             .values()
             .all(|v| matches!(v.value, VariantFormat::Unit))
@@ -1075,7 +1075,7 @@ mod tests {
         indent::{IndentConfig, IndentedWriter},
         plugin::EmitContext,
     };
-    use crate::reflection::format::{ContainerFormat, Doc, QualifiedTypeName};
+    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, QualifiedTypeName};
 
     fn render(f: impl FnOnce(&mut dyn IndentWrite) -> io::Result<()>) -> String {
         let mut buf = Vec::new();
@@ -1133,7 +1133,7 @@ mod tests {
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -1170,7 +1170,7 @@ mod tests {
         variants.insert(0u32, Named::new(&VariantFormat::Unit, "A".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,
@@ -1226,7 +1226,7 @@ mod tests {
         variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
 
         let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, Doc::default());
+        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
         let container = Container {
             name: &name,
             format: &format,

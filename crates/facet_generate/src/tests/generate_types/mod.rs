@@ -19,7 +19,7 @@ pub struct Types {
     pub custom_type: CustomType,
 }
 
-// TODO: enable swift, typescript (expect files need updating for no-encoding output)
+// TODO: enable swift
 crate::test! {
-    Types for kotlin
+    Types for kotlin, typescript
 }

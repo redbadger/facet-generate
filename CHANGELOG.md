@@ -4,6 +4,123 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.18.0] - unreleased
+
+TypeScript enums are now generated as **discriminated union types** instead of abstract class hierarchies. This is a breaking change for any code that was constructing or matching TypeScript enum values, but the new output is far more idiomatic and integrates naturally with TypeScript's type narrowing.
+
+### 💥 Breaking Changes
+
+- **TypeScript enums are no longer emitted as abstract classes.** Each enum is now a `type` alias over a union of object literals. Code that used `new FooVariant(...)` or `instanceof` checks must be updated to use the generated constructor functions and `matchX` helpers described below. [#106](https://github.com/redbadger/facet-generate/pull/106)
+
+### 🚀 Features
+
+- **feat(typescript): discriminated union types for enums** — Rust enums now generate a `type` alias, a typed constructor arrow function per variant, and an exhaustive `matchX<R>(...)` helper [#106](https://github.com/redbadger/facet-generate/pull/106)
+- **feat(typescript): `EnumTagging` in format AST** — `#[facet(tag = "...")]` and `#[facet(tag = "...", content = "...")]` are now reflected into the format as `EnumTagging::Internal` and `EnumTagging::Adjacent`, controlling the shape of each variant's object literal [#106](https://github.com/redbadger/facet-generate/pull/106)
+- **feat(typescript): standalone serialize/deserialize for enums** — the Bincode and JSON plugins now emit `serializeX(value, serializer)` / `deserializeX(deserializer)` functions alongside each enum type rather than expecting a `.serialize()` method on the value [#106](https://github.com/redbadger/facet-generate/pull/106)
+
+### 🐛 Bug Fixes
+
+- **fix(typescript): quote non-identifier property keys in match function** — variant names that are not valid JavaScript identifiers (e.g. `"number-array"` from `rename_all = "kebab-case"`) are now correctly quoted as string keys in the `matchX` cases object type [#106](https://github.com/redbadger/facet-generate/pull/106)
+
+### 🧪 Tests
+
+- Enabled TypeScript output for 21 previously-disabled or untested expect-file test cases covering structs, unit enums, externally/internally/adjacently tagged enums, skipped variants, readonly fields, deprecation notices, and anonymous struct variants [#106](https://github.com/redbadger/facet-generate/pull/106)
+
+---
+
+#### Usage examples
+
+Given this Rust enum:
+
+```rust
+#[derive(Facet)]
+#[repr(C)]
+pub enum Shape {
+    Circle { radius: f64 },
+    Rectangle { width: f64, height: f64 },
+    Point,
+}
+```
+
+The generated TypeScript is:
+
+```typescript
+export type Shape =
+    | { kind: "Circle"; radius: float64 }
+    | { kind: "Rectangle"; width: float64; height: float64 }
+    | { kind: "Point" };
+
+export const shapeCircle = (radius: float64): Shape => ({ kind: "Circle", radius });
+export const shapeRectangle = (width: float64, height: float64): Shape => ({ kind: "Rectangle", width, height });
+export const shapePoint = (): Shape => ({ kind: "Point" });
+
+export function matchShape<R>(value: Shape, cases: {
+    Circle: (v: Extract<Shape, { kind: "Circle" }>) => R;
+    Rectangle: (v: Extract<Shape, { kind: "Rectangle" }>) => R;
+    Point: (v: Extract<Shape, { kind: "Point" }>) => R;
+}): R {
+    return cases[value.kind as Shape["kind"]](value as never);
+}
+```
+
+**Constructing values:**
+
+```typescript
+const circle = shapeCircle(3.14);
+const rect = shapeRectangle(10, 20);
+const point = shapePoint();
+```
+
+**Exhaustive pattern matching:**
+
+```typescript
+const area = matchShape(shape, {
+    Circle: ({ radius }) => Math.PI * radius ** 2,
+    Rectangle: ({ width, height }) => width * height,
+    Point: () => 0,
+});
+```
+
+**Type narrowing without `matchShape`** — TypeScript's built-in narrowing works directly on the `kind` field:
+
+```typescript
+if (shape.kind === "Circle") {
+    console.log(shape.radius); // TypeScript knows this is a Circle
+}
+```
+
+**Internally tagged enums** (`#[facet(tag = "type")]`) inline the tag alongside the payload fields:
+
+```rust
+#[facet(tag = "type")]
+pub enum Event {
+    Click { x: i32, y: i32 },
+    KeyPress { key: String },
+}
+```
+
+```typescript
+export type Event =
+    | { type: "Click"; x: int32; y: int32 }
+    | { type: "KeyPress"; key: str };
+```
+
+**Adjacently tagged enums** (`#[facet(tag = "type", content = "data")]`) wrap the payload under a content field:
+
+```rust
+#[facet(tag = "type", content = "data")]
+pub enum Message {
+    Text(String),
+    Image { url: String, alt: String },
+}
+```
+
+```typescript
+export type Message =
+    | { type: "Text"; data: str }
+    | { type: "Image"; data: { url: str; alt: str; } };
+```
+
 ## [0.17.2] - 2026-06-25
 
 ### 🐛 Bug Fixes

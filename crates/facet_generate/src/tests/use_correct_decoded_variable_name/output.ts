@@ -1,3 +1,5 @@
-export interface MyEmptyStruct {
-}
 
+export class MyEmptyStruct {
+    constructor () {
+    }
+}

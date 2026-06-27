@@ -7,3 +7,7 @@ pub enum Test {
     AnonymousEmptyStruct {},
     NoStruct,
 }
+
+crate::test! {
+    Test for typescript
+}

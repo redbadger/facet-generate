@@ -1,3 +1,5 @@
-export interface UnitStruct {
-}
 
+export class UnitStruct {
+    constructor () {
+    }
+}

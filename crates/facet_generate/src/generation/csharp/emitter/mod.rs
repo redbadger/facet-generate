@@ -176,7 +176,7 @@ impl Emitter<CSharp> for Container<'_> {
                     write_class(w, self, name, fields, doc, lang)
                 }
             }
-            ContainerFormat::Enum(variants, doc) => {
+            ContainerFormat::Enum(variants, _, doc) => {
                 let all_unit_variants = variants
                     .values()
                     .all(|variant| matches!(variant.value, VariantFormat::Unit));

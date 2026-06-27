@@ -128,7 +128,7 @@ impl<'a> EmitContext<'a> {
         }
 
         match self.container.format {
-            ContainerFormat::UnitStruct(_) | ContainerFormat::Enum(_, _) => vec![],
+            ContainerFormat::UnitStruct(_) | ContainerFormat::Enum(_, _, _) => vec![],
             ContainerFormat::NewTypeStruct(format, _) => {
                 vec![Named::new(format, "value".to_string())]
             }

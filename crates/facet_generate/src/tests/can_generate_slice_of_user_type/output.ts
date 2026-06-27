@@ -1,4 +1,11 @@
-export interface Video {
-    tags: Tag[];
+type Seq<T> = T[];
+
+export class Tag {
+    constructor () {
+    }
 }
 
+export class Video {
+    constructor (public tags: Seq<Tag>) {
+    }
+}

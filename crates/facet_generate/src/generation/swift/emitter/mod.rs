@@ -356,7 +356,7 @@ impl Emitter<Swift> for Container<'_> {
             ContainerFormat::Struct(nameds, doc) => {
                 struct_(w, self, &nameds.iter().collect::<Vec<_>>(), doc, lang)
             }
-            ContainerFormat::Enum(variants, doc) => enum_(w, self, variants, doc, lang),
+            ContainerFormat::Enum(variants, _, doc) => enum_(w, self, variants, doc, lang),
         }
     }
 }

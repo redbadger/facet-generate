@@ -3,7 +3,9 @@
 
 use std::{collections::HashSet, string::ToString};
 
-use crate::reflection::format::{ContainerFormat, Doc, Format, FormatHolder, Named, VariantFormat};
+use crate::reflection::format::{
+    ContainerFormat, Doc, EnumTagging, Format, FormatHolder, Named, VariantFormat,
+};
 
 #[test]
 fn test_format_visiting() {
@@ -24,6 +26,7 @@ fn test_format_visiting() {
         )]
         .into_iter()
         .collect(),
+        EnumTagging::External,
         Doc::new(),
     );
     let mut names = HashSet::new();
