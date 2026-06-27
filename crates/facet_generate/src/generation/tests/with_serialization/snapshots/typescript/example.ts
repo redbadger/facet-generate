@@ -138,7 +138,7 @@ export class MyStruct {
                 });
             });
         });
-        this.parent.serialize(serializer);
+        serializeParent(this.parent, serializer);
     }
 
     static deserialize(deserializer: Deserializer): MyStruct {
@@ -161,7 +161,7 @@ export class MyStruct {
                 });
             });
         });
-        const parent = Parent.deserialize(deserializer);
+        const parent = deserializeParent(deserializer);
         return new MyStruct(string_to_int,map_to_list,option_of_vec_of_set,parent);
     }
 }
@@ -175,4 +175,26 @@ export function matchParent<R>(value: Parent, cases: {
     Child: (v: Extract<Parent, { kind: "Child" }>) => R;
 }): R {
     return cases[value.kind as Parent["kind"]](value as never);
+}
+
+export function serializeParent(value: Parent, serializer: Serializer): void {
+    switch (value.kind) {
+        case "Child": {
+            serializer.serializeVariantIndex(0);
+            value.value.serialize(serializer);
+            break;
+        }
+        default: throw new Error("Unknown variant: " + (value as any).kind);
+    }
+}
+
+export function deserializeParent(deserializer: Deserializer): Parent {
+    const index = deserializer.deserializeVariantIndex();
+    switch (index) {
+        case 0: {
+            const value = Child.deserialize(deserializer);
+            return { kind: "Child", value };
+        }
+        default: throw new Error("Unknown variant index for Parent: " + index);
+    }
 }

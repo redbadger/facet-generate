@@ -61,6 +61,11 @@ pub struct CodeGeneratorConfig {
     /// Populated by `update_from`. Used by the C# Bincode plugin to dispatch
     /// enum-typed fields through `{TypeName}Bincode.Serialize(...)` helpers.
     pub unit_variant_enums: BTreeSet<String>,
+    /// Names of all enum types in the registry.
+    /// Populated by `update_from`. Used by TypeScript bincode/json plugins to
+    /// branch `Format::TypeName` serialization: enums use standalone
+    /// `serializeX(value, serializer)` functions while structs use `.serialize(serializer)`.
+    pub enum_type_names: BTreeSet<String>,
 }
 
 /// Container or leaf types in the registry that need a runtime support file
@@ -143,6 +148,7 @@ impl CodeGeneratorConfig {
             used_format_types: BTreeSet::new(),
             referenced_namespaces: BTreeSet::new(),
             unit_variant_enums: BTreeSet::new(),
+            enum_type_names: BTreeSet::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -284,12 +290,14 @@ impl CodeGeneratorConfig {
                 entry.push(name.name.clone());
             }
 
-            if let ContainerFormat::Enum(variants, _, _) = format
-                && variants
+            if let ContainerFormat::Enum(variants, _, _) = format {
+                self.enum_type_names.insert(name.name.clone());
+                if variants
                     .values()
                     .all(|v| matches!(v.value, VariantFormat::Unit))
-            {
-                self.unit_variant_enums.insert(name.name.clone());
+                {
+                    self.unit_variant_enums.insert(name.name.clone());
+                }
             }
         }
     }
