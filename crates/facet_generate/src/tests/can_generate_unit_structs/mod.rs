@@ -5,7 +5,7 @@ use facet::Facet;
 #[derive(Facet)]
 struct UnitStruct;
 
-// TODO: enable swift, typescript (expect files need updating for no-encoding output)
+// TODO: enable swift
 crate::test! {
-    UnitStruct for kotlin
+    UnitStruct for kotlin, typescript
 }
