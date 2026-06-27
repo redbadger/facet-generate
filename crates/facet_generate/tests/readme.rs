@@ -1,10 +1,14 @@
 //! Keeps the generated-code examples in the top-level `README.md` in sync with
 //! what the generators actually produce.
 //!
-//! For each target language we reflect the `HttpHeader` type used in the README,
-//! generate the bincode-enabled output, extract just the `HttpHeader`
-//! declaration, and compare it against the fenced code block embedded in the
-//! README between marker comments such as:
+//! For Swift, Kotlin, and C# we reflect `Point` (a representative struct) and
+//! extract just its declaration. For TypeScript we show the full generated
+//! module (struct + enum), because TypeScript enums now produce a discriminated
+//! union type rather than a class and the declaration-extraction logic does not
+//! handle that format.
+//!
+//! Each language's output is compared against the fenced code block embedded in
+//! the README between marker comments such as:
 //!
 //! ```text
 //! <!-- generated:swift:start -->
@@ -34,13 +38,28 @@ use facet::Facet;
 use facet_generate::{
     Registry,
     generation::{bincode::BincodePlugin, csharp, kotlin, swift, typescript},
-    reflect,
+    reflection::RegistryBuilder,
 };
 
 #[derive(Facet)]
-struct HttpHeader {
-    name: String,
-    value: String,
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+enum Shape {
+    Circle {
+        centre: Point,
+        radius: f64,
+    },
+    Rectangle {
+        position: Point,
+        width: f64,
+        height: f64,
+    },
 }
 
 /// The README block we keep in sync, identified by the marker name and the
@@ -56,7 +75,11 @@ struct Block {
 
 #[test]
 fn readme_examples_are_up_to_date() {
-    let registry = reflect!(HttpHeader).unwrap();
+    let registry = RegistryBuilder::new()
+        .add_type::<Shape>()
+        .unwrap()
+        .build()
+        .unwrap();
 
     let blocks = vec![
         Block {
@@ -119,7 +142,7 @@ fn generate_swift(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "HttpHeader")
+    extract_declaration(dir.path(), "Point")
 }
 
 fn generate_kotlin(registry: &Registry) -> String {
@@ -128,16 +151,27 @@ fn generate_kotlin(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "HttpHeader")
+    extract_declaration(dir.path(), "Point")
 }
 
+/// For TypeScript we show the full generated module (minus import statements)
+/// because enums now produce discriminated union types rather than classes, and
+/// the brace-balanced `extract_declaration` helper cannot handle that format.
 fn generate_typescript(registry: &Registry) -> String {
     let dir = tempfile::tempdir().unwrap();
     typescript::Installer::new("example", dir.path())
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "HttpHeader")
+    let source = find_source_with_declaration(dir.path(), "Point")
+        .expect("generated TypeScript module not found");
+    source
+        .lines()
+        .skip_while(|line| line.starts_with("import "))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim_start()
+        .to_string()
 }
 
 fn generate_csharp(registry: &Registry) -> String {
@@ -146,7 +180,7 @@ fn generate_csharp(registry: &Registry) -> String {
         .plugin(BincodePlugin)
         .generate(registry)
         .unwrap();
-    extract_declaration(dir.path(), "HttpHeader")
+    extract_declaration(dir.path(), "Point")
 }
 
 /// Walks `dir`, finds the generated module file that declares `type_name`, and
