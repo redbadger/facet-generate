@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- fix(typescript): Correct `deserializeI64` / `deserializeI128` when the low limb has its high bit set. The previous BigInt `|` of signed halves dropped the upper limb (e.g. epoch-millis timestamps).
+
 ## [0.17.2] - 2026-06-25
 
 ### 🐛 Bug Fixes
