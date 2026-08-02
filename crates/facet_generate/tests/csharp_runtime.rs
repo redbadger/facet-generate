@@ -7,7 +7,12 @@
 
 use std::{fs, io::Write as _, process::Command};
 
-use facet_generate::generation::{bincode::BincodePlugin, csharp};
+use facet::Facet;
+use facet_generate::{
+    generation::{bincode::BincodePlugin, csharp},
+    reflect,
+};
+use serde::Serialize;
 use tempfile::tempdir;
 
 pub mod common;
@@ -51,6 +56,58 @@ fn quote_bytes(bytes: &[u8]) -> String {
             .collect::<Vec<_>>()
             .join(", ")
     )
+}
+
+#[test]
+fn test_csharp_bincode_runtime_with_keyword_fields() {
+    #[derive(Facet, Serialize)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        event: bool,
+        lock: bool,
+        class: bool,
+        namespace: bool,
+    }
+
+    let registry = reflect!(KeywordFields).unwrap();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let reference = bincode::serialize(&KeywordFields {
+        event: true,
+        lock: false,
+        class: true,
+        namespace: false,
+    })
+    .unwrap();
+
+    make_executable(&dir, "Example.Testing");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example.Testing;
+
+byte[] input = {bytes};
+var value = KeywordFields.BincodeDeserialize(input);
+
+if (!value.Event || value.Lock || !value.Class || value.Namespace)
+    throw new Exception("Keyword field values did not deserialize correctly");
+if (!input.SequenceEqual(value.BincodeSerialize()))
+    throw new Exception("Keyword field roundtrip failed");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
 }
 
 #[test]

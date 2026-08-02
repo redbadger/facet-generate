@@ -10,6 +10,31 @@ use super::super::*;
 use crate::{emit, generation::bincode::BincodePlugin};
 
 #[test]
+fn struct_variant_with_csharp_keyword_fields_escapes_deserialize_locals() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordVariant {
+        Values { event: bool, lock: bool },
+    }
+
+    let actual = emit!(KeywordVariant as CSharp with BincodePlugin).unwrap();
+
+    assert!(
+        actual.contains("var @event = deserializer.DeserializeBool();"),
+        "{actual}"
+    );
+    assert!(
+        actual.contains("var @lock = deserializer.DeserializeBool();"),
+        "{actual}"
+    );
+    assert!(
+        actual.contains("return new Values(@event, @lock);"),
+        "{actual}"
+    );
+}
+
+#[test]
 fn enum_with_unit_variants() {
     #[derive(Facet)]
     #[repr(C)]

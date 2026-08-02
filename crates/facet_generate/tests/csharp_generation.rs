@@ -39,6 +39,35 @@ fn test_that_csharp_code_compiles_with_bincode() {
 }
 
 #[test]
+fn test_that_csharp_code_with_keyword_fields_compiles_with_bincode() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        event: bool,
+        lock: bool,
+        class: bool,
+        namespace: bool,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordVariant {
+        Values { event: bool, lock: bool },
+    }
+
+    let registry = reflect!(KeywordFields, KeywordVariant).unwrap();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
+#[test]
 fn test_that_csharp_code_compiles_with_json() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
