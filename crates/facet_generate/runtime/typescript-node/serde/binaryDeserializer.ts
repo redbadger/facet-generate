@@ -19,6 +19,14 @@ export abstract class BinaryDeserializer implements Deserializer {
   }
 
   private read(length: number): ArrayBuffer {
+    const remaining = this.buffer.byteLength - this.offset;
+    if (length > remaining) {
+      throw new Error(
+        `Unexpected end of input: tried to read ${length} byte(s) at offset ` +
+          `${this.offset}, but only ${remaining} remain`,
+      );
+    }
+
     const bytes = this.buffer.slice(this.offset, this.offset + length);
     this.offset += length;
     return bytes;
