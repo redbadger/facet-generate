@@ -15,30 +15,35 @@ export class Child {
     }
 }
 
-export abstract class Parent {
-    abstract serialize(serializer: Serializer): void;
+export type Parent =
+    | { kind: "Child"; value: Child };
 
-    static deserialize(deserializer: Deserializer): Parent {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: return ParentVariantChild.load(deserializer);
-            default: throw new Error("Unknown variant index for Parent: " + index);
+export const parentChild = (value: Child): Parent => ({ kind: "Child", value });
+
+export function matchParent<R>(value: Parent, cases: {
+    Child: (v: Extract<Parent, { kind: "Child" }>) => R;
+}): R {
+    return cases[value.kind as Parent["kind"]](value as never);
+}
+
+export function serializeParent(value: Parent, serializer: Serializer): void {
+    switch (value.kind) {
+        case "Child": {
+            serializer.serializeVariantIndex(0);
+            value.value.serialize(serializer);
+            break;
         }
+        default: throw new Error("Unknown variant: " + (value as any).kind);
     }
 }
 
-export class ParentVariantChild extends Parent {
-    constructor (public value: Child) {
-        super();
-    }
-
-    public serialize(serializer: Serializer): void {
-        serializer.serializeVariantIndex(0);
-        this.value.serialize(serializer);
-    }
-
-    static load(deserializer: Deserializer): ParentVariantChild {
-        const value = Child.deserialize(deserializer);
-        return new ParentVariantChild(value);
+export function deserializeParent(deserializer: Deserializer): Parent {
+    const index = deserializer.deserializeVariantIndex();
+    switch (index) {
+        case 0: {
+            const value = Child.deserialize(deserializer);
+            return { kind: "Child", value };
+        }
+        default: throw new Error("Unknown variant index for Parent: " + index);
     }
 }

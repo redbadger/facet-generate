@@ -47,7 +47,8 @@ use crate as fg;
 use crate::{Registry, error::Error};
 
 use format::{
-    ContainerFormat, Format, FormatHolder, Named, Namespace, QualifiedTypeName, VariantFormat,
+    ContainerFormat, EnumTagging, Format, FormatHolder, Named, Namespace, QualifiedTypeName,
+    VariantFormat,
 };
 
 const SUPPORTED_GENERIC_TYPES: [&str; 10] = [
@@ -808,7 +809,7 @@ impl RegistryBuilder {
         self.push_namespace(type_level_namespace);
 
         let variants = self.process_enum_variants(enum_type, shape)?;
-        let container = ContainerFormat::Enum(variants, shape.into());
+        let container = ContainerFormat::Enum(variants, extract_enum_tagging(shape), shape.into());
         self.push_with_type_check(enum_name, container, shape)?;
         self.pop();
 
@@ -1405,7 +1406,7 @@ impl RegistryBuilder {
                         }
                     }
                 }
-                ContainerFormat::Enum(_, _doc) => {
+                ContainerFormat::Enum(_, _, _doc) => {
                     if matches!(mode, UpdateMode::Force) {
                         todo!("Enum container format update not implemented");
                     }
@@ -1670,6 +1671,19 @@ fn extract_rename_from_shape_attributes(shape: &Shape) -> Option<&'static str> {
         }
     }
     None
+}
+
+fn extract_enum_tagging(shape: &Shape) -> EnumTagging {
+    match (shape.tag, shape.content) {
+        (Some(tag), Some(content)) => EnumTagging::Adjacent {
+            tag: tag.to_string(),
+            content: content.to_string(),
+        },
+        (Some(tag), None) => EnumTagging::Internal {
+            tag: tag.to_string(),
+        },
+        _ => EnumTagging::External,
+    }
 }
 
 fn extract_namespace_from_shape(shape: &Shape) -> Result<NamespaceAction, Error> {

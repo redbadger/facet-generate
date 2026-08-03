@@ -11,7 +11,7 @@ pub struct MyStruct {
     d: i32,
 }
 
-// TODO: enable swift, typescript (expect files need updating for no-encoding output)
+// TODO: enable swift
 crate::test! {
-    MyStruct for kotlin
+    MyStruct for kotlin, typescript
 }

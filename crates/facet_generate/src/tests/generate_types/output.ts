@@ -1,16 +1,18 @@
-export interface CustomType {
+type float32 = number;
+type float64 = number;
+type int32 = number;
+type int8 = number;
+type ListTuple<T extends any[]> = Tuple<T>[];
+type Optional<T> = T | null;
+type Seq<T> = T[];
+type str = string;
+
+export class CustomType {
+    constructor () {
+    }
 }
 
-export interface Types {
-    s: string;
-    static_s: string;
-    int8: number;
-    float: number;
-    double: number;
-    array: string[];
-    fixed_length_array: [string, string, string, string];
-    dictionary: Record<string, number>;
-    optional_dictionary?: Record<string, number> | null;
-    custom_type: CustomType;
+export class Types {
+    constructor (public s: str, public static_s: str, public int8: int8, public float: float32, public double: float64, public array: Seq<str>, public fixed_length_array: ListTuple<[str]>, public dictionary: Map<str,int32>, public optional_dictionary: Optional<Map<str,int32>>, public custom_type: CustomType) {
+    }
 }
-

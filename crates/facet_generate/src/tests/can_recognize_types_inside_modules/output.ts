@@ -1,16 +1,21 @@
-export interface A {
-    field: number;
+type uint32 = number;
+
+export class A {
+    constructor (public field: uint32) {
+    }
 }
 
-export interface ABC {
-    field: number;
+export class AB {
+    constructor (public field: uint32) {
+    }
 }
 
-export interface AB {
-    field: number;
+export class ABC {
+    constructor (public field: uint32) {
+    }
 }
 
-export interface OutsideOfModules {
-    field: number;
+export class OutsideOfModules {
+    constructor (public field: uint32) {
+    }
 }
-

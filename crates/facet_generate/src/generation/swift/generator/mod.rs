@@ -150,7 +150,7 @@ fn check_type_hashable<'a>(
         ContainerFormat::Struct(fields, _) => fields
             .iter()
             .all(|f| fmt_is_hashable(registry, &f.value, known, visiting)),
-        ContainerFormat::Enum(variants, _) => variants
+        ContainerFormat::Enum(variants, _, _) => variants
             .values()
             .all(|v| variant_is_hashable(registry, &v.value, known, visiting)),
     };
@@ -287,7 +287,7 @@ fn check_type_equatable<'a>(
         ContainerFormat::Struct(fields, _) => fields
             .iter()
             .all(|f| fmt_is_equatable(registry, &f.value, known, visiting)),
-        ContainerFormat::Enum(variants, _) => variants
+        ContainerFormat::Enum(variants, _, _) => variants
             .values()
             .all(|v| variant_is_equatable(registry, &v.value, known, visiting)),
     };
