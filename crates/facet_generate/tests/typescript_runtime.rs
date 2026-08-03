@@ -36,7 +36,7 @@ impl TsProject {
 
         writeln!(
             source,
-            r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+            r#"import {{ assertEquals, assertThrows }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
 import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
 "#
         )
@@ -344,6 +344,51 @@ fn test_typescript_runtime_integer_edge_cases_roundtrip() {
         "U128",
         &u128_cases,
     ));
+
+    project.run();
+}
+
+/// Truncated input must fail loudly. `read()` used to hand back whatever the
+/// buffer had left, so a short fixed-width field surfaced as an opaque
+/// `RangeError` from `DataView` and a short length-prefixed field was silently
+/// deserialized as a shorter value.
+#[test]
+fn test_typescript_runtime_truncated_input_throws() {
+    let mut project = TsProject::new(&common::get_simple_registry());
+
+    project.write_test(
+        r#"
+Deno.test("truncated input throws instead of yielding a short value", () => {
+  // an i64 needs eight bytes; only three are available
+  assertThrows(
+    () => new BincodeDeserializer(new Uint8Array([1, 2, 3])).deserializeI64(),
+    Error,
+    "Unexpected end of input",
+  );
+
+  // a length prefix of five, with only two bytes of payload behind it
+  const truncatedStr = new Uint8Array([5, 0, 0, 0, 0, 0, 0, 0, 0x68, 0x69]);
+  assertThrows(
+    () => new BincodeDeserializer(truncatedStr).deserializeStr(),
+    Error,
+    "Unexpected end of input",
+  );
+
+  // nothing at all to read
+  assertThrows(
+    () => new BincodeDeserializer(new Uint8Array([])).deserializeBool(),
+    Error,
+    "Unexpected end of input",
+  );
+
+  // reading exactly to the end must still succeed
+  const exact = new BincodeDeserializer(
+    new Uint8Array([9, 0, 0, 0, 0, 0, 0, 0]),
+  );
+  assertEquals(exact.deserializeI64(), BigInt(9));
+});
+"#,
+    );
 
     project.run();
 }
