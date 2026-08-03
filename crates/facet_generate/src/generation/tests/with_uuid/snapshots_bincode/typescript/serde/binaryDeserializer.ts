@@ -103,25 +103,13 @@ export abstract class BinaryDeserializer implements Deserializer {
   }
 
   public deserializeI64(): bigint {
-    const low = this.deserializeI32();
-    const high = this.deserializeI32();
-
-    // combine the two 32-bit values and return (little endian)
-    return (
-      (BigInt(high.toString()) << BinaryDeserializer.BIG_32) |
-      BigInt(low.toString())
-    );
+    return new DataView(this.read(8)).getBigInt64(0, true);
   }
 
   public deserializeI128(): bigint {
-    const low = this.deserializeI64();
-    const high = this.deserializeI64();
-
-    // combine the two 64-bit values and return (little endian)
-    return (
-      (BigInt(high.toString()) << BinaryDeserializer.BIG_64) |
-      BigInt(low.toString())
-    );
+    const low = BigInt.asUintN(64, this.deserializeI64());
+    const high = BigInt.asUintN(64, this.deserializeI64());
+    return BigInt.asIntN(128, low | (high << BinaryDeserializer.BIG_64));
   }
 
   public deserializeOptionTag(): boolean {

@@ -281,7 +281,7 @@ impl Emitter<TypeScript> for Format {
 
 impl Emitter<TypeScript> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
-        write!(w, "public {}: ", &self.name)?;
+        write!(w, "public {}: ", self.name)?;
         self.value.write(w, lang)
     }
 }
@@ -319,7 +319,7 @@ fn output_struct_or_variant<W: IndentWrite>(
         .iter()
         .map(|f| {
             let type_str = quote_type(&f.value, lang);
-            format!("public {}: {}", &f.name, type_str)
+            format!("public {}: {}", f.name, type_str)
         })
         .collect();
     let args = args.join(", ");
