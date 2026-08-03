@@ -6,10 +6,8 @@
 import { Serializer } from "./serializer";
 
 export abstract class BinarySerializer implements Serializer {
-  private static readonly BIG_32: bigint = BigInt(32);
   private static readonly BIG_64: bigint = BigInt(64);
 
-  private static readonly BIG_32Fs: bigint = BigInt("4294967295");
   private static readonly BIG_64Fs: bigint = BigInt("18446744073709551615");
 
   private static readonly textEncoder = new TextEncoder();
@@ -72,6 +70,17 @@ export abstract class BinarySerializer implements Serializer {
     this.offset += bytesLength;
   }
 
+  private serializeBigWithFunction(
+    fn: (byteOffset: number, value: bigint, littleEndian: boolean) => void,
+    bytesLength: number,
+    value: bigint,
+  ) {
+    this.ensureBufferWillHandleSize(bytesLength);
+    const dv = new DataView(this.buffer, this.offset);
+    fn.apply(dv, [0, value, true]);
+    this.offset += bytesLength;
+  }
+
   public serializeU8(value: number): void {
     this.serialize(new Uint8Array([value]));
   }
@@ -85,21 +94,19 @@ export abstract class BinarySerializer implements Serializer {
   }
 
   public serializeU64(value: BigInt | number): void {
-    const low = BigInt(value.toString()) & BinarySerializer.BIG_32Fs;
-    const high = BigInt(value.toString()) >> BinarySerializer.BIG_32;
-
-    // write little endian number
-    this.serializeU32(Number(low));
-    this.serializeU32(Number(high));
+    this.serializeBigWithFunction(
+      DataView.prototype.setBigUint64,
+      8,
+      BigInt(value.toString()),
+    );
   }
 
   public serializeU128(value: BigInt | number): void {
-    const low = BigInt(value.toString()) & BinarySerializer.BIG_64Fs;
-    const high = BigInt(value.toString()) >> BinarySerializer.BIG_64;
+    const unsigned = BigInt(value.toString());
 
     // write little endian number
-    this.serializeU64(low);
-    this.serializeU64(high);
+    this.serializeU64(unsigned & BinarySerializer.BIG_64Fs);
+    this.serializeU64(unsigned >> BinarySerializer.BIG_64);
   }
 
   public serializeI8(value: number): void {
@@ -124,21 +131,20 @@ export abstract class BinarySerializer implements Serializer {
   }
 
   public serializeI64(value: bigint | number): void {
-    const low = BigInt(value) & BinarySerializer.BIG_32Fs;
-    const high = BigInt(value) >> BinarySerializer.BIG_32;
-
-    // write little endian number
-    this.serializeI32(Number(low));
-    this.serializeI32(Number(high));
+    this.serializeBigWithFunction(
+      DataView.prototype.setBigInt64,
+      8,
+      BigInt(value),
+    );
   }
 
   public serializeI128(value: bigint | number): void {
-    const low = BigInt(value) & BinarySerializer.BIG_64Fs;
-    const high = BigInt(value) >> BinarySerializer.BIG_64;
+    const signed = BigInt(value);
 
-    // write little endian number
-    this.serializeI64(low);
-    this.serializeI64(high);
+    // write little endian number; the low limb is unsigned, and setBigInt64
+    // reinterprets it as the same 64-bit pattern
+    this.serializeI64(signed & BinarySerializer.BIG_64Fs);
+    this.serializeI64(signed >> BinarySerializer.BIG_64);
   }
 
   public serializeOptionTag(value: boolean): void {

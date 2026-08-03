@@ -6,7 +6,6 @@
 import { Deserializer } from "./deserializer";
 
 export abstract class BinaryDeserializer implements Deserializer {
-  private static readonly BIG_32: bigint = BigInt(32);
   private static readonly BIG_64: bigint = BigInt(64);
   private static readonly textDecoder = new TextDecoder();
   public buffer: ArrayBuffer;
@@ -69,25 +68,14 @@ export abstract class BinaryDeserializer implements Deserializer {
   }
 
   public deserializeU64(): bigint {
-    const low = this.deserializeU32();
-    const high = this.deserializeU32();
-
-    // combine the two 32-bit values and return (little endian)
-    return BigInt(
-      (BigInt(high.toString()) << BinaryDeserializer.BIG_32) |
-        BigInt(low.toString()),
-    );
+    return new DataView(this.read(8)).getBigUint64(0, true);
   }
 
   public deserializeU128(): bigint {
+    // both limbs are unsigned, so they combine without sign extension
     const low = this.deserializeU64();
     const high = this.deserializeU64();
-
-    // combine the two 64-bit values and return (little endian)
-    return BigInt(
-      (BigInt(high.toString()) << BinaryDeserializer.BIG_64) |
-        BigInt(low.toString()),
-    );
+    return low | (high << BinaryDeserializer.BIG_64);
   }
 
   public deserializeI8(): number {
