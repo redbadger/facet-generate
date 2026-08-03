@@ -72,18 +72,42 @@ update-rust-deps:
     cargo upgrade --incompatible allow
     cargo update
 
+# Release flow:
+#
+#   1. bump the version in the crate's Cargo.toml, and date the CHANGELOG
+#      section (`## [x.y.z] - unreleased` -> `## [x.y.z] - <date>`)
+#   2. `just ci`, then commit the bump and push it to `main`
+#   3. create the GitHub release, which creates the tag for you:
+#        gh release create "facet-generate-v<version>" --target <commit> \
+#          --notes-file <the CHANGELOG section>
+#      or, when releasing without a GitHub release, `just tag`
+#   4. `just publish`
+#
+# Tagging is deliberately not part of `publish`: `gh release create` already
+# creates the tag, so doing it in `publish` too fails the whole recipe after
+# the irreversible upload has already happened. Keeping them separate means
+# `publish` behaves the same whichever order you release in.
+
+# publish the main crate to crates.io
+# Note: run `cargo login` first if you haven't already
+publish:
+    @echo '{{ style("command") }}publish v{{ version }}:{{ NORMAL }}'
+    cargo publish -p facet_generate
+
 # publish the attribute macro crate independently (only needed when it changes)
 # Note: run `cargo login` first if you haven't already
 publish-attrs:
     @echo '{{ style("command") }}publish facet-generate-attrs v{{ attrs-version }}:{{ NORMAL }}'
     cargo publish -p facet-generate-attrs
-    git tag -a "facet-generate-attrs-v{{ attrs-version }}" -m "Release facet-generate-attrs v{{ attrs-version }}"
-    git push origin "facet-generate-attrs-v{{ attrs-version }}"
 
-# publish the main crate to crates.io, then tag and push
-# Note: run `cargo login` first if you haven't already
-publish:
-    @echo '{{ style("command") }}publish v{{ version }}:{{ NORMAL }}'
-    cargo publish -p facet_generate
+# tag git HEAD and push the tag (unnecessary if a GitHub release made it; HEAD is `@-` under jj)
+tag:
+    @echo '{{ style("command") }}tag facet-generate-v{{ version }}:{{ NORMAL }}'
     git tag -a "facet-generate-v{{ version }}" -m "Release facet-generate v{{ version }}"
     git push origin "facet-generate-v{{ version }}"
+
+# as `tag`, for the independently versioned attribute macro crate
+tag-attrs:
+    @echo '{{ style("command") }}tag facet-generate-attrs-v{{ attrs-version }}:{{ NORMAL }}'
+    git tag -a "facet-generate-attrs-v{{ attrs-version }}" -m "Release facet-generate-attrs v{{ attrs-version }}"
+    git push origin "facet-generate-attrs-v{{ attrs-version }}"
