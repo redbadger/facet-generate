@@ -154,6 +154,12 @@ Deno.test("bincode serialization matches deserialization", () => {{
 
 #[test]
 fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
+    const LARGE_I64: i64 = 1_785_688_513_662;
+    // Low limb (bits 0-63) has bit 63 set; the old signed-OR combine dropped
+    // the high limb the same way it did for i64.
+    const LARGE_I128: i128 = (1 << 64) | 0xF8C4_E09E_F8C4_E09E_u64 as i128;
+    const NEGATIVE_I128: i128 = i128::MIN + 5;
+
     let registry = common::get_simple_registry();
     let dir = tempdir().unwrap();
     let dir_path = dir.path();
@@ -179,7 +185,6 @@ import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
         .with_plugins(vec![Arc::new(BincodePlugin)]);
     generator.output(&mut source, &registry).unwrap();
 
-    const LARGE_I64: i64 = 1_785_688_513_662;
     let reference = bincode::serialize(&Test {
         a: vec![1],
         b: (LARGE_I64, 9),
@@ -212,10 +217,6 @@ Deno.test("i64 with low-half bit 31 set round-trips", () => {{
     )
     .unwrap();
 
-    // Low limb (bits 0-63) has bit 63 set; the old signed-OR combine dropped
-    // the high limb the same way it did for i64.
-    const LARGE_I128: i128 = (1 << 64) | 0xF8C4_E09E_F8C4_E09E_u64 as i128;
-    const NEGATIVE_I128: i128 = i128::MIN + 5;
     let i128_reference = bincode::serialize(&(LARGE_I128, NEGATIVE_I128)).unwrap();
 
     writeln!(
