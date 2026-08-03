@@ -4,43 +4,134 @@
 pub mod common;
 
 use common::{Choice, Test};
-use facet_generate::generation::{CodeGeneratorConfig, bincode::BincodePlugin, typescript};
-use std::{fs::File, io::Write, process::Command, sync::Arc};
-use tempfile::tempdir;
+use facet_generate::{
+    Registry,
+    generation::{CodeGeneratorConfig, bincode::BincodePlugin, typescript},
+};
+use std::{fs::File, io::Write, path::PathBuf, process::Command, sync::Arc};
+use tempfile::{TempDir, tempdir};
+
+/// A throwaway TypeScript project with the serde and bincode runtimes
+/// installed, and a `test.ts` primed with the imports plus the types generated
+/// from `registry`.
+///
+/// Append `Deno.test` blocks with [`TsProject::write_test`], then execute them
+/// with [`TsProject::run`].
+struct TsProject {
+    dir: TempDir,
+    source_path: PathBuf,
+    source: File,
+}
+
+impl TsProject {
+    fn new(registry: &Registry) -> Self {
+        let dir = tempdir().unwrap();
+
+        let mut installer = typescript::Installer::new("main", dir.path());
+        installer.install_serde_runtime().unwrap();
+        installer.install_bincode_runtime().unwrap();
+
+        let source_path = dir.path().join("test.ts");
+        let mut source = File::create(&source_path).unwrap();
+
+        writeln!(
+            source,
+            r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
+"#
+        )
+        .unwrap();
+
+        let config = CodeGeneratorConfig::new("main".to_string());
+        let generator = typescript::TypeScriptCodeGenerator::new(&config)
+            .with_plugins(vec![Arc::new(BincodePlugin)]);
+        generator.output(&mut source, registry).unwrap();
+
+        Self {
+            dir,
+            source_path,
+            source,
+        }
+    }
+
+    fn write_test(&mut self, body: &str) {
+        writeln!(self.source, "{body}").unwrap();
+    }
+
+    fn run(self) {
+        drop(self.source);
+
+        let status = Command::new("deno")
+            .current_dir(self.dir.path())
+            .arg("test")
+            .arg("--sloppy-imports")
+            .arg(&self.source_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+}
+
+/// Pairs each value with its bincode encoding, for [`scalar_roundtrip_test`].
+macro_rules! wire_cases {
+    ($($value:expr),* $(,)?) => {
+        vec![$((($value).to_string(), bincode::serialize(&$value).unwrap())),*]
+    };
+}
+
+/// Builds a Deno test that round-trips every `(value, bytes)` pair through the
+/// runtime's `deserialize{method}` and `serialize{method}`.
+///
+/// The expected bytes come from bincode on the Rust side, so the TypeScript
+/// runtime is checked against the wire format rather than against itself.
+fn scalar_roundtrip_test(test_name: &str, method: &str, cases: &[(String, Vec<u8>)]) -> String {
+    let rows = cases
+        .iter()
+        .map(|(value, bytes)| {
+            let bytes = bytes
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("    {{ value: BigInt(\"{value}\"), bytes: new Uint8Array([{bytes}]) }},")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        r#"
+Deno.test("{test_name}", () => {{
+  const cases = [
+{rows}
+  ];
+
+  for (const {{ value, bytes }} of cases) {{
+    const deserializer = new BincodeDeserializer(bytes);
+    assertEquals(
+      deserializer.deserialize{method}(),
+      value,
+      `deserialize{method}(${{value}})`,
+    );
+
+    const serializer = new BincodeSerializer();
+    serializer.serialize{method}(value);
+    assertEquals(
+      serializer.getBytes(),
+      bytes,
+      `serialize{method}(${{value}})`,
+    );
+  }}
+}});"#
+    )
+}
 
 #[test]
 fn test_typescript_runtime_bincode_uuid_roundtrip() {
-    let registry = common::get_uuid_registry();
-    let dir = tempdir().unwrap();
-    let dir_path = dir.path();
-    std::fs::create_dir_all(dir_path).unwrap();
-
-    let mut installer = typescript::Installer::new("main", dir_path);
-    installer.install_serde_runtime().unwrap();
-    installer.install_bincode_runtime().unwrap();
-
-    let source_path = dir_path.join("test.ts");
-    let mut source = File::create(&source_path).unwrap();
-
-    writeln!(
-        source,
-        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
-import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
-"#
-    )
-    .unwrap();
-
-    let config = CodeGeneratorConfig::new("main".to_string());
-    let generator = typescript::TypeScriptCodeGenerator::new(&config)
-        .with_plugins(vec![Arc::new(BincodePlugin)]);
-    generator.output(&mut source, &registry).unwrap();
+    let mut project = TsProject::new(&common::get_uuid_registry());
 
     let reference = common::get_uuid_reference_bytes();
-    let id_str = common::UUID_ID.to_string();
-    let parent_id_str = common::UUID_PARENT_ID.to_string();
 
-    writeln!(
-        source,
+    project.write_test(&format!(
         r#"
 Deno.test("UUID bincode roundtrip", () => {{
   const expectedBytes = new Uint8Array([{bytes}]);
@@ -59,50 +150,19 @@ Deno.test("UUID bincode roundtrip", () => {{
 "#,
         bytes = reference
             .iter()
-            .map(|x| format!("{x}"))
+            .map(u8::to_string)
             .collect::<Vec<_>>()
             .join(", "),
-        id = id_str,
-        parent_id = parent_id_str,
-    )
-    .unwrap();
+        id = common::UUID_ID,
+        parent_id = common::UUID_PARENT_ID,
+    ));
 
-    let status = Command::new("deno")
-        .current_dir(dir_path)
-        .arg("test")
-        .arg("--sloppy-imports")
-        .arg(&source_path)
-        .status()
-        .unwrap();
-    assert!(status.success());
+    project.run();
 }
 
 #[test]
 fn test_typescript_runtime_bincode_serialization() {
-    let registry = common::get_simple_registry();
-    let dir = tempdir().unwrap();
-    let dir_path = dir.path();
-    std::fs::create_dir_all(dir_path).unwrap();
-
-    let mut installer = typescript::Installer::new("main", dir_path);
-    installer.install_serde_runtime().unwrap();
-    installer.install_bincode_runtime().unwrap();
-
-    let source_path = dir_path.join("test.ts");
-    let mut source = File::create(&source_path).unwrap();
-
-    writeln!(
-        source,
-        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
-import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
-"#
-    )
-    .unwrap();
-
-    let config = CodeGeneratorConfig::new("main".to_string());
-    let generator = typescript::TypeScriptCodeGenerator::new(&config)
-        .with_plugins(vec![Arc::new(BincodePlugin)]);
-    generator.output(&mut source, &registry).unwrap();
+    let mut project = TsProject::new(&common::get_simple_registry());
 
     let reference = bincode::serialize(&Test {
         a: vec![4, 6],
@@ -111,11 +171,10 @@ import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
     })
     .unwrap();
 
-    writeln!(
-        source,
+    project.write_test(&format!(
         r#"
 Deno.test("bincode serialization matches deserialization", () => {{
-  const expectedBytes = new Uint8Array([{0}]);
+  const expectedBytes = new Uint8Array([{bytes}]);
   const deserializer = new BincodeDeserializer(expectedBytes);
   const deserializedInstance: Test = Test.deserialize(deserializer);
 
@@ -135,22 +194,14 @@ Deno.test("bincode serialization matches deserialization", () => {{
   assertEquals(serializedBytes, expectedBytes, "bincode bytes should match");
 }});
 "#,
-        reference
+        bytes = reference
             .iter()
-            .map(|x| format!("{x}"))
+            .map(u8::to_string)
             .collect::<Vec<_>>()
             .join(", "),
-    )
-    .unwrap();
+    ));
 
-    let status = Command::new("deno")
-        .current_dir(dir_path)
-        .arg("test")
-        .arg("--sloppy-imports")
-        .arg(&source_path)
-        .status()
-        .unwrap();
-    assert!(status.success());
+    project.run();
 }
 
 #[test]
@@ -161,30 +212,7 @@ fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
     const LARGE_I128: i128 = (1 << 64) | 0xF8C4_E09E_F8C4_E09E_u64 as i128;
     const NEGATIVE_I128: i128 = i128::MIN + 5;
 
-    let registry = common::get_simple_registry();
-    let dir = tempdir().unwrap();
-    let dir_path = dir.path();
-    std::fs::create_dir_all(dir_path).unwrap();
-
-    let mut installer = typescript::Installer::new("main", dir_path);
-    installer.install_serde_runtime().unwrap();
-    installer.install_bincode_runtime().unwrap();
-
-    let source_path = dir_path.join("test.ts");
-    let mut source = File::create(&source_path).unwrap();
-
-    writeln!(
-        source,
-        r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
-import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
-"#
-    )
-    .unwrap();
-
-    let config = CodeGeneratorConfig::new("main".to_string());
-    let generator = typescript::TypeScriptCodeGenerator::new(&config)
-        .with_plugins(vec![Arc::new(BincodePlugin)]);
-    generator.output(&mut source, &registry).unwrap();
+    let mut project = TsProject::new(&common::get_simple_registry());
 
     let reference = bincode::serialize(&Test {
         a: vec![1],
@@ -193,8 +221,7 @@ import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
     })
     .unwrap();
 
-    writeln!(
-        source,
+    project.write_test(&format!(
         r#"
 Deno.test("i64 with low-half bit 31 set round-trips", () => {{
   const expectedBytes = new Uint8Array([{bytes}]);
@@ -211,17 +238,15 @@ Deno.test("i64 with low-half bit 31 set round-trips", () => {{
 "#,
         bytes = reference
             .iter()
-            .map(|x| format!("{x}"))
+            .map(u8::to_string)
             .collect::<Vec<_>>()
             .join(", "),
         large = LARGE_I64,
-    )
-    .unwrap();
+    ));
 
     let i128_reference = bincode::serialize(&(LARGE_I128, NEGATIVE_I128)).unwrap();
 
-    writeln!(
-        source,
+    project.write_test(&format!(
         r#"
 Deno.test("i128 with low-limb bit 63 set round-trips", () => {{
   const expectedBytes = new Uint8Array([{bytes}]);
@@ -240,20 +265,85 @@ Deno.test("i128 with low-limb bit 63 set round-trips", () => {{
 "#,
         bytes = i128_reference
             .iter()
-            .map(|x| format!("{x}"))
+            .map(u8::to_string)
             .collect::<Vec<_>>()
             .join(", "),
         large = LARGE_I128,
         negative = NEGATIVE_I128,
-    )
-    .unwrap();
+    ));
 
-    let status = Command::new("deno")
-        .current_dir(dir_path)
-        .arg("test")
-        .arg("--sloppy-imports")
-        .arg(&source_path)
-        .status()
-        .unwrap();
-    assert!(status.success());
+    project.run();
+}
+
+/// Exercises the boundaries of every multi-limb integer the TypeScript runtime
+/// handles: zero, ±1, the type extremes, and values that straddle the 32- and
+/// 64-bit limb boundaries where sign extension used to corrupt the result.
+#[test]
+fn test_typescript_runtime_integer_edge_cases_roundtrip() {
+    let mut project = TsProject::new(&common::get_simple_registry());
+
+    let i64_cases = wire_cases![
+        0_i64,
+        1_i64,
+        -1_i64,
+        i64::MIN,
+        i64::MAX,
+        1_i64 << 31,
+        -(1_i64 << 31),
+        1_785_688_513_662_i64,
+        -1_785_688_513_662_i64,
+    ];
+    project.write_test(&scalar_roundtrip_test(
+        "i64 edge cases round-trip",
+        "I64",
+        &i64_cases,
+    ));
+
+    let u64_cases = wire_cases![
+        0_u64,
+        1_u64,
+        u64::MAX,
+        1_u64 << 31,
+        (1_u64 << 32) - 1,
+        1_u64 << 32,
+        0xFFFF_FFFF_8000_0000_u64,
+    ];
+    project.write_test(&scalar_roundtrip_test(
+        "u64 edge cases round-trip",
+        "U64",
+        &u64_cases,
+    ));
+
+    let i128_cases = wire_cases![
+        0_i128,
+        1_i128,
+        -1_i128,
+        i128::MIN,
+        i128::MAX,
+        i128::MIN + 5,
+        1_i128 << 63,
+        -(1_i128 << 64),
+    ];
+    project.write_test(&scalar_roundtrip_test(
+        "i128 edge cases round-trip",
+        "I128",
+        &i128_cases,
+    ));
+
+    let u128_cases = wire_cases![
+        0_u128,
+        1_u128,
+        u128::MAX,
+        1_u128 << 63,
+        1_u128 << 64,
+        u128::from(u64::MAX),
+        (1_u128 << 64) | 0xF8C4_E09E_F8C4_E09E_u128,
+    ];
+    project.write_test(&scalar_roundtrip_test(
+        "u128 edge cases round-trip",
+        "U128",
+        &u128_cases,
+    ));
+
+    project.run();
 }

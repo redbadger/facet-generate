@@ -21,11 +21,17 @@ TypeScript enums are now generated as **discriminated union types** instead of a
 ### 🐛 Bug Fixes
 
 - **fix(typescript): quote non-identifier property keys in match function** — variant names that are not valid JavaScript identifiers (e.g. `"number-array"` from `rename_all = "kebab-case"`) are now correctly quoted as string keys in the `matchX` cases object type [#106](https://github.com/redbadger/facet-generate/pull/106)
-- fix(typescript): Correct `deserializeI64` / `deserializeI128` when the low limb has its high bit set. The previous BigInt `|` of signed halves dropped the upper limb (e.g. epoch-millis timestamps).
+- **fix(typescript): correct `i64`/`i128` deserialization when the low limb has its high bit set** — the previous BigInt `|` of signed halves sign-extended the low limb and dropped the upper one, so any `i64` at or above `2^31` (including every current epoch-millis timestamp) decoded incorrectly [#110](https://github.com/redbadger/facet-generate/pull/110)
+- **fix(csharp): escape reserved C# identifiers in bincode output** — generated local variable names that collide with C# keywords (e.g. a field named `event` or `string`) are now prefixed with `@`, so the emitted bincode serializers compile [#109](https://github.com/redbadger/facet-generate/pull/109)
 
 ### 🧪 Tests
 
 - Enabled TypeScript output for 21 previously-disabled or untested expect-file test cases covering structs, unit enums, externally/internally/adjacently tagged enums, skipped variants, readonly fields, deprecation notices, and anonymous struct variants [#106](https://github.com/redbadger/facet-generate/pull/106)
+- Added edge-case round-trip coverage for every multi-limb integer in the TypeScript runtime (`i64`, `u64`, `i128`, `u128` at zero, ±1, the type extremes, and the 32-/64-bit limb boundaries), checked against bincode's encoding rather than against the runtime itself
+
+### ⚙️ Miscellaneous Tasks
+
+- chore(typescript): The `serde` runtime now reads and writes 64-bit integers with the native `DataView` `BigInt64`/`BigUint64` accessors instead of splitting them into 32-bit limbs, making `U64`/`U128` consistent with the `I64`/`I128` fix and retiring the now-unused `BIG_32` constants
 
 ---
 
