@@ -20,6 +20,7 @@
 //! | `type_body` | `Serialize`/`Deserialize`/`BincodeSerialize`/`BincodeDeserialize` methods |
 //! | `after_type` | `{EnumName}Bincode` static helper class for all-unit enums |
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
@@ -239,6 +240,100 @@ fn is_all_unit_enum(format: &ContainerFormat) -> bool {
     }
 }
 
+/// Escapes an identifier when it is a reserved C# keyword.
+///
+/// C# verbatim identifiers preserve the identifier's spelling while allowing a
+/// keyword to be used in declaration and reference positions. Contextual
+/// keywords are intentionally omitted because the generated identifiers are
+/// method locals, where those words are valid without escaping.
+fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    const RESERVED_KEYWORDS: &[&str] = &[
+        "abstract",
+        "as",
+        "base",
+        "bool",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "checked",
+        "class",
+        "const",
+        "continue",
+        "decimal",
+        "default",
+        "delegate",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "event",
+        "explicit",
+        "extern",
+        "false",
+        "finally",
+        "fixed",
+        "float",
+        "for",
+        "foreach",
+        "goto",
+        "if",
+        "implicit",
+        "in",
+        "int",
+        "interface",
+        "internal",
+        "is",
+        "lock",
+        "long",
+        "namespace",
+        "new",
+        "null",
+        "object",
+        "operator",
+        "out",
+        "override",
+        "params",
+        "private",
+        "protected",
+        "public",
+        "readonly",
+        "ref",
+        "return",
+        "sbyte",
+        "sealed",
+        "short",
+        "sizeof",
+        "stackalloc",
+        "static",
+        "string",
+        "struct",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "uint",
+        "ulong",
+        "unchecked",
+        "unsafe",
+        "ushort",
+        "using",
+        "virtual",
+        "void",
+        "volatile",
+        "while",
+    ];
+
+    if RESERVED_KEYWORDS.contains(&identifier) {
+        Cow::Owned(format!("@{identifier}"))
+    } else {
+        Cow::Borrowed(identifier)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Main code-generation functions
 // ---------------------------------------------------------------------------
@@ -270,7 +365,8 @@ fn write_class_bincode_methods(
     with_block(w, Newlines::BOTH, |w| {
         writeln!(w, "deserializer.IncreaseContainerDepth();")?;
         for field in fields {
-            let local_name = field.name.to_lower_camel_case();
+            let lower_camel_name = field.name.to_lower_camel_case();
+            let local_name = escape_identifier(&lower_camel_name);
             write_deserialize_binding(w, &local_name, &field.value, c_style_enums)?;
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
@@ -281,7 +377,8 @@ fn write_class_bincode_methods(
             with_block(w, Newlines::OPEN, |w| {
                 for field in fields {
                     let prop_name = field.name.to_upper_camel_case();
-                    let local_name = field.name.to_lower_camel_case();
+                    let lower_camel_name = field.name.to_lower_camel_case();
+                    let local_name = escape_identifier(&lower_camel_name);
                     writeln!(w, "{prop_name} = {local_name},")?;
                 }
                 Ok(())
@@ -613,16 +710,13 @@ fn deserializer_variant_body(
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_deserialize_binding(
-                    w,
-                    &field.name.to_lower_camel_case(),
-                    &field.value,
-                    c_style_enums,
-                )?;
+                let lower_camel_name = field.name.to_lower_camel_case();
+                let local_name = escape_identifier(&lower_camel_name);
+                write_deserialize_binding(w, &local_name, &field.value, c_style_enums)?;
             }
             let args = fields
                 .iter()
-                .map(|field| field.name.to_lower_camel_case())
+                .map(|field| escape_identifier(&field.name.to_lower_camel_case()).into_owned())
                 .collect::<Vec<_>>()
                 .join(", ");
             writeln!(

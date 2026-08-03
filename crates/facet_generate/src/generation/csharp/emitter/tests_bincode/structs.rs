@@ -9,6 +9,36 @@ use super::super::*;
 use crate::{self as fg, emit, generation::bincode::BincodePlugin};
 
 #[test]
+fn struct_with_csharp_keyword_fields_escapes_deserialize_locals() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        event: bool,
+        lock: bool,
+        class: bool,
+        namespace: bool,
+    }
+
+    let actual = emit!(KeywordFields as CSharp with BincodePlugin).unwrap();
+
+    for (keyword, property) in [
+        ("event", "Event"),
+        ("lock", "Lock"),
+        ("class", "Class"),
+        ("namespace", "Namespace"),
+    ] {
+        assert!(
+            actual.contains(&format!("var @{keyword} = deserializer.DeserializeBool();")),
+            "missing escaped declaration for {keyword}:\n{actual}"
+        );
+        assert!(
+            actual.contains(&format!("{property} = @{keyword},")),
+            "missing escaped reference for {keyword}:\n{actual}"
+        );
+    }
+}
+
+#[test]
 fn unit_struct() {
     /// line 1
     #[derive(Facet)]
@@ -258,7 +288,7 @@ fn struct_with_fields_of_primitive_types() {
         {
             deserializer.IncreaseContainerDepth();
             var unit = deserializer.DeserializeUnit();
-            var bool = deserializer.DeserializeBool();
+            var @bool = deserializer.DeserializeBool();
             var i8 = deserializer.DeserializeI8();
             var i16 = deserializer.DeserializeI16();
             var i32 = deserializer.DeserializeI32();
@@ -271,12 +301,12 @@ fn struct_with_fields_of_primitive_types() {
             var u128 = deserializer.DeserializeU128();
             var f32 = deserializer.DeserializeF32();
             var f64 = deserializer.DeserializeF64();
-            var char = deserializer.DeserializeChar();
-            var string = deserializer.DeserializeStr();
+            var @char = deserializer.DeserializeChar();
+            var @string = deserializer.DeserializeStr();
             deserializer.DecreaseContainerDepth();
             return new StructWithFields {
                 Unit = unit,
-                Bool = bool,
+                Bool = @bool,
                 I8 = i8,
                 I16 = i16,
                 I32 = i32,
@@ -289,8 +319,8 @@ fn struct_with_fields_of_primitive_types() {
                 U128 = u128,
                 F32 = f32,
                 F64 = f64,
-                Char = char,
-                String = string,
+                Char = @char,
+                String = @string,
             };
         }
 
