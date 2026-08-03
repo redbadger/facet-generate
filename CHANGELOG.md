@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
-## [0.18.0] - unreleased
+## [0.18.0] - 2026-08-03
 
 TypeScript enums are now generated as **discriminated union types** instead of abstract class hierarchies. This is a breaking change for any code that was constructing or matching TypeScript enum values, but the new output is far more idiomatic and integrates naturally with TypeScript's type narrowing.
 
@@ -23,16 +23,16 @@ TypeScript enums are now generated as **discriminated union types** instead of a
 - **fix(typescript): quote non-identifier property keys in match function** — variant names that are not valid JavaScript identifiers (e.g. `"number-array"` from `rename_all = "kebab-case"`) are now correctly quoted as string keys in the `matchX` cases object type [#106](https://github.com/redbadger/facet-generate/pull/106)
 - **fix(typescript): correct `i64`/`i128` deserialization when the low limb has its high bit set** — the previous BigInt `|` of signed halves sign-extended the low limb and dropped the upper one, so any `i64` at or above `2^31` (including every current epoch-millis timestamp) decoded incorrectly [#110](https://github.com/redbadger/facet-generate/pull/110)
 - **fix(csharp): escape reserved C# identifiers in bincode output** — generated local variable names that collide with C# keywords (e.g. a field named `event` or `string`) are now prefixed with `@`, so the emitted bincode serializers compile [#109](https://github.com/redbadger/facet-generate/pull/109)
-- **fix(typescript): reject truncated input instead of decoding a short value** — the binary deserializer's `read()` returned however many bytes were left in the buffer, so a length-prefixed field (`String`, `Vec<u8>`) whose payload was cut short silently deserialized as a shorter value, while a truncated fixed-width field surfaced as an opaque `RangeError` from `DataView`. Both now throw an error naming the offset and the shortfall. [#112](https://github.com/redbadger/facet-generate/pull/112)
+- **fix(typescript): reject truncated input instead of decoding a short value** — the binary deserializer's `read()` returned however many bytes were left in the buffer, so a length-prefixed field (`String`, `Vec<u8>`) whose payload was cut short silently deserialized as a shorter value, while a truncated fixed-width field surfaced as an opaque `RangeError` from `DataView`. Both now throw an error naming the offset and the shortfall [#112](https://github.com/redbadger/facet-generate/pull/112)
 
 ### 🧪 Tests
 
 - Enabled TypeScript output for 21 previously-disabled or untested expect-file test cases covering structs, unit enums, externally/internally/adjacently tagged enums, skipped variants, readonly fields, deprecation notices, and anonymous struct variants [#106](https://github.com/redbadger/facet-generate/pull/106)
-- Added edge-case round-trip coverage for every multi-limb integer in the TypeScript runtime (`i64`, `u64`, `i128`, `u128` at zero, ±1, the type extremes, and the 32-/64-bit limb boundaries), checked against bincode's encoding rather than against the runtime itself
+- Added edge-case round-trip coverage for every multi-limb integer in the TypeScript runtime (`i64`, `u64`, `i128`, `u128` at zero, ±1, the type extremes, and the 32-/64-bit limb boundaries), checked against bincode's encoding rather than against the runtime itself [#111](https://github.com/redbadger/facet-generate/pull/111)
 
 ### ⚙️ Miscellaneous Tasks
 
-- chore(typescript): The `serde` runtime now reads and writes 64-bit integers with the native `DataView` `BigInt64`/`BigUint64` accessors instead of splitting them into 32-bit limbs, making `U64`/`U128` consistent with the `I64`/`I128` fix and retiring the now-unused `BIG_32` constants
+- chore(typescript): The `serde` runtime now reads and writes 64-bit integers with the native `DataView` `BigInt64`/`BigUint64` accessors instead of splitting them into 32-bit limbs, making `U64`/`U128` consistent with the `I64`/`I128` fix and retiring the now-unused `BIG_32` constants [#111](https://github.com/redbadger/facet-generate/pull/111)
 
 ---
 
