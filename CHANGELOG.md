@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
+## [0.19.0] - 2026-08-06
+
+A dependency-only release: `facet` moves from `=0.44` to `=0.46.5`. No generation
+behaviour changes — output is byte-for-byte identical to 0.18.0.
+
+`facet-generate-attrs` is released alongside as **0.18.0** for the same reason.
+
+### 💥 Breaking Changes
+
+- **Requires `facet` 0.46.5** (was 0.44). `facet` is a public dependency of both crates
+  — `facet_generate` takes `Shape`, `Field` and `Variant` in its API, and
+  `facet-generate-attrs` builds its attribute grammar with `facet::define_attr_grammar!`
+  — so a consumer pinning `facet =0.44` cannot use this version, and vice versa. Both
+  crates need to move together with whatever pins `facet` downstream.
+
+### ⚙️ Miscellaneous Tasks
+
+- No source changes were required for the upgrade. The facet 0.44 → 0.46 delta is
+  additive and confined to parts of facet this crate does not use: `facet-core` gained
+  list `pop`/`swap` operations, `char` and `()` now advertise `Clone` in their
+  `TypeOps`, `Result`'s hand-written drop glue moved, and `facet-reflect` grew its
+  `poke` module (map, set, option, result, tuple, pointer, ndarray, list_like,
+  dynamic_value). `facet-macros` and `facet-macro-parse` are byte-identical, so there
+  are no new derive attributes. The `Shape`/`Field`/`Variant` surface this crate reads
+  is unchanged, which is why no snapshots or expect-files moved.
+
 ## [0.18.0] - 2026-08-03
 
 TypeScript enums are now generated as **discriminated union types** instead of abstract class hierarchies. This is a breaking change for any code that was constructing or matching TypeScript enum values, but the new output is far more idiomatic and integrates naturally with TypeScript's type narrowing.
