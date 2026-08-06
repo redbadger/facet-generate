@@ -13,5 +13,5 @@ rust-version = "1.90"
 [workspace.dependencies]
 anyhow = "1.0.102"
 expect-test = "1.5.1"
-facet = "=0.44"
+facet = "=0.46.5"
 facet-generate-attrs = { path = "crates/facet-generate-attrs", version = "0.17" }
