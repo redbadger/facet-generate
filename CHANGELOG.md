@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [unreleased]
 
-### 🐛 Bug Fixes
+### ⚙️ Miscellaneous Tasks
 
 - **fix(typescript): use type-only imports for runtime interfaces** — generated projects no longer report TS1484 for `Serializer` and `Deserializer` when `verbatimModuleSyntax` is enabled.
 
