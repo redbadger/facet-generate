@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  */
 
-import { Deserializer } from "./deserializer";
+import type { Deserializer } from "./deserializer";
 
 export abstract class BinaryDeserializer implements Deserializer {
   private static readonly BIG_64: bigint = BigInt(64);

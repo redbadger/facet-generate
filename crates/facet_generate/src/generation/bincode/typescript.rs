@@ -211,7 +211,7 @@ function deserializeUuid(deserializer: Deserializer): Uuid {
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<TypeScript> for BincodePlugin {
-    /// Returns the `import { Serializer, Deserializer }` statement needed by
+    /// Returns the `import type { Serializer, Deserializer }` statement needed by
     /// the generated serialize/deserialize methods. The import path is resolved
     /// from `config.external_packages`.
     fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
@@ -228,7 +228,7 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
             },
         );
         vec![format!(
-            r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
+            r#"import type {{ Serializer, Deserializer }} from "{import_path}";"#
         )]
     }
 
