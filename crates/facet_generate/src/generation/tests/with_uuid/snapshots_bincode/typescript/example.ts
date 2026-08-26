@@ -1,4 +1,4 @@
-import { Serializer, Deserializer } from "./serde";
+import type { Serializer, Deserializer } from "./serde";
 type Optional<T> = T | null;
 type str = string;
 

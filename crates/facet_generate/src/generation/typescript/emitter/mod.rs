@@ -129,7 +129,7 @@ impl Emitter<TypeScript> for Module {
             ..
         } = self.config();
 
-        // Plugin imports (e.g. `import { Serializer, Deserializer }` from the
+        // Plugin imports (e.g. `import type { Serializer, Deserializer }` from the
         // bincode or json plugin).
         for import in collect_from_plugins(lang.plugins(), |p| p.imports(self.config())) {
             writeln!(w, "{import}")?;

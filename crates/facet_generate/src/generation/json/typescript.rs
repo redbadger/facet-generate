@@ -198,7 +198,7 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
             },
         );
         vec![format!(
-            r#"import {{ Serializer, Deserializer }} from "{import_path}";"#
+            r#"import type {{ Serializer, Deserializer }} from "{import_path}";"#
         )]
     }
 

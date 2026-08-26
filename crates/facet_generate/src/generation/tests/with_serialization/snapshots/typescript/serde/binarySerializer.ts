@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: MIT OR Apache-2.0
  */
 
-import { Serializer } from "./serializer";
+import type { Serializer } from "./serializer";
 
 export abstract class BinarySerializer implements Serializer {
   private static readonly BIG_64: bigint = BigInt(64);

@@ -130,9 +130,9 @@ fn test_typescript_code_generation_file_layout() {
     let module_path = dir.path().join("testing.ts");
     assert!(module_path.exists());
 
-    // Generated content uses extensionless serde import (Node convention)
+    // Generated content uses the expected type-only, extensionless serde import
     let content = std::fs::read_to_string(&module_path).unwrap();
-    assert!(content.contains(r#"from "./serde""#));
+    assert!(content.contains(r#"import type { Serializer, Deserializer } from "./serde";"#));
     assert!(!content.contains(r#"from "./serde/mod.ts""#));
 
     // Runtime entry point is index.ts (Node convention)
