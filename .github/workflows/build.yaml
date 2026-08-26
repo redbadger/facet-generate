@@ -5,6 +5,14 @@ on:
     branches:
       - main
   pull_request:
+  # Lets a build be re-run by hand from the Actions tab or `gh workflow run ci
+  # --ref main`. Without this there is no supported way to ask for a fresh run
+  # on main: `push` only fires on a new commit, so a run that never starts
+  # leaves main with no build and nothing to retry. That happened after #117 —
+  # the run sat queued for 12 hours having acquired no jobs, and GitHub refused
+  # both `rerun` ("already running") and `cancel` ("has not yet queued"), so it
+  # could only be waited out.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
