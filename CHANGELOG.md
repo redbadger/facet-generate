@@ -2,11 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [unreleased]
+## [0.20.0] - 2026-08-26
 
-### ⚙️ Miscellaneous Tasks
+Two generated-output fixes, released as a minor bump because one of them widens the
+public API. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged
+and stays at 0.18.0.
 
-- **fix(typescript): use type-only imports for runtime interfaces** — generated projects no longer report TS1484 for `Serializer` and `Deserializer` when `verbatimModuleSyntax` is enabled.
+### 💥 Breaking Changes
+
+- **`CodeGeneratorConfig` gained a public `parent: Option<String>` field.** The struct
+  has all-public fields and is not `#[non_exhaustive]`, so any code building one with a
+  struct literal (or destructuring it exhaustively) no longer compiles. Use
+  `CodeGeneratorConfig::new()` and the `with_*` builder methods, which is what the field
+  is populated by. Nothing else in the API moved [#122](https://github.com/redbadger/facet-generate/pull/122)
+
+### 🐛 Bug Fixes
+
+- **fix(kotlin): root a sibling namespace's package at the parent, not the module** — a type in a *different* named namespace was qualified with the current module's full name, so a reference from `feature` to a type in `kit` came out as `com.example.feature.kit.Row` when the type is declared in `com.example.kit`, generating source that does not compile. `CodeGeneratorConfig` now records the `parent` set by `with_parent` and a new `root_package()` accessor returns it (falling back to `module_name`), so a root module and its namespaced children agree on where namespace packages live [#122](https://github.com/redbadger/facet-generate/pull/122)
+- **fix(typescript): use type-only imports for runtime interfaces** — generated projects no longer report TS1484 for `Serializer` and `Deserializer` when `verbatimModuleSyntax` is enabled [#119](https://github.com/redbadger/facet-generate/pull/119)
 
 ## [0.19.0] - 2026-08-06
 
