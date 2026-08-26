@@ -40,6 +40,15 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct CodeGeneratorConfig {
     pub module_name: String,
+    /// The package this module was nested under by [`with_parent`](Self::with_parent),
+    /// if any.
+    ///
+    /// Kept because `module_name` alone cannot be decomposed: once a namespaced
+    /// module becomes `com.example.auth`, nothing in the string says whether
+    /// `auth` is a namespace or the last segment of the root package. Kotlin
+    /// needs the answer to qualify a type living in a *sibling* namespace —
+    /// that path is rooted at the parent, not at this module.
+    pub parent: Option<String>,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
     pub comments: DocComments,
@@ -140,6 +149,7 @@ impl CodeGeneratorConfig {
     pub const fn new(module_name: String) -> Self {
         Self {
             module_name,
+            parent: None,
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
             comments: BTreeMap::new(),
@@ -165,8 +175,19 @@ impl CodeGeneratorConfig {
             return self;
         }
 
+        self.parent = Some(parent.to_string());
         self.module_name = format!("{}.{}", parent, self.module_name());
         self
+    }
+
+    /// The package that sibling namespaces hang off.
+    ///
+    /// The parent when this module was nested under one, and the module itself
+    /// otherwise — so a root module and its namespaced children agree on where
+    /// namespace packages live.
+    #[must_use]
+    pub fn root_package(&self) -> &str {
+        self.parent.as_deref().unwrap_or(&self.module_name)
     }
 
     /// Which indentation style to use when writing generated source code.

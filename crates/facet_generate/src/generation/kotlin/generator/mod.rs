@@ -106,9 +106,13 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///    configured path replaces the namespace prefix.
     ///    `Other::MyType` with path `com.acme.other` → `com.acme.other.Other.MyType`
     ///
-    /// 2. **External definition in a different namespace** — prefixed with
-    ///    the current module name.
+    /// 2. **External definition in a different namespace** — prefixed with the
+    ///    *root package* (the parent this module was nested under, or the module
+    ///    itself when it has no parent), because sibling namespaces are peers
+    ///    rather than children.
     ///    Module `com.example.main`, namespace `auth` → `com.example.main.auth.User`
+    ///    Module `com.example.main.orders` (parent `com.example.main`), namespace
+    ///    `auth` → `com.example.main.auth.User` — *not* `…main.orders.auth.User`
     ///
     /// 3. **Same namespace as the current module** — collapsed to just the
     ///    module name (no double-nesting).
@@ -154,9 +158,12 @@ impl<'a> KotlinCodeGenerator<'a> {
                                 if config.external_definitions.contains_key(&namespace)
                                     && namespace != current_leaf_namespace
                                 {
-                                    // For external types, build full path: current_module.namespace
+                                    // A sibling namespace, so the path is rooted at the
+                                    // parent package — NOT at `module_name()`, which already
+                                    // ends in *this* module's namespace and would yield
+                                    // `com.example.main.Directory.Kit.Row`.
                                     let full_namespace =
-                                        format!("{}.{namespace}", config.module_name());
+                                        format!("{}.{namespace}", config.root_package());
                                     *qualified_name = QualifiedTypeName::namespaced(
                                         full_namespace,
                                         qualified_name.name.clone(),
@@ -168,9 +175,10 @@ impl<'a> KotlinCodeGenerator<'a> {
                                         qualified_name.name.clone(),
                                     );
                                 } else {
-                                    // For other local types with named namespace, preserve the namespace
+                                    // Same reasoning as the external case above: a named
+                                    // namespace that is not our own hangs off the parent.
                                     let full_namespace =
-                                        format!("{}.{namespace}", config.module_name());
+                                        format!("{}.{namespace}", config.root_package());
                                     *qualified_name = QualifiedTypeName::namespaced(
                                         full_namespace,
                                         qualified_name.name.clone(),

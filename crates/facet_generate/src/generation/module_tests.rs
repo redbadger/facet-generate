@@ -35,6 +35,7 @@ fn single_namespace() {
         Module(
             CodeGeneratorConfig {
                 module_name: "Root",
+                parent: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
@@ -177,6 +178,7 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "Root",
+                parent: None,
                 external_definitions: {
                     "one": [
                         "ChildOne",
@@ -240,6 +242,7 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "one",
+                parent: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
@@ -303,6 +306,7 @@ fn root_namespace_with_two_child_namespaces() {
         Module(
             CodeGeneratorConfig {
                 module_name: "two",
+                parent: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
@@ -393,6 +397,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
         Module(
             CodeGeneratorConfig {
                 module_name: "App",
+                parent: None,
                 external_definitions: {
                     "api": [
                         "GrandChild",
@@ -461,6 +466,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
         Module(
             CodeGeneratorConfig {
                 module_name: "api",
+                parent: None,
                 external_definitions: {},
                 external_packages: {},
                 comments: {},
