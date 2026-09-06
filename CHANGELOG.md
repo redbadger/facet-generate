@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0] - unreleased
+
+Extensibility work for **out-of-tree `EmitterPlugin` implementations**. Everything a
+plugin needs to emit code *about* a type — where to hook in, how to name it, how to
+render it, how to serialize it — is now part of the public API, so a plugin no longer
+has to re-implement (and drift from) the emitters' own naming and rendering rules.
+Nothing the in-tree plugins generate changes: every snapshot and expect-file is
+byte-for-byte identical. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs`
+is unchanged and stays at 0.18.0.
+
+Motivated by, but not specific to, the effect-handler code generation in
+[redbadger/crux#581](https://github.com/redbadger/crux/pull/581).
+
+### 🚀 Features
+
+- **`RegistryBuilder::format_of::<T>()`** — the `Format` a struct field of type `T`
+  would be given, so a plugin can name and serialize a type it did not receive as the
+  container being emitted. Named containers become `TypeName(qualified)` honouring
+  `rename` / `fg::namespace` / `transparent`, `()` becomes `Unit`, and `Option`, `Vec`,
+  maps, tuples and primitives become the corresponding structural format. `T`'s
+  container types should be added with `add_type` first [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Public `write_serialize_value` per language** — `generation::bincode::{swift, kotlin, typescript, csharp}::write_serialize_value(w, value_expr, format, config)` emits exactly the bincode serialization statements the plugin writes for a field of that format. Each documents its precondition: a `serializer` variable of the language's conventional type in scope, and container depth managed by the caller [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Public naming and type-rendering helpers** so plugins reproduce emitter naming exactly: `generation::{swift,kotlin,typescript,csharp}::render_type(format, config)`, plus `swift::case_name`, `kotlin::variant_class_name`, `kotlin::enum_constant_name` and `csharp::escape_identifier` (which was private in `bincode::csharp`) [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **`EmitContext::variants()`** — the container's variants keyed by discriminant, or `None` when it is not an enum [#123](https://github.com/redbadger/facet-generate/pull/123)
+
+### 🐛 Bug Fixes
+
+- **`after_type` now fires for every top-level type, in every language** — it was only called for TypeScript enums and C# all-unit enums, which made it unusable as the "emit something alongside this type" hook it is documented to be. It is now called after every top-level container: Swift structs and enums, Kotlin `data class` / `data object` / `enum class` / `sealed interface`, TypeScript classes (as well as enums), and C# classes, sealed records and `abstract record` variant hierarchies (as well as enums). It is still never called for an individual enum variant, and the context is always a top-level one [#123](https://github.com/redbadger/facet-generate/pull/123)
+
+  **A third-party plugin implementing `after_type` will now be called at call sites it
+  never saw before**, and must guard on the container shape (`ctx.container.format`, or
+  the new `ctx.variants()`) and return `Ok(())` for the rest — as the in-tree bincode
+  and JSON plugins already did. The hook table in the `generation::plugin` module docs
+  records exactly where it fires.
+
 ## [0.20.0] - 2026-08-26
 
 Two generated-output fixes, released as a minor bump because one of them widens the

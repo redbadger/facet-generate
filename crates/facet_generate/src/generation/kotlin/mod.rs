@@ -31,6 +31,6 @@ mod emitter;
 mod generator;
 mod installer;
 
-pub use emitter::Kotlin;
+pub use emitter::{Kotlin, enum_constant_name, render_type, variant_class_name};
 pub use generator::KotlinCodeGenerator;
 pub use installer::Installer;

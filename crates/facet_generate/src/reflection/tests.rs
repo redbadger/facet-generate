@@ -3605,3 +3605,106 @@ fn generics_unsupported_if_used_twice() {
 
     insta::assert_snapshot!(err.root_cause(), @"failed to add type MyStruct: unsupported generic type: UnsupportedGenerics<u16>, the type may have already been used with different parameters");
 }
+
+// ---------------------------------------------------------------------------
+// format_of — the Format a field of a given type would receive
+// ---------------------------------------------------------------------------
+
+mod format_of {
+    use facet::Facet;
+
+    use crate as fg;
+    use crate::reflection::{
+        RegistryBuilder,
+        format::{Format, Namespace, QualifiedTypeName},
+    };
+
+    #[derive(Facet)]
+    #[facet(rename = "TheOtherName")]
+    struct Renamed {
+        field: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Namespaced {
+        field: String,
+    }
+
+    #[derive(Facet)]
+    struct Plain {
+        field: String,
+    }
+
+    #[derive(Facet)]
+    struct Holder {
+        maybe: Option<Plain>,
+    }
+
+    #[test]
+    fn renamed_struct_uses_the_new_name() {
+        let builder = RegistryBuilder::new().add_type::<Renamed>().unwrap();
+
+        assert_eq!(
+            builder.format_of::<Renamed>().unwrap(),
+            Format::TypeName(QualifiedTypeName::root("TheOtherName".to_string()))
+        );
+    }
+
+    #[test]
+    fn namespaced_struct_keeps_its_namespace() {
+        let builder = RegistryBuilder::new().add_type::<Namespaced>().unwrap();
+
+        assert_eq!(
+            builder.format_of::<Namespaced>().unwrap(),
+            Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("other".to_string()),
+                name: "Namespaced".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn unit_type_is_unit() {
+        let builder = RegistryBuilder::new();
+
+        assert_eq!(builder.format_of::<()>().unwrap(), Format::Unit);
+    }
+
+    #[test]
+    fn option_of_a_struct_wraps_a_type_name() {
+        let builder = RegistryBuilder::new().add_type::<Holder>().unwrap();
+
+        assert_eq!(
+            builder.format_of::<Option<Plain>>().unwrap(),
+            Format::Option(Box::new(Format::TypeName(QualifiedTypeName::root(
+                "Plain".to_string()
+            ))))
+        );
+    }
+
+    #[test]
+    fn vec_of_u8_is_a_sequence_not_bytes() {
+        // `#[facet(fg::bytes)]` is a property of a *field*, so a bare
+        // `Vec<u8>` type is a sequence of bytes here.
+        let builder = RegistryBuilder::new();
+
+        assert_eq!(
+            builder.format_of::<Vec<u8>>().unwrap(),
+            Format::Seq(Box::new(Format::U8))
+        );
+    }
+
+    #[test]
+    fn a_type_that_was_never_added_is_named_from_its_own_attributes() {
+        let builder = RegistryBuilder::new();
+
+        assert_eq!(
+            builder.format_of::<Namespaced>().unwrap(),
+            Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("other".to_string()),
+                name: "Namespaced".to_string(),
+            })
+        );
+    }
+}
