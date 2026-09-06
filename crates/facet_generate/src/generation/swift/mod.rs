@@ -32,7 +32,7 @@ mod generator;
 mod installer;
 mod package;
 
-pub use emitter::Swift;
+pub use emitter::{Swift, case_name, render_type};
 pub use generator::SwiftCodeGenerator;
 pub use installer::Installer;
 

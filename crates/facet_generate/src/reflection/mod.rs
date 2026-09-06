@@ -187,6 +187,83 @@ impl RegistryBuilder {
         self.format(T::SHAPE)?;
         Ok(self)
     }
+
+    /// The [`Format`] that a struct field of type `T` would be given.
+    ///
+    /// This is the reflection-level answer to "how do I refer to `T` from
+    /// generated code?", and is intended for [`EmitterPlugin`] authors who
+    /// need to emit a type reference or a serialization call for a type that
+    /// is not itself the container being emitted (for example the payload
+    /// type of a generated method).
+    ///
+    /// - A named container (struct or enum) becomes
+    ///   [`Format::TypeName`] carrying its [`QualifiedTypeName`], honouring
+    ///   `#[facet(rename = "…")]`, `#[facet(fg::namespace = "…")]` and
+    ///   `#[facet(transparent)]` exactly as the registry does.
+    /// - `()` becomes [`Format::Unit`].
+    /// - `Option<T>`, `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, `[T; N]`,
+    ///   tuples, smart pointers and primitives become the corresponding
+    ///   structural [`Format`], recursively.
+    ///
+    /// `T`'s container types should have been added with
+    /// [`add_type`](Self::add_type) first: renames applied while reflecting a
+    /// container are recorded on the builder, and a type this builder has
+    /// never seen is named from its own attributes alone.
+    ///
+    /// Field-level attributes have no analogue here — `format_of::<Vec<u8>>()`
+    /// is `Seq(U8)`, not `Bytes`, because `#[facet(fg::bytes)]` is a property
+    /// of the field, not of the type.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `T` (or a type reachable from it) cannot be
+    /// reflected — for example an unsupported scalar.
+    ///
+    /// [`EmitterPlugin`]: crate::generation::plugin::EmitterPlugin
+    pub fn format_of<'a, T: Facet<'a>>(&self) -> Result<Format, Error> {
+        self.format_of_shape(T::SHAPE)
+    }
+
+    /// Read-only counterpart of [`Self::get_user_type_format`], used by
+    /// [`format_of`](Self::format_of).
+    fn format_of_shape(&self, mut shape: &Shape) -> Result<Format, Error> {
+        if is_transparent_shape(shape)
+            && let Some(inner) = shape.inner
+        {
+            shape = inner;
+        }
+
+        match &shape.ty {
+            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
+                if shape.type_identifier == "()" {
+                    Ok(Format::Unit)
+                } else if let Def::Option(option_def) = shape.def {
+                    Ok(Format::Option(Box::new(
+                        self.format_of_shape(option_def.t())?,
+                    )))
+                } else {
+                    Ok(Format::TypeName(self.mapped_name(shape)?))
+                }
+            }
+            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
+                get_inner_format(pt.target)
+            }
+            _ => get_inner_format(shape),
+        }
+    }
+
+    /// Read-only counterpart of [`Self::get_name_with_mappings`].
+    ///
+    /// Namespace *contexts* are a property of an in-progress walk, and the
+    /// stack is empty once the types have been added, so only the recorded
+    /// rename mappings and the type's own attributes contribute.
+    fn mapped_name(&self, shape: &Shape) -> Result<QualifiedTypeName, Error> {
+        let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
+        if let Some(mapped_name) = self.name_mappings.get(&base_key) {
+            return Ok(mapped_name.clone());
+        }
+        get_name(shape)
+    }
 }
 
 impl RegistryBuilder {

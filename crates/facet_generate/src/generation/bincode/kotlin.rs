@@ -184,6 +184,41 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
     )
 }
 
+/// Write the bincode serialization statement(s) for `value_expr`, a Kotlin
+/// expression of the type described by `format`.
+///
+/// This is the same code the plugin emits for a `data class` property,
+/// exposed for plugins that need to serialize a value of a type they looked
+/// up with
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+///
+/// # Preconditions
+///
+/// A variable named `serializer`, of type `Serializer`, must be in scope at
+/// the point of the emitted code. Container depth is *not* managed here —
+/// that is the caller's job, exactly as it is for the generated `serialize`
+/// methods.
+///
+/// `config` is accepted for symmetry with the other languages; Kotlin's
+/// serialization does not vary with the configuration.
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub fn write_serialize_value(
+    w: &mut dyn IndentWrite,
+    value_expr: &str,
+    format: &Format,
+    _config: &CodeGeneratorConfig,
+) -> Result<()> {
+    // `write_serialize` needs a sized writer (it opens `{ }` blocks for
+    // lambdas); an `IndentedWriter` writing *through* the trait object keeps
+    // the caller's indentation as the baseline. Nesting level starts at 0.
+    let config = w.config();
+    let mut w = IndentedWriter::new(w, config);
+    write_serialize(&mut w, value_expr, format, 0)
+}
+
 fn write_serialize<W: IndentWrite>(
     w: &mut W,
     field_name: &str,
@@ -1206,5 +1241,47 @@ mod tests {
         assert!(!output.is_empty());
         assert!(output.contains("fun serialize(serializer: Serializer)"));
         assert!(output.contains("fun deserialize(deserializer: Deserializer)"));
+    }
+
+    // -------------------------------------------------------------------------
+    // write_serialize_value — public helper for plugin authors
+    // -------------------------------------------------------------------------
+
+    fn render(f: impl FnOnce(&mut dyn IndentWrite) -> Result<()>) -> String {
+        use crate::generation::indent::IndentConfig;
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            f(&mut w).unwrap();
+        }
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_primitive_call() {
+        let cfg = make_config(&[]);
+        let out = render(|w| write_serialize_value(w, "output", &Format::Str, &cfg));
+        insta::assert_snapshot!(out, @"serializer.serialize_str(output)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_method_call_for_a_named_type() {
+        use crate::reflection::format::QualifiedTypeName;
+        let cfg = make_config(&[]);
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"output.serialize(serializer)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_lambda_for_a_container() {
+        let cfg = make_config(&[]);
+        let format = Format::Seq(Box::new(Format::U8));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"
+        output.serialize(serializer) {
+            serializer.serialize_u8(it)
+        }
+        ");
     }
 }

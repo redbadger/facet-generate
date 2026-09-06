@@ -549,6 +549,34 @@ fn write_deserialize_variant_return(
 // Serialize helpers
 // ---------------------------------------------------------------------------
 
+/// Write the bincode serialization statement(s) for `value_expr`, a
+/// TypeScript expression of the type described by `format`.
+///
+/// This is the same code the plugin emits for a class property, exposed for
+/// plugins that need to serialize a value of a type they looked up with
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+///
+/// # Preconditions
+///
+/// A variable named `serializer`, of type `Serializer`, must be in scope at
+/// the point of the emitted code. `config` decides how a named type is
+/// serialized: enums are unions with standalone `serialize{Name}` functions,
+/// everything else has a `serialize` method, and the emitter tells the two
+/// apart with `config.enum_type_names`, so pass the config for the module
+/// being generated.
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub fn write_serialize_value(
+    w: &mut dyn IndentWrite,
+    value_expr: &str,
+    format: &Format,
+    config: &CodeGeneratorConfig,
+) -> io::Result<()> {
+    write_serialize(w, value_expr, format, config)
+}
+
 fn write_serialize(
     w: &mut dyn IndentWrite,
     value_expr: &str,
@@ -1166,5 +1194,33 @@ mod tests {
             out.is_empty(),
             "after_type for struct should emit nothing, got:\n{out}"
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // write_serialize_value — public helper for plugin authors
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn write_serialize_value_emits_a_primitive_call() {
+        let cfg = make_config(&[]);
+        let out = render(|w| write_serialize_value(w, "output", &Format::Str, &cfg));
+        insta::assert_snapshot!(out, @"serializer.serializeStr(output);");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_method_call_for_a_named_type() {
+        let cfg = make_config(&[]);
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"output.serialize(serializer);");
+    }
+
+    #[test]
+    fn write_serialize_value_routes_enums_through_the_standalone_function() {
+        let mut cfg = make_config(&[]);
+        cfg.enum_type_names.insert("HttpResult".to_string());
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"serializeHttpResult(output, serializer);");
     }
 }

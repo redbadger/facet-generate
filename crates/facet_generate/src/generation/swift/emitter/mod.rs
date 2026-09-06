@@ -341,24 +341,81 @@ impl Emitter<Swift> for Container<'_> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let Container { format, .. } = self;
         match format {
-            ContainerFormat::UnitStruct(doc) => struct_(w, self, &[], doc, lang),
+            ContainerFormat::UnitStruct(doc) => struct_(w, self, &[], doc, lang)?,
             ContainerFormat::NewTypeStruct(format, doc) => struct_(
                 w,
                 self,
                 &[&Named::new(format, "value".to_string())],
                 doc,
                 lang,
-            ),
+            )?,
             ContainerFormat::TupleStruct(formats, doc) => {
                 let formats = named(formats, "field");
-                struct_(w, self, &formats.iter().collect::<Vec<_>>(), doc, lang)
+                struct_(w, self, &formats.iter().collect::<Vec<_>>(), doc, lang)?;
             }
             ContainerFormat::Struct(nameds, doc) => {
-                struct_(w, self, &nameds.iter().collect::<Vec<_>>(), doc, lang)
+                struct_(w, self, &nameds.iter().collect::<Vec<_>>(), doc, lang)?;
             }
-            ContainerFormat::Enum(variants, _, doc) => enum_(w, self, variants, doc, lang),
+            ContainerFormat::Enum(variants, _, doc) => enum_(w, self, variants, doc, lang)?,
         }
+
+        // Plugin after-type hook — fires once per top-level type, after its
+        // closing brace. Never called for individual enum cases.
+        let ctx = EmitContext::top_level(self, &lang.config);
+        for plugin in lang.plugins() {
+            plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
+        }
+
+        Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Public helpers for plugin authors
+// ---------------------------------------------------------------------------
+
+/// Render `format` as the Swift type expression the emitter would use for a
+/// property of that type — for example `Int32`, `[String]`, `Foo?`,
+/// `[String: Bar]`, or `Other.Child` for a type in another namespace.
+///
+/// `config` supplies the current module name, which decides whether a
+/// namespaced type is qualified.
+///
+/// # Panics
+///
+/// Panics if `format` is one Swift cannot express: a `Set` whose element type,
+/// or a `Map` whose key type, is a native tuple or a dictionary (neither
+/// conforms to `Hashable`). The emitter rejects the same formats with an
+/// error, so such a registry never reaches code generation.
+#[must_use]
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    let lang = Swift {
+        config: config.clone(),
+        local_types: BTreeSet::new(),
+        hashable_types: BTreeSet::new(),
+        equatable_types: BTreeSet::new(),
+        plugins: vec![],
+    };
+    let mut buf = Vec::new();
+    {
+        let mut w = crate::generation::indent::IndentedWriter::new(
+            &mut buf,
+            crate::generation::indent::IndentConfig::Space(0),
+        );
+        format
+            .write(&mut w, &lang)
+            .expect("Swift type expression is not renderable");
+    }
+    String::from_utf8(buf).expect("type expression should be valid UTF-8")
+}
+
+/// The Swift `case` name the emitter gives to an enum variant.
+///
+/// Variant names are lower-camel-cased (`NotFound` → `notFound`); Swift
+/// keywords are not escaped, matching the emitter.
+#[must_use]
+pub fn case_name(variant_name: &str) -> String {
+    variant_name.to_lower_camel_case()
 }
 
 // ---------------------------------------------------------------------------

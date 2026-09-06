@@ -26,14 +26,32 @@
 //! | `has_type_body` | Before deciding to open `{ }` | tell emitter a body is needed |
 //! | `type_body_preamble` | Start of type body, before variants | abstract method declarations |
 //! | `type_body` | Inside the type body, after fields | `fun patching(...)` |
-//! | `after_type` | After the closing brace of a type | extension methods |
+//! | `after_type` | After the closing brace of every top-level type | extension methods |
 //! | `module_helpers` | After imports, before types | feature helper snippets |
 //! | `field_annotations` | Before a field declaration | `@SerialName("foo")` |
 //! | `runtime_files` | During installation | serde/bincode runtime `.kt` files |
 //! | `manifest_dependencies` | When writing the build manifest | `kotlinx-serialization-json` |
+//!
+//! ## Where `after_type` fires
+//!
+//! `after_type` is called once for **every top-level container**, in all four
+//! languages, with a top-level [`EmitContext`](crate::generation::plugin::EmitContext) (never a variant one):
+//!
+//! | Language | Call sites |
+//! |---|---|
+//! | Swift | after `public struct` / `indirect public enum` |
+//! | Kotlin | after `data class`, `data object`, `enum class`, `sealed interface` |
+//! | TypeScript | after `export class` and after the union type + helpers of an enum |
+//! | C# | after `partial class`, `sealed record`, `public enum`, and the `abstract record` variant hierarchy |
+//!
+//! It is **not** called for the individual variants of an enum, so a plugin
+//! that only wants to act on one container shape must say so — see
+//! [`EmitterPlugin::after_type`](crate::generation::plugin::EmitterPlugin::after_type).
 
 use std::io;
 use std::sync::Arc;
+
+use std::collections::BTreeMap;
 
 use super::{CodeGeneratorConfig, Container, indent::IndentWrite};
 use crate::reflection::format::{Format, Named, VariantFormat};
@@ -106,6 +124,20 @@ impl<'a> EmitContext<'a> {
         match &self.variant {
             Some(v) => v.name,
             None => &self.container.name.name,
+        }
+    }
+
+    /// The variants of the container being emitted, keyed by discriminant,
+    /// or `None` when the container is not an enum.
+    ///
+    /// This is the container's variants even inside a variant context — a
+    /// plugin that needs the *current* variant should read
+    /// [`variant`](Self::variant) instead.
+    #[must_use]
+    pub const fn variants(&self) -> Option<&BTreeMap<u32, Named<VariantFormat>>> {
+        match self.container.format {
+            crate::reflection::format::ContainerFormat::Enum(variants, _, _) => Some(variants),
+            _ => None,
         }
     }
 
@@ -311,6 +343,14 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     ///
     /// Use this for extension methods, free functions, or companion
     /// declarations that must appear outside the type.
+    ///
+    /// Called once for **every top-level container** in every language, with
+    /// a top-level context (`ctx.is_variant()` is always `false`) — see the
+    /// [module docs](self#where-after_type-fires) for the exact call sites.
+    /// An implementation that is only meaningful for one container shape must
+    /// therefore inspect `ctx.container.format` (or
+    /// [`ctx.variants()`](EmitContext::variants)) and return `Ok(())` for the
+    /// rest.
     ///
     /// # Errors
     ///
