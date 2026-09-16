@@ -16,10 +16,17 @@ use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::{Kotlin, property_name},
+    kotlin::{Kotlin, naming, property_name},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
+
+/// Rewrite the builtin type names in a module-level helper snippet to their
+/// fully qualified form where the generated module shadows them.
+fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
+    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
+}
 
 /// Look up the package path for `namespace` in the config's external packages.
 /// Falls back to `default` when no override is configured.
@@ -150,11 +157,12 @@ fun Deserializer.deserializeUuid(): UUID {
 }
 "#;
 
-fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
+fn write_bincode_serialize<W: Write>(w: &mut W, cfg: &CodeGeneratorConfig) -> Result<()> {
+    let byte_array = naming::builtin("ByteArray", cfg);
     writedoc!(
         w,
         r"
-        fun bincodeSerialize(): ByteArray {{
+        fun bincodeSerialize(): {byte_array} {{
             val serializer = BincodeSerializer()
             serialize(serializer)
             return serializer.get_bytes()
@@ -163,12 +171,18 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
     )
 }
 
-fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
+fn write_bincode_deserialize<W: Write>(
+    w: &mut W,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> Result<()> {
+    let byte_array = naming::builtin("ByteArray", cfg);
+    let throws = naming::builtin("Throws", cfg);
     writedoc!(
         w,
         r#"
-        @Throws(DeserializationError::class)
-        fun bincodeDeserialize(input: ByteArray?): {name} {{
+        @{throws}(DeserializationError::class)
+        fun bincodeDeserialize(input: {byte_array}?): {name} {{
             if (input == null) {{
                 throw DeserializationError("Cannot deserialize null array")
             }}
@@ -515,12 +529,16 @@ fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
 
 /// Write the bincode type body for a top-level `data object` (unit struct or
 /// empty struct).
-fn write_data_object_top_level<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
+fn write_data_object_top_level<W: IndentWrite>(
+    w: &mut W,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> Result<()> {
     write!(w, "fun serialize(serializer: Serializer) ")?;
     let _ = w.block(Newlines::CLOSE)?;
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
@@ -529,7 +547,7 @@ fn write_data_object_top_level<W: IndentWrite>(w: &mut W, name: &str) -> Result<
         writeln!(w, "return {name}")?;
     }
     writeln!(w)?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
     Ok(())
 }
 
@@ -563,6 +581,7 @@ fn write_data_class_top_level<W: IndentWrite>(
     w: &mut W,
     name: &str,
     fields: &[Named<Format>],
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     // serialize
     write!(w, "fun serialize(serializer: Serializer) ")?;
@@ -578,7 +597,7 @@ fn write_data_class_top_level<W: IndentWrite>(
     }
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     // companion object
@@ -612,7 +631,7 @@ fn write_data_class_top_level<W: IndentWrite>(
             }
         }
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -679,6 +698,7 @@ fn write_enum_class_body<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     writeln!(w)?;
     write!(w, "fun serialize(serializer: Serializer) ")?;
@@ -690,7 +710,7 @@ fn write_enum_class_body<W: IndentWrite>(
     }
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     write!(w, "companion object ")?;
@@ -718,7 +738,7 @@ fn write_enum_class_body<W: IndentWrite>(
             }
         }
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -729,6 +749,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     writeln!(w)?;
     write!(w, "companion object ")?;
@@ -754,7 +775,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
         }
 
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -841,23 +862,23 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         for feature in &config.features {
             match feature {
                 Feature::ListOfT => {
-                    write!(w, "{FEATURE_LIST_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::OptionOfT => {
-                    write!(w, "{FEATURE_OPTION_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::SetOfT => {
-                    write!(w, "{FEATURE_SET_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::MapOfT => {
-                    write!(w, "{FEATURE_MAP_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::Uuid => {
-                    write!(w, "{FEATURE_UUID}")?;
+                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
                     writeln!(w)?;
                 }
                 // BigInt and Bytes add imports (handled above); TupleArray is
@@ -896,7 +917,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                     let mut iw = IndentedWriter::new(&mut *w, config);
                     writeln!(iw, "fun serialize(serializer: Serializer)")?;
                     writeln!(iw)?;
-                    write_bincode_serialize(&mut iw)?;
+                    write_bincode_serialize(&mut iw, ctx.config)?;
                     writeln!(iw)?;
                 }
             }
@@ -954,9 +975,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 let config = w.config();
                 let mut iw = IndentedWriter::new(&mut *w, config);
                 if all_unit {
-                    write_enum_class_body(&mut iw, name, variants)?;
+                    write_enum_class_body(&mut iw, name, variants, ctx.config)?;
                 } else {
-                    write_sealed_interface_body(&mut iw, name, variants)?;
+                    write_sealed_interface_body(&mut iw, name, variants, ctx.config)?;
                 }
             }
             return Ok(());
@@ -967,9 +988,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
             let config = w.config();
             let mut iw = IndentedWriter::new(&mut *w, config);
             if fields.is_empty() {
-                write_data_object_top_level(&mut iw, name)?;
+                write_data_object_top_level(&mut iw, name, ctx.config)?;
             } else {
-                write_data_class_top_level(&mut iw, name, &fields)?;
+                write_data_class_top_level(&mut iw, name, &fields, ctx.config)?;
             }
         }
 

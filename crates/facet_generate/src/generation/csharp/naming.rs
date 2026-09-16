@@ -4,7 +4,14 @@
 //! are intentionally omitted: the generated identifiers that need escaping are
 //! method locals and parameters, where those words are valid unescaped.
 
-use crate::generation::naming::{EscapeStyle, NamingRules};
+use std::borrow::Cow;
+
+use heck::ToUpperCamelCase;
+
+use crate::generation::{
+    config::CodeGeneratorConfig,
+    naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+};
 
 /// C# keywords, sorted.
 pub(crate) const KEYWORDS: &[&str] = &[
@@ -87,15 +94,190 @@ pub(crate) const KEYWORDS: &[&str] = &[
     "while",
 ];
 
+/// Types the emitter writes bare through a `using` directive, and the fully
+/// qualified form to use instead when the module declares a type of the same
+/// name. Sorted by the bare name.
+///
+/// A declaration in the generated namespace outranks a `using`-imported type,
+/// so `HashSet<string>` in a namespace that also declares a `HashSet` record
+/// would resolve to the record. Lower-case keyword types (`int`, `string`, …)
+/// cannot be shadowed and are not listed.
+pub(crate) const QUALIFIED: &[(&str, &str)] = &[
+    (
+        "Dictionary",
+        "global::System.Collections.Generic.Dictionary",
+    ),
+    ("Guid", "global::System.Guid"),
+    ("HashSet", "global::System.Collections.Generic.HashSet"),
+    ("Int128", "global::System.Int128"),
+    (
+        "ObservableCollection",
+        "global::System.Collections.ObjectModel.ObservableCollection",
+    ),
+    ("UInt128", "global::System.UInt128"),
+    ("Unit", "global::Facet.Runtime.Serde.Unit"),
+];
+
+/// Type names the generated module already uses for something else, with the
+/// clause that names what each collides with. Sorted by name.
+pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
+    (
+        "BincodeDeserializer",
+        "the runtime type `Facet.Runtime.Bincode.BincodeDeserializer`",
+    ),
+    (
+        "BincodeSerializer",
+        "the runtime type `Facet.Runtime.Bincode.BincodeSerializer`",
+    ),
+    (
+        "DeserializationError",
+        "the runtime type `Facet.Runtime.Serde.DeserializationError`",
+    ),
+    ("Enum", "the .NET base type `System.Enum`"),
+    ("Facet", "the `Facet` root namespace"),
+    (
+        "FacetHelpers",
+        "the runtime type `Facet.Runtime.Serde.FacetHelpers`",
+    ),
+    (
+        "IDeserializer",
+        "the runtime interface `Facet.Runtime.Serde.IDeserializer`",
+    ),
+    (
+        "IFacetDeserializable",
+        "the runtime interface `Facet.Runtime.Serde.IFacetDeserializable`",
+    ),
+    (
+        "IFacetSerializable",
+        "the runtime interface `Facet.Runtime.Serde.IFacetSerializable`",
+    ),
+    (
+        "ISerializer",
+        "the runtime interface `Facet.Runtime.Serde.ISerializer`",
+    ),
+    (
+        "JsonConverter",
+        "the `System.Text.Json.Serialization.JsonConverter` attribute",
+    ),
+    (
+        "JsonDerivedType",
+        "the `System.Text.Json.Serialization.JsonDerivedType` attribute",
+    ),
+    (
+        "JsonPolymorphic",
+        "the `System.Text.Json.Serialization.JsonPolymorphic` attribute",
+    ),
+    (
+        "JsonPropertyName",
+        "the `System.Text.Json.Serialization.JsonPropertyName` attribute",
+    ),
+    (
+        "JsonSerde",
+        "the runtime type `Facet.Runtime.Json.JsonSerde`",
+    ),
+    (
+        "JsonStringEnumConverter",
+        "the `System.Text.Json.Serialization.JsonStringEnumConverter` converter",
+    ),
+    ("Object", "the .NET base type `System.Object`"),
+    (
+        "ObservableObject",
+        "the `CommunityToolkit.Mvvm.ComponentModel.ObservableObject` base class",
+    ),
+    (
+        "ObservableProperty",
+        "the `CommunityToolkit.Mvvm.ComponentModel.ObservableProperty` attribute",
+    ),
+    (
+        "SerializationError",
+        "the runtime type `Facet.Runtime.Serde.SerializationError`",
+    ),
+    ("String", "the .NET type `System.String`"),
+    ("System", "the `System` root namespace"),
+    ("Task", "the .NET type `System.Threading.Tasks.Task`"),
+    (
+        "UuidSerde",
+        "the runtime type `Facet.Runtime.Serde.UuidSerde`",
+    ),
+];
+
+/// Property names the generated code cannot accommodate, with the clause
+/// explaining why. Sorted by name.
+pub(crate) const FORBIDDEN_MEMBERS: ForbiddenNames = &[
+    (
+        "Deserializer",
+        "yields a `deserializer` local that shadows the parameter of the generated Deserialize method",
+    ),
+    ("Equals", "hides an inherited member of every C# object"),
+    (
+        "GetHashCode",
+        "hides an inherited member of every C# object",
+    ),
+    ("GetType", "hides an inherited member of every C# object"),
+    (
+        "Serializer",
+        "yields a `serializer` local that shadows the parameter of the generated Serialize method",
+    ),
+    ("ToString", "hides an inherited member of every C# object"),
+];
+
+fn type_case(name: &str) -> String {
+    name.to_upper_camel_case()
+}
+
+fn member_case(name: &str) -> String {
+    name.to_upper_camel_case()
+}
+
 /// The naming rules for this language.
 pub(crate) const RULES: NamingRules = NamingRules {
+    language: "C#",
     reserved_words: KEYWORDS,
     escape_style: EscapeStyle::AtPrefix,
+    forbidden_types: FORBIDDEN_TYPES,
+    forbidden_members: FORBIDDEN_MEMBERS,
+    type_case,
+    member_case,
+    variants_are_types: true,
+    member_equals_type_forbidden: true,
+    numbered_components_forbidden: false,
 };
+
+/// Returns `true` if the module declares a type whose `UpperCamelCase` name is
+/// `name`.
+pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
+    config
+        .declared_type_names
+        .iter()
+        .any(|declared| declared.to_upper_camel_case() == name)
+}
+
+/// The C# spelling of the builtin type `name`: fully qualified with
+/// `global::` when a declaration in the generated namespace shadows it, and
+/// bare otherwise.
+pub(crate) fn builtin<'a>(name: &'a str, config: &CodeGeneratorConfig) -> Cow<'a, str> {
+    qualify(name, QUALIFIED, |n| shadows(n, config))
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lookup_tables_are_sorted_for_binary_search() {
+        assert!(
+            QUALIFIED.windows(2).all(|w| w[0].0 < w[1].0),
+            "QUALIFIED must be sorted by the bare name"
+        );
+        assert!(
+            FORBIDDEN_TYPES.windows(2).all(|w| w[0].0 < w[1].0),
+            "FORBIDDEN_TYPES must be sorted by name"
+        );
+        assert!(
+            FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
+            "FORBIDDEN_MEMBERS must be sorted by name"
+        );
+    }
 
     #[test]
     fn keywords_are_sorted_and_unique() {

@@ -33,4 +33,4 @@ pub use installer::Installer;
 mod emitter;
 mod generator;
 mod installer;
-mod naming;
+pub(crate) mod naming;

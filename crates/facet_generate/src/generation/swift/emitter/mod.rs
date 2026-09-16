@@ -51,6 +51,7 @@
 //! element or `Map` key.
 
 #![allow(clippy::too_many_lines)]
+use super::naming::builtin;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -490,24 +491,24 @@ impl Emitter<Swift> for Format {
             Self::TypeName(qualified_type_name) => {
                 write!(w, "{}", render_type_name(qualified_type_name, &lang.config))
             }
-            Self::Unit => write!(w, "Void"),
-            Self::Bool => write!(w, "Bool"),
-            Self::I8 => write!(w, "Int8"),
-            Self::I16 => write!(w, "Int16"),
-            Self::I32 => write!(w, "Int32"),
-            Self::I64 => write!(w, "Int64"),
+            Self::Unit => write!(w, "{}", builtin("Void", &lang.config)),
+            Self::Bool => write!(w, "{}", builtin("Bool", &lang.config)),
+            Self::I8 => write!(w, "{}", builtin("Int8", &lang.config)),
+            Self::I16 => write!(w, "{}", builtin("Int16", &lang.config)),
+            Self::I32 => write!(w, "{}", builtin("Int32", &lang.config)),
+            Self::I64 => write!(w, "{}", builtin("Int64", &lang.config)),
             Self::I128 => write!(w, "Int128"),
-            Self::U8 => write!(w, "UInt8"),
-            Self::U16 => write!(w, "UInt16"),
-            Self::U32 => write!(w, "UInt32"),
-            Self::U64 => write!(w, "UInt64"),
+            Self::U8 => write!(w, "{}", builtin("UInt8", &lang.config)),
+            Self::U16 => write!(w, "{}", builtin("UInt16", &lang.config)),
+            Self::U32 => write!(w, "{}", builtin("UInt32", &lang.config)),
+            Self::U64 => write!(w, "{}", builtin("UInt64", &lang.config)),
             Self::U128 => write!(w, "UInt128"),
-            Self::F32 => write!(w, "Float"),
-            Self::F64 => write!(w, "Double"),
-            Self::Char => write!(w, "Character"),
-            Self::Str => write!(w, "String"),
-            Self::Bytes => write!(w, "[UInt8]"),
-            Self::Uuid => write!(w, "UUID"),
+            Self::F32 => write!(w, "{}", builtin("Float", &lang.config)),
+            Self::F64 => write!(w, "{}", builtin("Double", &lang.config)),
+            Self::Char => write!(w, "{}", builtin("Character", &lang.config)),
+            Self::Str => write!(w, "{}", builtin("String", &lang.config)),
+            Self::Bytes => write!(w, "[{}]", builtin("UInt8", &lang.config)),
+            Self::Uuid => write!(w, "{}", builtin("UUID", &lang.config)),
 
             Self::Option(format) => {
                 format.write(w, lang)?;
@@ -532,7 +533,7 @@ impl Emitter<Swift> for Format {
                         ),
                     ));
                 }
-                write!(w, "Set<")?;
+                write!(w, "{}<", builtin("Set", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
@@ -701,10 +702,10 @@ fn struct_<W: IndentWrite>(
     let mut implements = vec![];
 
     if all_hashable {
-        implements.push("Hashable");
+        implements.push(builtin("Hashable", &lang.config));
     }
     if all_equatable_auto || all_can_eq {
-        implements.push("Equatable");
+        implements.push(builtin("Equatable", &lang.config));
     }
 
     if has_plugins && !implements.is_empty() {
@@ -815,10 +816,10 @@ fn enum_<W: IndentWrite>(
     let mut implements = vec![];
 
     if all_hashable {
-        implements.push("Hashable");
+        implements.push(builtin("Hashable", &lang.config));
     }
     if all_equatable_auto || all_can_eq {
-        implements.push("Equatable");
+        implements.push(builtin("Equatable", &lang.config));
     }
 
     if has_plugins && !implements.is_empty() {

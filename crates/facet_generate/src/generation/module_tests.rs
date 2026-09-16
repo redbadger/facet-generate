@@ -48,6 +48,7 @@ fn single_namespace() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {
@@ -198,6 +199,7 @@ fn root_namespace_with_two_child_namespaces() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {
@@ -255,6 +257,7 @@ fn root_namespace_with_two_child_namespaces() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {
@@ -319,6 +322,7 @@ fn root_namespace_with_two_child_namespaces() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {
@@ -414,6 +418,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {
@@ -479,6 +484,7 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 referenced_namespaces: {},
                 unit_variant_enums: {},
                 enum_type_names: {},
+                declared_type_names: {},
             },
         ): {
             QualifiedTypeName {

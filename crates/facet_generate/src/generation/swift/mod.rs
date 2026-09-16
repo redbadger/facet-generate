@@ -30,7 +30,7 @@
 pub(crate) mod emitter;
 mod generator;
 mod installer;
-mod naming;
+pub(crate) mod naming;
 mod package;
 
 pub use emitter::{Swift, case_name, escape_identifier, field_name, render_type};

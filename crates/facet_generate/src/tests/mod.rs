@@ -60,6 +60,7 @@ mod can_recognize_types_inside_modules;
 mod deprecation_notice;
 mod enum_with_discriminant;
 mod generate_types;
+mod generate_types_shadowing_builtins;
 mod generate_types_with_keywords;
 mod generates_empty_structs_and_initializers;
 mod kebab_case_rename;

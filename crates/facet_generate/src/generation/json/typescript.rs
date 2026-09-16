@@ -26,12 +26,19 @@ use heck::ToUpperCamelCase;
 use crate::generation::{
     CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, Newlines, with_block},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    typescript::{TypeScript, is_reserved_word, param_name},
+    typescript::{TypeScript, is_reserved_word, naming, param_name, render_type},
 };
 use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
 
 use super::JsonPlugin;
+
+/// Rewrite the builtin type names in a module-level helper snippet to their
+/// `globalThis` form where the generated module shadows them.
+fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
+    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
+}
 
 // ---------------------------------------------------------------------------
 // Inlined feature helper snippets
@@ -223,27 +230,27 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
             match feature {
                 Feature::ListOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_LIST_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
                 }
                 Feature::OptionOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_OPTION_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
                 }
                 Feature::SetOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_SET_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
                 }
                 Feature::MapOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_MAP_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
                 }
                 Feature::TupleArray => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                    write!(w, "{}", qualified(FEATURE_TUPLE_ARRAY, config))?;
                 }
                 Feature::Uuid => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_UUID}")?;
+                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
                 Feature::BigInt | Feature::Bytes => {}
             }
@@ -340,7 +347,8 @@ fn write_enum_standalone_functions(
             }
             writeln!(
                 w,
-                r#"default: throw new Error("Unknown variant: " + (value as any).{tag_field});"#
+                r#"default: throw new {error}("Unknown variant: " + (value as any).{tag_field});"#,
+                error = naming::builtin("Error", config),
             )
         })
     })?;
@@ -368,7 +376,8 @@ fn write_enum_standalone_functions(
             }
             writeln!(
                 w,
-                r#"default: throw new Error("Unknown variant index for {name}: " + index);"#
+                r#"default: throw new {error}("Unknown variant index for {name}: " + index);"#,
+                error = naming::builtin("Error", config),
             )
         })
     })?;
@@ -617,49 +626,6 @@ fn write_serialize(
 // Deserialize helpers
 // ---------------------------------------------------------------------------
 
-/// Renders a TypeScript type expression for `format` without requiring a
-/// language tag — the mapping is fixed for TypeScript.
-fn quote_type(format: &Format) -> String {
-    match format {
-        Format::TypeName(type_) => type_.format(ToUpperCamelCase::to_upper_camel_case, "."),
-        Format::Unit => "unit".to_string(),
-        Format::Bool => "bool".to_string(),
-        Format::I8 => "int8".to_string(),
-        Format::I16 => "int16".to_string(),
-        Format::I32 => "int32".to_string(),
-        Format::I64 => "int64".to_string(),
-        Format::I128 => "int128".to_string(),
-        Format::U8 => "uint8".to_string(),
-        Format::U16 => "uint16".to_string(),
-        Format::U32 => "uint32".to_string(),
-        Format::U64 => "uint64".to_string(),
-        Format::U128 => "uint128".to_string(),
-        Format::F32 => "float32".to_string(),
-        Format::F64 => "float64".to_string(),
-        Format::Char => "char".to_string(),
-        Format::Str => "str".to_string(),
-        Format::Bytes => "bytes".to_string(),
-        Format::Uuid => "Uuid".to_string(),
-        Format::Option(inner) => format!("Optional<{}>", quote_type(inner)),
-        Format::Seq(inner) | Format::Set(inner) => format!("Seq<{}>", quote_type(inner)),
-        Format::Map { key, value } => {
-            format!("Map<{},{}>", quote_type(key), quote_type(value))
-        }
-        Format::Tuple(formats) => {
-            let inner = formats
-                .iter()
-                .map(quote_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("Tuple<[{inner}]>")
-        }
-        Format::TupleArray { content, .. } => {
-            format!("ListTuple<[{}]>", quote_type(content))
-        }
-        Format::Variable(_) => panic!("unexpected variable in quote_type"),
-    }
-}
-
 /// Returns the deserialize expression for a primitive or named type.
 fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> String {
     match format {
@@ -835,7 +801,7 @@ fn write_deserialize(
                 .join(", ");
             let type_str = formats
                 .iter()
-                .map(quote_type)
+                .map(|f| render_type(f, config))
                 .collect::<Vec<_>>()
                 .join(", ");
             if let Some(name) = field_name {

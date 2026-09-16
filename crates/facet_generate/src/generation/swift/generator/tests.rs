@@ -864,3 +864,48 @@ fn test_named_namespace_map_struct_omits_conformance_without_plugin() {
         "without a plugin, Child should not declare any conformance:\n{output}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Reserved-name pre-pass
+// ---------------------------------------------------------------------------
+
+#[test]
+fn type_named_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    #[facet(rename = "Serializer")]
+    struct Renamed {
+        name: String,
+    }
+
+    let registry = crate::reflect!(Renamed).unwrap();
+    let cfg = CodeGeneratorConfig::new("Testing".to_string());
+    let err = SwiftCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Swift: type `Serializer` collides with the runtime protocol `Serde.Serializer` used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+#[test]
+fn field_named_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    struct Foo {
+        serializer: String,
+    }
+
+    let registry = crate::reflect!(Foo).unwrap();
+    let cfg = CodeGeneratorConfig::new("Testing".to_string());
+    let err = SwiftCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Swift: field `serializer` of `Foo` would become `serializer`, which shadows the `serializer` parameter in the generated serialize method; rename it with #[facet(rename = \"...\")]"
+    );
+}

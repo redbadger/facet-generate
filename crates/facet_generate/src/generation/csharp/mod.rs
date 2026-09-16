@@ -36,7 +36,7 @@
 mod emitter;
 mod generator;
 mod installer;
-mod naming;
+pub(crate) mod naming;
 
 pub use emitter::{CSharp, escape_identifier, render_type};
 pub use generator::CSharpCodeGenerator;

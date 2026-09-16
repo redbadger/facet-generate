@@ -12,8 +12,12 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, plugin::EmitterPlugin, typescript::emitter::TypeScript,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
+        indent::IndentedWriter,
+        module::Module,
+        naming::check_reserved_names,
+        plugin::EmitterPlugin,
+        typescript::{emitter::TypeScript, naming},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -71,6 +75,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = TypeScript::new(&config, registry);
         for p in &self.plugins {
