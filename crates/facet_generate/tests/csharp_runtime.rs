@@ -202,7 +202,6 @@ for (int i = 0; i < inputs.Length; i++)
 
 Console.WriteLine("Optional C-style enum roundtrip: PASSED");
 "#,
-            inputs = inputs,
         ),
     )
     .unwrap();
