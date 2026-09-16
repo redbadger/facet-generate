@@ -131,47 +131,73 @@ impl Kotlin {
     }
 }
 
+/// Write the module header — the `package` declaration and the sorted,
+/// deduplicated `import` lines (feature-driven, plugin-provided, and the
+/// caller's `extra_imports`, each a whole `import …` line).
+///
+/// Shared by [`Module`]'s emitter and by the generator when it renders a
+/// plugin's companion file, which needs the same header but none of the module
+/// helpers (they are declared once, in the module file).
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub(crate) fn write_module_header<W: IndentWrite>(
+    w: &mut W,
+    config: &CodeGeneratorConfig,
+    lang: &Kotlin,
+    extra_imports: &[String],
+) -> Result<()> {
+    let CodeGeneratorConfig {
+        module_name,
+        features,
+        ..
+    } = config;
+
+    writeln!(w, "package {module_name}")?;
+    writeln!(w)?;
+
+    // --- Imports ---
+    // Language-level imports that are NOT driven by plugins stay here.
+    // Bincode imports are now provided by BincodePlugin::imports().
+    let mut imports: Vec<String> = vec![];
+
+    // `import java.math.BigInteger` is needed regardless of plugins, including
+    // when no plugin runs. Plugin-specific BigInt imports (JSON KSerializer,
+    // Bincode Int128) are added by their respective plugins.
+    if features.contains(&Feature::BigInt) {
+        imports.push("import java.math.BigInteger".to_string());
+    }
+
+    // --- Plugin imports ---
+    for plugin in lang.plugins() {
+        imports.extend(plugin.imports(config));
+    }
+
+    imports.extend(extra_imports.iter().cloned());
+
+    imports.sort_unstable();
+    imports.dedup();
+    if !imports.is_empty() {
+        for import in imports {
+            writeln!(w, "{import}")?;
+        }
+        writeln!(w)?;
+    }
+
+    Ok(())
+}
+
 impl Emitter<Kotlin> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
-        let CodeGeneratorConfig {
-            module_name,
-            features,
-            ..
-        } = self.config();
+        write_module_header(w, self.config(), lang, &[])?;
 
-        writeln!(w, "package {module_name}")?;
-        writeln!(w)?;
-
-        // --- Imports ---
-        // Language-level imports that are NOT driven by plugins stay here.
-        // Bincode imports are now provided by BincodePlugin::imports().
-        let mut imports: Vec<String> = vec![];
-
-        // --- Feature-driven imports (non-plugin) ---
+        // --- Feature helpers (non-plugin) ---
         let mut features_out = vec![];
-        for feature in features {
-            match feature {
-                Feature::BigInt => {
-                    // `import java.math.BigInteger` is needed regardless of plugins,
-                    // including when no plugin runs.
-                    // Plugin-specific BigInt imports (JSON KSerializer, Bincode
-                    // Int128) are added by their respective plugins.
-                    imports.push("import java.math.BigInteger".to_string());
-                }
-                Feature::TupleArray => {
-                    // TupleArray is encoding-independent — stays in the emitter.
-                    write!(features_out, "{FEATURE_TUPLE_ARRAY}")?;
-                    writeln!(features_out)?;
-                }
-                // Bincode feature helpers (ListOfT, SetOfT, MapOfT, OptionOfT, Bytes)
-                // are now provided by BincodePlugin::module_helpers() / imports().
-                _ => {}
-            }
-        }
-
-        // --- Plugin imports ---
-        for plugin in lang.plugins() {
-            imports.extend(plugin.imports(self.config()));
+        if self.config().features.contains(&Feature::TupleArray) {
+            // TupleArray is encoding-independent — stays in the emitter.
+            write!(features_out, "{FEATURE_TUPLE_ARRAY}")?;
+            writeln!(features_out)?;
         }
 
         // --- Plugin module helpers ---
@@ -180,20 +206,6 @@ impl Emitter<Kotlin> for Module {
             for plugin in lang.plugins() {
                 plugin.module_helpers(&mut fw, self.config())?;
             }
-        }
-
-        let mut imports = imports
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
-
-        imports.sort_unstable();
-        imports.dedup();
-        if !imports.is_empty() {
-            for import in imports {
-                writeln!(w, "{import}")?;
-            }
-            writeln!(w)?;
         }
 
         w.write_all(&features_out)?;

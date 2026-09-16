@@ -124,21 +124,44 @@ impl CSharp {
     }
 }
 
+/// Write the module header — the `using` directives (built-in,
+/// plugin-provided, and the caller's `extra_imports`, each a whole
+/// `using …;` directive) and the file-scoped `namespace` declaration.
+///
+/// Shared by [`Module`]'s emitter and by the generator when it renders a
+/// plugin's companion file, which needs the same header but none of the module
+/// helpers (they are declared once, in the module file).
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub(crate) fn write_module_header<W: IndentWrite>(
+    w: &mut W,
+    config: &CodeGeneratorConfig,
+    lang: &CSharp,
+    extra_imports: &[String],
+) -> Result<()> {
+    let CodeGeneratorConfig { module_name, .. } = config;
+    writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
+    writeln!(w, "using Facet.Runtime.Serde;")?;
+    writeln!(w, "using System.Collections.Generic;")?;
+    writeln!(w, "using System.Collections.ObjectModel;")?;
+    // Plugin-provided using directives (e.g. Facet.Runtime.Json / Bincode).
+    for plugin in lang.plugins() {
+        for import in plugin.imports(config) {
+            writeln!(w, "{import}")?;
+        }
+    }
+    for import in extra_imports {
+        writeln!(w, "{import}")?;
+    }
+    writeln!(w)?;
+    writeln!(w, "namespace {};", namespace_name(module_name))
+}
+
 impl Emitter<CSharp> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
-        let CodeGeneratorConfig { module_name, .. } = self.config();
-        writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
-        writeln!(w, "using Facet.Runtime.Serde;")?;
-        writeln!(w, "using System.Collections.Generic;")?;
-        writeln!(w, "using System.Collections.ObjectModel;")?;
-        // Plugin-provided using directives (e.g. Facet.Runtime.Json / Bincode).
-        for plugin in lang.plugins() {
-            for import in plugin.imports(self.config()) {
-                writeln!(w, "{import}")?;
-            }
-        }
-        writeln!(w)?;
-        writeln!(w, "namespace {};", namespace_name(module_name))?;
+        write_module_header(w, self.config(), lang, &[])?;
         // Plugin module helpers (e.g. UuidSerde from BincodePlugin).
         // These are emitted per-module file rather than into a shared runtime
         // file because they reference types (e.g. Guid) that may not be in
