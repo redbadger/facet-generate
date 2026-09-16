@@ -27,7 +27,7 @@ use crate::generation::{
     CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    typescript::TypeScript,
+    typescript::{TypeScript, is_reserved_word, param_name},
 };
 use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
 
@@ -334,14 +334,14 @@ fn write_struct_type_body(
     write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
     with_block(w, Newlines::BOTH, |w| {
         for field in fields {
-            write_deserialize(w, Some(&field.name), &field.value, config)?;
+            write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
         }
         writeln!(
             w,
             "return new {name}({args});",
             args = fields
                 .iter()
-                .map(|f| f.name.clone())
+                .map(|f| param_name(&f.name).into_owned())
                 .collect::<Vec<_>>()
                 .join(",")
         )
@@ -463,6 +463,17 @@ fn write_serialize_variant_fields(
     }
 }
 
+/// The object-literal entry for a struct-variant field: shorthand normally,
+/// but `name: name_` when the field name is a reserved word and the local
+/// binding had to be renamed.
+fn object_entry(field: &Named<Format>) -> String {
+    if is_reserved_word(&field.name) {
+        format!("{}: {}", field.name, param_name(&field.name))
+    } else {
+        field.name.clone()
+    }
+}
+
 /// Emit deserialize statements and a `return { ... }` for a single variant.
 fn write_deserialize_variant_return(
     w: &mut dyn IndentWrite,
@@ -518,11 +529,11 @@ fn write_deserialize_variant_return(
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&field.name), &field.value, config)?;
+                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
             }
             let struct_fields = fields
                 .iter()
-                .map(|f| f.name.clone())
+                .map(object_entry)
                 .collect::<Vec<_>>()
                 .join(", ");
             writeln!(
@@ -532,9 +543,9 @@ fn write_deserialize_variant_return(
         }
         (_, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&field.name), &field.value, config)?;
+                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
             }
-            let field_names: Vec<String> = fields.iter().map(|f| f.name.clone()).collect();
+            let field_names: Vec<String> = fields.iter().map(object_entry).collect();
             let all_parts: Vec<String> =
                 std::iter::once(format!(r#"{tag_field}: "{variant_name}""#))
                     .chain(field_names)

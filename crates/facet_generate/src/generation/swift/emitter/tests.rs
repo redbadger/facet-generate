@@ -461,7 +461,7 @@ fn enum_with_mixed_variants() {
         case unit
         case newType(String)
         case tuple(String, Int32)
-        case struct(field: Bool)
+        case `struct`(field: Bool)
     }
     ");
 }

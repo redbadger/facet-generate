@@ -680,6 +680,32 @@ struct Request {
 Container-level `rename` and field/variant-level `rename` (or `rename_all`) can
 be combined freely.
 
+#### Reserved words
+
+Names reach the target language exactly as written (after `rename` / `rename_all`), so a
+field called `default` or a variant called `Default` becomes an identifier that is a reserved
+word in most targets. Each generator escapes such identifiers with the language's own
+mechanism, so the member keeps its name and its wire name:
+
+| Language   | Escaping                                                | `default: String` becomes                          |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
+| Swift      | backticks                                               | `` public var `default`: String ``                 |
+| Kotlin     | backticks (hard keywords only)                          | `` val `default`: String `` — `default` is not one |
+| TypeScript | property keeps its name; bindings get a `_` suffix      | `public default: str;` set from `default_`         |
+| C#         | `@` prefix on locals; properties are PascalCase anyway  | `@default`                                         |
+
+Backticks and `@` are pure quoting, so a Kotlin `@SerialName`, a JSON key or a positional
+bincode field is unaffected. In TypeScript a reserved word is legal as a property name but
+not as a parameter or local, so a class with any reserved field declares its fields
+explicitly and assigns them in the constructor from renamed parameters; classes without one
+keep the compact parameter-property form. Kotlin soft keywords such as `value`, `field`,
+`import` and `data` are ordinary identifiers and are left alone.
+
+Plugins that derive identifiers from field or variant names should use the same helpers the
+emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
+`typescript::param_name` and `csharp::escape_identifier` — so their output agrees with the
+generated type.
+
 ### Skipping struct fields or enum variants
 
 You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)]` to prevent Facet from recursing through).

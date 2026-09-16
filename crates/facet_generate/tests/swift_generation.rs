@@ -226,6 +226,20 @@ let package = Package(
     (dir, source_path)
 }
 
+/// Field and variant names that collide with Swift keywords must be escaped
+/// with backticks everywhere they are written — property declarations,
+/// initializer labels, `case` declarations and patterns, and the plugins'
+/// serialize / deserialize bodies.
+#[test]
+fn test_that_swift_code_with_keyword_names_compiles_with_bincode() {
+    let config = CodeGeneratorConfig::new("testing".to_string());
+    test_that_swift_code_compiles_with_config_and_registry(
+        &config,
+        &common::get_keyword_registry(),
+        vec![Arc::new(BincodePlugin)],
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Error-case tests: non-Hashable types used as Set elements / Map keys
 // ---------------------------------------------------------------------------

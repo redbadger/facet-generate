@@ -42,6 +42,7 @@
 #[cfg(test)]
 use std::collections::BTreeSet;
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     io::{Result, Write},
     sync::Arc,
@@ -49,6 +50,7 @@ use std::{
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
+use super::naming;
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter, PackageLocation,
@@ -308,6 +310,29 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     quote_type(format, &lang)
 }
 
+/// The TypeScript binding name the emitter gives to a constructor parameter
+/// or a `const` local derived from `name`.
+///
+/// Reserved words are illegal as binding identifiers and cannot be quoted, so
+/// they are renamed with a trailing underscore (`default` → `default_`).
+/// Property and wire names are *not* renamed — they stay identical to the
+/// Rust names — so a renamed binding is paired with an explicit
+/// `this.name = name_;` assignment or a `name: name_` object entry.
+///
+/// Plugins that emit a parameter or a `const` declaration from a field name
+/// should route it through this so the result matches the emitter.
+#[must_use]
+pub fn param_name(name: &str) -> Cow<'_, str> {
+    naming::RULES.escape(name)
+}
+
+/// Returns `true` if `name` is a TypeScript reserved word, and therefore
+/// illegal as a binding identifier.
+#[must_use]
+pub fn is_reserved_word(name: &str) -> bool {
+    naming::RULES.is_reserved(name)
+}
+
 /// Render a type expression to a string (used for constructor argument types).
 fn quote_type(format: &Format, lang: &TypeScript) -> String {
     let mut buf = Vec::new();
@@ -331,17 +356,47 @@ fn output_struct_or_variant<W: IndentWrite>(
     write!(w, "export class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
+    // A field whose name is a reserved word cannot be a parameter property:
+    // the parameter is a binding identifier. When any field needs renaming the
+    // whole class switches to the explicit style — every field declared, every
+    // parameter plain, every assignment written in the constructor body — so
+    // that declaration order and property-insertion order still match the
+    // registry. A class with no reserved field name keeps its parameter
+    // properties and is emitted exactly as before.
+    let explicit = fields.iter().any(|f| is_reserved_word(&f.name));
+
+    if explicit {
+        for field in fields {
+            writeln!(
+                w,
+                "public {}: {};",
+                field.name,
+                quote_type(&field.value, lang)
+            )?;
+        }
+        writeln!(w)?;
+    }
+
     let args: Vec<String> = fields
         .iter()
         .map(|f| {
             let type_str = quote_type(&f.value, lang);
-            format!("public {}: {}", f.name, type_str)
+            if explicit {
+                format!("{}: {}", param_name(&f.name), type_str)
+            } else {
+                format!("public {}: {}", f.name, type_str)
+            }
         })
         .collect();
     let args = args.join(", ");
     write!(w, "constructor ({args}) ")?;
     {
-        let _w = w.block(Newlines::BOTH)?;
+        let mut w = w.block(Newlines::BOTH)?;
+        if explicit {
+            for field in fields {
+                writeln!(w, "this.{} = {};", field.name, param_name(&field.name))?;
+            }
+        }
     }
 
     for plugin in lang.plugins() {
@@ -480,9 +535,20 @@ fn write_variant_constructor<W: std::io::Write>(
         VariantFormat::Struct(fields) => {
             let params: Vec<String> = fields
                 .iter()
-                .map(|f| format!("{}: {}", f.name, quote_type(&f.value, lang)))
+                .map(|f| format!("{}: {}", param_name(&f.name), quote_type(&f.value, lang)))
                 .collect();
-            let field_names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+            // Object-literal shorthand is illegal for a renamed binding, so
+            // those fields are written out in full (`default: default_`).
+            let field_names: Vec<String> = fields
+                .iter()
+                .map(|f| {
+                    if is_reserved_word(&f.name) {
+                        format!("{}: {}", f.name, param_name(&f.name))
+                    } else {
+                        f.name.clone()
+                    }
+                })
+                .collect();
             let obj = if let Some(content) = content_field {
                 format!(
                     r#"{{ {tag_field}: "{variant_name}", {content}: {{ {} }} }}"#,

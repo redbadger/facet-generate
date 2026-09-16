@@ -2550,3 +2550,173 @@ fn struct_with_bytes_field_and_slice() {
     }
     "#);
 }
+
+#[test]
+fn keyword_fields_struct() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        r#default: String,
+        r#in: i32,
+        object: bool,
+        import: bool,
+    }
+
+    let actual = emit!(KeywordFields as Kotlin with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    data class KeywordFields(
+        val default: String,
+        val `in`: Int,
+        val `object`: Boolean,
+        val import: Boolean,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_str(default)
+            serializer.serialize_i32(`in`)
+            serializer.serialize_bool(`object`)
+            serializer.serialize_bool(import)
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): KeywordFields {
+                deserializer.increase_container_depth()
+                val default = deserializer.deserialize_str()
+                val `in` = deserializer.deserialize_i32()
+                val `object` = deserializer.deserialize_bool()
+                val import = deserializer.deserialize_bool()
+                deserializer.decrease_container_depth()
+                return KeywordFields(default, `in`, `object`, import)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): KeywordFields {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as Kotlin with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    sealed interface KeywordEnum {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        data object Default: KeywordEnum {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
+                serializer.decrease_container_depth()
+            }
+
+            fun deserialize(deserializer: Deserializer): Default {
+                return Default
+            }
+        }
+
+        data class Switch(
+            val value: String,
+        ) : KeywordEnum {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(1)
+                serializer.serialize_str(value)
+                serializer.decrease_container_depth()
+            }
+
+            companion object {
+                fun deserialize(deserializer: Deserializer): Switch {
+                    deserializer.increase_container_depth()
+                    val value = deserializer.deserialize_str()
+                    deserializer.decrease_container_depth()
+                    return Switch(value)
+                }
+            }
+        }
+
+        data class Where(
+            val `in`: Int,
+            val default: String,
+        ) : KeywordEnum {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(2)
+                serializer.serialize_i32(`in`)
+                serializer.serialize_str(default)
+                serializer.decrease_container_depth()
+            }
+
+            companion object {
+                fun deserialize(deserializer: Deserializer): Where {
+                    deserializer.increase_container_depth()
+                    val `in` = deserializer.deserialize_i32()
+                    val default = deserializer.deserialize_str()
+                    deserializer.decrease_container_depth()
+                    return Where(`in`, default)
+                }
+            }
+        }
+
+        companion object {
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): KeywordEnum {
+                val index = deserializer.deserialize_variant_index()
+                return when (index) {
+                    0 -> Default.deserialize(deserializer)
+                    1 -> Switch.deserialize(deserializer)
+                    2 -> Where.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for KeywordEnum: $index")
+                }
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): KeywordEnum {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}

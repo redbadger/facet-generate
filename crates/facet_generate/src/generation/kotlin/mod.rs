@@ -30,7 +30,10 @@
 mod emitter;
 mod generator;
 mod installer;
+mod naming;
 
-pub use emitter::{Kotlin, enum_constant_name, render_type, variant_class_name};
+pub use emitter::{
+    Kotlin, enum_constant_name, escape_identifier, property_name, render_type, variant_class_name,
+};
 pub use generator::KotlinCodeGenerator;
 pub use installer::Installer;
