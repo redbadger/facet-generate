@@ -10,14 +10,13 @@
 
 use std::io::{self, Result, Write};
 
-use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::Kotlin,
+    kotlin::{Kotlin, property_name},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
@@ -573,7 +572,7 @@ fn write_data_class_top_level<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         push_serializer(&mut w)?;
         for field in fields {
-            write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
+            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -596,7 +595,7 @@ fn write_data_class_top_level<W: IndentWrite>(
                 for field in fields {
                     write_deserialize(
                         &mut w,
-                        Some(&field.name.to_lower_camel_case()),
+                        Some(&property_name(&field.name)),
                         &field.value,
                         true,
                     )?;
@@ -607,7 +606,7 @@ fn write_data_class_top_level<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", field.name.to_lower_camel_case())?;
+                    write!(w, "{}", property_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
@@ -635,7 +634,7 @@ fn write_data_class_variant<W: IndentWrite>(
         push_serializer(&mut w)?;
         writeln!(w, "serializer.serialize_variant_index({variant_index})")?;
         for field in fields {
-            write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
+            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -655,7 +654,7 @@ fn write_data_class_variant<W: IndentWrite>(
                 for field in fields {
                     write_deserialize(
                         &mut w,
-                        Some(&field.name.to_lower_camel_case()),
+                        Some(&property_name(&field.name)),
                         &field.value,
                         true,
                     )?;
@@ -666,7 +665,7 @@ fn write_data_class_variant<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", field.name.to_lower_camel_case())?;
+                    write!(w, "{}", property_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }

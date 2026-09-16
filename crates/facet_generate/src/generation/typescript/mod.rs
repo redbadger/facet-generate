@@ -26,10 +26,11 @@
 //!    registry by namespace into per-module files, and generates a
 //!    `package.json` manifest.
 
-pub use emitter::{TypeScript, render_type};
+pub use emitter::{TypeScript, is_reserved_word, param_name, render_type};
 pub use generator::TypeScriptCodeGenerator;
 pub use installer::Installer;
 
 mod emitter;
 mod generator;
 mod installer;
+mod naming;

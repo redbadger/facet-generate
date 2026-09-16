@@ -45,6 +45,7 @@
 //! (`generation/json/kotlin.rs`).
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     io::{Result, Write},
     string::ToString,
@@ -278,7 +279,7 @@ impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         self.doc.write(w, lang)?;
 
-        let name = &self.name.to_lower_camel_case();
+        let name = &property_name(&self.name);
         write!(w, "val {name}: ")?;
 
         self.value.write(w, lang)?;
@@ -454,6 +455,33 @@ pub fn variant_class_name(variant_name: &str) -> String {
 #[must_use]
 pub fn enum_constant_name(variant_name: &str) -> String {
     variant_name.to_uppercase()
+}
+
+/// The Kotlin property name the emitter gives to a struct field, a
+/// struct-variant field, or a tuple/newtype member.
+///
+/// Field names are lower-camel-cased (`not_found` → `notFound`) and Kotlin
+/// hard keywords are escaped with backticks (`in` → `` `in` ``). Soft
+/// keywords — including the synthetic member names `value` and `field0` — are
+/// left alone.
+///
+/// Plugins that emit a property access, a local binding, or a constructor
+/// argument derived from a field name should route it through this so the
+/// result matches the emitter.
+#[must_use]
+pub fn property_name(name: &str) -> String {
+    escape_identifier(&name.to_lower_camel_case()).into_owned()
+}
+
+/// Escapes an identifier when it is a Kotlin hard keyword, by wrapping it in
+/// backticks.
+///
+/// Backticks are pure quoting: the identifier's spelling is unchanged, so the
+/// name a serialization format sees (a `@SerialName`, a JSON key) is the bare
+/// one. Already-escaped identifiers are returned unchanged.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
 }
 
 impl Emitter<Kotlin> for Format {

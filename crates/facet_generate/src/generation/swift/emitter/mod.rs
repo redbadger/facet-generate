@@ -52,6 +52,7 @@
 
 #![allow(clippy::too_many_lines)]
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     io::{self, Result, Write},
     sync::Arc,
@@ -434,11 +435,37 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
 
 /// The Swift `case` name the emitter gives to an enum variant.
 ///
-/// Variant names are lower-camel-cased (`NotFound` → `notFound`); Swift
-/// keywords are not escaped, matching the emitter.
+/// Variant names are lower-camel-cased (`NotFound` → `notFound`) and Swift
+/// keywords are escaped with backticks (`Default` → `` `default` ``),
+/// matching the emitter.
 #[must_use]
 pub fn case_name(variant_name: &str) -> String {
-    variant_name.to_lower_camel_case()
+    escape_identifier(&variant_name.to_lower_camel_case()).into_owned()
+}
+
+/// The Swift property name the emitter gives to a struct field, a
+/// struct-variant field, or a tuple/newtype member.
+///
+/// Field names are lower-camel-cased (`not_found` → `notFound`) and Swift
+/// keywords are escaped with backticks (`default` → `` `default` ``).
+///
+/// Plugins that emit a property access, a parameter label, or a binding
+/// derived from a field name should route it through this so the result
+/// matches the emitter.
+#[must_use]
+pub fn field_name(name: &str) -> String {
+    escape_identifier(&name.to_lower_camel_case()).into_owned()
+}
+
+/// Escapes an identifier when it is a Swift keyword, by wrapping it in
+/// backticks.
+///
+/// Backticks are pure quoting: the identifier's spelling is unchanged, so an
+/// escaped name is interchangeable with the bare one everywhere except the
+/// source text. Already-escaped identifiers are returned unchanged.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +580,7 @@ impl Emitter<Swift> for Format {
 impl Emitter<Swift> for (&Named<Format>, Usage) {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let (Named { name, doc, value }, usage) = self;
-        let name = &name.to_lower_camel_case();
+        let name = &field_name(name);
 
         match usage {
             Usage::Field => {
@@ -591,7 +618,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
             },
             usage,
         ) = self;
-        let name = name.to_lower_camel_case();
+        let name = case_name(name);
 
         doc.write(w, lang)?;
 
@@ -744,7 +771,7 @@ fn write_struct_eq<W: IndentWrite>(w: &mut W, name: &str, fields: &[&Named<Forma
     } else {
         write!(w, "return ")?;
         for (i, field) in fields.iter().enumerate() {
-            let fname = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
             if i > 0 {
                 writeln!(w)?;
                 write!(w, "    && ")?;
@@ -836,7 +863,7 @@ fn write_enum_eq<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         w.unindent();
         for variant in variants {
-            let variant_name = variant.name.to_lower_camel_case();
+            let variant_name = case_name(&variant.name);
             match &variant.value {
                 VariantFormat::Unit => {
                     writeln!(w, "case (.{variant_name}, .{variant_name}): return true")?;
@@ -877,7 +904,7 @@ fn write_enum_eq<W: IndentWrite>(
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        let fname = n.name.to_lower_camel_case();
+                        let fname = field_name(&n.name);
                         write!(w, "{fname}: let l{i}")?;
                     }
                     write!(w, "), .{variant_name}(")?;
@@ -885,7 +912,7 @@ fn write_enum_eq<W: IndentWrite>(
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        let fname = n.name.to_lower_camel_case();
+                        let fname = field_name(&n.name);
                         write!(w, "{fname}: let r{i}")?;
                     }
                     write!(w, ")): return ")?;

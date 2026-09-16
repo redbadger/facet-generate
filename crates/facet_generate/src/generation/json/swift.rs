@@ -36,7 +36,7 @@ use crate::generation::{
     CodeGeneratorConfig, Feature,
     indent::{IndentWrite, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    swift::Swift,
+    swift::{Swift, case_name, escape_identifier, field_name},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
@@ -279,7 +279,7 @@ fn write_struct_type_body(
     with_block(w, Newlines::BOTH, |w| {
         push_serializer(w)?;
         for field in fields {
-            let fname = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
             write_field_serialize(w, &fname, &field.value)?;
         }
         pop_serializer(w)
@@ -303,8 +303,11 @@ fn write_struct_type_body(
             if i > 0 {
                 write!(w, ", ")?;
             }
-            let fname = field.name.to_lower_camel_case();
-            write!(w, "{fname}: {fname}")?;
+            // The argument *label* is the bare name: Swift warns that a
+            // keyword does not need escaping in an argument list.
+            let label = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
+            write!(w, "{label}: {fname}")?;
         }
         writeln!(w, ")")
     })?;
@@ -348,7 +351,7 @@ fn write_field_deserialize(
                 let elem = format!("{fname}{i}");
                 write_format_deserialize(w, fmt, &elem)?;
             }
-            write!(w, "let {fname} = (")?;
+            write!(w, "let {} = (", escape_identifier(fname))?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -430,7 +433,7 @@ fn write_variant_serialize_case(
     variant: &Named<VariantFormat>,
     index: usize,
 ) -> io::Result<()> {
-    let name = variant.name.to_lower_camel_case();
+    let name = case_name(&variant.name);
     match &variant.value {
         VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
         VariantFormat::Unit => {
@@ -468,15 +471,15 @@ fn write_variant_serialize_case(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                let field_name = named.name.to_lower_camel_case();
-                write!(w, "let {field_name}")?;
+                let binding = field_name(&named.name);
+                write!(w, "let {binding}")?;
             }
             writeln!(w, "):")?;
             w.indent();
             writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
             for named in nameds {
-                let field_name = named.name.to_lower_camel_case();
-                write_format_serialize(w, &named.value, &field_name)?;
+                let binding = field_name(&named.name);
+                write_format_serialize(w, &named.value, &binding)?;
             }
             w.unindent();
         }
@@ -489,7 +492,7 @@ fn write_variant_deserialize_case(
     variant: &Named<VariantFormat>,
     index: usize,
 ) -> io::Result<()> {
-    let name = variant.name.to_lower_camel_case();
+    let name = case_name(&variant.name);
     writeln!(w, "case {index}:")?;
     w.indent();
     match &variant.value {
@@ -519,8 +522,7 @@ fn write_variant_deserialize_case(
         }
         VariantFormat::Struct(nameds) => {
             for named in nameds {
-                let field_name = named.name.to_lower_camel_case();
-                write_format_deserialize(w, &named.value, &field_name)?;
+                write_format_deserialize(w, &named.value, &named.name.to_lower_camel_case())?;
             }
             pop_deserializer(w)?;
             write!(w, "return .{name}(")?;
@@ -528,8 +530,9 @@ fn write_variant_deserialize_case(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                let field_name = named.name.to_lower_camel_case();
-                write!(w, "{field_name}: {field_name}")?;
+                let label = named.name.to_lower_camel_case();
+                let binding = field_name(&named.name);
+                write!(w, "{label}: {binding}")?;
             }
             writeln!(w, ")")?;
         }
@@ -661,7 +664,7 @@ fn write_format_deserialize(w: &mut dyn IndentWrite, format: &Format, var: &str)
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
             }
-            write!(w, "let {var} = (")?;
+            write!(w, "let {} = (", escape_identifier(var))?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -671,7 +674,7 @@ fn write_format_deserialize(w: &mut dyn IndentWrite, format: &Format, var: &str)
             writeln!(w, ")")
         }
         _ => {
-            write!(w, "let {var} = ")?;
+            write!(w, "let {} = ", escape_identifier(var))?;
             write_deserialize_expr(w, format)?;
             writeln!(w)
         }

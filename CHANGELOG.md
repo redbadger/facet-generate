@@ -25,10 +25,29 @@ Motivated by, but not specific to, the effect-handler code generation in
   container types should be added with `add_type` first [#123](https://github.com/redbadger/facet-generate/pull/123)
 - **Public `write_serialize_value` per language** — `generation::bincode::{swift, kotlin, typescript, csharp}::write_serialize_value(w, value_expr, format, config)` emits exactly the bincode serialization statements the plugin writes for a field of that format. Each documents its precondition: a `serializer` variable of the language's conventional type in scope, and container depth managed by the caller [#123](https://github.com/redbadger/facet-generate/pull/123)
 - **Public naming and type-rendering helpers** so plugins reproduce emitter naming exactly: `generation::{swift,kotlin,typescript,csharp}::render_type(format, config)`, plus `swift::case_name`, `kotlin::variant_class_name`, `kotlin::enum_constant_name` and `csharp::escape_identifier` (which was private in `bincode::csharp`) [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Reserved words are escaped in every language.** A field or variant whose generated
+  identifier is a keyword (`default`, `in`, `class`, `where`, …) is now written with the
+  language's own escape — backticks in Swift and Kotlin, `@` in C#, and in TypeScript a
+  `_`-suffixed parameter or local while the property keeps its name — everywhere the
+  emitters and the bincode/JSON plugins spell it: declarations, initialiser labels,
+  bindings, patterns and property accesses. Escaping is pure quoting, so wire names are
+  untouched. New public helpers `swift::field_name`, `swift::escape_identifier`,
+  `kotlin::property_name`, `kotlin::escape_identifier`, `typescript::param_name` and
+  `typescript::is_reserved_word` let plugins reproduce the emitters' spelling exactly;
+  the word lists live in one `naming` module per language with a shared driver
 - **`EmitContext::variants()`** — the container's variants keyed by discriminant, or `None` when it is not an enum [#123](https://github.com/redbadger/facet-generate/pull/123)
 
 ### 🐛 Bug Fixes
 
+- **Keyword-named fields and variants generated code that did not compile** — a Rust
+  `r#default` field came out as `public var default: String` in Swift and `val in: Int` in
+  Kotlin, a `Default` variant as `case default`, and a TypeScript constructor took a
+  parameter literally named `class`. All four targets now compile such types; the
+  `generate_types_with_keywords` fixture (dormant since the typeshare days) is live again
+  for every language, and Swift, Kotlin and TypeScript gained compile tests alongside the
+  existing C# one. `swift::case_name` now escapes as well, so a plugin that used it for a
+  variant named `Struct` or `Default` sees `` `struct` `` / `` `default` `` where it
+  previously saw the bare word
 - **`after_type` now fires for every top-level type, in every language** — it was only called for TypeScript enums and C# all-unit enums, which made it unusable as the "emit something alongside this type" hook it is documented to be. It is now called after every top-level container: Swift structs and enums, Kotlin `data class` / `data object` / `enum class` / `sealed interface`, TypeScript classes (as well as enums), and C# classes, sealed records and `abstract record` variant hierarchies (as well as enums). It is still never called for an individual enum variant, and the context is always a top-level one [#123](https://github.com/redbadger/facet-generate/pull/123)
 
   **A third-party plugin implementing `after_type` will now be called at call sites it

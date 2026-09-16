@@ -19,9 +19,12 @@
 
 #![cfg(feature = "kotlin")]
 
-use std::process::Command;
+use std::{path::Path, process::Command};
 
-use facet_generate::{generation::kotlin, reflect};
+use facet_generate::{
+    generation::{bincode::BincodePlugin, json::JsonPlugin, kotlin},
+    reflect,
+};
 use tempfile::tempdir;
 
 pub mod common;
@@ -61,4 +64,72 @@ fn test_that_kotlin_code_compiles() {
         .status()
         .unwrap();
     assert!(status.success());
+}
+
+/// The installer writes the package tree at the project root, but Gradle's
+/// Kotlin source set is `src/main/kotlin`, so `gradle build` would find no
+/// sources. Move everything except the manifest there.
+fn move_sources_into_gradle_source_set(dir: &Path) {
+    let source_set = dir.join("src").join("main").join("kotlin");
+    std::fs::create_dir_all(&source_set).unwrap();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        if name == "src" || name == "build.gradle.kts" {
+            continue;
+        }
+        std::fs::rename(entry.path(), source_set.join(&name)).unwrap();
+    }
+}
+
+/// Pin both the Java and the Kotlin JVM target so the build does not fail with
+/// "Inconsistent JVM-target compatibility" on a JDK newer than the one the
+/// Kotlin compiler supports.
+fn pin_jvm_target(dir: &Path) {
+    let manifest = dir.join("build.gradle.kts");
+    let mut contents = std::fs::read_to_string(&manifest).unwrap();
+    contents.push_str(
+        r"
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+",
+    );
+    std::fs::write(&manifest, contents).unwrap();
+}
+
+/// Field and variant names that collide with Kotlin hard keywords must be
+/// escaped with backticks; soft keywords (`import`, `value`, `field0`) must
+/// not be.
+#[test]
+fn test_that_kotlin_code_with_keyword_names_compiles() {
+    for encoding in ["bincode", "json"] {
+        let registry = common::get_keyword_registry();
+        let tmp = tempdir().unwrap();
+        let dir = tmp.path().join("testing");
+
+        let installer = kotlin::Installer::new("com.example.testing", &dir);
+        let installer = if encoding == "bincode" {
+            installer.plugin(BincodePlugin)
+        } else {
+            installer.plugin(JsonPlugin)
+        };
+        installer.generate(&registry).unwrap();
+        move_sources_into_gradle_source_set(&dir);
+        pin_jvm_target(&dir);
+
+        let status = gradle_command()
+            .args(["--configuration-cache", "build"])
+            .current_dir(&dir)
+            .status()
+            .unwrap();
+        assert!(status.success(), "gradle build failed for {encoding}");
+    }
 }

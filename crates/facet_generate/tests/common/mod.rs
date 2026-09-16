@@ -615,3 +615,54 @@ pub fn get_swift_positive_samples() -> Vec<Vec<u8>> {
         .map(|v| bincode::serialize(v).unwrap())
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// Keyword fixture — shared by the per-language compilation tests.
+//
+// Every field and variant name here collides with a keyword in at least one
+// target language, except `import` and `type`, which are soft or contextual
+// keywords everywhere and must come through untouched.
+// ---------------------------------------------------------------------------
+
+#[derive(Facet)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct KeywordFields {
+    pub r#default: String,
+    pub r#in: i32,
+    pub class: bool,
+    pub object: String,
+    pub r#static: bool,
+    pub r#let: String,
+    pub when: i32,
+    pub is: bool,
+    pub fun: String,
+    pub operator: String,
+    pub import: String,
+    pub r#type: String,
+    pub function: Option<String>,
+    /// A tuple field: the Swift plugin derives `whereField0` / `whereField1`
+    /// locals from this name, which must stay unescaped.
+    pub r#where: (i32, String),
+}
+
+#[derive(Facet)]
+pub struct KeywordTuple(pub String, pub i32);
+
+#[derive(Facet)]
+pub struct KeywordNewType(pub String);
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum KeywordEnum {
+    Default,
+    Case,
+    Switch(String),
+    Where { r#in: i32, r#default: String },
+}
+
+/// Registry of the keyword fixture types, used by the per-language
+/// compilation tests.
+pub fn get_keyword_registry() -> Registry {
+    reflect!(KeywordFields, KeywordTuple, KeywordNewType, KeywordEnum).unwrap()
+}
