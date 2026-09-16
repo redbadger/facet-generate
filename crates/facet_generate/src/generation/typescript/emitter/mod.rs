@@ -50,12 +50,13 @@ use std::{
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
-use super::naming;
+use super::naming::{self, builtin};
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter, PackageLocation,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
+        naming::qualify_helper,
         plugin::{EmitContext, EmitterPlugin, collect_from_plugins},
     },
     reflection::format::{ContainerFormat, Doc, EnumTagging, Format, Named, VariantFormat},
@@ -151,7 +152,14 @@ impl Emitter<TypeScript> for Module {
         let alias_map = BTreeMap::from(TYPE_ALIASES);
         let aliases: Vec<String> = used_format_types
             .iter()
-            .filter_map(|k| alias_map.get(k.as_str()).map(|s| (*s).to_string()))
+            .filter_map(|k| {
+                alias_map.get(k.as_str()).map(|s| {
+                    qualify_helper(s, naming::QUALIFIED, |name| {
+                        naming::shadows(name, self.config())
+                    })
+                    .into_owned()
+                })
+            })
             .collect();
         if !aliases.is_empty() {
             writeln!(w, "{}", aliases.join("\n"))?;
@@ -260,7 +268,7 @@ impl Emitter<TypeScript> for Format {
                 write!(w, ">")
             }
             Self::Map { key, value } => {
-                write!(w, "Map<")?;
+                write!(w, "{}<", builtin("Map", &lang.config))?;
                 key.write(w, lang)?;
                 write!(w, ",")?;
                 value.write(w, lang)?;
@@ -298,9 +306,8 @@ impl Emitter<TypeScript> for Named<Format> {
 /// `Optional<Foo>`, `Map<str,Bar>`, or `Other.Child` for a type in another
 /// namespace.
 ///
-/// `config` is accepted for symmetry with the other languages and to keep the
-/// helper stable if TypeScript's type rendering becomes
-/// configuration-dependent.
+/// `config` supplies the set of type names the module declares, so a global a
+/// declaration shadows (`Map`, …) is reached through `globalThis`.
 #[must_use]
 pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     let lang = TypeScript {

@@ -14,8 +14,12 @@ use crate::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         config::PackageLocation,
         indent::IndentedWriter,
-        kotlin::emitter::{Kotlin, write_module_header},
+        kotlin::{
+            emitter::{Kotlin, write_module_header},
+            naming,
+        },
         module::Module,
+        naming::check_reserved_names,
         plugin::{CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
@@ -74,6 +78,7 @@ impl<'a> KotlinCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = Kotlin::new(&config, registry);
         for p in &self.plugins {

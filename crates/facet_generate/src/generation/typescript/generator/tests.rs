@@ -565,3 +565,48 @@ fn output_user_example_multiple_external_references() {
     assert!(output.contains("public image: Optional<CatImage>"));
     assert!(output.contains("const image = deserializeOption(deserializer, (deserializer) => {"));
 }
+
+// ---------------------------------------------------------------------------
+// Reserved-name pre-pass
+// ---------------------------------------------------------------------------
+
+#[test]
+fn type_named_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    #[facet(rename = "Serializer")]
+    struct Renamed {
+        name: String,
+    }
+
+    let registry = crate::reflect!(Renamed).unwrap();
+    let cfg = CodeGeneratorConfig::new("testing".to_string());
+    let err = TypeScriptCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "TypeScript: type `Serializer` collides with the `Serializer` import used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+#[test]
+fn field_named_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    struct Foo {
+        serializer: String,
+    }
+
+    let registry = crate::reflect!(Foo).unwrap();
+    let cfg = CodeGeneratorConfig::new("testing".to_string());
+    let err = TypeScriptCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "TypeScript: field `serializer` of `Foo` would become `serializer`, which shadows the `serializer` parameter in the generated serialize method; rename it with #[facet(rename = \"...\")]"
+    );
+}

@@ -33,12 +33,19 @@ use indoc::writedoc;
 use crate::generation::{
     CodeGeneratorConfig, Feature,
     indent::{IndentWrite, Newlines, with_block},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    swift::{Swift, case_name, escape_identifier, field_name},
+    swift::{Swift, case_name, escape_identifier, field_name, naming},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
 use super::BincodePlugin;
+
+/// Rewrite the builtin type names in a module-level helper snippet to their
+/// fully qualified form where the generated module shadows them.
+fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
+    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
+}
 
 // ---------------------------------------------------------------------------
 // Inlined feature helper snippets
@@ -232,27 +239,27 @@ impl EmitterPlugin<Swift> for BincodePlugin {
             match feature {
                 Feature::OptionOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_OPTION_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
                 }
                 Feature::ListOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_LIST_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
                 }
                 Feature::SetOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_SET_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
                 }
                 Feature::MapOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_MAP_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
                 }
                 Feature::TupleArray => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                    write!(w, "{}", qualified(FEATURE_TUPLE_ARRAY, config))?;
                 }
                 Feature::Uuid => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_UUID}")?;
+                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
                 _ => {}
             }
@@ -267,9 +274,9 @@ impl EmitterPlugin<Swift> for BincodePlugin {
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
         let name = ctx.name();
         if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
-            write_enum_type_body(w, name, variants)
+            write_enum_type_body(w, name, variants, ctx.config)
         } else {
-            write_struct_type_body(w, name, &ctx.fields())
+            write_struct_type_body(w, name, &ctx.fields(), ctx.config)
         }
     }
 }
@@ -282,6 +289,7 @@ fn write_struct_type_body(
     w: &mut dyn IndentWrite,
     name: &str,
     fields: &[Named<Format>],
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w)?;
     write!(
@@ -296,7 +304,7 @@ fn write_struct_type_body(
         }
         pop_serializer(w)
     })?;
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
 
     writeln!(w)?;
     write!(
@@ -323,7 +331,7 @@ fn write_struct_type_body(
         }
         writeln!(w, ")")
     })?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
 
     Ok(())
 }
@@ -336,6 +344,7 @@ fn write_enum_type_body(
     w: &mut dyn IndentWrite,
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w)?;
     write!(
@@ -355,7 +364,7 @@ fn write_enum_type_body(
         })?;
         pop_serializer(w)
     })?;
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
 
     writeln!(w)?;
     write!(
@@ -382,7 +391,7 @@ fn write_enum_type_body(
             Ok(())
         })
     })?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
 
     Ok(())
 }
@@ -508,12 +517,13 @@ fn write_variant_deserialize_case(
 // Serialization wrappers
 // ---------------------------------------------------------------------------
 
-fn write_bincode_serialize(w: &mut dyn IndentWrite) -> io::Result<()> {
+fn write_bincode_serialize(w: &mut dyn IndentWrite, cfg: &CodeGeneratorConfig) -> io::Result<()> {
+    let byte = naming::builtin("UInt8", cfg);
     writeln!(w)?;
     writedoc!(
         w,
         r"
-        public func bincodeSerialize() throws -> [UInt8] {{
+        public func bincodeSerialize() throws -> [{byte}] {{
             let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
@@ -522,12 +532,17 @@ fn write_bincode_serialize(w: &mut dyn IndentWrite) -> io::Result<()> {
     )
 }
 
-fn write_bincode_deserialize(w: &mut dyn IndentWrite, name: &str) -> io::Result<()> {
+fn write_bincode_deserialize(
+    w: &mut dyn IndentWrite,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> io::Result<()> {
+    let byte = naming::builtin("UInt8", cfg);
     writeln!(w)?;
     writedoc!(
         w,
         r#"
-        public static func bincodeDeserialize(input: [UInt8]) throws -> {name} {{
+        public static func bincodeDeserialize(input: [{byte}]) throws -> {name} {{
             let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {{

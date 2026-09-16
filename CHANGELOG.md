@@ -8,12 +8,25 @@ Extensibility work for **out-of-tree `EmitterPlugin` implementations**. Everythi
 plugin needs to emit code *about* a type — where to hook in, how to name it, how to
 render it, how to serialize it — is now part of the public API, so a plugin no longer
 has to re-implement (and drift from) the emitters' own naming and rendering rules.
-Nothing the in-tree plugins generate changes: every snapshot and expect-file is
-byte-for-byte identical. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs`
+Nothing the in-tree plugins generate changes for types that compiled before: every
+existing snapshot and expect-file is byte-for-byte identical. Alongside that, generated
+code no longer trips over the target language's reserved words or builtin type names. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs`
 is unchanged and stays at 0.18.0.
 
 Motivated by, but not specific to, the effect-handler code generation in
 [redbadger/crux#581](https://github.com/redbadger/crux/pull/581).
+
+### 💥 Breaking Changes
+
+- **`CodeGeneratorConfig` gained a public `declared_type_names: BTreeSet<String>` field.**
+  As with `parent` in 0.20.0, the struct has all-public fields and is not
+  `#[non_exhaustive]`, so a struct literal or exhaustive destructuring no longer compiles;
+  use `CodeGeneratorConfig::new()` and the builder methods. The field is filled in by
+  `update_from` with every type and data-carrying variant the module declares, and is what
+  lets `render_type` decide whether a builtin needs qualifying [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **`swift::case_name` now escapes Swift keywords**, so a plugin that used it for a
+  variant named `Struct` or `Default` sees `` `struct` `` / `` `default` `` where it
+  previously saw the bare (uncompilable) word [#126](https://github.com/redbadger/facet-generate/pull/126)
 
 ### 🚀 Features
 
@@ -34,7 +47,23 @@ Motivated by, but not specific to, the effect-handler code generation in
   untouched. New public helpers `swift::field_name`, `swift::escape_identifier`,
   `kotlin::property_name`, `kotlin::escape_identifier`, `typescript::param_name` and
   `typescript::is_reserved_word` let plugins reproduce the emitters' spelling exactly;
-  the word lists live in one `naming` module per language with a shared driver
+  the word lists live in one `naming` module per language with a shared driver [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **Builtin type names are qualified when a generated type shadows them.** A Rust type
+  called `Set`, `List`, `Map`, `String`, `Dictionary`… is emitted under its own name, and
+  every reference to the builtin of the same name in that module is written fully
+  qualified instead — `kotlin.collections.Set<T>`, `Swift.Set<T>`,
+  `global::System.Collections.Generic.HashSet<T>`, `globalThis.Map<K, V>` — including the
+  module-level serialization helpers. Prompted by `crux_kv`'s `Set` operation struct, which
+  previously hid `kotlin.collections.Set` for the whole generated package. Nothing changes
+  when no name is shadowed [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **Names that can be neither escaped nor qualified are rejected before anything is
+  written.** A type named after an explicit import the generated code depends on
+  (`Serializer`, `Bytes`, `UUID`, the TypeScript `str`/`Seq` aliases…), or a field that
+  would become a member the language or the generated code already provides (`toString`,
+  `copy`, `hashCode`, `GetHashCode`, a C# property named like its class, `serializer`,
+  `deserializer`), now fails generation with an `InvalidInput` error that names the
+  language, the offending type or field, why it clashes, and suggests
+  `#[facet(rename = "...")]` [#126](https://github.com/redbadger/facet-generate/pull/126)
 - **`EmitContext::variants()`** — the container's variants keyed by discriminant, or `None` when it is not an enum [#123](https://github.com/redbadger/facet-generate/pull/123)
 
 ### 🐛 Bug Fixes
@@ -45,9 +74,7 @@ Motivated by, but not specific to, the effect-handler code generation in
   parameter literally named `class`. All four targets now compile such types; the
   `generate_types_with_keywords` fixture (dormant since the typeshare days) is live again
   for every language, and Swift, Kotlin and TypeScript gained compile tests alongside the
-  existing C# one. `swift::case_name` now escapes as well, so a plugin that used it for a
-  variant named `Struct` or `Default` sees `` `struct` `` / `` `default` `` where it
-  previously saw the bare word
+  existing C# one [#126](https://github.com/redbadger/facet-generate/pull/126)
 - **`after_type` now fires for every top-level type, in every language** — it was only called for TypeScript enums and C# all-unit enums, which made it unusable as the "emit something alongside this type" hook it is documented to be. It is now called after every top-level container: Swift structs and enums, Kotlin `data class` / `data object` / `enum class` / `sealed interface`, TypeScript classes (as well as enums), and C# classes, sealed records and `abstract record` variant hierarchies (as well as enums). It is still never called for an individual enum variant, and the context is always a top-level one [#123](https://github.com/redbadger/facet-generate/pull/123)
 
   **A third-party plugin implementing `after_type` will now be called at call sites it

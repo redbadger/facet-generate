@@ -666,3 +666,97 @@ pub enum KeywordEnum {
 pub fn get_keyword_registry() -> Registry {
     reflect!(KeywordFields, KeywordTuple, KeywordNewType, KeywordEnum).unwrap()
 }
+
+// ---------------------------------------------------------------------------
+// Builtin-shadowing fixture — shared by the per-language compilation tests.
+//
+// `Set` is declared as a top-level struct, so every `Set<T>` the generated
+// module writes must be qualified (`kotlin.collections.Set`, `Swift.Set`, …)
+// while the declaration itself keeps its name.
+// ---------------------------------------------------------------------------
+
+#[derive(Facet)]
+pub struct Get {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct Set {
+    pub key: String,
+    #[facet(fg::bytes)]
+    pub value: Vec<u8>,
+}
+
+#[derive(Facet)]
+pub struct Delete {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct Exists {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct ListKeys {
+    pub prefix: String,
+    pub cursor: u64,
+}
+
+#[derive(Facet)]
+pub struct Keys {
+    // Named `items` rather than `keys`: a C# property may not share its name
+    // with its enclosing type (CS0542).
+    pub items: Vec<String>,
+    pub next_cursor: u64,
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum ValueResult {
+    Ok(Option<Vec<u8>>),
+    Err(String),
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum BoolResult {
+    Ok(bool),
+    Err(String),
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum KeysResult {
+    Ok(Keys),
+    Err(String),
+}
+
+#[derive(Facet)]
+pub struct Store {
+    pub tags: std::collections::HashSet<String>,
+    pub entries: BTreeMap<String, String>,
+    pub blob: Vec<u8>,
+    pub pair: (i32, String),
+}
+
+/// Registry of the builtin-shadowing fixture types, used by the per-language
+/// compilation tests.
+pub fn get_shadowing_registry() -> Registry {
+    reflect!(
+        Get,
+        Set,
+        Delete,
+        Exists,
+        ListKeys,
+        Keys,
+        ValueResult,
+        BoolResult,
+        KeysResult,
+        Store
+    )
+    .unwrap()
+}

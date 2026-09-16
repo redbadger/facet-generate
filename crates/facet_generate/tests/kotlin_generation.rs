@@ -133,3 +133,30 @@ fn test_that_kotlin_code_with_keyword_names_compiles() {
         assert!(status.success(), "gradle build failed for {encoding}");
     }
 }
+
+/// A type named `Set` shadows `kotlin.collections.Set` for the whole package,
+/// so every `Set<T>` the emitter and the bincode plugin write must be
+/// qualified while the `data class Set` keeps its name.
+///
+/// Bincode only: the fixture has a `#[facet(fg::bytes)]` field, and the Kotlin
+/// JSON plugin emits a bare `Bytes` without importing it.
+#[test]
+fn test_that_kotlin_code_shadowing_builtin_names_compiles() {
+    let registry = common::get_shadowing_registry();
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    move_sources_into_gradle_source_set(&dir);
+    pin_jvm_target(&dir);
+
+    let status = gradle_command()
+        .args(["--configuration-cache", "build"])
+        .current_dir(&dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "gradle build failed");
+}

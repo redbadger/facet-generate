@@ -680,7 +680,7 @@ struct Request {
 Container-level `rename` and field/variant-level `rename` (or `rename_all`) can
 be combined freely.
 
-#### Reserved words
+#### Reserved words and builtin type names
 
 Names reach the target language exactly as written (after `rename` / `rename_all`), so a
 field called `default` or a variant called `Default` becomes an identifier that is a reserved
@@ -705,6 +705,38 @@ Plugins that derive identifiers from field or variant names should use the same 
 emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
 `typescript::param_name` and `csharp::escape_identifier` — so their output agrees with the
 generated type.
+
+A type can also take the name of a builtin the generated code relies on. `crux_kv`, for
+example, has an operation struct called `Set`, which in Kotlin becomes a package-level
+`data class Set` that hides `kotlin.collections.Set` for the whole package. Rather than
+rejecting the name, the generators notice that the module declares it and write the builtin
+fully qualified, only where it is shadowed:
+
+```kotlin
+data class Set(
+    val key: String,
+    val value: Bytes,
+)
+
+data class Store(
+    val tags: kotlin.collections.Set<String>,
+    val entries: Map<String, String>,
+)
+```
+
+The same happens for `Swift.Set<String>`, `global::System.Collections.Generic.HashSet<string>`
+and `globalThis.Map<str,str>`. When nothing is shadowed the output is unchanged.
+
+A few names cannot be escaped or qualified: a type named after something the module
+imports explicitly (`Serializer`, `Deserializer`, `Bytes`, `UUID`, the TypeScript aliases
+such as `str` and `Seq`), or a field that would become a member the language or the
+generated code already provides (`toString`, `copy` or `hashCode` on a Kotlin data class,
+`GetHashCode` or a property named like its class in C#, `serializer` and `deserializer`
+everywhere). Generation stops before writing anything and says what to rename:
+
+```text
+Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = "...")]
+```
 
 ### Skipping struct fields or enum variants
 

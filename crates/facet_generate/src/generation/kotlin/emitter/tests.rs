@@ -882,3 +882,33 @@ fn variant_names_match_the_emitter() {
     assert_eq!(variant_class_name("NotFound"), "NotFound");
     assert_eq!(enum_constant_name("NotFound"), "NOTFOUND");
 }
+
+/// A declaration named `String` shadows `kotlin.String` for the whole package,
+/// so the emitter must write the prelude type fully qualified.
+#[test]
+fn declared_string_qualifies_the_kotlin_prelude_type() {
+    #[derive(Facet)]
+    #[facet(rename = "String")]
+    struct MyString {
+        text: std::string::String,
+    }
+
+    #[derive(Facet)]
+    struct Holder {
+        label: std::string::String,
+        inner: MyString,
+    }
+
+    let actual = emit!(Holder as Kotlin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    data class Holder(
+        val label: kotlin.String,
+        val inner: String,
+    )
+
+    data class String(
+        val text: kotlin.String,
+    )
+    ");
+}

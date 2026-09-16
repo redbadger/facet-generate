@@ -189,3 +189,37 @@ fn test_that_typescript_code_with_keyword_names_type_checks() {
         assert!(status.success(), "deno check failed");
     }
 }
+
+/// A type named `Set` must not break the generated module, and a type named
+/// `Map` must leave the global `Map` reachable through `globalThis`.
+#[test]
+fn test_that_typescript_code_shadowing_builtin_names_type_checks() {
+    for plugin in [
+        Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<typescript::TypeScript>>,
+        Arc::new(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        let registry = common::get_shadowing_registry();
+
+        let mut installer = typescript::Installer::new("testing", dir.path());
+        installer.install_serde_runtime().unwrap();
+        installer.install_bincode_runtime().unwrap();
+
+        let source_path = dir.path().join("testing.ts");
+        let mut source = File::create(&source_path).unwrap();
+        let config = CodeGeneratorConfig::new("testing".to_string());
+        let generator =
+            typescript::TypeScriptCodeGenerator::new(&config).with_plugins(vec![plugin]);
+        generator.output(&mut source, &registry).unwrap();
+        drop(source);
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&source_path)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}
