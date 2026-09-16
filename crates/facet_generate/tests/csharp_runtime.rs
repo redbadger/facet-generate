@@ -5,7 +5,13 @@
 //! run the generated C# code to deserialize, verify, and re-serialize —
 //! checking that the bytes roundtrip correctly.
 
-use std::{fs, io::Write as _, process::Command};
+use std::{
+    fs,
+    io::Write as _,
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 use facet::Facet;
 use facet_generate::{
@@ -31,14 +37,40 @@ fn make_executable(dir: &std::path::Path, package_name: &str) {
 }
 
 fn dotnet_run(dir: &std::path::Path) {
-    let output = Command::new("dotnet")
+    const TIMEOUT: Duration = Duration::from_secs(300);
+
+    let mut child = Command::new("dotnet")
         .arg("run")
         .current_dir(dir)
         .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
         .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
         .env("DOTNET_NOLOGO", "1")
-        .output()
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
         .unwrap();
+
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        if child.try_wait().unwrap().is_some() {
+            break;
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let output = child.wait_with_output().unwrap();
+            panic!(
+                "dotnet run timed out after {} seconds:\nstdout: {}\nstderr: {}",
+                TIMEOUT.as_secs(),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    let output = child.wait_with_output().unwrap();
     assert!(
         output.status.success(),
         "dotnet run failed:\nstdout: {}\nstderr: {}",
