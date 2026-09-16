@@ -7,12 +7,16 @@
 //!
 //! # How it works
 //!
-//! 1. Reflects [`PrimitiveTypes`](common::PrimitiveTypes) into a [`Registry`].
-//! 2. Runs the full [`Installer`](facet_generate::generation::kotlin::Installer)
+//! Every test builds a [`Registry`] from a fixture in [`common`] and hands it
+//! to [`assert_generated_code_compiles`], which
+//!
+//! 1. runs the full [`Installer`](facet_generate::generation::kotlin::Installer)
 //!    pipeline into a temporary directory, producing `.kt` source files and a
-//!    `build.gradle.kts` manifest.
-//! 3. Invokes `gradle --version` as a smoke check for the toolchain.
-//! 4. Invokes `gradle build` and asserts a zero exit code.
+//!    `build.gradle.kts` manifest,
+//! 2. rearranges that output into a shape Gradle can build (see
+//!    [`move_sources_into_gradle_source_set`] and [`pin_jvm_target`]),
+//! 3. invokes `gradle build`, asserting both a zero exit code and that
+//!    `compileKotlin` actually had sources to compile.
 //!
 //! The test is gated on `#[cfg(feature = "kotlin")]` so it only runs when the
 //! Kotlin/Gradle toolchain is available.
@@ -22,8 +26,9 @@
 use std::{path::Path, process::Command};
 
 use facet_generate::{
+    Registry,
     generation::{bincode::BincodePlugin, json::JsonPlugin, kotlin},
-    reflect,
+    reflection::format::{ContainerFormat, Format},
 };
 use tempfile::tempdir;
 
@@ -33,37 +38,15 @@ fn gradle_command() -> Command {
     Command::new("gradle")
 }
 
-#[test]
-fn test_that_kotlin_code_compiles() {
-    type Test = common::PrimitiveTypes;
-
-    let registry = reflect!(Test).unwrap();
-    let dir = tempdir().unwrap();
-    let dir = dir.path().to_path_buf().join("testing");
-
-    let package_name = "com.example.testing";
-
-    kotlin::Installer::new(package_name, &dir)
-        .generate(&registry)
-        .unwrap();
-
-    let args = ["--configuration-cache"];
-
-    let status = gradle_command()
-        .args(args)
-        .arg("--version")
-        .current_dir(&dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
-
-    let status = gradle_command()
-        .args(args)
-        .arg("build")
-        .current_dir(&dir)
-        .status()
-        .unwrap();
-    assert!(status.success());
+/// Which encoding plugin the generated Gradle project is installed with.
+///
+/// There is no plugin-less variant: without a plugin the installer ships no
+/// runtime sources, so anything the emitter renders as a runtime type (such as
+/// `Bytes`) cannot resolve.
+#[derive(Clone, Copy, Debug)]
+enum Encoding {
+    Bincode,
+    Json,
 }
 
 /// The installer writes the package tree at the project root, but Gradle's
@@ -105,32 +88,82 @@ kotlin {
     std::fs::write(&manifest, contents).unwrap();
 }
 
+/// Generate `registry` for `encoding` into a throwaway Gradle project and
+/// compile it, asserting that `compileKotlin` ran and succeeded.
+fn assert_generated_code_compiles(registry: &Registry, encoding: Encoding) {
+    let tmp = tempdir().unwrap();
+    let dir = tmp.path().join("testing");
+
+    let installer = kotlin::Installer::new("com.example.testing", &dir);
+    let installer = match encoding {
+        Encoding::Bincode => installer.plugin(BincodePlugin),
+        Encoding::Json => installer.plugin(JsonPlugin),
+    };
+    installer.generate(registry).unwrap();
+
+    move_sources_into_gradle_source_set(&dir);
+    pin_jvm_target(&dir);
+
+    let output = gradle_command()
+        .args(["--configuration-cache", "build"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        output.status.success(),
+        "gradle build failed for {encoding:?}\n{stdout}\n{stderr}"
+    );
+    // A bare `> Task :compileKotlin` line means the task ran with sources;
+    // `NO-SOURCE` (or no line at all) means the generated code was never
+    // compiled, which would make the whole test vacuous.
+    assert!(
+        stdout.contains("> Task :compileKotlin\n"),
+        "gradle did not compile any Kotlin sources for {encoding:?}\n{stdout}"
+    );
+}
+
+/// Drop every `u128` / `i128` struct field from `registry`.
+///
+/// Known bug, not fixed here: the Kotlin JSON plugin binds its
+/// `BigIntegerSerializer` with a same-file `typealias BigInteger`, but the
+/// emitter also writes `import java.math.BigInteger` for any module with
+/// 128-bit integers, and an explicit import outranks a same-package
+/// declaration. The alias therefore never applies and kotlinx.serialization
+/// fails with "Serializer has not been found for type '`BigInteger`'".
+fn remove_128_bit_fields(registry: &mut Registry) {
+    for container in registry.values_mut() {
+        if let ContainerFormat::Struct(fields, _) = container {
+            fields.retain(|field| !matches!(field.value, Format::I128 | Format::U128));
+        }
+    }
+}
+
+/// The main fixture — the full [`SerdeData`](common::SerdeData) tree of
+/// primitives, containers, tuples, maps and recursive enums.
+///
+/// JSON only: the bincode plugin does not compile this fixture (128-bit
+/// integers are declared as `BigInteger` but serialized through
+/// `Int128`/`UInt128`, `char` is declared as `String` but serialized as
+/// `Char`, and `Vec<()>` / `BTreeMap<_, ()>` call the container helpers
+/// without their `serializeElement` argument). All pre-existing bugs.
+#[test]
+fn test_that_kotlin_code_compiles() {
+    let mut registry = common::get_registry();
+    remove_128_bit_fields(&mut registry);
+    assert_generated_code_compiles(&registry, Encoding::Json);
+}
+
 /// Field and variant names that collide with Kotlin hard keywords must be
 /// escaped with backticks; soft keywords (`import`, `value`, `field0`) must
 /// not be.
 #[test]
 fn test_that_kotlin_code_with_keyword_names_compiles() {
-    for encoding in ["bincode", "json"] {
-        let registry = common::get_keyword_registry();
-        let tmp = tempdir().unwrap();
-        let dir = tmp.path().join("testing");
-
-        let installer = kotlin::Installer::new("com.example.testing", &dir);
-        let installer = if encoding == "bincode" {
-            installer.plugin(BincodePlugin)
-        } else {
-            installer.plugin(JsonPlugin)
-        };
-        installer.generate(&registry).unwrap();
-        move_sources_into_gradle_source_set(&dir);
-        pin_jvm_target(&dir);
-
-        let status = gradle_command()
-            .args(["--configuration-cache", "build"])
-            .current_dir(&dir)
-            .status()
-            .unwrap();
-        assert!(status.success(), "gradle build failed for {encoding}");
+    let registry = common::get_keyword_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json] {
+        assert_generated_code_compiles(&registry, encoding);
     }
 }
 
@@ -138,25 +171,12 @@ fn test_that_kotlin_code_with_keyword_names_compiles() {
 /// so every `Set<T>` the emitter and the bincode plugin write must be
 /// qualified while the `data class Set` keeps its name.
 ///
-/// Bincode only: the fixture has a `#[facet(fg::bytes)]` field, and the Kotlin
-/// JSON plugin emits a bare `Bytes` without importing it.
+/// The fixture's `Set.value` is a `#[facet(fg::bytes)]` field, so this also
+/// covers `Bytes` being resolvable (and serializable) under both encodings.
 #[test]
 fn test_that_kotlin_code_shadowing_builtin_names_compiles() {
     let registry = common::get_shadowing_registry();
-    let tmp = tempdir().unwrap();
-    let dir = tmp.path().join("testing");
-
-    kotlin::Installer::new("com.example.testing", &dir)
-        .plugin(BincodePlugin)
-        .generate(&registry)
-        .unwrap();
-    move_sources_into_gradle_source_set(&dir);
-    pin_jvm_target(&dir);
-
-    let status = gradle_command()
-        .args(["--configuration-cache", "build"])
-        .current_dir(&dir)
-        .status()
-        .unwrap();
-    assert!(status.success(), "gradle build failed");
+    for encoding in [Encoding::Bincode, Encoding::Json] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
 }

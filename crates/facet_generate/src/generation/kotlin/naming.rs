@@ -103,6 +103,7 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("BincodeDeserializer", "the `BincodeDeserializer` import"),
     ("BincodeSerializer", "the `BincodeSerializer` import"),
     ("Bytes", "the `Bytes` import"),
+    ("BytesSerializer", "the generated `BytesSerializer` object"),
     (
         "Decoder",
         "the `kotlinx.serialization.encoding.Decoder` import",

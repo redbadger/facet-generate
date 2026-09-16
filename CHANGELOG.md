@@ -75,6 +75,21 @@ Motivated by, but not specific to, the effect-handler code generation in
   `generate_types_with_keywords` fixture (dormant since the typeshare days) is live again
   for every language, and Swift, Kotlin and TypeScript gained compile tests alongside the
   existing C# one [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **fix(kotlin): `#[facet(bytes)]` fields compile under the JSON plugin** — the emitter
+  writes such a field as `Bytes`, but the JSON plugin never imported it, and the runtime's
+  `com.novi.serde.Bytes` is not `@Serializable` anyway, so `gradle build` failed with
+  `Unresolved reference 'Bytes'`. The plugin now emits a `BytesSerializer` and a
+  `typealias Bytes` that binds it, on the same pattern as `UUID`, encoding the value as a
+  JSON array of bytes [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **The Kotlin compile test compiles something now.** The installer writes the package tree
+  at the project root while Gradle reads `src/main/kotlin`, so `test_that_kotlin_code_compiles`
+  had always ended in `compileKotlin NO-SOURCE` and asserted nothing. All Kotlin compile tests
+  now share one setup that moves the sources into the source set, pins the JVM target, and
+  fails unless `compileKotlin` genuinely ran. Making it real exposed two generator bugs that
+  are recorded in the test rather than fixed here: Kotlin JSON cannot serialise `u128`/`i128`
+  because the unconditional `import java.math.BigInteger` outranks the plugin's
+  `typealias BigInteger`, and Kotlin bincode output for the main fixture does not compile
+  (128-bit integers, `char`, and `Vec<()>` / maps of unit) [#126](https://github.com/redbadger/facet-generate/pull/126)
 - **`after_type` now fires for every top-level type, in every language** — it was only called for TypeScript enums and C# all-unit enums, which made it unusable as the "emit something alongside this type" hook it is documented to be. It is now called after every top-level container: Swift structs and enums, Kotlin `data class` / `data object` / `enum class` / `sealed interface`, TypeScript classes (as well as enums), and C# classes, sealed records and `abstract record` variant hierarchies (as well as enums). It is still never called for an individual enum variant, and the context is always a top-level one [#123](https://github.com/redbadger/facet-generate/pull/123)
 
   **A third-party plugin implementing `after_type` will now be called at call sites it
