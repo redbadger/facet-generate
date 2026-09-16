@@ -344,6 +344,18 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
+    /// Swift only: the deployment targets the generated package declares.
+    ///
+    /// Each entry is a raw SPM platform expression — `".iOS(.v16)"` — and they
+    /// are rendered in the order given as
+    /// `platforms: [.iOS(.v16), .macOS(.v13)],`. Leave empty to omit the
+    /// `platforms:` line, which leaves SPM on its own defaults.
+    ///
+    /// This is configuration rather than a plugin hook because the floor
+    /// depends on the app the generated package is linked into, which no
+    /// plugin can know.
+    #[builder(default = vec![], setter(each(name = "platform", into)))]
+    pub platforms: Vec<String>,
 }
 
 impl Config {
@@ -438,5 +450,21 @@ mod tests {
     fn config_builder_defaults_external_packages_to_empty() {
         let config = Config::builder("MyPackage", "/tmp/out").build();
         assert!(config.external_packages.is_empty());
+    }
+
+    #[test]
+    fn config_builder_populates_platforms_in_order() {
+        let config = Config::builder("MyPackage", "/tmp/out")
+            .platform(".iOS(.v16)")
+            .platform(".macOS(.v13)")
+            .build();
+
+        assert_eq!(config.platforms, vec![".iOS(.v16)", ".macOS(.v13)"]);
+    }
+
+    #[test]
+    fn config_builder_defaults_platforms_to_empty() {
+        let config = Config::builder("MyPackage", "/tmp/out").build();
+        assert!(config.platforms.is_empty());
     }
 }

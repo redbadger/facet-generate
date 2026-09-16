@@ -11,12 +11,16 @@
 //! - Serde/bincode runtime installation.
 //! - Multi-module (namespace) scenarios where each namespace becomes a
 //!   separate `.ts` file.
+//! - Plugin-provided dependency pairs, merged with the external ones.
 
 use facet::Facet;
 
 use crate as fg;
 use crate::{
-    generation::{ExternalPackage, PackageLocation, SourceInstaller as _, module::split},
+    generation::{
+        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        plugin::EmitterPlugin, typescript::TypeScript,
+    },
     reflect,
 };
 
@@ -293,6 +297,71 @@ fn manifest_with_scoped_package() {
     {
       "dependencies": {
         "@types/node": "^20.0.0"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      },
+      "name": "my-package",
+      "version": "0.1.0"
+    }
+    "#);
+}
+
+/// A plugin standing in for one that bridges to an FFI package: it contributes
+/// a `package.json` dependency pair.
+#[derive(Debug)]
+struct FfiPlugin;
+
+impl EmitterPlugin<TypeScript> for FfiPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![r#""shared": "file:../pkg""#.to_string()]
+    }
+}
+
+#[test]
+fn manifest_with_plugin_dependencies() {
+    let package_name = "my-package";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let installer = Installer::new(package_name, install_dir.path()).plugin(FfiPlugin);
+
+    let manifest = installer.make_manifest(package_name);
+
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "dependencies": {
+        "shared": "file:../pkg"
+      },
+      "devDependencies": {
+        "typescript": "^5.8.3"
+      },
+      "name": "my-package",
+      "version": "0.1.0"
+    }
+    "#);
+}
+
+#[test]
+fn manifest_with_plugin_and_external_dependencies() {
+    let package_name = "my-package";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: PackageLocation::Path("../serde".to_string()),
+            module_name: None,
+            version: None,
+        }])
+        .plugin(FfiPlugin);
+
+    let manifest = installer.make_manifest(package_name);
+
+    insta::assert_json_snapshot!(manifest, @r#"
+    {
+      "dependencies": {
+        "serde": "file:../serde",
+        "shared": "file:../pkg"
       },
       "devDependencies": {
         "typescript": "^5.8.3"

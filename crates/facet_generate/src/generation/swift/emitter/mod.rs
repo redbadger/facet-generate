@@ -304,25 +304,48 @@ fn variant_can_use_eq_operator(format: &VariantFormat, lang: &Swift) -> bool {
 // Module emitter
 // ---------------------------------------------------------------------------
 
+/// Write the module header — the `import` lines for external namespaces and
+/// for every plugin, merged with `extra_imports` (bare Swift module names).
+///
+/// Shared by [`Module`]'s emitter and by the generator when it renders a
+/// plugin's companion file, which needs the same header but none of the module
+/// helpers (they are declared once, in the module file).
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub(crate) fn write_module_header<W: IndentWrite>(
+    w: &mut W,
+    config: &CodeGeneratorConfig,
+    lang: &Swift,
+    extra_imports: &[String],
+) -> Result<()> {
+    let mut imports = vec![];
+
+    // Encoding-independent base imports (external namespaces).
+    for ns in config.external_definitions.keys() {
+        imports.push(ns.to_upper_camel_case());
+    }
+
+    // Plugin imports (e.g. `import Serde`).
+    for plugin in lang.plugins() {
+        imports.extend(plugin.imports(config));
+    }
+
+    imports.extend(extra_imports.iter().cloned());
+
+    imports.sort();
+    imports.dedup();
+    for import in &imports {
+        writeln!(w, "import {import}")?;
+    }
+
+    Ok(())
+}
+
 impl Emitter<Swift> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
-        let mut imports = vec![];
-
-        // Encoding-independent base imports (external namespaces).
-        for ns in self.config().external_definitions.keys() {
-            imports.push(ns.to_upper_camel_case());
-        }
-
-        // Plugin imports (e.g. `import Serde`).
-        for plugin in lang.plugins() {
-            imports.extend(plugin.imports(self.config()));
-        }
-
-        imports.sort();
-        imports.dedup();
-        for import in &imports {
-            writeln!(w, "import {import}")?;
-        }
+        write_module_header(w, self.config(), lang, &[])?;
 
         // Plugin module helpers (feature snippets).
         for plugin in lang.plugins() {

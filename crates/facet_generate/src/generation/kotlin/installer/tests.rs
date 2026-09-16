@@ -1,7 +1,7 @@
 //! Snapshot tests for the Kotlin [`Installer`] — **project scaffolding**.
 //!
 //! These tests verify the `build.gradle.kts` manifest that the installer
-//! generates, without writing anything to disk. They cover:
+//! generates, and the companion files it writes. They cover:
 //!
 //! - Basic manifest structure: Kotlin JVM and serialization plugins, `group`
 //!   metadata.
@@ -9,8 +9,21 @@
 //!   version strings, plus the `kotlinx-serialization-json` runtime.
 //! - External path dependencies: local file-system dependencies via
 //!   `files("…")`.
+//! - Plugin companion files written into the module's package directory.
 
-use crate::generation::{ExternalPackage, PackageLocation, json::JsonPlugin, kotlin::Installer};
+use facet::Facet;
+use indoc::indoc;
+
+use crate::{
+    generation::{
+        CodeGeneratorConfig, ExternalPackage, PackageLocation,
+        bincode::BincodePlugin,
+        json::JsonPlugin,
+        kotlin::{Installer, Kotlin},
+        plugin::{CompanionFile, EmitterPlugin},
+    },
+    reflect,
+};
 
 #[test]
 fn test_new_installer() {
@@ -62,4 +75,57 @@ fn test_make_manifest_with_path_dependency() {
 
     // Check that path dependencies are handled correctly
     assert!(manifest.contains(r#"files("../local-lib")"#));
+}
+
+/// A plugin standing in for one that bridges to an FFI package: it contributes
+/// a companion source file that needs an import of its own.
+#[derive(Debug)]
+struct FfiPlugin;
+
+impl EmitterPlugin<Kotlin> for FfiPlugin {
+    fn companion_files(&self, _config: &CodeGeneratorConfig) -> Vec<CompanionFile> {
+        vec![CompanionFile {
+            file_name: "FfiBridge.kt".to_string(),
+            imports: vec!["import com.example.shared.CoreFfi".to_string()],
+            contents: indoc! {r"
+            class FfiBridge(private val ffi: CoreFfi = CoreFfi())"}
+            .to_string(),
+        }]
+    }
+}
+
+#[test]
+fn companion_file_is_written_in_the_package_directory() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("com.example", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("com/example/FfiBridge.kt")).unwrap();
+
+    // The module's package and imports, merged with the companion's, and none
+    // of the module helpers.
+    insta::assert_snapshot!(companion, @r"
+    package com.example
+
+    import com.example.shared.CoreFfi
+    import com.novi.bincode.BincodeDeserializer
+    import com.novi.bincode.BincodeSerializer
+    import com.novi.serde.DeserializationError
+    import com.novi.serde.Deserializer
+    import com.novi.serde.Serializer
+
+    class FfiBridge(private val ffi: CoreFfi = CoreFfi())
+    ");
 }
