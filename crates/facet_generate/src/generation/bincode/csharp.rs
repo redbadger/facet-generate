@@ -776,7 +776,7 @@ fn write_serialize_expr(
         Format::Bytes => write!(w, "{ser}.SerializeBytes({val})"),
         Format::Uuid => write!(w, "UuidSerde.Serialize({val}, {ser})"),
         Format::Option(inner) => {
-            let helper = option_serialize_helper(inner);
+            let helper = option_serialize_helper(inner, c_style_enums);
             write!(w, "FacetHelpers.{helper}({val}, {ser}, ")?;
             write_serialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
@@ -847,7 +847,7 @@ fn write_deserialize_expr(
         Format::Bytes => write!(w, "{de}.DeserializeBytes()"),
         Format::Uuid => write!(w, "UuidSerde.Deserialize({de})"),
         Format::Option(inner) => {
-            let helper = option_deserialize_helper(inner);
+            let helper = option_deserialize_helper(inner, c_style_enums);
             write!(w, "FacetHelpers.{helper}({de}, ")?;
             write_deserialize_lambda(w, inner, c_style_enums)?;
             write!(w, ")")
@@ -1040,9 +1040,10 @@ fn write_serialize_tuple_stmts(
 
 /// Returns the `FacetHelpers` method name for serializing an `Option<T>`.
 ///
-/// Value types use `SerializeOption`; reference types use `SerializeOptionRef`.
-const fn option_serialize_helper(inner: &Format) -> &'static str {
-    if is_csharp_value_type(inner) {
+/// Value types (including C-style enums) use `SerializeOption`; reference types
+/// use `SerializeOptionRef`.
+fn option_serialize_helper(inner: &Format, c_style_enums: &BTreeSet<String>) -> &'static str {
+    if is_csharp_value_type(inner, c_style_enums) {
         "SerializeOption"
     } else {
         "SerializeOptionRef"
@@ -1051,9 +1052,10 @@ const fn option_serialize_helper(inner: &Format) -> &'static str {
 
 /// Returns the `FacetHelpers` method name for deserializing an `Option<T>`.
 ///
-/// Value types use `DeserializeOption`; reference types use `DeserializeOptionRef`.
-const fn option_deserialize_helper(inner: &Format) -> &'static str {
-    if is_csharp_value_type(inner) {
+/// Value types (including C-style enums) use `DeserializeOption`; reference
+/// types use `DeserializeOptionRef`.
+fn option_deserialize_helper(inner: &Format, c_style_enums: &BTreeSet<String>) -> &'static str {
+    if is_csharp_value_type(inner, c_style_enums) {
         "DeserializeOption"
     } else {
         "DeserializeOptionRef"
@@ -1131,9 +1133,10 @@ fn namespace_name(namespace: &str) -> String {
         .join(".")
 }
 
-/// Returns `true` for C# value types (structs, primitives, tuples) that use
-/// `SerializeOption` / `DeserializeOption` rather than the `…Ref` variants.
-const fn is_csharp_value_type(format: &Format) -> bool {
+/// Returns `true` for C# value types (structs, primitives, tuples, and C-style
+/// enums) that use `SerializeOption` / `DeserializeOption` rather than the
+/// `…Ref` variants.
+fn is_csharp_value_type(format: &Format, c_style_enums: &BTreeSet<String>) -> bool {
     matches!(
         format,
         Format::Unit
@@ -1153,6 +1156,9 @@ const fn is_csharp_value_type(format: &Format) -> bool {
             | Format::Char
             | Format::Uuid
             | Format::Tuple(_)
+    ) || matches!(
+        format,
+        Format::TypeName(qtn) if c_style_enums.contains(&qtn.name)
     )
 }
 

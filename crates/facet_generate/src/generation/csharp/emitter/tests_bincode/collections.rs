@@ -576,6 +576,74 @@ fn option_value_type_needs_dot_value_for_serialize() {
     );
 }
 
+/// C# enums are value types even though they arrive in the format tree as
+/// `Format::TypeName`. Optional C-style enums therefore need the nullable-value
+/// option helpers, including when the option is nested inside a collection.
+#[test]
+fn optional_c_style_enum_uses_nullable_value_helpers() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum ContactGroup {
+        Align,
+        Partner,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum RecordChoice {
+        Empty,
+        Value(i32),
+    }
+
+    #[derive(Facet)]
+    struct HasOptionalEnums {
+        group: Option<ContactGroup>,
+        groups: Vec<Option<ContactGroup>>,
+        choice: Option<RecordChoice>,
+    }
+
+    let actual = emit!(HasOptionalEnums as CSharp with BincodePlugin).unwrap();
+
+    assert!(
+        actual.contains(
+            "FacetHelpers.SerializeOption(Group, serializer, (item, s) => ContactGroupBincode.Serialize(item, s))"
+        ),
+        "optional C-style enum should use SerializeOption\n{actual}"
+    );
+    assert!(
+        actual.contains(
+            "FacetHelpers.DeserializeOption(deserializer, d => ContactGroupBincode.Deserialize(d))"
+        ),
+        "optional C-style enum should use DeserializeOption\n{actual}"
+    );
+    assert!(
+        actual.contains(
+            "FacetHelpers.SerializeCollection(Groups, serializer, (item, s) => FacetHelpers.SerializeOption(item, s, (item, s) => ContactGroupBincode.Serialize(item, s)))"
+        ),
+        "optional C-style enum in a collection should use SerializeOption\n{actual}"
+    );
+    assert!(
+        actual.contains(
+            "FacetHelpers.DeserializeList(deserializer, d => FacetHelpers.DeserializeOption(d, d => ContactGroupBincode.Deserialize(d)))"
+        ),
+        "optional C-style enum in a collection should use DeserializeOption\n{actual}"
+    );
+    assert!(
+        actual.contains(
+            "FacetHelpers.SerializeOptionRef(Choice, serializer, (item, s) => item.Serialize(s))"
+        ),
+        "record-based enum should retain reference option helpers\n{actual}"
+    );
+    assert!(
+        actual.contains(
+            "FacetHelpers.DeserializeOptionRef(deserializer, d => RecordChoice.Deserialize(d))"
+        ),
+        "record-based enum should retain reference option helpers\n{actual}"
+    );
+}
+
 /// `Vec<Vec<T>>` deserialization generates nested loops that reuse `item` and `i`,
 /// but C# does not allow shadowing locals in nested scopes.
 #[test]

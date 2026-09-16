@@ -111,6 +111,106 @@ if (!input.SequenceEqual(value.BincodeSerialize()))
 }
 
 #[test]
+fn test_csharp_bincode_runtime_on_optional_c_style_enums() {
+    #[derive(Facet, Serialize)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum ContactGroup {
+        Align,
+        Partner,
+    }
+
+    #[derive(Facet, Serialize)]
+    struct ContactFilter {
+        group: Option<ContactGroup>,
+        groups: Vec<Option<ContactGroup>>,
+    }
+
+    let registry = reflect!(ContactFilter).unwrap();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let samples = [
+        ContactFilter {
+            group: None,
+            groups: vec![],
+        },
+        ContactFilter {
+            group: Some(ContactGroup::Align),
+            groups: vec![None, Some(ContactGroup::Align)],
+        },
+        ContactFilter {
+            group: Some(ContactGroup::Partner),
+            groups: vec![Some(ContactGroup::Partner), None],
+        },
+    ];
+    let inputs = samples
+        .iter()
+        .map(|sample| quote_bytes(&bincode::serialize(sample).unwrap()))
+        .collect::<Vec<_>>()
+        .join(",\n        ");
+
+    make_executable(&dir, "Example.Testing");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example.Testing;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[][] inputs = new byte[][] {{
+        {inputs}
+}};
+
+for (int i = 0; i < inputs.Length; i++)
+{{
+    byte[] input = inputs[i];
+    var value = ContactFilter.BincodeDeserialize(input);
+
+    switch (i)
+    {{
+        case 0:
+            Assert(value.Group is null, "None group should remain null");
+            Assert(value.Groups.Count == 0, "None sample should have no groups");
+            break;
+        case 1:
+            Assert(value.Group.HasValue && value.Group.Value == ContactGroup.Align, "Align group should roundtrip");
+            Assert(value.Groups.Count == 2, "Align sample should have two groups");
+            Assert(value.Groups[0] is null, "first nested group should remain null");
+            Assert(value.Groups[1].HasValue && value.Groups[1].Value == ContactGroup.Align, "nested Align should roundtrip");
+            break;
+        case 2:
+            Assert(value.Group.HasValue && value.Group.Value == ContactGroup.Partner, "Partner group should roundtrip");
+            Assert(value.Groups.Count == 2, "Partner sample should have two groups");
+            Assert(value.Groups[0].HasValue && value.Groups[0].Value == ContactGroup.Partner, "nested Partner should roundtrip");
+            Assert(value.Groups[1] is null, "last nested group should remain null");
+            break;
+    }}
+
+    Assert(input.SequenceEqual(value.BincodeSerialize()), $"sample {{i}} did not roundtrip");
+}}
+
+Console.WriteLine("Optional C-style enum roundtrip: PASSED");
+"#,
+            inputs = inputs,
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
+#[test]
 fn test_csharp_bincode_runtime_on_uuid_data() {
     let registry = common::get_uuid_registry();
     let dir = tempdir().unwrap();
