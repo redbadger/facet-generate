@@ -118,9 +118,13 @@ fn assert_generated_code_compiles(registry: &Registry, encoding: Encoding) {
     );
     // A bare `> Task :compileKotlin` line means the task ran with sources;
     // `NO-SOURCE` (or no line at all) means the generated code was never
-    // compiled, which would make the whole test vacuous.
+    // compiled, which would make the whole test vacuous. Match on whole lines
+    // rather than a `"...\n"` substring: Gradle terminates its lines with
+    // `\r\n` on Windows, which no `\n`-suffixed needle can ever match.
     assert!(
-        stdout.contains("> Task :compileKotlin\n"),
+        stdout
+            .lines()
+            .any(|line| line.trim_end() == "> Task :compileKotlin"),
         "gradle did not compile any Kotlin sources for {encoding:?}\n{stdout}"
     );
 }
