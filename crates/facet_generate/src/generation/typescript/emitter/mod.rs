@@ -183,33 +183,38 @@ impl Emitter<TypeScript> for Container<'_> {
         } = self;
         let name = &qualified_name.name;
 
-        match format {
-            ContainerFormat::UnitStruct(doc) => {
-                let ctx = EmitContext::top_level(self, &lang.config);
-                output_struct_or_variant(w, &ctx, name, &[], doc, lang)
-            }
+        if let ContainerFormat::Enum(variants, tagging, doc) = format {
+            // `output_enum_container` runs the after-type hook itself, after
+            // the union type, the constructors and the match helper.
+            return output_enum_container(w, self, name, variants, tagging, doc, lang);
+        }
+
+        let (fields, doc): (Vec<Named<Format>>, &Doc) = match format {
+            ContainerFormat::UnitStruct(doc) => (vec![], doc),
             ContainerFormat::NewTypeStruct(format, doc) => {
-                let fields = vec![Named::new(format.as_ref(), "value".to_string())];
-                let ctx = EmitContext::top_level(self, &lang.config);
-                output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
+                (vec![Named::new(format.as_ref(), "value".to_string())], doc)
             }
-            ContainerFormat::TupleStruct(formats, doc) => {
-                let fields: Vec<_> = formats
+            ContainerFormat::TupleStruct(formats, doc) => (
+                formats
                     .iter()
                     .enumerate()
                     .map(|(i, f)| Named::new(f, format!("field{i}")))
-                    .collect();
-                let ctx = EmitContext::top_level(self, &lang.config);
-                output_struct_or_variant(w, &ctx, name, &fields, doc, lang)
-            }
-            ContainerFormat::Struct(fields, doc) => {
-                let ctx = EmitContext::top_level(self, &lang.config);
-                output_struct_or_variant(w, &ctx, name, fields, doc, lang)
-            }
-            ContainerFormat::Enum(variants, tagging, doc) => {
-                output_enum_container(w, self, name, variants, tagging, doc, lang)
-            }
+                    .collect(),
+                doc,
+            ),
+            ContainerFormat::Struct(fields, doc) => (fields.clone(), doc),
+            ContainerFormat::Enum(_, _, _) => unreachable!("handled above"),
+        };
+
+        let ctx = EmitContext::top_level(self, &lang.config);
+        output_struct_or_variant(w, &ctx, name, &fields, doc, lang)?;
+
+        // Plugin after-type hook — fires once per top-level type.
+        for plugin in lang.plugins() {
+            plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
         }
+
+        Ok(())
     }
 }
 
@@ -284,6 +289,23 @@ impl Emitter<TypeScript> for Named<Format> {
         write!(w, "public {}: ", self.name)?;
         self.value.write(w, lang)
     }
+}
+
+/// Render `format` as the TypeScript type expression the emitter would use
+/// for a property of that type — for example `int32`, `Seq<str>`,
+/// `Optional<Foo>`, `Map<str,Bar>`, or `Other.Child` for a type in another
+/// namespace.
+///
+/// `config` is accepted for symmetry with the other languages and to keep the
+/// helper stable if TypeScript's type rendering becomes
+/// configuration-dependent.
+#[must_use]
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    let lang = TypeScript {
+        config: config.clone(),
+        plugins: vec![],
+    };
+    quote_type(format, &lang)
 }
 
 /// Render a type expression to a string (used for constructor argument types).

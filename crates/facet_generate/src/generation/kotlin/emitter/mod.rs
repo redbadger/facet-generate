@@ -249,6 +249,15 @@ impl Emitter<Kotlin> for Container<'_> {
             }
         }
 
+        // Plugin after-type hook — fires once per top-level type, after its
+        // closing brace. `data_class` / `data_object` deliberately do not call
+        // it: they are reused for sealed-interface variants (with a temporary
+        // container), and `after_type` is a top-level-only hook.
+        let ctx = EmitContext::top_level(self, &lang.config);
+        for plugin in lang.plugins() {
+            plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
+        }
+
         Ok(())
     }
 }
@@ -381,6 +390,58 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
 
         Ok(())
     }
+}
+
+// ---------------------------------------------------------------------------
+// Public helpers for plugin authors
+// ---------------------------------------------------------------------------
+
+/// Render `format` as the Kotlin type expression the emitter would use for a
+/// property of that type — for example `Int`, `List<String>`, `Foo?`,
+/// `Map<String, Bar>`, or `other.Child` for a type in another namespace.
+///
+/// `config` is accepted for symmetry with the other languages and to keep the
+/// helper stable if Kotlin's type rendering becomes configuration-dependent.
+///
+/// # Panics
+///
+/// Panics if `format` is a placeholder ([`Format::Variable`]), which never
+/// survives registry construction.
+#[must_use]
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    let lang = Kotlin {
+        config: config.clone(),
+        plugins: vec![],
+    };
+    let mut buf = Vec::new();
+    {
+        let mut w = crate::generation::indent::IndentedWriter::new(
+            &mut buf,
+            crate::generation::indent::IndentConfig::Space(0),
+        );
+        format
+            .write(&mut w, &lang)
+            .expect("writing to a Vec cannot fail");
+    }
+    String::from_utf8(buf).expect("type expression should be valid UTF-8")
+}
+
+/// The name of the nested `data class` / `data object` the emitter generates
+/// for a variant of a `sealed interface` (an enum with at least one variant
+/// that carries data).
+///
+/// The variant name is used verbatim, so from outside the interface the class
+/// is referred to as `Parent.Variant`.
+#[must_use]
+pub fn variant_class_name(variant_name: &str) -> String {
+    variant_name.to_string()
+}
+
+/// The name of the constant the emitter generates for a variant of an
+/// `enum class` (an enum whose variants are all unit variants).
+#[must_use]
+pub fn enum_constant_name(variant_name: &str) -> String {
+    variant_name.to_uppercase()
 }
 
 impl Emitter<Kotlin> for Format {

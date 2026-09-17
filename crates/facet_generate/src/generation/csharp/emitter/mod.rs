@@ -55,6 +55,7 @@
 //! ```
 
 use std::{
+    borrow::Cow,
     io::{Result, Write},
     sync::Arc,
 };
@@ -272,7 +273,7 @@ fn write_sealed_record<W: IndentWrite>(
 
     if !any_plugin(lang.plugins(), |p| p.has_type_body(&ctx)) {
         writeln!(w, "public sealed record {record_name}{conforms};")?;
-        return Ok(());
+        return write_after_type(w, &ctx, lang);
     }
 
     write!(w, "public sealed record {record_name}{conforms} ")?;
@@ -283,6 +284,15 @@ fn write_sealed_record<W: IndentWrite>(
         }
     }
 
+    write_after_type(w, &ctx, lang)
+}
+
+/// Run the plugin `after_type` hook for a top-level type, at the indentation
+/// level of the type declaration itself.
+fn write_after_type<W: IndentWrite>(w: &mut W, ctx: &EmitContext<'_>, lang: &CSharp) -> Result<()> {
+    for plugin in lang.plugins() {
+        plugin.after_type(w as &mut dyn IndentWrite, ctx)?;
+    }
     Ok(())
 }
 
@@ -315,24 +325,26 @@ fn write_class<W: IndentWrite>(
 
     if fields.is_empty() && !has_plugin_body {
         let _ = w.block(Newlines::CLOSE)?;
-        return Ok(());
+        return write_after_type(w, &ctx, lang);
     }
 
-    let mut w = w.block(Newlines::BOTH)?;
-    for field in fields {
-        write_field(&mut w, field, &ctx, lang)?;
-    }
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        for field in fields {
+            write_field(&mut w, field, &ctx, lang)?;
+        }
 
-    for plugin in lang.plugins() {
-        if plugin.has_type_body(&ctx) {
-            if !fields.is_empty() {
-                writeln!(w)?;
+        for plugin in lang.plugins() {
+            if plugin.has_type_body(&ctx) {
+                if !fields.is_empty() {
+                    writeln!(w)?;
+                }
+                plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
             }
-            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
     }
 
-    Ok(())
+    write_after_type(w, &ctx, lang)
 }
 
 fn write_enum<W: IndentWrite>(
@@ -369,11 +381,7 @@ fn write_enum<W: IndentWrite>(
     }
 
     // After-type content from plugins (e.g. {EnumName}Bincode static class).
-    for plugin in lang.plugins() {
-        plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
-    }
-
-    Ok(())
+    write_after_type(w, &ctx, lang)
 }
 
 fn write_variant_record_hierarchy<W: IndentWrite>(
@@ -411,10 +419,31 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     };
 
     write!(w, "public abstract record {base_name}{conforms} ")?;
-    let mut w = w.block(Newlines::BOTH)?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        write_variant_records(&mut w, base_name.as_str(), variants, partial, lang)?;
 
+        // Plugin type bodies (JSON helpers or Bincode abstract method +
+        // partial record overrides).
+        for plugin in lang.plugins() {
+            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
+        }
+    }
+
+    write_after_type(w, &ctx, lang)
+}
+
+/// Write the `sealed record` declaration for each variant of an
+/// `abstract record` hierarchy.
+fn write_variant_records<W: IndentWrite>(
+    w: &mut W,
+    base_name: &str,
+    variants: &[Named<VariantFormat>],
+    partial: &str,
+    lang: &CSharp,
+) -> Result<()> {
     for variant in variants {
-        variant.doc.write(&mut w, lang)?;
+        variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
         write!(w, "public sealed{partial} record {variant_name}")?;
         match &variant.value {
@@ -454,12 +483,121 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
         writeln!(w)?;
     }
 
-    // Plugin type bodies (JSON helpers or Bincode abstract method + partial record overrides).
-    for plugin in lang.plugins() {
-        plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
-    }
-
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Public helpers for plugin authors
+// ---------------------------------------------------------------------------
+
+/// Render `format` as the C# type expression the emitter would use for a
+/// property of that type — for example `int`, `ObservableCollection<string>`,
+/// `Foo?`, `Dictionary<string, Bar>`, or `Other.Child` for a type in another
+/// namespace.
+///
+/// `_config` is accepted for symmetry with the other languages; C# always
+/// writes the fully namespace-qualified name, so nothing is read from it.
+#[must_use]
+pub fn render_type(format: &Format, _config: &CodeGeneratorConfig) -> String {
+    csharp_type(format)
+}
+
+/// Escapes an identifier when it is a reserved C# keyword.
+///
+/// C# verbatim identifiers preserve the identifier's spelling while allowing a
+/// keyword to be used in declaration and reference positions. Contextual
+/// keywords are intentionally omitted because the generated identifiers are
+/// method locals, where those words are valid without escaping.
+///
+/// Plugins that generate parameter or local names from field or variant names
+/// should route them through this so the result matches the emitter.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    const RESERVED_KEYWORDS: &[&str] = &[
+        "abstract",
+        "as",
+        "base",
+        "bool",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "checked",
+        "class",
+        "const",
+        "continue",
+        "decimal",
+        "default",
+        "delegate",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "event",
+        "explicit",
+        "extern",
+        "false",
+        "finally",
+        "fixed",
+        "float",
+        "for",
+        "foreach",
+        "goto",
+        "if",
+        "implicit",
+        "in",
+        "int",
+        "interface",
+        "internal",
+        "is",
+        "lock",
+        "long",
+        "namespace",
+        "new",
+        "null",
+        "object",
+        "operator",
+        "out",
+        "override",
+        "params",
+        "private",
+        "protected",
+        "public",
+        "readonly",
+        "ref",
+        "return",
+        "sbyte",
+        "sealed",
+        "short",
+        "sizeof",
+        "stackalloc",
+        "static",
+        "string",
+        "struct",
+        "switch",
+        "this",
+        "throw",
+        "true",
+        "try",
+        "typeof",
+        "uint",
+        "ulong",
+        "unchecked",
+        "unsafe",
+        "ushort",
+        "using",
+        "virtual",
+        "void",
+        "volatile",
+        "while",
+    ];
+
+    if RESERVED_KEYWORDS.contains(&identifier) {
+        Cow::Owned(format!("@{identifier}"))
+    } else {
+        Cow::Borrowed(identifier)
+    }
 }
 
 fn csharp_type(format: &Format) -> String {

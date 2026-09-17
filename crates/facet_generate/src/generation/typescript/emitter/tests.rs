@@ -865,3 +865,105 @@ fn type_in_root_and_named_namespace() {
     }
     "#);
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `after_type` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that records every `after_type` call, to pin down where the hook
+/// fires and with what context.
+#[derive(Debug)]
+struct AfterTypeProbe;
+
+impl EmitterPlugin<TypeScript> for AfterTypeProbe {
+    fn after_type(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> std::io::Result<()> {
+        writeln!(
+            w,
+            "// after_type: {} (variant: {})",
+            ctx.name(),
+            ctx.is_variant()
+        )
+    }
+}
+
+#[test]
+fn after_type_fires_once_for_a_class() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    let actual = emit!(Point as TypeScript with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class Point {
+        constructor (public x: int32) {
+        }
+    }
+    // after_type: Point (variant: false)
+    ");
+}
+
+#[test]
+fn after_type_fires_once_for_an_enum_not_per_variant() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[expect(dead_code, reason = "the payload only has to exist for reflection")]
+    enum Shape {
+        Empty,
+        Round(u32),
+    }
+
+    let actual = emit!(Shape as TypeScript with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Shape =
+        | { kind: "Empty" }
+        | { kind: "Round"; value: uint32 };
+
+    export const shapeEmpty = (): Shape => ({ kind: "Empty" });
+
+    export const shapeRound = (value: uint32): Shape => ({ kind: "Round", value });
+
+    export function matchShape<R>(value: Shape, cases: {
+        Empty: (v: Extract<Shape, { kind: "Empty" }>) => R;
+        Round: (v: Extract<Shape, { kind: "Round" }>) => R;
+    }): R {
+        return cases[value.kind as Shape["kind"]](value as never);
+    }
+    // after_type: Shape (variant: false)
+    "#);
+}
+
+// ---------------------------------------------------------------------------
+// Public type-rendering helper
+// ---------------------------------------------------------------------------
+
+#[test]
+fn render_type_matches_the_emitter() {
+    use crate::reflection::format::{Namespace, QualifiedTypeName};
+
+    let config = CodeGeneratorConfig::new("test".to_string());
+
+    assert_eq!(render_type(&Format::I32, &config), "int32");
+    assert_eq!(
+        render_type(&Format::Seq(Box::new(Format::Str)), &config),
+        "Seq<str>"
+    );
+    assert_eq!(
+        render_type(&Format::Option(Box::new(Format::Bool)), &config),
+        "Optional<bool>"
+    );
+    assert_eq!(
+        render_type(
+            &Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("other".to_string()),
+                name: "Child".to_string(),
+            }),
+            &config
+        ),
+        "Other.Child"
+    );
+}

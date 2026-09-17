@@ -764,3 +764,121 @@ fn type_in_root_and_named_namespace() {
     )
     ");
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `after_type` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that records every `after_type` call, to pin down where the hook
+/// fires and with what context.
+#[derive(Debug)]
+struct AfterTypeProbe;
+
+impl EmitterPlugin<Kotlin> for AfterTypeProbe {
+    fn after_type(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> std::io::Result<()> {
+        writeln!(
+            w,
+            "// after_type: {} (variant: {})",
+            ctx.name(),
+            ctx.is_variant()
+        )
+    }
+}
+
+#[test]
+fn after_type_fires_once_for_a_data_class() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    let actual = emit!(Point as Kotlin with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    data class Point(
+        val x: Int,
+    )
+    // after_type: Point (variant: false)
+    ");
+}
+
+#[test]
+fn after_type_fires_once_for_an_enum_class() {
+    #[derive(Facet)]
+    #[repr(C)]
+    enum Flag {
+        On,
+        Off,
+    }
+
+    let actual = emit!(Flag as Kotlin with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    enum class Flag {
+        ON,
+        OFF;
+    }
+    // after_type: Flag (variant: false)
+    ");
+}
+
+#[test]
+fn after_type_fires_once_for_a_sealed_interface_not_per_variant() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[expect(dead_code, reason = "the payload only has to exist for reflection")]
+    enum Shape {
+        Empty,
+        Round(u32),
+    }
+
+    let actual = emit!(Shape as Kotlin with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    sealed interface Shape {
+        data object Empty: Shape
+
+        data class Round(
+            val value: UInt,
+        ) : Shape
+    }
+    // after_type: Shape (variant: false)
+    ");
+}
+
+// ---------------------------------------------------------------------------
+// Public naming / type-rendering helpers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn render_type_matches_the_emitter() {
+    use crate::reflection::format::{Namespace, QualifiedTypeName};
+
+    let config = CodeGeneratorConfig::new("com.example".to_string());
+
+    assert_eq!(render_type(&Format::I32, &config), "Int");
+    assert_eq!(
+        render_type(&Format::Seq(Box::new(Format::Str)), &config),
+        "List<String>"
+    );
+    assert_eq!(
+        render_type(&Format::Option(Box::new(Format::Bool)), &config),
+        "Boolean?"
+    );
+    assert_eq!(
+        render_type(
+            &Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("other".to_string()),
+                name: "Child".to_string(),
+            }),
+            &config
+        ),
+        "other.Child"
+    );
+}
+
+#[test]
+fn variant_names_match_the_emitter() {
+    assert_eq!(variant_class_name("NotFound"), "NotFound");
+    assert_eq!(enum_constant_name("NotFound"), "NOTFOUND");
+}

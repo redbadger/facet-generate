@@ -1022,3 +1022,114 @@ fn type_in_root_and_map_in_named_namespace() {
     }
     ");
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `after_type` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that records every `after_type` call, to pin down where the hook
+/// fires and with what context.
+#[derive(Debug)]
+struct AfterTypeProbe;
+
+impl EmitterPlugin<Swift> for AfterTypeProbe {
+    fn after_type(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
+        writeln!(
+            w,
+            "// after_type: {} (variant: {})",
+            ctx.name(),
+            ctx.is_variant()
+        )
+    }
+}
+
+#[test]
+fn after_type_fires_once_for_a_struct() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    let actual = emit!(Point as Swift with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    public struct Point: Hashable, Equatable {
+        public var x: Int32
+
+        public init(x: Int32) {
+            self.x = x
+        }
+    }
+    // after_type: Point (variant: false)
+    ");
+}
+
+#[test]
+fn after_type_fires_once_for_an_enum_not_per_case() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[expect(dead_code, reason = "the payload only has to exist for reflection")]
+    enum Shape {
+        Empty,
+        Round(u32),
+    }
+
+    let actual = emit!(Shape as Swift with AfterTypeProbe).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    indirect public enum Shape: Hashable, Equatable {
+        case empty
+        case round(UInt32)
+    }
+    // after_type: Shape (variant: false)
+    ");
+}
+
+// ---------------------------------------------------------------------------
+// Public naming / type-rendering helpers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn render_type_matches_the_emitter() {
+    use crate::reflection::format::{Namespace, QualifiedTypeName};
+
+    let config = CodeGeneratorConfig::new("test".to_string());
+
+    assert_eq!(render_type(&Format::I32, &config), "Int32");
+    assert_eq!(
+        render_type(&Format::Seq(Box::new(Format::Str)), &config),
+        "[String]"
+    );
+    assert_eq!(
+        render_type(&Format::Option(Box::new(Format::Bool)), &config),
+        "Bool?"
+    );
+    // A type in the module being generated is unqualified …
+    assert_eq!(
+        render_type(
+            &Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("test".to_string()),
+                name: "Child".to_string(),
+            }),
+            &config
+        ),
+        "Child"
+    );
+    // … a type in another namespace is not.
+    assert_eq!(
+        render_type(
+            &Format::TypeName(QualifiedTypeName {
+                namespace: Namespace::Named("other".to_string()),
+                name: "Child".to_string(),
+            }),
+            &config
+        ),
+        "Other.Child"
+    );
+}
+
+#[test]
+fn case_name_lower_camel_cases() {
+    assert_eq!(case_name("NotFound"), "notFound");
+    assert_eq!(case_name("HTTP"), "http");
+}
