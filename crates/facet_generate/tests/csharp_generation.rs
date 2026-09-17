@@ -68,6 +68,33 @@ fn test_that_csharp_code_with_keyword_fields_compiles_with_bincode() {
 }
 
 #[test]
+fn test_that_csharp_code_compiles_with_optional_c_style_enums() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum ContactGroup {
+        Align,
+        Partner,
+    }
+
+    #[derive(Facet)]
+    struct ContactFilter {
+        group: Option<ContactGroup>,
+        groups: Vec<Option<ContactGroup>>,
+    }
+
+    let registry = reflect!(ContactFilter).unwrap();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
+#[test]
 fn test_that_csharp_code_compiles_with_json() {
     let registry = common::get_registry();
     let dir = tempdir().unwrap();
