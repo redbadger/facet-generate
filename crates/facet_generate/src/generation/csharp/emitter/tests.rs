@@ -884,3 +884,37 @@ fn escape_identifier_prefixes_reserved_keywords() {
     assert_eq!(escape_identifier("class"), "@class");
     assert_eq!(escape_identifier("value"), "value");
 }
+
+/// A declaration named `Dictionary` shadows the `using`-imported
+/// `System.Collections.Generic.Dictionary`, so the emitter must write the
+/// `global::` qualified name.
+#[test]
+fn declared_dictionary_qualifies_the_bcl_type() {
+    #[derive(Facet)]
+    #[facet(rename = "Dictionary")]
+    struct MyDictionary {
+        text: String,
+    }
+
+    #[derive(Facet)]
+    struct Holder {
+        entries: BTreeMap<String, String>,
+        inner: MyDictionary,
+    }
+
+    let actual = emit!(Holder as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    public partial class Dictionary : ObservableObject {
+        [ObservableProperty]
+        private string _text;
+    }
+
+    public partial class Holder : ObservableObject {
+        [ObservableProperty]
+        private global::System.Collections.Generic.Dictionary<string, string> _entries;
+        [ObservableProperty]
+        private Dictionary _inner;
+    }
+    ");
+}

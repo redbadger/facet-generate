@@ -663,3 +663,115 @@ fn c_style_enum_field_uses_static_bincode_helpers() {
         "c-style enum deserialize should dispatch to static helper\n{actual}"
     );
 }
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public abstract record KeywordEnum : IFacetSerializable, IFacetDeserializable<KeywordEnum> {
+        public sealed partial record Default() : KeywordEnum;
+
+        public sealed partial record Switch(string Value) : KeywordEnum;
+
+        public sealed partial record Where(int In, string Default) : KeywordEnum;
+
+        public abstract void Serialize(ISerializer serializer);
+
+        private static KeywordEnum DeserializeDefault(IDeserializer deserializer)
+        {
+            return new Default();
+        }
+
+        public sealed partial record Default
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(0);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static KeywordEnum DeserializeSwitch(IDeserializer deserializer)
+        {
+            var value = deserializer.DeserializeStr();
+            return new Switch(value);
+        }
+
+        public sealed partial record Switch
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(1);
+                serializer.SerializeStr(Value);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static KeywordEnum DeserializeWhere(IDeserializer deserializer)
+        {
+            var @in = deserializer.DeserializeI32();
+            var @default = deserializer.DeserializeStr();
+            return new Where(@in, @default);
+        }
+
+        public sealed partial record Where
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(2);
+                serializer.SerializeI32(In);
+                serializer.SerializeStr(Default);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        public static KeywordEnum Deserialize(IDeserializer deserializer)
+        {
+            var index = deserializer.DeserializeVariantIndex();
+            return index switch
+            {
+                0 => DeserializeDefault(deserializer),
+                1 => DeserializeSwitch(deserializer),
+                2 => DeserializeWhere(deserializer),
+                _ => throw new DeserializationError("Unknown variant index for KeywordEnum: " + index),
+            }
+            ;
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static KeywordEnum BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}

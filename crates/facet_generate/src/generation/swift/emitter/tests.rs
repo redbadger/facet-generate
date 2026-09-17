@@ -461,7 +461,7 @@ fn enum_with_mixed_variants() {
         case unit
         case newType(String)
         case tuple(String, Int32)
-        case struct(field: Bool)
+        case `struct`(field: Bool)
     }
     ");
 }
@@ -1132,4 +1132,43 @@ fn render_type_matches_the_emitter() {
 fn case_name_lower_camel_cases() {
     assert_eq!(case_name("NotFound"), "notFound");
     assert_eq!(case_name("HTTP"), "http");
+}
+
+/// A declaration named `String` shadows `Swift.String` for the whole module,
+/// so the emitter must write the standard-library type fully qualified.
+#[test]
+fn declared_string_qualifies_the_swift_standard_library_type() {
+    #[derive(Facet)]
+    #[facet(rename = "String")]
+    struct MyString {
+        text: std::string::String,
+    }
+
+    #[derive(Facet)]
+    struct Holder {
+        label: std::string::String,
+        inner: MyString,
+    }
+
+    let actual = emit!(Holder as Swift).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    public struct Holder {
+        public var label: Swift.String
+        public var inner: String
+
+        public init(label: Swift.String, inner: String) {
+            self.label = label
+            self.inner = inner
+        }
+    }
+
+    public struct String {
+        public var text: Swift.String
+
+        public init(text: Swift.String) {
+            self.text = text
+        }
+    }
+    ");
 }

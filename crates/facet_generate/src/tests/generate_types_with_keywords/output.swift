@@ -1,54 +1,69 @@
-import Foundation
 
-struct `catch`: Codable {
-    var `default`: String
-    var `case`: String
-
-    init(default: String, case: String) {
-        self.default = `default`
-        self.case = `case`
-    }
-}
-
-enum `throws`: String, Codable {
-    case `case`
+indirect public enum KeywordEnum {
     case `default`
+    case `case`
+    case `switch`(String)
+    case `where`(`in`: Int32, `default`: String)
 }
 
-enum `switch`: Codable {
-    case `default`(`catch`)
+/// A struct whose every field is a keyword in at least one target language.
+/// Each language escapes only its own reserved words: `import` is escaped in
+/// Swift and TypeScript but is a soft keyword in Kotlin, and `type` is
+/// contextual everywhere, so both come through bare where they are legal.
+public struct KeywordFields {
+    public var `default`: String
+    public var `in`: Int32
+    public var `class`: Bool
+    public var object: String
+    public var `static`: Bool
+    public var `let`: String
+    public var when: Int32
+    public var `is`: Bool
+    public var fun: String
+    public var `operator`: String
+    public var `import`: String
+    public var type: String
+    public var function: String?
+    /// A tuple field: the Swift plugin derives `whereField0` / `whereField1`
+    /// locals from this name, which must stay unescaped.
+    public var `where`: (Int32, String)
 
-    enum `Type`: String, CodingKey, Codable, CaseIterable {
-        case `default`
+    public init(`default`: String, `in`: Int32, `class`: Bool, object: String, `static`: Bool, `let`: String, when: Int32, `is`: Bool, fun: String, `operator`: String, `import`: String, type: String, function: String?, `where`: (Int32, String)) {
+        self.`default` = `default`
+        self.`in` = `in`
+        self.`class` = `class`
+        self.object = object
+        self.`static` = `static`
+        self.`let` = `let`
+        self.when = when
+        self.`is` = `is`
+        self.fun = fun
+        self.`operator` = `operator`
+        self.`import` = `import`
+        self.type = type
+        self.function = function
+        self.`where` = `where`
     }
+}
 
-    var type: `Type` {
-        switch self {
-        case .`default`: return .`default`
-        }
+/// Newtype struct — its member is named `value`, a Kotlin soft keyword that
+/// must not be escaped.
+public struct KeywordNewType {
+    public var value: String
+
+    public init(value: String) {
+        self.value = value
     }
+}
 
-    private enum CodingKeys: String, CodingKey {
-        case type
-        case content
-    }
+/// Tuple struct — its members are named `field0`, `field1`, which are never
+/// keywords.
+public struct KeywordTuple {
+    public var field0: String
+    public var field1: Int32
 
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let type = try container.decode(`Type`.self, forKey: .type)
-        switch type {
-        case .default:
-            let content = try container.decode(`catch`.self, forKey: .content)
-            self = .default(content)
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        switch self {
-        case .default(let content):
-            try container.encode(`Type`.default, forKey: .type)
-            try container.encode(content, forKey: .content)
-        }
+    public init(field0: String, field1: Int32) {
+        self.field0 = field0
+        self.field1 = field1
     }
 }

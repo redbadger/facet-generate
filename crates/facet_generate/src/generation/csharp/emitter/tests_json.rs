@@ -1086,3 +1086,82 @@ fn struct_with_bytes_field_and_slice() {
     }
     "#);
 }
+
+#[test]
+fn keyword_fields_struct() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        r#default: String,
+        r#in: i32,
+        object: bool,
+        import: bool,
+    }
+
+    let actual = emit!(KeywordFields as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class KeywordFields : ObservableObject {
+        [JsonPropertyName("default")]
+        [ObservableProperty]
+        private string _default;
+        [JsonPropertyName("in")]
+        [ObservableProperty]
+        private int _in;
+        [JsonPropertyName("object")]
+        [ObservableProperty]
+        private bool _object;
+        [JsonPropertyName("import")]
+        [ObservableProperty]
+        private bool _import;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static KeywordFields JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<KeywordFields>(input);
+        }
+    }
+    "#);
+}
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Default), "Default")]
+    [JsonDerivedType(typeof(Switch), "Switch")]
+    [JsonDerivedType(typeof(Where), "Where")]
+    public abstract record KeywordEnum {
+        public sealed record Default() : KeywordEnum;
+
+        public sealed record Switch(string Value) : KeywordEnum;
+
+        public sealed record Where(int In, string Default) : KeywordEnum;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static KeywordEnum JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<KeywordEnum>(input);
+        }
+    }
+    "#);
+}

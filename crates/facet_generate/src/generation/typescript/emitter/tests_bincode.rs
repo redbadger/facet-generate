@@ -1631,3 +1631,125 @@ fn struct_with_bytes_field_and_slice() {
     }
     ");
 }
+
+#[test]
+fn keyword_fields_struct() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        r#default: String,
+        r#in: i32,
+        object: bool,
+        import: bool,
+    }
+
+    let actual = emit!(KeywordFields as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class KeywordFields {
+        public default: str;
+        public in: int32;
+        public object: bool;
+        public import: bool;
+
+        constructor (default_: str, in_: int32, object: bool, import_: bool) {
+            this.default = default_;
+            this.in = in_;
+            this.object = object;
+            this.import = import_;
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializer.serializeStr(this.default);
+            serializer.serializeI32(this.in);
+            serializer.serializeBool(this.object);
+            serializer.serializeBool(this.import);
+        }
+
+        static deserialize(deserializer: Deserializer): KeywordFields {
+            const default_ = deserializer.deserializeStr();
+            const in_ = deserializer.deserializeI32();
+            const object = deserializer.deserializeBool();
+            const import_ = deserializer.deserializeBool();
+            return new KeywordFields(default_,in_,object,import_);
+        }
+    }
+    ");
+}
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type KeywordEnum =
+        | { kind: "Default" }
+        | { kind: "Switch"; value: str }
+        | { kind: "Where"; in: int32; default: str };
+
+    export const keywordEnumDefault = (): KeywordEnum => ({ kind: "Default" });
+
+    export const keywordEnumSwitch = (value: str): KeywordEnum => ({ kind: "Switch", value });
+
+    export const keywordEnumWhere = (in_: int32, default_: str): KeywordEnum => ({ kind: "Where", in: in_, default: default_ });
+
+    export function matchKeywordEnum<R>(value: KeywordEnum, cases: {
+        Default: (v: Extract<KeywordEnum, { kind: "Default" }>) => R;
+        Switch: (v: Extract<KeywordEnum, { kind: "Switch" }>) => R;
+        Where: (v: Extract<KeywordEnum, { kind: "Where" }>) => R;
+    }): R {
+        return cases[value.kind as KeywordEnum["kind"]](value as never);
+    }
+
+    export function serializeKeywordEnum(value: KeywordEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Default": {
+                serializer.serializeVariantIndex(0);
+                break;
+            }
+            case "Switch": {
+                serializer.serializeVariantIndex(1);
+                serializer.serializeStr(value.value);
+                break;
+            }
+            case "Where": {
+                serializer.serializeVariantIndex(2);
+                serializer.serializeI32(value.in);
+                serializer.serializeStr(value.default);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeKeywordEnum(deserializer: Deserializer): KeywordEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                return { kind: "Default" };
+            }
+            case 1: {
+                const value = deserializer.deserializeStr();
+                return { kind: "Switch", value };
+            }
+            case 2: {
+                const in_ = deserializer.deserializeI32();
+                const default_ = deserializer.deserializeStr();
+                return { kind: "Where", in: in_, default: default_ };
+            }
+            default: throw new Error("Unknown variant index for KeywordEnum: " + index);
+        }
+    }
+    "#);
+}

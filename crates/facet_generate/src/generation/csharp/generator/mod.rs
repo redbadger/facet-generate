@@ -13,9 +13,13 @@ use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
-        csharp::emitter::{CSharp, write_module_header},
+        csharp::{
+            emitter::{CSharp, write_module_header},
+            naming,
+        },
         indent::IndentedWriter,
         module::Module,
+        naming::check_reserved_names,
         plugin::{CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
@@ -74,6 +78,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);

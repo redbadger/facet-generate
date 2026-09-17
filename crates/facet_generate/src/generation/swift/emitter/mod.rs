@@ -51,7 +51,9 @@
 //! element or `Map` key.
 
 #![allow(clippy::too_many_lines)]
+use super::naming::builtin;
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     io::{self, Result, Write},
     sync::Arc,
@@ -434,11 +436,37 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
 
 /// The Swift `case` name the emitter gives to an enum variant.
 ///
-/// Variant names are lower-camel-cased (`NotFound` → `notFound`); Swift
-/// keywords are not escaped, matching the emitter.
+/// Variant names are lower-camel-cased (`NotFound` → `notFound`) and Swift
+/// keywords are escaped with backticks (`Default` → `` `default` ``),
+/// matching the emitter.
 #[must_use]
 pub fn case_name(variant_name: &str) -> String {
-    variant_name.to_lower_camel_case()
+    escape_identifier(&variant_name.to_lower_camel_case()).into_owned()
+}
+
+/// The Swift property name the emitter gives to a struct field, a
+/// struct-variant field, or a tuple/newtype member.
+///
+/// Field names are lower-camel-cased (`not_found` → `notFound`) and Swift
+/// keywords are escaped with backticks (`default` → `` `default` ``).
+///
+/// Plugins that emit a property access, a parameter label, or a binding
+/// derived from a field name should route it through this so the result
+/// matches the emitter.
+#[must_use]
+pub fn field_name(name: &str) -> String {
+    escape_identifier(&name.to_lower_camel_case()).into_owned()
+}
+
+/// Escapes an identifier when it is a Swift keyword, by wrapping it in
+/// backticks.
+///
+/// Backticks are pure quoting: the identifier's spelling is unchanged, so an
+/// escaped name is interchangeable with the bare one everywhere except the
+/// source text. Already-escaped identifiers are returned unchanged.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
 }
 
 // ---------------------------------------------------------------------------
@@ -463,24 +491,24 @@ impl Emitter<Swift> for Format {
             Self::TypeName(qualified_type_name) => {
                 write!(w, "{}", render_type_name(qualified_type_name, &lang.config))
             }
-            Self::Unit => write!(w, "Void"),
-            Self::Bool => write!(w, "Bool"),
-            Self::I8 => write!(w, "Int8"),
-            Self::I16 => write!(w, "Int16"),
-            Self::I32 => write!(w, "Int32"),
-            Self::I64 => write!(w, "Int64"),
+            Self::Unit => write!(w, "{}", builtin("Void", &lang.config)),
+            Self::Bool => write!(w, "{}", builtin("Bool", &lang.config)),
+            Self::I8 => write!(w, "{}", builtin("Int8", &lang.config)),
+            Self::I16 => write!(w, "{}", builtin("Int16", &lang.config)),
+            Self::I32 => write!(w, "{}", builtin("Int32", &lang.config)),
+            Self::I64 => write!(w, "{}", builtin("Int64", &lang.config)),
             Self::I128 => write!(w, "Int128"),
-            Self::U8 => write!(w, "UInt8"),
-            Self::U16 => write!(w, "UInt16"),
-            Self::U32 => write!(w, "UInt32"),
-            Self::U64 => write!(w, "UInt64"),
+            Self::U8 => write!(w, "{}", builtin("UInt8", &lang.config)),
+            Self::U16 => write!(w, "{}", builtin("UInt16", &lang.config)),
+            Self::U32 => write!(w, "{}", builtin("UInt32", &lang.config)),
+            Self::U64 => write!(w, "{}", builtin("UInt64", &lang.config)),
             Self::U128 => write!(w, "UInt128"),
-            Self::F32 => write!(w, "Float"),
-            Self::F64 => write!(w, "Double"),
-            Self::Char => write!(w, "Character"),
-            Self::Str => write!(w, "String"),
-            Self::Bytes => write!(w, "[UInt8]"),
-            Self::Uuid => write!(w, "UUID"),
+            Self::F32 => write!(w, "{}", builtin("Float", &lang.config)),
+            Self::F64 => write!(w, "{}", builtin("Double", &lang.config)),
+            Self::Char => write!(w, "{}", builtin("Character", &lang.config)),
+            Self::Str => write!(w, "{}", builtin("String", &lang.config)),
+            Self::Bytes => write!(w, "[{}]", builtin("UInt8", &lang.config)),
+            Self::Uuid => write!(w, "{}", builtin("UUID", &lang.config)),
 
             Self::Option(format) => {
                 format.write(w, lang)?;
@@ -505,7 +533,7 @@ impl Emitter<Swift> for Format {
                         ),
                     ));
                 }
-                write!(w, "Set<")?;
+                write!(w, "{}<", builtin("Set", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
@@ -553,7 +581,7 @@ impl Emitter<Swift> for Format {
 impl Emitter<Swift> for (&Named<Format>, Usage) {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Swift) -> Result<()> {
         let (Named { name, doc, value }, usage) = self;
-        let name = &name.to_lower_camel_case();
+        let name = &field_name(name);
 
         match usage {
             Usage::Field => {
@@ -591,7 +619,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
             },
             usage,
         ) = self;
-        let name = name.to_lower_camel_case();
+        let name = case_name(name);
 
         doc.write(w, lang)?;
 
@@ -674,10 +702,10 @@ fn struct_<W: IndentWrite>(
     let mut implements = vec![];
 
     if all_hashable {
-        implements.push("Hashable");
+        implements.push(builtin("Hashable", &lang.config));
     }
     if all_equatable_auto || all_can_eq {
-        implements.push("Equatable");
+        implements.push(builtin("Equatable", &lang.config));
     }
 
     if has_plugins && !implements.is_empty() {
@@ -744,7 +772,7 @@ fn write_struct_eq<W: IndentWrite>(w: &mut W, name: &str, fields: &[&Named<Forma
     } else {
         write!(w, "return ")?;
         for (i, field) in fields.iter().enumerate() {
-            let fname = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
             if i > 0 {
                 writeln!(w)?;
                 write!(w, "    && ")?;
@@ -788,10 +816,10 @@ fn enum_<W: IndentWrite>(
     let mut implements = vec![];
 
     if all_hashable {
-        implements.push("Hashable");
+        implements.push(builtin("Hashable", &lang.config));
     }
     if all_equatable_auto || all_can_eq {
-        implements.push("Equatable");
+        implements.push(builtin("Equatable", &lang.config));
     }
 
     if has_plugins && !implements.is_empty() {
@@ -836,7 +864,7 @@ fn write_enum_eq<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         w.unindent();
         for variant in variants {
-            let variant_name = variant.name.to_lower_camel_case();
+            let variant_name = case_name(&variant.name);
             match &variant.value {
                 VariantFormat::Unit => {
                     writeln!(w, "case (.{variant_name}, .{variant_name}): return true")?;
@@ -877,7 +905,7 @@ fn write_enum_eq<W: IndentWrite>(
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        let fname = n.name.to_lower_camel_case();
+                        let fname = field_name(&n.name);
                         write!(w, "{fname}: let l{i}")?;
                     }
                     write!(w, "), .{variant_name}(")?;
@@ -885,7 +913,7 @@ fn write_enum_eq<W: IndentWrite>(
                         if i > 0 {
                             write!(w, ", ")?;
                         }
-                        let fname = n.name.to_lower_camel_case();
+                        let fname = field_name(&n.name);
                         write!(w, "{fname}: let r{i}")?;
                     }
                     write!(w, ")): return ")?;

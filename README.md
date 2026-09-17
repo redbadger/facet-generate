@@ -680,6 +680,64 @@ struct Request {
 Container-level `rename` and field/variant-level `rename` (or `rename_all`) can
 be combined freely.
 
+#### Reserved words and builtin type names
+
+Names reach the target language exactly as written (after `rename` / `rename_all`), so a
+field called `default` or a variant called `Default` becomes an identifier that is a reserved
+word in most targets. Each generator escapes such identifiers with the language's own
+mechanism, so the member keeps its name and its wire name:
+
+| Language   | Escaping                                                | `default: String` becomes                          |
+| ---------- | ------------------------------------------------------- | -------------------------------------------------- |
+| Swift      | backticks                                               | `` public var `default`: String ``                 |
+| Kotlin     | backticks (hard keywords only)                          | `` val `default`: String `` — `default` is not one |
+| TypeScript | property keeps its name; bindings get a `_` suffix      | `public default: str;` set from `default_`         |
+| C#         | `@` prefix on locals; properties are PascalCase anyway  | `@default`                                         |
+
+Backticks and `@` are pure quoting, so a Kotlin `@SerialName`, a JSON key or a positional
+bincode field is unaffected. In TypeScript a reserved word is legal as a property name but
+not as a parameter or local, so a class with any reserved field declares its fields
+explicitly and assigns them in the constructor from renamed parameters; classes without one
+keep the compact parameter-property form. Kotlin soft keywords such as `value`, `field`,
+`import` and `data` are ordinary identifiers and are left alone.
+
+Plugins that derive identifiers from field or variant names should use the same helpers the
+emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
+`typescript::param_name` and `csharp::escape_identifier` — so their output agrees with the
+generated type.
+
+A type can also take the name of a builtin the generated code relies on. `crux_kv`, for
+example, has an operation struct called `Set`, which in Kotlin becomes a package-level
+`data class Set` that hides `kotlin.collections.Set` for the whole package. Rather than
+rejecting the name, the generators notice that the module declares it and write the builtin
+fully qualified, only where it is shadowed:
+
+```kotlin
+data class Set(
+    val key: String,
+    val value: Bytes,
+)
+
+data class Store(
+    val tags: kotlin.collections.Set<String>,
+    val entries: Map<String, String>,
+)
+```
+
+The same happens for `Swift.Set<String>`, `global::System.Collections.Generic.HashSet<string>`
+and `globalThis.Map<str,str>`. When nothing is shadowed the output is unchanged.
+
+A few names cannot be escaped or qualified: a type named after something the module
+imports explicitly (`Serializer`, `Deserializer`, `Bytes`, `UUID`, the TypeScript aliases
+such as `str` and `Seq`), or a field that would become a member the language or the
+generated code already provides (`toString`, `copy` or `hashCode` on a Kotlin data class,
+`GetHashCode` or a property named like its class in C#, `serializer` and `deserializer`
+everywhere). Generation stops before writing anything and says what to rename:
+
+```text
+Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = "...")]
+```
+
 ### Skipping struct fields or enum variants
 
 You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)]` to prevent Facet from recursing through).

@@ -176,3 +176,18 @@ fn test_csharp_code_with_external_definitions() {
         "Generated code should reference external namespace: {generated}"
     );
 }
+
+/// A type named `Set` must not break the generated namespace, and the
+/// `using`-imported collection types must stay reachable.
+#[test]
+fn test_that_csharp_code_shadowing_builtin_names_compiles_with_bincode() {
+    let registry = common::get_shadowing_registry();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}

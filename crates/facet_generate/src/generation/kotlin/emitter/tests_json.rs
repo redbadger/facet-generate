@@ -797,3 +797,65 @@ fn struct_with_bytes_field_and_slice() {
     )
     "#);
 }
+
+#[test]
+fn keyword_fields_struct() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        r#default: String,
+        r#in: i32,
+        object: bool,
+        import: bool,
+    }
+
+    let actual = emit!(KeywordFields as Kotlin with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    @Serializable
+    @SerialName("KeywordFields")
+    data class KeywordFields(
+        val default: String,
+        val `in`: Int,
+        val `object`: Boolean,
+        val import: Boolean,
+    )
+    "#);
+}
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as Kotlin with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    @Serializable
+    @SerialName("KeywordEnum")
+    sealed interface KeywordEnum {
+        @Serializable
+        @SerialName("Default")
+        data object Default: KeywordEnum
+
+        @Serializable
+        @SerialName("Switch")
+        data class Switch(
+            val value: String,
+        ) : KeywordEnum
+
+        @Serializable
+        @SerialName("Where")
+        data class Where(
+            val `in`: Int,
+            val default: String,
+        ) : KeywordEnum
+    }
+    "#);
+}

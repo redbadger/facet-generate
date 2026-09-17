@@ -967,3 +967,36 @@ fn render_type_matches_the_emitter() {
         "Other.Child"
     );
 }
+
+/// A declaration named `Map` shadows the global `Map` for the whole module, so
+/// the emitter must reach the global one through `globalThis`.
+#[test]
+fn declared_map_qualifies_the_global_map() {
+    #[derive(Facet)]
+    #[facet(rename = "Map")]
+    struct MyMap {
+        text: String,
+    }
+
+    #[derive(Facet)]
+    struct Holder {
+        entries: BTreeMap<String, String>,
+        inner: MyMap,
+    }
+
+    let actual = emit!(Holder as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class Holder {
+        constructor (public entries: globalThis.Map<str,str>, public inner: Map) {
+        }
+    }
+
+
+    export class Map {
+        constructor (public text: str) {
+        }
+    }
+    ");
+}

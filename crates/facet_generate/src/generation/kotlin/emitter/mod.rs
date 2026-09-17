@@ -45,6 +45,7 @@
 //! (`generation/json/kotlin.rs`).
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     io::{Result, Write},
     string::ToString,
@@ -53,12 +54,14 @@ use std::{
 
 use heck::ToLowerCamelCase;
 
+use super::naming::{self, builtin};
 use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Feature,
         indent::{IndentWrite, Newlines},
         module::Module,
+        naming::qualify_helper,
         plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
@@ -196,7 +199,13 @@ impl Emitter<Kotlin> for Module {
         let mut features_out = vec![];
         if self.config().features.contains(&Feature::TupleArray) {
             // TupleArray is encoding-independent — stays in the emitter.
-            write!(features_out, "{FEATURE_TUPLE_ARRAY}")?;
+            write!(
+                features_out,
+                "{}",
+                qualify_helper(FEATURE_TUPLE_ARRAY, naming::QUALIFIED, |name| {
+                    naming::shadows(name, self.config())
+                })
+            )?;
             writeln!(features_out)?;
         }
 
@@ -278,7 +287,7 @@ impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         self.doc.write(w, lang)?;
 
-        let name = &self.name.to_lower_camel_case();
+        let name = &property_name(&self.name);
         write!(w, "val {name}: ")?;
 
         self.value.write(w, lang)?;
@@ -456,6 +465,33 @@ pub fn enum_constant_name(variant_name: &str) -> String {
     variant_name.to_uppercase()
 }
 
+/// The Kotlin property name the emitter gives to a struct field, a
+/// struct-variant field, or a tuple/newtype member.
+///
+/// Field names are lower-camel-cased (`not_found` → `notFound`) and Kotlin
+/// hard keywords are escaped with backticks (`in` → `` `in` ``). Soft
+/// keywords — including the synthetic member names `value` and `field0` — are
+/// left alone.
+///
+/// Plugins that emit a property access, a local binding, or a constructor
+/// argument derived from a field name should route it through this so the
+/// result matches the emitter.
+#[must_use]
+pub fn property_name(name: &str) -> String {
+    escape_identifier(&name.to_lower_camel_case()).into_owned()
+}
+
+/// Escapes an identifier when it is a Kotlin hard keyword, by wrapping it in
+/// backticks.
+///
+/// Backticks are pure quoting: the identifier's spelling is unchanged, so the
+/// name a serialization format sees (a `@SerialName`, a JSON key) is the bare
+/// one. Already-escaped identifiers are returned unchanged.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
+}
+
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
@@ -467,20 +503,20 @@ impl Emitter<Kotlin> for Format {
                     ty = qualified_type_name.format(ToString::to_string, ".")
                 )
             }
-            Self::Unit => write!(w, "Unit"),
-            Self::Bool => write!(w, "Boolean"),
-            Self::I8 => write!(w, "Byte"),
-            Self::I16 => write!(w, "Short"),
-            Self::I32 => write!(w, "Int"),
-            Self::I64 => write!(w, "Long"),
-            Self::U8 => write!(w, "UByte"),
-            Self::U16 => write!(w, "UShort"),
-            Self::U32 => write!(w, "UInt"),
-            Self::U64 => write!(w, "ULong"),
+            Self::Unit => write!(w, "{}", builtin("Unit", &lang.config)),
+            Self::Bool => write!(w, "{}", builtin("Boolean", &lang.config)),
+            Self::I8 => write!(w, "{}", builtin("Byte", &lang.config)),
+            Self::I16 => write!(w, "{}", builtin("Short", &lang.config)),
+            Self::I32 => write!(w, "{}", builtin("Int", &lang.config)),
+            Self::I64 => write!(w, "{}", builtin("Long", &lang.config)),
+            Self::U8 => write!(w, "{}", builtin("UByte", &lang.config)),
+            Self::U16 => write!(w, "{}", builtin("UShort", &lang.config)),
+            Self::U32 => write!(w, "{}", builtin("UInt", &lang.config)),
+            Self::U64 => write!(w, "{}", builtin("ULong", &lang.config)),
             Self::I128 | Self::U128 => write!(w, "BigInteger"),
-            Self::F32 => write!(w, "Float"),
-            Self::F64 => write!(w, "Double"),
-            Self::Char | Self::Str => write!(w, "String"),
+            Self::F32 => write!(w, "{}", builtin("Float", &lang.config)),
+            Self::F64 => write!(w, "{}", builtin("Double", &lang.config)),
+            Self::Char | Self::Str => write!(w, "{}", builtin("String", &lang.config)),
             Self::Bytes => write!(w, "Bytes"),
             Self::Uuid => write!(w, "UUID"),
 
@@ -489,17 +525,17 @@ impl Emitter<Kotlin> for Format {
                 write!(w, "?")
             }
             Self::Seq(format) => {
-                write!(w, "List<")?;
+                write!(w, "{}<", builtin("List", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
             Self::Set(format) => {
-                write!(w, "Set<")?;
+                write!(w, "{}<", builtin("Set", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
             Self::Map { key, value } => {
-                write!(w, "Map<")?;
+                write!(w, "{}<", builtin("Map", &lang.config))?;
                 key.write(w, lang)?;
                 write!(w, ", ")?;
                 value.write(w, lang)?;
@@ -508,20 +544,20 @@ impl Emitter<Kotlin> for Format {
             Self::Tuple(formats) => {
                 let len = formats.len();
                 match len {
-                    0 => write!(w, "Unit"),
+                    0 => write!(w, "{}", builtin("Unit", &lang.config)),
                     1 => {
                         // A single-element tuple is just the element itself
                         formats[0].write(w, lang)
                     }
                     2 => {
-                        write!(w, "Pair<")?;
+                        write!(w, "{}<", builtin("Pair", &lang.config))?;
                         formats[0].write(w, lang)?;
                         write!(w, ", ")?;
                         formats[1].write(w, lang)?;
                         write!(w, ">")
                     }
                     3 => {
-                        write!(w, "Triple<")?;
+                        write!(w, "{}<", builtin("Triple", &lang.config))?;
                         formats[0].write(w, lang)?;
                         write!(w, ", ")?;
                         formats[1].write(w, lang)?;
@@ -543,7 +579,7 @@ impl Emitter<Kotlin> for Format {
                 }
             }
             Self::TupleArray { content, size: _ } => {
-                write!(w, "List<")?;
+                write!(w, "{}<", builtin("List", &lang.config))?;
                 content.write(w, lang)?;
                 write!(w, ">")
             }

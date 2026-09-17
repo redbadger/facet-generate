@@ -15,8 +15,12 @@ use crate::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         indent::IndentedWriter,
         module::Module,
+        naming::check_reserved_names,
         plugin::{CompanionFile, EmitterPlugin, render_companion_files},
-        swift::emitter::{Swift, write_module_header},
+        swift::{
+            emitter::{Swift, write_module_header},
+            naming,
+        },
     },
     reflection::format::{ContainerFormat, Format, QualifiedTypeName, VariantFormat},
 };
@@ -78,6 +82,7 @@ impl<'a> SwiftCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = Swift::new(&config, registry);
         for p in &self.plugins {

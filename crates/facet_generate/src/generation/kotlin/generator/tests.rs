@@ -944,3 +944,48 @@ fn test_update_qualified_names_mixed_external_and_local() {
         panic!("Expected Struct container");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Reserved-name pre-pass
+// ---------------------------------------------------------------------------
+
+#[test]
+fn type_named_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    #[facet(rename = "Serializer")]
+    struct Renamed {
+        name: String,
+    }
+
+    let registry = crate::reflect!(Renamed).unwrap();
+    let cfg = CodeGeneratorConfig::new("com.example".to_string());
+    let err = KotlinCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Kotlin: type `Serializer` collides with the `Serializer` import used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+#[test]
+fn field_named_to_string_is_rejected() {
+    #[derive(facet::Facet)]
+    struct Foo {
+        to_string: String,
+    }
+
+    let registry = crate::reflect!(Foo).unwrap();
+    let cfg = CodeGeneratorConfig::new("com.example".to_string());
+    let err = KotlinCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = \"...\")]"
+    );
+}

@@ -54,6 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
+use super::naming::builtin;
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -239,7 +240,7 @@ impl Emitter<CSharp> for Named<Format> {
         writeln!(
             w,
             "private {} _{};",
-            csharp_type(&self.value),
+            csharp_type(&self.value, &lang.config),
             self.name.to_lower_camel_case()
         )
     }
@@ -261,7 +262,7 @@ fn write_field<W: IndentWrite>(
     writeln!(
         w,
         "private {} _{};",
-        csharp_type(&field.value),
+        csharp_type(&field.value, &lang.config),
         field.name.to_lower_camel_case()
     )
 }
@@ -474,7 +475,12 @@ fn write_variant_records<W: IndentWrite>(
                 writeln!(w, "() : {base_name};")?;
             }
             VariantFormat::NewType(inner) => {
-                writeln!(w, "({} Value) : {};", csharp_type(inner), base_name)?;
+                writeln!(
+                    w,
+                    "({} Value) : {};",
+                    csharp_type(inner, &lang.config),
+                    base_name
+                )?;
             }
             VariantFormat::Tuple(values) => {
                 write!(w, "(")?;
@@ -482,7 +488,7 @@ fn write_variant_records<W: IndentWrite>(
                     if index > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{} Field{}", csharp_type(format), index)?;
+                    write!(w, "{} Field{}", csharp_type(format, &lang.config), index)?;
                 }
                 writeln!(w, ") : {base_name};")?;
             }
@@ -495,7 +501,7 @@ fn write_variant_records<W: IndentWrite>(
                     write!(
                         w,
                         "{} {}",
-                        csharp_type(&field.value),
+                        csharp_type(&field.value, &lang.config),
                         field.name.to_upper_camel_case()
                     )?;
                 }
@@ -518,11 +524,12 @@ fn write_variant_records<W: IndentWrite>(
 /// `Foo?`, `Dictionary<string, Bar>`, or `Other.Child` for a type in another
 /// namespace.
 ///
-/// `_config` is accepted for symmetry with the other languages; C# always
-/// writes the fully namespace-qualified name, so nothing is read from it.
+/// `config` supplies the set of type names the module declares, so a builtin
+/// a declaration shadows (`HashSet`, `Dictionary`, …) is written with its
+/// `global::` qualified name.
 #[must_use]
-pub fn render_type(format: &Format, _config: &CodeGeneratorConfig) -> String {
-    csharp_type(format)
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    csharp_type(format, config)
 }
 
 /// Escapes an identifier when it is a reserved C# keyword.
@@ -536,133 +543,62 @@ pub fn render_type(format: &Format, _config: &CodeGeneratorConfig) -> String {
 /// should route them through this so the result matches the emitter.
 #[must_use]
 pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
-    const RESERVED_KEYWORDS: &[&str] = &[
-        "abstract",
-        "as",
-        "base",
-        "bool",
-        "break",
-        "byte",
-        "case",
-        "catch",
-        "char",
-        "checked",
-        "class",
-        "const",
-        "continue",
-        "decimal",
-        "default",
-        "delegate",
-        "do",
-        "double",
-        "else",
-        "enum",
-        "event",
-        "explicit",
-        "extern",
-        "false",
-        "finally",
-        "fixed",
-        "float",
-        "for",
-        "foreach",
-        "goto",
-        "if",
-        "implicit",
-        "in",
-        "int",
-        "interface",
-        "internal",
-        "is",
-        "lock",
-        "long",
-        "namespace",
-        "new",
-        "null",
-        "object",
-        "operator",
-        "out",
-        "override",
-        "params",
-        "private",
-        "protected",
-        "public",
-        "readonly",
-        "ref",
-        "return",
-        "sbyte",
-        "sealed",
-        "short",
-        "sizeof",
-        "stackalloc",
-        "static",
-        "string",
-        "struct",
-        "switch",
-        "this",
-        "throw",
-        "true",
-        "try",
-        "typeof",
-        "uint",
-        "ulong",
-        "unchecked",
-        "unsafe",
-        "ushort",
-        "using",
-        "virtual",
-        "void",
-        "volatile",
-        "while",
-    ];
-
-    if RESERVED_KEYWORDS.contains(&identifier) {
-        Cow::Owned(format!("@{identifier}"))
-    } else {
-        Cow::Borrowed(identifier)
-    }
+    super::naming::RULES.escape(identifier)
 }
 
-fn csharp_type(format: &Format) -> String {
+fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(qualified_type_name) => format_qualified_type_name(qualified_type_name),
-        Format::Unit => "Unit".to_string(),
+        Format::Unit => builtin("Unit", config).into_owned(),
         Format::Bool => "bool".to_string(),
         Format::I8 => "sbyte".to_string(),
         Format::I16 => "short".to_string(),
         Format::I32 => "int".to_string(),
         Format::I64 => "long".to_string(),
-        Format::I128 => "Int128".to_string(),
+        Format::I128 => builtin("Int128", config).into_owned(),
         Format::U8 => "byte".to_string(),
         Format::U16 => "ushort".to_string(),
         Format::U32 => "uint".to_string(),
         Format::U64 => "ulong".to_string(),
-        Format::U128 => "UInt128".to_string(),
+        Format::U128 => builtin("UInt128", config).into_owned(),
         Format::F32 => "float".to_string(),
         Format::F64 => "double".to_string(),
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
-        Format::Uuid => "Guid".to_string(),
-        Format::Option(inner) => format!("{}?", csharp_type(inner)),
-        Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
-        Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),
+        Format::Uuid => builtin("Guid", config).into_owned(),
+        Format::Option(inner) => format!("{}?", csharp_type(inner, config)),
+        Format::Seq(inner) => format!(
+            "{}<{}>",
+            builtin("ObservableCollection", config),
+            csharp_type(inner, config)
+        ),
+        Format::Set(inner) => format!(
+            "{}<{}>",
+            builtin("HashSet", config),
+            csharp_type(inner, config)
+        ),
         Format::Map { key, value } => {
-            format!("Dictionary<{}, {}>", csharp_type(key), csharp_type(value))
+            format!(
+                "{}<{}, {}>",
+                builtin("Dictionary", config),
+                csharp_type(key, config),
+                csharp_type(value, config)
+            )
         }
         Format::Tuple(formats) => {
             if formats.is_empty() {
-                return "Unit".to_string();
+                return builtin("Unit", config).into_owned();
             }
             let values = formats
                 .iter()
-                .map(csharp_type)
+                .map(|f| csharp_type(f, config))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("({values})")
         }
-        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content)),
+        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content, config)),
     }
 }
 
