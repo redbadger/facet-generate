@@ -1,7 +1,7 @@
 //! Snapshot tests for the Swift [`Installer`] — **project scaffolding**.
 //!
 //! These tests verify the `Package.swift` manifest that the installer
-//! generates, without writing anything to disk. They cover:
+//! generates, and the companion files it writes. They cover:
 //!
 //! - Basic manifest structure: SPM targets, library products.
 //! - External URL dependencies: remote package references with version
@@ -11,17 +11,57 @@
 //! - Serde runtime target registration and dependency edges.
 //! - Multi-module (namespace) scenarios where each namespace becomes a
 //!   separate SPM target.
+//! - Plugin-provided package and target dependencies, and deployment
+//!   platforms.
+//! - Plugin companion files written beside the generated module.
 
 use facet::Facet;
+use indoc::indoc;
 
 use crate as fg;
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, bincode::BincodePlugin,
-        module::split, swift::installer::Installer,
+        CodeGeneratorConfig, ExternalPackage, PackageLocation, SourceInstaller as _,
+        bincode::BincodePlugin,
+        module::split,
+        plugin::{CompanionFile, EmitterPlugin},
+        swift::{Swift, installer::Installer},
     },
     reflect,
 };
+
+/// A plugin standing in for one that bridges to an FFI package: it adds a
+/// package dependency, a target dependency, and a companion source file.
+#[derive(Debug)]
+struct FfiPlugin;
+
+impl EmitterPlugin<Swift> for FfiPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![
+            indoc! {r#"
+            .package(
+                path: "../Shared"
+            )"#}
+            .to_string(),
+        ]
+    }
+
+    fn target_dependencies(&self) -> Vec<String> {
+        vec![r#".product(name: "Shared", package: "Shared")"#.to_string()]
+    }
+
+    fn companion_files(&self, _config: &CodeGeneratorConfig) -> Vec<CompanionFile> {
+        vec![CompanionFile {
+            file_name: "FfiBridge.swift".to_string(),
+            imports: vec!["Shared".to_string()],
+            contents: indoc! {r"
+                public struct FfiBridge {
+                    public init() {}
+                }"}
+            .to_string(),
+        }]
+    }
+}
 
 #[test]
 fn simple_manifest() {
@@ -626,4 +666,253 @@ fn external_dependency_references_local_dependency() {
         ]
     )
     "#);
+}
+
+#[test]
+fn manifest_with_plugin_dependencies() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin);
+
+    installer.install_serde_runtime().unwrap();
+
+    for (module, registry) in split(package_name, &registry) {
+        let config = module.config().clone();
+        installer.install_module(&config, &registry).unwrap();
+    }
+
+    // The plugin's package dependency is listed, and its target edge is on the
+    // generated module's target only — never on `Serde`, and never quoted.
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Shared"
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn manifest_with_plugin_and_external_dependencies() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .external_packages(&[ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: PackageLocation::Path("../Serde".to_string()),
+            module_name: None,
+            version: None,
+        }])
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin);
+
+    for (module, registry) in split(package_name, &registry) {
+        let config = module.config().clone();
+        installer.install_module(&config, &registry).unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Serde"
+            ),
+            .package(
+                path: "../Shared"
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["Serde", .product(name: "Shared", package: "Shared")]
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn manifest_with_platforms() {
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let installer = Installer::new(package_name, install_dir.path())
+        .platforms(&[".iOS(.v16)".to_string(), ".macOS(.v13)".to_string()]);
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        platforms: [.iOS(.v16), .macOS(.v13)],
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+}
+
+#[test]
+fn companion_file_is_written_beside_the_module() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("App", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Sources/App/FfiBridge.swift")).unwrap();
+
+    // The module's own imports, merged with the companion's, and none of the
+    // module helpers.
+    insta::assert_snapshot!(companion, @r"
+    import Serde
+    import Shared
+
+    public struct FfiBridge {
+        public init() {}
+    }
+    ");
+}
+
+#[test]
+fn companion_file_imports_foundation_when_the_module_uses_uuid() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: uuid::Uuid,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("App", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Sources/App/FfiBridge.swift")).unwrap();
+
+    insta::assert_snapshot!(companion, @r"
+    import Foundation
+    import Serde
+    import Shared
+
+    public struct FfiBridge {
+        public init() {}
+    }
+    ");
+}
+
+#[test]
+fn companion_file_is_written_when_serde_is_external() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("App", install_dir.path())
+        .external_packages(&[ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: PackageLocation::Path("../Serde".to_string()),
+            module_name: None,
+            version: None,
+        }])
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    // Runtime files are skipped when serde comes from a package…
+    assert!(!install_dir.path().join("Sources/Serde").exists());
+    // …but the companion file belongs to the module, so it is still written.
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Sources/App/FfiBridge.swift")).unwrap();
+
+    insta::assert_snapshot!(companion, @r"
+    import Serde
+    import Shared
+
+    public struct FfiBridge {
+        public init() {}
+    }
+    ");
 }

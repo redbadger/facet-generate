@@ -11,8 +11,12 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, config::PackageLocation,
-        indent::IndentedWriter, kotlin::emitter::Kotlin, module::Module, plugin::EmitterPlugin,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
+        config::PackageLocation,
+        indent::IndentedWriter,
+        kotlin::emitter::{Kotlin, write_module_header},
+        module::Module,
+        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -89,6 +93,37 @@ impl<'a> KotlinCodeGenerator<'a> {
             container.write(w, &lang)?;
         }
         Ok(())
+    }
+
+    /// Render the companion files contributed by the plugins for `registry`.
+    ///
+    /// Each returned [`CompanionFile`] carries the file's final contents: the
+    /// same module header [`output`](Self::output) writes (minus the module
+    /// helpers), merged with the file's own imports, followed by the plugin's
+    /// body. The installer writes them into the module's package directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rendering a header fails.
+    pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+
+        let mut lang = Kotlin::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
+
+        render_companion_files(lang.plugins(), &config, |imports| {
+            let mut header = Vec::new();
+            write_module_header(
+                &mut IndentedWriter::new(&mut header, config.indent),
+                &config,
+                &lang,
+                imports,
+            )?;
+            String::from_utf8(header).map_err(std::io::Error::other)
+        })
     }
 
     /// Rewrites every [`QualifiedTypeName`] in the registry to a fully-qualified

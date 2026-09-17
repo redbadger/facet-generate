@@ -330,6 +330,12 @@ impl SourceInstaller for Installer {
             KotlinCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
+        // Companion files live in the module's package directory, beside its
+        // own source file.
+        for companion in generator.companion_files(registry)? {
+            std::fs::write(module_dir.join(&companion.file_name), companion.contents)?;
+        }
+
         Ok(())
     }
 

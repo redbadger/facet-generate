@@ -17,8 +17,13 @@
 //!    `import * as Namespace` wildcard imports with `Namespace.Type` syntax.
 //!
 //! 3. **`package.json`** — generates an NPM manifest with dependencies
-//!    (external packages as `file:` paths or versioned registry references)
-//!    and devDependencies (`typescript`).
+//!    (external packages as `file:` paths or versioned registry references,
+//!    plus any pairs the plugins declare) and devDependencies (`typescript`).
+//!
+//! A module is a single file here, so there is nothing to put beside it:
+//! [`companion_files`](crate::generation::plugin::EmitterPlugin::companion_files)
+//! is ignored, and a TypeScript plugin emits extra declarations through
+//! [`after_type`](crate::generation::plugin::EmitterPlugin::after_type) instead.
 
 use std::{
     collections::BTreeMap,
@@ -205,8 +210,11 @@ impl Installer {
     ///
     /// Dependencies are derived from external packages: `Path` locations
     /// become `file:` references, `Url` locations use the extracted package
-    /// name with an optional version string. `typescript` is always added as
-    /// a devDependency.
+    /// name with an optional version string. Plugins contribute further
+    /// dependencies through
+    /// [`manifest_dependencies`](crate::generation::plugin::EmitterPlugin::manifest_dependencies),
+    /// each entry a `package.json` pair such as `"shared": "file:../pkg"`.
+    /// `typescript` is always added as a devDependency.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> Value {
         let mut manifest = json!({
@@ -214,39 +222,53 @@ impl Installer {
             "version": "0.1.0"
         });
 
-        // Add dependencies if we have external packages
-        if !self.external_packages.is_empty() {
-            let mut dependencies = BTreeMap::new();
+        let mut dependencies = BTreeMap::new();
 
-            for external_package in self.external_packages.values() {
-                let (name, version) = match &external_package.location {
-                    PackageLocation::Path(path) => (
-                        external_package.for_namespace.clone(),
-                        format!("file:{path}"),
-                    ),
-                    PackageLocation::Url(url) => (
-                        {
-                            // Extract package name from URL
-                            let parts: Vec<&str> = url.split('/').collect();
-                            if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
-                                // Scoped package: @scope/package-name
-                                format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
-                            } else if let Some(last_segment) = parts.last() {
-                                // Regular package: package-name
-                                (*last_segment).to_string()
-                            } else {
-                                url.clone()
-                            }
-                        },
-                        external_package
-                            .version
-                            .clone()
-                            .unwrap_or_else(|| "*".to_string()),
-                    ),
-                };
-                dependencies.insert(name, version);
+        for external_package in self.external_packages.values() {
+            let (name, version) = match &external_package.location {
+                PackageLocation::Path(path) => (
+                    external_package.for_namespace.clone(),
+                    format!("file:{path}"),
+                ),
+                PackageLocation::Url(url) => (
+                    {
+                        // Extract package name from URL
+                        let parts: Vec<&str> = url.split('/').collect();
+                        if parts.len() >= 2 && parts[parts.len() - 2].starts_with('@') {
+                            // Scoped package: @scope/package-name
+                            format!("{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
+                        } else if let Some(last_segment) = parts.last() {
+                            // Regular package: package-name
+                            (*last_segment).to_string()
+                        } else {
+                            url.clone()
+                        }
+                    },
+                    external_package
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "*".to_string()),
+                ),
+            };
+            dependencies.insert(name, version);
+        }
+
+        // Plugin dependencies are `package.json` pairs — parse each as a
+        // one-entry object and merge it in. An entry that is not a
+        // `"name": "version"` pair is ignored.
+        for entry in self.plugins.iter().flat_map(|p| p.manifest_dependencies()) {
+            let Ok(Value::Object(pairs)) = serde_json::from_str::<Value>(&format!("{{{entry}}}"))
+            else {
+                continue;
+            };
+            for (name, version) in pairs {
+                if let Value::String(version) = version {
+                    dependencies.insert(name, version);
+                }
             }
+        }
 
+        if !dependencies.is_empty() {
             manifest["dependencies"] = json!(dependencies);
         }
 

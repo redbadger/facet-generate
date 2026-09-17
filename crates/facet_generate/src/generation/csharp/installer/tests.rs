@@ -10,13 +10,20 @@
 //! - JSON runtime installation (`JsonSerde.cs`)
 //! - No plugins skips serde/bincode runtimes
 //! - Core `Unit.cs` always present regardless of plugins
+//! - Plugin companion files written into the module's namespace directory
+
+use facet::Facet;
 
 use crate::{
     Registry,
     generation::{
-        ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp::Installer,
+        CodeGeneratorConfig, ExternalPackage, PackageLocation,
+        bincode::BincodePlugin,
+        csharp::{CSharp, Installer},
         json::JsonPlugin,
+        plugin::{CompanionFile, EmitterPlugin},
     },
+    reflect,
 };
 
 #[test]
@@ -238,4 +245,55 @@ fn test_generate_json_encoding_installs_serde_but_not_bincode() {
             .exists()
     );
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
+}
+
+/// A plugin standing in for one that bridges to an FFI package: it contributes
+/// a companion source file that needs a `using` of its own.
+#[derive(Debug)]
+struct FfiPlugin;
+
+impl EmitterPlugin<CSharp> for FfiPlugin {
+    fn companion_files(&self, _config: &CodeGeneratorConfig) -> Vec<CompanionFile> {
+        vec![CompanionFile {
+            file_name: "FfiBridge.cs".to_string(),
+            imports: vec!["using Example.Shared;".to_string()],
+            contents: "public sealed class FfiBridge;".to_string(),
+        }]
+    }
+}
+
+#[test]
+fn companion_file_is_written_in_the_namespace_directory() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("Example.Types", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Example/Types/FfiBridge.cs")).unwrap();
+
+    // The module's usings and namespace, merged with the companion's, and none
+    // of the module helpers.
+    insta::assert_snapshot!(companion, @r"
+    using CommunityToolkit.Mvvm.ComponentModel;
+    using Facet.Runtime.Serde;
+    using System.Collections.Generic;
+    using System.Collections.ObjectModel;
+    using Facet.Runtime.Bincode;
+    using Example.Shared;
+
+    namespace Example.Types;
+
+    public sealed class FfiBridge;
+    ");
 }
