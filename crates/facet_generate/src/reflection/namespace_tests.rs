@@ -2202,6 +2202,76 @@ fn ambiguous_namespace_inheritance_should_error() {
 }
 
 #[test]
+fn duplicate_names_in_same_explicit_namespace_error() {
+    mod one {
+        use crate as fg;
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "ns")]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use crate as fg;
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "ns")]
+        pub struct Delete {
+            pub id: u32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: one::Delete,
+        b: two::Delete,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Delete" in namespace "ns": `facet_generate::reflection::namespace_tests::one::Delete` and `facet_generate::reflection::namespace_tests::two::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn field_namespace_override_with_different_type_of_same_name_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub id: u32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct ContainerA {
+        #[facet(fg::namespace = "ns")]
+        a: one::Delete,
+    }
+
+    #[derive(Facet)]
+    struct ContainerB {
+        #[facet(fg::namespace = "ns")]
+        b: two::Delete,
+    }
+
+    let err = reflect!(ContainerA, ContainerB).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type ContainerB: two types generate as "Delete" in namespace "ns": `facet_generate::reflection::namespace_tests::one::Delete` and `facet_generate::reflection::namespace_tests::two::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
 fn explicit_namespace_prevents_inheritance_ambiguity() {
     // This test shows that explicit namespace annotations prevent inheritance conflicts
 

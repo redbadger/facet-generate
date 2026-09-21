@@ -24,4 +24,13 @@ pub enum Error {
         existing_namespace: String,
         new_namespace: String,
     },
+    #[error(
+        r#"two types generate as "{name}" in namespace "{namespace}": `{existing}` and `{new}`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#
+    )]
+    DuplicateTypeName {
+        name: String,
+        namespace: String,
+        existing: String,
+        new: String,
+    },
 }

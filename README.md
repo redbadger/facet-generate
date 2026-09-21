@@ -549,6 +549,7 @@ Notes:
 * A namespace context can be unset (via `#[facet(fg::namespace)]`). This is still an explicit annotation, so it cancels any implicit annotations being carried forwards from higher in the graph. It places the type (and any child types) in the ROOT namespace.
 * Namespaces are propagated through field level references, including via pointers and collections.
 * Any ambiguity (i.e. a type is reached via more than one path, each with a different implicit namespace) will cause the typegen to emit an error, detailing the type involved and the namespaces that clash. The fix is then to either explicitly set (or unset) the type's namespace, or to align the inherited namespaces.
+* Every generated name must belong to exactly one Rust type. If two different Rust types would generate the same name in the same namespace (`a::Delete` and `b::Delete` both in the root, say, or two types renamed to the same string), the builder returns an error naming both types by their Rust path, whether they were added directly or reached through a field. Rename one with `#[facet(rename = "...")]`, or give it its own namespace with `#[facet(fg::namespace = "...")]`. The same Rust type reached many times, including recursively, is fine.
 
 
 ```rust
@@ -597,7 +598,9 @@ enum EffectFfi {
 ```
 
 When a renamed type is referenced from another struct, the generated code uses
-the new name automatically.
+the new name automatically. The new name has to be free: renaming a type to the name
+of another type in the same namespace is rejected with an error that names both
+Rust types, since one of them would otherwise be lost from the generated output.
 
 #### Field rename
 
