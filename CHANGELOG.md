@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.21.0] - unreleased
+## [0.21.0] - 2026-09-22
 
 Extensibility work for **out-of-tree `EmitterPlugin` implementations**. Everything a
 plugin needs to emit code *about* a type — where to hook in, how to name it, how to
@@ -12,7 +12,9 @@ Nothing the in-tree plugins generate changes for input that already produced com
 output: every existing snapshot and expect-file is byte-for-byte identical. Input that
 used to lose a type silently is now rejected (see Bug Fixes), and generated code no
 longer trips over the target language's reserved words or builtin type names. `facet`
-stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged and stays at 0.18.0.
+stays pinned at `=0.46.5` (no newer stable release exists), the lockfile is refreshed to
+the latest semver-compatible version of every dependency, and `facet-generate-attrs` is
+unchanged and stays at 0.18.0.
 
 Motivated by, but not specific to, the effect-handler code generation in
 [redbadger/crux#581](https://github.com/redbadger/crux/pull/581).
@@ -28,6 +30,16 @@ Motivated by, but not specific to, the effect-handler code generation in
 - **`swift::case_name` now escapes Swift keywords**, so a plugin that used it for a
   variant named `Struct` or `Default` sees `` `struct` `` / `` `default` `` where it
   previously saw the bare (uncompilable) word [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **`EmitterPlugin::target_dependencies` now takes the module's `&CodeGeneratorConfig`.**
+  The Swift installer asks every plugin for its SPM target edges once per module, but
+  gave the plugin nothing to say which module it was being asked about, so an edge meant
+  for one target (Crux's `.product(name: "Shared", package: "Shared")` for the app's FFI
+  bridge) was written onto every namespaced feature target as well. A plugin whose edge
+  belongs to one module compares `CodeGeneratorConfig::module_name` and returns nothing
+  for the rest; a plugin whose edge every target needs ignores the argument.
+  `manifest_dependencies` keeps its signature, because the manifest's `dependencies:` are
+  the package's and are asked for once. Any plugin implementing `target_dependencies`
+  (Swift-only) must add the parameter [#136](https://github.com/redbadger/facet-generate/pull/136)
 
 ### 🚀 Features
 
