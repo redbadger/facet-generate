@@ -11,9 +11,12 @@ use std::borrow::Cow;
 
 use heck::ToLowerCamelCase;
 
-use crate::generation::{
-    config::CodeGeneratorConfig,
-    naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+use crate::{
+    generation::{
+        config::CodeGeneratorConfig,
+        naming::{EscapeStyle, ForbiddenNames, FormatBoundNames, NamingRules, qualify},
+    },
+    reflection::format::Format,
 };
 
 /// Kotlin hard keywords, sorted.
@@ -85,6 +88,8 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
 ///
 /// These are explicit imports and runtime types, which outrank a same-package
 /// declaration, so the collision cannot be resolved by qualifying the builtin.
+/// The ones that are only written beside a field of a particular format are
+/// listed again in [`FORMAT_BOUND_TYPES`], which limits when they apply.
 pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("Any", "the Kotlin root type `kotlin.Any`"),
     ("BigInteger", "the `java.math.BigInteger` import"),
@@ -166,6 +171,54 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("UUIDSerializer", "the generated `UUIDSerializer` object"),
 ];
 
+/// The entries of [`FORBIDDEN_TYPES`] that the generated code mentions only
+/// beside a field of a particular format: `Bytes` where a `#[facet(bytes)]`
+/// field is serialized, `UUID` beside a `Uuid`, `BigInteger` beside a 128-bit
+/// integer, `NTupleN` beside an N-tuple. Elsewhere the import, alias or helper
+/// is not even written, so a declaration of that name only collides within the
+/// scope that has such a field — the whole module for a top-level type, and the
+/// enclosing enum for a variant, since a nested class outranks the file's
+/// imports inside the class that declares it. Sorted by name.
+pub(crate) const FORMAT_BOUND_TYPES: FormatBoundNames = &[
+    ("BigInteger", is_128_bit),
+    ("BigIntegerSerializer", is_128_bit),
+    ("Bytes", is_bytes_or_uuid),
+    ("BytesSerializer", is_bytes_or_uuid),
+    ("Int128", is_128_bit),
+    ("NTuple4", is_tuple_of_4),
+    ("NTuple5", is_tuple_of_5),
+    ("NTuple6", is_tuple_of_6),
+    ("UInt128", is_128_bit),
+    ("UUID", is_uuid),
+    ("UUIDSerializer", is_uuid),
+];
+
+const fn is_128_bit(format: &Format) -> bool {
+    matches!(format, Format::I128 | Format::U128)
+}
+
+/// The bincode plugin imports `Bytes` for a `Uuid` field as well, since a UUID
+/// is serialized through it.
+const fn is_bytes_or_uuid(format: &Format) -> bool {
+    matches!(format, Format::Bytes | Format::Uuid)
+}
+
+const fn is_uuid(format: &Format) -> bool {
+    matches!(format, Format::Uuid)
+}
+
+fn is_tuple_of_4(format: &Format) -> bool {
+    matches!(format, Format::Tuple(formats) if formats.len() == 4)
+}
+
+fn is_tuple_of_5(format: &Format) -> bool {
+    matches!(format, Format::Tuple(formats) if formats.len() == 5)
+}
+
+fn is_tuple_of_6(format: &Format) -> bool {
+    matches!(format, Format::Tuple(formats) if formats.len() == 6)
+}
+
 /// Property names the generated code cannot accommodate, with the clause
 /// explaining why. Sorted by name.
 pub(crate) const FORBIDDEN_MEMBERS: ForbiddenNames = &[
@@ -204,6 +257,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     escape_style: EscapeStyle::Backticks,
     forbidden_types: FORBIDDEN_TYPES,
     forbidden_members: FORBIDDEN_MEMBERS,
+    format_bound_types: FORMAT_BOUND_TYPES,
     type_case,
     member_case,
     variants_are_types: true,
@@ -240,6 +294,22 @@ mod tests {
             FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
             "FORBIDDEN_MEMBERS must be sorted by name"
         );
+        assert!(
+            FORMAT_BOUND_TYPES.windows(2).all(|w| w[0].0 < w[1].0),
+            "FORMAT_BOUND_TYPES must be sorted by name"
+        );
+    }
+
+    #[test]
+    fn every_format_bound_type_is_also_forbidden() {
+        for (name, _) in FORMAT_BOUND_TYPES {
+            assert!(
+                FORBIDDEN_TYPES
+                    .binary_search_by_key(name, |(n, _)| *n)
+                    .is_ok(),
+                "`{name}` is format-bound but not in FORBIDDEN_TYPES"
+            );
+        }
     }
 
     #[test]

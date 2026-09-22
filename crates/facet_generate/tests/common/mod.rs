@@ -711,11 +711,22 @@ pub struct Keys {
     pub next_cursor: u64,
 }
 
+// `Value::Bytes` becomes a nested class in Kotlin and C#, beside a module that
+// imports `Bytes` for `Set.value`: the nested class only shadows the import
+// inside `Value`, where nothing uses it.
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum Value {
+    None,
+    Bytes(Vec<u8>),
+}
+
 #[derive(Facet)]
 #[repr(C)]
 #[allow(dead_code)]
 pub enum ValueResult {
-    Ok(Option<Vec<u8>>),
+    Ok(Value),
     Err(String),
 }
 
@@ -753,6 +764,7 @@ pub fn get_shadowing_registry() -> Registry {
         Exists,
         ListKeys,
         Keys,
+        Value,
         ValueResult,
         BoolResult,
         KeysResult,

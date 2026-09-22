@@ -192,6 +192,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     escape_style: EscapeStyle::Backticks,
     forbidden_types: FORBIDDEN_TYPES,
     forbidden_members: FORBIDDEN_MEMBERS,
+    format_bound_types: &[],
     type_case,
     member_case,
     variants_are_types: false,

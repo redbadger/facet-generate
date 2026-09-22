@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.1] - 2026-09-22
+
+### 🐛 Bug Fixes
+
+- **A Kotlin variant named after an import its enum never uses is no longer rejected** —
+  the reserved-name pre-pass that 0.21.0 introduced ran the import-collision rule on every
+  variant of a data-carrying enum, because Kotlin and C# emit each one as a nested class.
+  But a nested class only shadows the file's imports inside the enum that declares it, and
+  `Bytes`, `UUID`, `BigInteger`, `Int128` and the `NTupleN` helpers are only imported or
+  written at all beside a field of that format. `crux_kv`'s `Value::Bytes(Vec<u8>)` — a
+  `List<UByte>` payload in an enum with no bytes field — was therefore refused with
+  `type Bytes collides with the Bytes import`, which made 0.21.0 unable to generate Kotlin
+  for a released crux capability. Such names are now *format-bound*: a top-level type is
+  rejected only when the module has a field of that format, and a variant only when its own
+  enum has one. `Serializer`, `Deserializer` and the other names every generated type
+  mentions are still always rejected, as are the same names in every other position. The
+  shared shadowing fixture now carries crux_kv's `Value` enum, so the Kotlin, C#, Swift and
+  TypeScript compile tests cover a nested `Bytes` beside a module-level `Bytes` import
+  [#147](https://github.com/redbadger/facet-generate/pull/147)
+
 ## [0.21.0] - 2026-09-22
 
 Extensibility work for **out-of-tree `EmitterPlugin` implementations**. Everything a

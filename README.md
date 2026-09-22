@@ -743,6 +743,13 @@ everywhere). Generation stops before writing anything and says what to rename:
 Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = "...")]
 ```
 
+An import that is only written beside a field of one format — `Bytes`, `UUID`,
+`BigInteger` — only collides where such a field is: in the module, for a top-level type,
+or in the enclosing enum, for a Kotlin variant, which becomes a nested class that outranks
+the import inside that enum alone. So `crux_kv`'s `Value::Bytes(Vec<u8>)` is
+accepted, while an enum with both a `Bytes` variant and a `#[facet(bytes)]` field is not.
+`Serializer` and the other names every generated type mentions are always rejected.
+
 ### Skipping struct fields or enum variants
 
 You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)]` to prevent Facet from recursing through).
