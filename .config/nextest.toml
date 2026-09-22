@@ -2,12 +2,23 @@
 # (NuGet-Migrations) under /tmp/.dotnet/shm/, causing intermittent EEXIST/ENOENT
 # failures. Serializing dotnet-invoking tests avoids this while keeping everything
 # else fully parallel.
+#
+# The Kotlin tests need the same treatment for a different reason: every
+# `gradle build` shares one `~/.gradle/caches`, guarded by `modules-2.lock` and
+# friends. Concurrent builds against a cold cache all try to populate it at
+# once and end up queueing on those locks — on Windows CI that turned a 3-minute
+# job into a 3-hour one, with individual tests stuck for over 7000 seconds.
 [test-groups]
 dotnet = { max-threads = 1 }
+gradle = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'binary(~csharp)'
 test-group = 'dotnet'
+
+[[profile.default.overrides]]
+filter = 'binary(~kotlin)'
+test-group = 'gradle'
 
 [profile.ci]
 # Print out output for failing tests as soon as they fail, and also at the end
@@ -15,7 +26,16 @@ test-group = 'dotnet'
 failure-output = "immediate-final"
 # Do not cancel the test run on the first failure.
 fail-fast = false
+# Kill a test that has been stuck for ten minutes rather than let it run out
+# GitHub's six-hour job limit. Nothing here legitimately takes that long: the
+# slowest test on the slowest runner is the Kotlin Gradle build at ~5 minutes
+# on a cold cache.
+slow-timeout = { period = "60s", terminate-after = 10 }
 
 [[profile.ci.overrides]]
 filter = 'binary(~csharp)'
 test-group = 'dotnet'
+
+[[profile.ci.overrides]]
+filter = 'binary(~kotlin)'
+test-group = 'gradle'

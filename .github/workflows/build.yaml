@@ -33,6 +33,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    # A backstop, not a target: the job takes well under ten minutes. Without
+    # it a wedged test inherits GitHub's six-hour default, which is how #126
+    # once sat burning a Windows runner for six hours before being cancelled
+    # by hand.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v6
@@ -90,3 +95,16 @@ jobs:
       - name: Swift runtime tests
         if: runner.os != 'Windows'
         run: just swift-test
+
+      # The Kotlin tests leave a Gradle daemon running, and on Windows it keeps
+      # `~/.gradle/caches/**/*.lock` open. `setup-java`'s post step tars that
+      # directory to save the cache, tar fails to read the locked files
+      # ("Device or resource busy") and exits 2, so the save is abandoned —
+      # which is why every Windows run reported "gradle cache is not found" and
+      # re-downloaded the whole Kotlin toolchain, taking 318s over Linux's 25s.
+      # Stopping the daemon releases the locks so the cache can actually be
+      # written.
+      - name: Stop the Gradle daemon so its caches can be saved
+        if: always()
+        continue-on-error: true
+        run: gradle --stop
