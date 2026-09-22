@@ -1,4 +1,4 @@
-# `facet_generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/master/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
+# `facet_generate` · [![GitHub license](https://img.shields.io/github/license/redbadger/facet-generate?color=blue)](https://github.com/redbadger/facet-generate/blob/main/LICENSE) [![Crate version](https://img.shields.io/crates/v/facet_generate.svg)](https://crates.io/crates/facet_generate) [![Docs](https://img.shields.io/badge/docs.rs-facet_generate-green)](https://docs.rs/facet_generate/) [![Build status](https://img.shields.io/github/actions/workflow/status/redbadger/facet-generate/build.yaml)](https://github.com/redbadger/facet-generate/actions)
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, TypeScript, and C#. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
@@ -31,7 +31,7 @@ let registry = RegistryBuilder::new()
     .build()?;
 ```
 
-To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` to include `serialize`/`deserialize` methods and install the appropriate runtime library; omit `.plugin(...)` for plain type definitions only.
+To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` or `JsonPlugin` to include `serialize`/`deserialize` methods and install the appropriate runtime library; omit `.plugin(...)` for plain type definitions only.
 
 ```rust
 use facet_generate::generation::bincode::BincodePlugin;
@@ -57,7 +57,7 @@ csharp::Installer::new("Example", &out_dir)
     .generate(&registry)?;
 ```
 
-With `BincodePlugin`, structs gain `serialize`/`deserialize` methods and enums gain standalone `serializeX`/`deserializeX` functions alongside a discriminated union type, per-variant constructor functions, and an exhaustive `matchX` helper. The examples below show the full generated module for both `Point` (struct) and `Shape` (enum) in each language.
+With `BincodePlugin`, structs and enums gain `serialize`/`deserialize` members. In TypeScript, where an enum is emitted as a discriminated union rather than a class, the plugin instead emits standalone `serializeX`/`deserializeX` functions alongside per-variant constructor functions and an exhaustive `matchX` helper. The examples below show the full generated module for both `Point` (struct) and `Shape` (enum) in each language.
 
 > [!NOTE]
 > The code blocks below are generated from the real output of the code
@@ -549,6 +549,7 @@ Notes:
 * A namespace context can be unset (via `#[facet(fg::namespace)]`). This is still an explicit annotation, so it cancels any implicit annotations being carried forwards from higher in the graph. It places the type (and any child types) in the ROOT namespace.
 * Namespaces are propagated through field level references, including via pointers and collections.
 * Any ambiguity (i.e. a type is reached via more than one path, each with a different implicit namespace) will cause the typegen to emit an error, detailing the type involved and the namespaces that clash. The fix is then to either explicitly set (or unset) the type's namespace, or to align the inherited namespaces.
+* Every generated name must belong to exactly one Rust type. If two different Rust types would generate the same name in the same namespace (`a::Delete` and `b::Delete` both in the root, say, or two types renamed to the same string), the builder returns an error naming both types by their Rust path, whether they were added directly or reached through a field. Rename one with `#[facet(rename = "...")]`, or give it its own namespace with `#[facet(fg::namespace = "...")]`. The same Rust type reached many times, including recursively, is fine.
 
 
 ```rust
@@ -569,7 +570,7 @@ pub enum SseResponse {
 
 ### Renaming
 
-Renaming uses Facet's builtin [`rename`](https://facet.rs/reference/attributes/#field-attributes--rename) and [`rename_all`](https://facet.rs/reference/attributes/#container-attributes--rename-all) attributes.
+Renaming uses Facet's builtin `rename` and `rename_all` attributes, documented in Facet's [field attributes](https://facet.rs/reference/field-attributes/) and [container attributes](https://facet.rs/reference/container-attributes/) reference.
 
 #### Container rename
 
@@ -597,7 +598,9 @@ enum EffectFfi {
 ```
 
 When a renamed type is referenced from another struct, the generated code uses
-the new name automatically.
+the new name automatically. The new name has to be free: renaming a type to the name
+of another type in the same namespace is rejected with an error that names both
+Rust types, since one of them would otherwise be lost from the generated output.
 
 #### Field rename
 
@@ -690,7 +693,7 @@ mechanism, so the member keeps its name and its wire name:
 | Language   | Escaping                                                | `default: String` becomes                          |
 | ---------- | ------------------------------------------------------- | -------------------------------------------------- |
 | Swift      | backticks                                               | `` public var `default`: String ``                 |
-| Kotlin     | backticks (hard keywords only)                          | `` val `default`: String `` — `default` is not one |
+| Kotlin     | backticks (hard keywords only)                          | `val default: String` — `default` is not one; `in` is |
 | TypeScript | property keeps its name; bindings get a `_` suffix      | `public default: str;` set from `default_`         |
 | C#         | `@` prefix on locals; properties are PascalCase anyway  | `@default`                                         |
 
@@ -703,7 +706,9 @@ keep the compact parameter-property form. Kotlin soft keywords such as `value`, 
 
 Plugins that derive identifiers from field or variant names should use the same helpers the
 emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
-`typescript::param_name` and `csharp::escape_identifier` — so their output agrees with the
+`kotlin::variant_class_name`, `kotlin::enum_constant_name`, `typescript::param_name` and
+`csharp::escape_identifier`, with `swift::escape_identifier`, `kotlin::escape_identifier` and
+`typescript::is_reserved_word` as the lower-level escapes — so their output agrees with the
 generated type.
 
 A type can also take the name of a builtin the generated code relies on. `crux_kv`, for
@@ -768,11 +773,11 @@ struct MyStruct {
 }
 ```
 
-With `#[facet(transparent)]`, `Inner` is unwrapped and `MyStruct.inner` is generated as a plain `Int32` (Swift) / `Int` (Kotlin) / `number` (TypeScript) / `int` (C#) in the target language.
+With `#[facet(transparent)]`, `Inner` is unwrapped and `MyStruct.inner` is generated as a plain `Int32` (Swift) / `Int` (Kotlin) / `int32` (a TypeScript alias for `number`) / `int` (C#) in the target language.
 
 ### Bytes
 
-In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `Uint8Array` in TypeScript, `byte[]` in C#) for `Vec<u8>` and `&'a [u8]`, use the `#[facet(fg::bytes)]` attribute:
+In order to generate byte array types (e.g. `[UInt8]` in Swift, `Bytes` in Kotlin, `bytes` (an alias for `Uint8Array`) in TypeScript, `byte[]` in C#) for `Vec<u8>`, `&'a [u8]`, `[u8; N]` and `Bytes` fields, or an `Option` of any of them, use the `#[facet(fg::bytes)]` attribute:
 
 ```rust
 #[derive(Facet)]

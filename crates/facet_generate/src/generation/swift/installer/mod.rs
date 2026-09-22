@@ -414,7 +414,7 @@ impl SourceInstaller for Installer {
         let plugin_target_dependencies: Vec<String> = self
             .plugins
             .iter()
-            .flat_map(|p| p.target_dependencies())
+            .flat_map(|p| p.target_dependencies(config))
             .collect();
         if !plugin_target_dependencies.is_empty() {
             self.plugin_target_dependencies

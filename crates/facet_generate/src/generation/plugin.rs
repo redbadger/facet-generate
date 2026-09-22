@@ -471,12 +471,22 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// `dependencies:` array, so it must be a valid `Target.Dependency`
     /// expression.
     ///
+    /// Called once per module, with that module's config — a type in a
+    /// namespace is generated into a module of its own, and each gets its own
+    /// SPM target. A plugin whose edge belongs to one module in particular
+    /// (the app's, say) compares [`CodeGeneratorConfig::module_name`] and
+    /// returns nothing for the rest; a plugin whose edge every target needs
+    /// ignores the argument. Contrast
+    /// [`manifest_dependencies`](Self::manifest_dependencies), which takes no
+    /// config because the manifest's `dependencies:` are the *package*'s and
+    /// are asked for once.
+    ///
     /// # Examples
     ///
     /// ```text
     /// vec![r#".product(name: "Shared", package: "Shared")"#.into()]
     /// ```
-    fn target_dependencies(&self) -> Vec<String> {
+    fn target_dependencies(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![]
     }
 }

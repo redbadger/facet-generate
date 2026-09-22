@@ -46,7 +46,7 @@ impl EmitterPlugin<Swift> for FfiPlugin {
         ]
     }
 
-    fn target_dependencies(&self) -> Vec<String> {
+    fn target_dependencies(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![r#".product(name: "Shared", package: "Shared")"#.to_string()]
     }
 
@@ -668,6 +668,32 @@ fn external_dependency_references_local_dependency() {
     "#);
 }
 
+/// The same, for a plugin whose target edge belongs to one module: the
+/// package's own, not the module a namespace was generated into.
+#[derive(Debug)]
+struct AppOnlyFfiPlugin {
+    package: &'static str,
+}
+
+impl EmitterPlugin<Swift> for AppOnlyFfiPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![
+            indoc! {r#"
+            .package(
+                path: "../Shared"
+            )"#}
+            .to_string(),
+        ]
+    }
+
+    fn target_dependencies(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        if config.module_name() != self.package {
+            return vec![];
+        }
+        vec![r#".product(name: "Shared", package: "Shared")"#.to_string()]
+    }
+}
+
 #[test]
 fn manifest_with_plugin_dependencies() {
     #[derive(Facet)]
@@ -915,4 +941,71 @@ fn companion_file_is_written_when_serde_is_external() {
         public init() {}
     }
     ");
+}
+
+/// Every module's plugins are asked for their target edges, because every
+/// module is a target of its own — so an edge that belongs to one module has
+/// to be scoped there, and the config is what makes that possible.
+///
+/// Without it a plugin bridging the package to an FFI would put that edge on
+/// every feature target as well as the app's. Harmless to SPM, and wrong.
+#[test]
+fn a_plugin_can_scope_its_target_edge_to_one_module() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "feature")]
+    struct Inner {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct MyStruct {
+        inner: Inner,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let package_name = "App";
+    let install_dir = tempfile::tempdir().unwrap();
+
+    let mut installer = Installer::new(package_name, install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(AppOnlyFfiPlugin {
+            package: package_name,
+        });
+
+    for (module, registry) in split(package_name, &registry) {
+        let config = module.config().clone();
+        installer.install_module(&config, &registry).unwrap();
+    }
+
+    let manifest = installer.make_manifest(package_name);
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "App",
+        products: [
+            .library(
+                name: "App",
+                targets: ["App"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Shared"
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["Feature", "Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "Feature",
+                dependencies: ["Serde"]
+            ),
+        ]
+    )
+    "#);
 }

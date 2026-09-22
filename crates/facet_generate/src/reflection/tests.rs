@@ -3607,6 +3607,361 @@ fn generics_unsupported_if_used_twice() {
 }
 
 // ---------------------------------------------------------------------------
+// Two Rust types generating the same name
+// ---------------------------------------------------------------------------
+
+#[test]
+fn duplicate_struct_names_in_root_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub id: u32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: one::Delete,
+        b: two::Delete,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Delete" in namespace "ROOT": `facet_generate::reflection::tests::one::Delete` and `facet_generate::reflection::tests::two::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn duplicate_enum_names_in_root_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(dead_code)]
+        pub enum Delete {
+            ByKey(String),
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(dead_code)]
+        pub enum Delete {
+            ById(u32),
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: one::Delete,
+        b: two::Delete,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Delete" in namespace "ROOT": `facet_generate::reflection::tests::one::Delete` and `facet_generate::reflection::tests::two::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn duplicate_struct_and_enum_name_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(dead_code)]
+        pub enum Delete {
+            ById(u32),
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: two::Delete,
+        b: one::Delete,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Delete" in namespace "ROOT": `facet_generate::reflection::tests::two::Delete` and `facet_generate::reflection::tests::one::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn duplicate_names_registered_at_root_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub id: u32,
+        }
+    }
+
+    let err = RegistryBuilder::new()
+        .add_type::<one::Delete>()
+        .unwrap()
+        .add_type::<two::Delete>()
+        .unwrap_err();
+
+    insta::assert_snapshot!(err, @r#"two types generate as "Delete" in namespace "ROOT": `facet_generate::reflection::tests::one::Delete` and `facet_generate::reflection::tests::two::Delete`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn duplicate_via_rename_error() {
+    #[derive(Facet)]
+    struct Foo {
+        key: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(rename = "Foo")]
+    struct Bar {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: Foo,
+        b: Bar,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Foo" in namespace "ROOT": `facet_generate::reflection::tests::Foo` and `facet_generate::reflection::tests::Bar`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn duplicate_via_type_tag_error() {
+    #[derive(Facet)]
+    struct Foo {
+        key: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(type_tag = "Foo")]
+    struct Bar {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: Foo,
+        b: Bar,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Foo" in namespace "ROOT": `facet_generate::reflection::tests::Foo` and `facet_generate::reflection::tests::Bar`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+#[test]
+fn rename_does_not_leak_to_same_named_type() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(rename = "DeleteA")]
+        pub struct Delete {
+            pub key: String,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Delete {
+            pub id: u32,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: one::Delete,
+        b: two::Delete,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Parent).unwrap(), @"
+    ? namespace: ROOT
+      name: Delete
+    : STRUCT:
+        - - id:
+              - U32
+              - []
+        - []
+    ? namespace: ROOT
+      name: DeleteA
+    : STRUCT:
+        - - key:
+              - STR
+              - []
+        - []
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - a:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: DeleteA
+              - []
+          - b:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Delete
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn same_type_reached_twice_is_not_a_duplicate() {
+    #[derive(Facet)]
+    struct Child {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: Child,
+        b: Child,
+        c: Option<Child>,
+        d: Vec<Child>,
+        e: Box<Child>,
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(Parent).unwrap(), @"
+    ? namespace: ROOT
+      name: Child
+    : STRUCT:
+        - - value:
+              - STR
+              - []
+        - []
+    ? namespace: ROOT
+      name: Parent
+    : STRUCT:
+        - - a:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Child
+              - []
+          - b:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Child
+              - []
+          - c:
+              - OPTION:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Child
+              - []
+          - d:
+              - SEQ:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: Child
+              - []
+          - e:
+              - TYPENAME:
+                  namespace: ROOT
+                  name: Child
+              - []
+        - []
+    ");
+}
+
+#[test]
+fn distinct_tuple_types_are_not_duplicates() {
+    #[derive(Facet)]
+    #[repr(u8)]
+    #[allow(dead_code)]
+    enum HasTuples {
+        A((i32, u8)),
+        B((String, bool)),
+    }
+
+    insta::assert_yaml_snapshot!(reflect!(HasTuples).unwrap(), @"
+    ? namespace: ROOT
+      name: HasTuples
+    : ENUM:
+        - 0:
+            A:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: (…)
+              - []
+          1:
+            B:
+              - NEWTYPE:
+                  TYPENAME:
+                    namespace: ROOT
+                    name: (…)
+              - []
+        - EXTERNAL
+        - []
+    ");
+}
+
+#[test]
+fn generics_from_different_modules_with_same_name_error() {
+    mod one {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Foo<T> {
+            pub field: T,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Foo<U> {
+            pub other: U,
+        }
+    }
+
+    #[derive(Facet)]
+    struct Parent {
+        a: one::Foo<String>,
+        b: two::Foo<u16>,
+    }
+
+    let err = reflect!(Parent).unwrap_err();
+
+    insta::assert_snapshot!(err.root_cause(), @r#"failed to add type Parent: two types generate as "Foo" in namespace "ROOT": `facet_generate::reflection::tests::one::Foo<String>` and `facet_generate::reflection::tests::two::Foo<u16>`. Rename one with `#[facet(rename = "...")]` or give it its own namespace with `#[facet(fg::namespace = "...")]`"#);
+}
+
+// ---------------------------------------------------------------------------
 // format_of — the Format a field of a given type would receive
 // ---------------------------------------------------------------------------
 

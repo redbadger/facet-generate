@@ -24,22 +24,23 @@
 //! - Resolving generic types (`Option`, `Vec`, `HashMap`, `Arc`, `Box`, etc.) into their format equivalents
 //! - Handling transparent wrappers and newtypes
 //! - Propagating and resolving namespace annotations via a context stack
-//! - Detecting conflicts (e.g. a generic type used with different type parameters)
+//! - Detecting conflicts: a generic type instantiated with different type parameters, or two
+//!   different Rust types that would generate the same name in the same namespace
 
 pub mod format;
 #[cfg(test)]
 pub mod regression_tests;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap},
     string::ToString,
     sync::LazyLock,
 };
 
 use facet::{
-    ArrayDef, Def, EnumType, Facet, Field, FieldFlags, ListDef, MapDef, NumericType, OptionDef,
-    PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape, SliceDef, StructKind,
-    StructType, TextualType, Type, UserType, Variant,
+    ArrayDef, ConstTypeId, DeclId, Def, EnumType, Facet, Field, FieldFlags, ListDef, MapDef,
+    NumericType, OptionDef, PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape,
+    SliceDef, StructKind, StructType, TextualType, Type, UserType, Variant,
 };
 use regex::Regex;
 
@@ -54,6 +55,50 @@ use format::{
 const SUPPORTED_GENERIC_TYPES: [&str; 10] = [
     "Arc", "Rc", "Box", "Option", "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "DateTime",
 ];
+
+/// The Rust type that owns a generated name.
+///
+/// Two different Rust types can generate the same [`QualifiedTypeName`], so the identity of the
+/// type that got there first is kept alongside the name, both to recognise recursion back into
+/// the same type and to name the offender when a second type claims the name.
+#[derive(Debug)]
+struct Claim {
+    id: ConstTypeId,
+    rust_path: String,
+}
+
+/// A recorded rename, together with the Rust type it applies to.
+///
+/// The key is the unrenamed name, which another type of the same name would also produce, so the
+/// mapping is only applied to the type that registered it.
+#[derive(Debug)]
+struct Mapping {
+    id: ConstTypeId,
+    renamed: QualifiedTypeName,
+}
+
+/// The Rust path of a type, for use in error messages.
+///
+/// Derived types carry their module path; primitives and foreign types do not, and are named by
+/// their `Display` alone.
+fn rust_path(shape: &Shape) -> String {
+    shape
+        .module_path
+        .map_or_else(|| shape.to_string(), |path| format!("{path}::{shape}"))
+}
+
+/// The type a shape is generated as.
+///
+/// A transparent wrapper is generated as the type it wraps, under that type's name, so the two
+/// share an identity here — however long the chain of wrappers. Any other shape is its own.
+fn generated_shape(mut shape: &Shape) -> &Shape {
+    while is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        shape = inner;
+    }
+    shape
+}
 
 /// A namespace context with its source information
 #[derive(Debug, Clone, PartialEq)]
@@ -136,15 +181,16 @@ impl NamespaceAction {
 ///
 /// Types are added with [`add_type`](Self::add_type), which recursively reflects the type and
 /// all types reachable from its fields and variants. The builder tracks which types have already
-/// been processed to avoid duplicates and detects conflicts (e.g. a generic type instantiated
-/// with different type parameters).
+/// been processed to avoid duplicates, and detects conflicts: a generic type instantiated with
+/// different type parameters, or two different Rust types that would generate the same name in
+/// the same namespace.
 #[derive(Debug, Default)]
 pub struct RegistryBuilder {
     pub registry: Registry,
     current: Vec<QualifiedTypeName>,
-    processed: HashSet<QualifiedTypeName>,
-    name_mappings: BTreeMap<QualifiedTypeName, QualifiedTypeName>,
-    generic_type_params: HashMap<String, String>,
+    processed: HashMap<QualifiedTypeName, Claim>,
+    name_mappings: BTreeMap<QualifiedTypeName, Mapping>,
+    generic_type_params: BTreeMap<DeclId, String>,
     processing_nested: bool,
     namespace_context_stack: Vec<NamespaceContext>,
     type_namespace_sources: HashMap<QualifiedTypeName, bool>, // true = explicit, false = inherited
@@ -259,8 +305,10 @@ impl RegistryBuilder {
     /// rename mappings and the type's own attributes contribute.
     fn mapped_name(&self, shape: &Shape) -> Result<QualifiedTypeName, Error> {
         let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
-        if let Some(mapped_name) = self.name_mappings.get(&base_key) {
-            return Ok(mapped_name.clone());
+        if let Some(mapping) = self.name_mappings.get(&base_key)
+            && mapping.id == generated_shape(shape).id
+        {
+            return Ok(mapping.renamed.clone());
         }
         get_name(shape)
     }
@@ -309,16 +357,59 @@ impl RegistryBuilder {
         qualified_name
     }
 
-    fn register_type_mapping(&mut self, original: QualifiedTypeName, renamed: QualifiedTypeName) {
-        self.name_mappings.insert(original, renamed);
+    fn register_type_mapping(
+        &mut self,
+        original: QualifiedTypeName,
+        renamed: QualifiedTypeName,
+        shape: &Shape,
+    ) {
+        self.name_mappings.insert(
+            original,
+            Mapping {
+                id: generated_shape(shape).id,
+                renamed,
+            },
+        );
     }
 
-    fn is_processed(&self, name: &QualifiedTypeName) -> bool {
-        self.processed.contains(name)
+    /// Claims a generated name for a Rust type.
+    ///
+    /// Returns `Ok(true)` if this type already holds the name — the recursion case, where the
+    /// caller should stop rather than descend again — and `Ok(false)` once the claim is recorded
+    /// for the first time. A different Rust type already holding the name is a conflict, because
+    /// only one of them can be generated under it.
+    fn claim(&mut self, name: &QualifiedTypeName, shape: &Shape) -> Result<bool, Error> {
+        if self.is_claimed_by(name, shape)? {
+            return Ok(true);
+        }
+        self.record_claim(name.clone(), shape);
+        Ok(false)
     }
 
-    fn mark_processed(&mut self, name: QualifiedTypeName) {
-        self.processed.insert(name);
+    /// Whether `shape` already holds `name`, erroring if a different Rust type does.
+    fn is_claimed_by(&self, name: &QualifiedTypeName, shape: &Shape) -> Result<bool, Error> {
+        let shape = generated_shape(shape);
+        match self.processed.get(name) {
+            None => Ok(false),
+            Some(claim) if claim.id == shape.id => Ok(true),
+            Some(claim) => Err(Error::DuplicateTypeName {
+                name: name.name.clone(),
+                namespace: name.namespace.to_string(),
+                existing: claim.rust_path.clone(),
+                new: rust_path(shape),
+            }),
+        }
+    }
+
+    fn record_claim(&mut self, name: QualifiedTypeName, shape: &Shape) {
+        let shape = generated_shape(shape);
+        self.processed.insert(
+            name,
+            Claim {
+                id: shape.id,
+                rust_path: rust_path(shape),
+            },
+        );
     }
 
     fn pop(&mut self) {
@@ -341,29 +432,36 @@ impl RegistryBuilder {
         let base_name = shape.type_identifier.to_string();
         let namespaced_key = QualifiedTypeName::namespaced(namespace.to_string(), base_name);
 
-        if !self.registry.contains_key(&namespaced_key) {
-            // Store the previous namespace context
-            let context = NamespaceContext::explicit(Namespace::Named(namespace.to_string()));
-            self.push_namespace(NamespaceAction::SetContext(context));
+        // The name may already be taken — by this same type, in which case there is nothing left
+        // to do, or by a different one, which is a conflict.
+        if self.is_claimed_by(&namespaced_key, shape)? {
+            return Ok(());
+        }
 
-            // Process the type with the namespace context so nested types inherit the namespace
-            self.format(shape)?;
+        // Store the previous namespace context
+        let context = NamespaceContext::explicit(Namespace::Named(namespace.to_string()));
+        self.push_namespace(NamespaceAction::SetContext(context));
 
-            // Restore the previous namespace context
-            self.pop_namespace();
+        // Process the type with the namespace context so nested types inherit the namespace
+        self.format(shape)?;
 
-            // Check if the type has a conflicting type-level explicit namespace
-            // If type-level explicit matches what we want, or if no type-level explicit, then move is OK
-            let original_key = self.get_name_with_mappings(shape)?;
+        // Restore the previous namespace context
+        self.pop_namespace();
 
-            if original_key != namespaced_key {
-                let type_level_namespace = extract_namespace_from_shape(shape)?;
+        // Check if the type has a conflicting type-level explicit namespace
+        // If type-level explicit matches what we want, or if no type-level explicit, then move is OK
+        let original_key = self.get_name_with_mappings(shape)?;
 
-                let should_move = type_level_namespace.should_move_to_namespace(namespace);
+        if original_key != namespaced_key {
+            let type_level_namespace = extract_namespace_from_shape(shape)?;
 
-                if should_move && let Some(format) = self.registry.remove(&original_key) {
-                    self.registry.insert(namespaced_key, format);
-                }
+            let should_move = type_level_namespace.should_move_to_namespace(namespace);
+
+            if should_move && let Some(format) = self.registry.remove(&original_key) {
+                self.registry.insert(namespaced_key.clone(), format);
+                // Record the moved name as this type's, so a later visit under it is recognised
+                // as the same type rather than reported as a duplicate.
+                self.record_claim(namespaced_key, shape);
             }
         }
 
@@ -417,7 +515,7 @@ impl RegistryBuilder {
         let current_params = format!("{:?}", shape.type_params);
         let previous_params = self
             .generic_type_params
-            .entry(shape.type_identifier.to_string())
+            .entry(shape.decl_id)
             .or_insert_with(|| current_params.clone());
 
         *previous_params == current_params
@@ -573,10 +671,18 @@ impl RegistryBuilder {
     }
 
     fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) -> Result<(), Error> {
+        // Anonymous tuples all arrive here under the shared name `(…)`, so `(i32, u8)` and
+        // `(String, bool)` would look like two types claiming one name. There is nothing to do
+        // for them anyway — `handle_user_struct` has already given the field its format, and no
+        // container is pushed for a tuple.
+        if struct_type.kind == StructKind::Tuple {
+            return Ok(());
+        }
+
         let struct_name = self.get_name_with_mappings(shape)?;
 
         // Check if already processed using the full namespaced name
-        if self.is_processed(&struct_name) {
+        if self.claim(&struct_name, shape)? {
             // This is a mutual recursion case - only update if there's an unknown format that needs updating
             let format = Format::TypeName(struct_name);
             self.update_container_format(format, UpdateMode::MutualRecursion);
@@ -589,10 +695,8 @@ impl RegistryBuilder {
                 namespace: struct_name.namespace.clone(),
                 name: shape.type_identifier.to_string(),
             };
-            self.register_type_mapping(name, struct_name.clone());
+            self.register_type_mapping(name, struct_name.clone(), shape);
         }
-
-        self.mark_processed(struct_name.clone());
 
         // Extract namespace from this enum if it has one
         let type_level_namespace = extract_namespace_from_shape(shape)?;
@@ -674,10 +778,7 @@ impl RegistryBuilder {
 
                 self.pop();
             }
-            StructKind::Tuple => {
-                // Standalone tuple types never appear as StructKind::Tuple in facet's
-                // struct dispatch; they come through as Def::Scalar or Type::Primitive.
-            }
+            StructKind::Tuple => unreachable!("anonymous tuples return early, above"),
         }
 
         self.pop_namespace();
@@ -864,7 +965,7 @@ impl RegistryBuilder {
         let enum_name = self.get_name_with_mappings(shape)?;
 
         // Check if already processed using the full namespaced name
-        if self.is_processed(&enum_name) {
+        if self.claim(&enum_name, shape)? {
             return Ok(());
         }
 
@@ -874,10 +975,8 @@ impl RegistryBuilder {
                 namespace: enum_name.namespace.clone(),
                 name: shape.type_identifier.to_string(),
             };
-            self.register_type_mapping(name, enum_name.clone());
+            self.register_type_mapping(name, enum_name.clone(), shape);
         }
-
-        self.mark_processed(enum_name.clone());
 
         // Extract namespace from this enum if it has one
         let type_level_namespace = extract_namespace_from_shape(shape)?;
@@ -1540,8 +1639,10 @@ impl RegistryBuilder {
     fn get_name_with_mappings(&mut self, shape: &Shape) -> Result<QualifiedTypeName, Error> {
         // First check if there's a mapping for this type
         let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
-        if let Some(mapped_name) = self.name_mappings.get(&base_key) {
-            return Ok(mapped_name.clone());
+        if let Some(mapping) = self.name_mappings.get(&base_key)
+            && mapping.id == generated_shape(shape).id
+        {
+            return Ok(mapping.renamed.clone());
         }
 
         // Get the original name (which includes explicit namespace annotations)

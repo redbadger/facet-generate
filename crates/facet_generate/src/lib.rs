@@ -105,7 +105,7 @@
 //!
 //! | Attribute | Effect |
 //! |---|---|
-//! | `#[facet(fg::bytes)]` | Emit `Vec<u8>` / `&[u8]` as a native byte-array type (`[UInt8]`, `ByteArray`, `Uint8Array`) |
+//! | `#[facet(fg::bytes)]` | Emit `Vec<u8>` / `&[u8]` / `[u8; N]` / `Bytes` as a native byte-array type (`[UInt8]`, `Bytes`, `bytes`, `byte[]`) |
 //! | `#[facet(fg::namespace = "ns")]` | Group a type, transitively, into a named namespace, emitted as a separate module |
 //! | `#[facet(fg::namespace)]` | Group a type, transitively, into the ROOT namespace |
 //! | `#[facet(rename = "Name")]` | Override the generated name of a type, field, or variant |
