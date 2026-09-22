@@ -12,8 +12,15 @@ use std::{
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, plugin::EmitterPlugin, swift::emitter::Swift,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
+        indent::IndentedWriter,
+        module::Module,
+        naming::check_reserved_names,
+        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
+        swift::{
+            emitter::{Swift, write_module_header},
+            naming,
+        },
     },
     reflection::format::{ContainerFormat, Format, QualifiedTypeName, VariantFormat},
 };
@@ -75,6 +82,7 @@ impl<'a> SwiftCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = Swift::new(&config, registry);
         for p in &self.plugins {
@@ -89,6 +97,37 @@ impl<'a> SwiftCodeGenerator<'a> {
         }
 
         Ok(())
+    }
+
+    /// Render the companion files contributed by the plugins for `registry`.
+    ///
+    /// Each returned [`CompanionFile`] carries the file's final contents: the
+    /// same module header [`output`](Self::output) writes (minus the module
+    /// helpers), merged with the file's own imports, followed by the plugin's
+    /// body. The installer writes them next to the module's source file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rendering a header fails.
+    pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+
+        let mut lang = Swift::new(&config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
+
+        render_companion_files(lang.plugins(), &config, |imports| {
+            let mut header = Vec::new();
+            write_module_header(
+                &mut IndentedWriter::new(&mut header, config.indent),
+                &config,
+                &lang,
+                imports,
+            )?;
+            String::from_utf8(header).map_err(std::io::Error::other)
+        })
     }
 }
 

@@ -26,14 +26,51 @@
 //! | `has_type_body` | Before deciding to open `{ }` | tell emitter a body is needed |
 //! | `type_body_preamble` | Start of type body, before variants | abstract method declarations |
 //! | `type_body` | Inside the type body, after fields | `fun patching(...)` |
-//! | `after_type` | After the closing brace of a type | extension methods |
+//! | `after_type` | After the closing brace of every top-level type | extension methods |
 //! | `module_helpers` | After imports, before types | feature helper snippets |
 //! | `field_annotations` | Before a field declaration | `@SerialName("foo")` |
 //! | `runtime_files` | During installation | serde/bincode runtime `.kt` files |
+//! | `companion_files` | During installation | an extra source file beside the module |
 //! | `manifest_dependencies` | When writing the build manifest | `kotlinx-serialization-json` |
+//! | `target_dependencies` | When writing the build manifest | `.product(name: "Shared", package: "Shared")` |
+//!
+//! ## Where `after_type` fires
+//!
+//! `after_type` is called once for **every top-level container**, in all four
+//! languages, with a top-level [`EmitContext`](crate::generation::plugin::EmitContext) (never a variant one):
+//!
+//! | Language | Call sites |
+//! |---|---|
+//! | Swift | after `public struct` / `indirect public enum` |
+//! | Kotlin | after `data class`, `data object`, `enum class`, `sealed interface` |
+//! | TypeScript | after `export class` and after the union type + helpers of an enum |
+//! | C# | after `partial class`, `sealed record`, `public enum`, and the `abstract record` variant hierarchy |
+//!
+//! It is **not** called for the individual variants of an enum, so a plugin
+//! that only wants to act on one container shape must say so — see
+//! [`EmitterPlugin::after_type`](crate::generation::plugin::EmitterPlugin::after_type).
+//!
+//! ## Where `companion_files` land
+//!
+//! A [`CompanionFile`](crate::generation::plugin::CompanionFile) is a whole source file that belongs to the module but
+//! does not fit in the module's own file. The generator renders the module
+//! header in front of it (imports merged with the file's own, no module
+//! helpers) and the installer writes it into the module's directory:
+//!
+//! | Language | Destination |
+//! |---|---|
+//! | Swift | `Sources/<Module>/<file_name>` |
+//! | Kotlin | the module's package directory |
+//! | C# | the module's namespace directory |
+//! | TypeScript | — a module is a single file, so the hook is ignored |
+//!
+//! Unlike [`RuntimeFile`](crate::generation::plugin::RuntimeFile)s, companion files are written even when the serde
+//! runtime comes from an external package.
 
 use std::io;
 use std::sync::Arc;
+
+use std::collections::BTreeMap;
 
 use super::{CodeGeneratorConfig, Container, indent::IndentWrite};
 use crate::reflection::format::{Format, Named, VariantFormat};
@@ -106,6 +143,20 @@ impl<'a> EmitContext<'a> {
         match &self.variant {
             Some(v) => v.name,
             None => &self.container.name.name,
+        }
+    }
+
+    /// The variants of the container being emitted, keyed by discriminant,
+    /// or `None` when the container is not an enum.
+    ///
+    /// This is the container's variants even inside a variant context — a
+    /// plugin that needs the *current* variant should read
+    /// [`variant`](Self::variant) instead.
+    #[must_use]
+    pub const fn variants(&self) -> Option<&BTreeMap<u32, Named<VariantFormat>>> {
+        match self.container.format {
+            crate::reflection::format::ContainerFormat::Enum(variants, _, _) => Some(variants),
+            _ => None,
         }
     }
 
@@ -312,6 +363,14 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// Use this for extension methods, free functions, or companion
     /// declarations that must appear outside the type.
     ///
+    /// Called once for **every top-level container** in every language, with
+    /// a top-level context (`ctx.is_variant()` is always `false`) — see the
+    /// [module docs](self#where-after_type-fires) for the exact call sites.
+    /// An implementation that is only meaningful for one container shape must
+    /// therefore inspect `ctx.container.format` (or
+    /// [`ctx.variants()`](EmitContext::variants)) and return `Ok(())` for the
+    /// rest.
+    ///
     /// # Errors
     ///
     /// Returns an error if writing the after-type code fails.
@@ -367,18 +426,57 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         vec![]
     }
 
+    /// Extra source files to write **beside the generated module file**.
+    ///
+    /// Unlike [`runtime_files`](Self::runtime_files) — which installers skip
+    /// when the serde runtime is provided by an external package — a companion
+    /// file is written whenever the module itself is, because it is part of the
+    /// module rather than of the shared runtime.
+    ///
+    /// The generator renders the module's own header (package / namespace
+    /// declaration and imports, merged with
+    /// [`CompanionFile::imports`]) in front of
+    /// [`CompanionFile::contents`]; module helpers are *not* repeated, since
+    /// they are already declared in the module file and would collide.
+    ///
+    /// Only Swift, Kotlin and C# write companion files — TypeScript emits a
+    /// single file per module and ignores this hook.
+    fn companion_files(&self, _config: &CodeGeneratorConfig) -> Vec<CompanionFile> {
+        vec![]
+    }
+
     /// Extra dependency entries for the package manifest.
     ///
-    /// The format of each string is language-specific — for example, a
-    /// Gradle dependency line for Kotlin or an SPM `.package(...)` entry
-    /// for Swift.
+    /// The format of each string is language-specific — a Gradle dependency
+    /// line for Kotlin, an SPM `.package(...)` entry (unindented) for Swift, or
+    /// a `package.json` dependency pair for TypeScript.
     ///
     /// # Examples
     ///
     /// ```text
+    /// // Kotlin
     /// vec![r#"implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")"#.into()]
+    /// // Swift
+    /// vec![".package(\n    path: \"../Shared\"\n)".into()]
+    /// // TypeScript
+    /// vec![r#""shared": "file:../pkg""#.into()]
     /// ```
     fn manifest_dependencies(&self) -> Vec<String> {
+        vec![]
+    }
+
+    /// Extra dependency edges for the generated module's build target.
+    ///
+    /// Swift only: each string is written verbatim into the SPM target's
+    /// `dependencies:` array, so it must be a valid `Target.Dependency`
+    /// expression.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// vec![r#".product(name: "Shared", package: "Shared")"#.into()]
+    /// ```
+    fn target_dependencies(&self) -> Vec<String> {
         vec![]
     }
 }
@@ -400,6 +498,38 @@ pub struct RuntimeFile {
 
     /// The raw file contents.
     pub contents: Vec<u8>,
+}
+
+// ---------------------------------------------------------------------------
+// CompanionFile
+// ---------------------------------------------------------------------------
+
+/// A source file written next to the generated module file, sharing the
+/// module's package / namespace.
+///
+/// Returned by [`EmitterPlugin::companion_files`] and rendered by the language
+/// generator, which prepends the module header (see
+/// [`companion_files`](EmitterPlugin::companion_files)).
+#[derive(Debug, Clone)]
+pub struct CompanionFile {
+    /// File name, including the extension — e.g. `"FfiBridge.swift"`.
+    ///
+    /// The installer writes it into the same directory as the module file, so
+    /// this is a bare name, not a path. When two plugins ask for the same file
+    /// name, the first one wins.
+    pub file_name: String,
+
+    /// Imports needed by [`contents`](Self::contents) on top of the module's
+    /// own imports.
+    ///
+    /// Each string takes the same shape as [`EmitterPlugin::imports`] for the
+    /// language: a bare module name in Swift (`"Foundation"`), a whole
+    /// `import` line in Kotlin (`"import com.example.CoreFfi"`), and a whole
+    /// `using` directive in C# (`"using Example.Shared;"`).
+    pub imports: Vec<String>,
+
+    /// The body of the file, written after the header.
+    pub contents: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +566,64 @@ where
         f(plugin.as_ref(), w)?;
     }
     Ok(())
+}
+
+/// Collect the companion files of every plugin, rendering each one's header
+/// with `write_header` (which receives the file's extra imports and returns the
+/// rendered module header).
+///
+/// The first plugin to claim a file name wins; later plugins asking for the
+/// same name are ignored.
+///
+/// # Errors
+///
+/// Returns an error if rendering a header fails.
+pub(crate) fn render_companion_files<L, F>(
+    plugins: &[Arc<dyn EmitterPlugin<L>>],
+    config: &CodeGeneratorConfig,
+    mut write_header: F,
+) -> io::Result<Vec<CompanionFile>>
+where
+    F: FnMut(&[String]) -> io::Result<String>,
+{
+    let mut seen = std::collections::BTreeSet::new();
+    let mut files = Vec::new();
+
+    for plugin in plugins {
+        for file in plugin.companion_files(config) {
+            if !seen.insert(file.file_name.clone()) {
+                continue;
+            }
+            let header = write_header(&file.imports)?;
+            let contents = join_header(&header, &file.contents);
+            files.push(CompanionFile {
+                file_name: file.file_name,
+                imports: file.imports,
+                contents,
+            });
+        }
+    }
+
+    Ok(files)
+}
+
+/// Join a rendered module header and a companion file's body, separated by a
+/// single blank line and terminated by a newline.
+fn join_header(header: &str, body: &str) -> String {
+    let header = header.trim_end();
+    let body = body.trim_start_matches('\n');
+
+    let mut contents = if header.is_empty() {
+        body.to_string()
+    } else {
+        format!("{header}\n\n{body}")
+    };
+
+    if !contents.ends_with('\n') {
+        contents.push('\n');
+    }
+
+    contents
 }
 
 /// Check whether *any* plugin in the list returns `true` for a predicate.

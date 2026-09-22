@@ -12,8 +12,15 @@ use std::sync::Arc;
 use crate::{
     Registry,
     generation::{
-        CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
-        indent::IndentedWriter, module::Module, plugin::EmitterPlugin,
+        CodeGenerator, CodeGeneratorConfig, Container, Emitter,
+        csharp::{
+            emitter::{CSharp, write_module_header},
+            naming,
+        },
+        indent::IndentedWriter,
+        module::Module,
+        naming::check_reserved_names,
+        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -71,6 +78,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        check_reserved_names(registry, &naming::RULES)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
@@ -88,6 +96,38 @@ impl<'a> CSharpCodeGenerator<'a> {
         }
 
         Ok(())
+    }
+
+    /// Render the companion files contributed by the plugins for `registry`.
+    ///
+    /// Each returned [`CompanionFile`] carries the file's final contents: the
+    /// same module header [`output`](Self::output) writes (minus the module
+    /// helpers), merged with the file's own imports, followed by the plugin's
+    /// body. The installer writes them into the module's namespace directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rendering a header fails.
+    pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+
+        let updated_registry = Self::update_qualified_names(&config, registry);
+        let mut lang = CSharp::new(&config, &updated_registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
+
+        render_companion_files(lang.plugins(), &config, |imports| {
+            let mut header = Vec::new();
+            write_module_header(
+                &mut IndentedWriter::new(&mut header, config.indent),
+                &config,
+                &lang,
+                imports,
+            )?;
+            String::from_utf8(header).map_err(std::io::Error::other)
+        })
     }
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.

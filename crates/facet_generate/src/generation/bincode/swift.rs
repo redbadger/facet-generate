@@ -33,12 +33,19 @@ use indoc::writedoc;
 use crate::generation::{
     CodeGeneratorConfig, Feature,
     indent::{IndentWrite, Newlines, with_block},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    swift::Swift,
+    swift::{Swift, case_name, escape_identifier, field_name, naming},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
 
 use super::BincodePlugin;
+
+/// Rewrite the builtin type names in a module-level helper snippet to their
+/// fully qualified form where the generated module shadows them.
+fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
+    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
+}
 
 // ---------------------------------------------------------------------------
 // Inlined feature helper snippets
@@ -232,27 +239,27 @@ impl EmitterPlugin<Swift> for BincodePlugin {
             match feature {
                 Feature::OptionOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_OPTION_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
                 }
                 Feature::ListOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_LIST_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
                 }
                 Feature::SetOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_SET_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
                 }
                 Feature::MapOfT => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_MAP_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
                 }
                 Feature::TupleArray => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_TUPLE_ARRAY}")?;
+                    write!(w, "{}", qualified(FEATURE_TUPLE_ARRAY, config))?;
                 }
                 Feature::Uuid => {
                     writeln!(w)?;
-                    write!(w, "{FEATURE_UUID}")?;
+                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
                 _ => {}
             }
@@ -267,9 +274,9 @@ impl EmitterPlugin<Swift> for BincodePlugin {
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
         let name = ctx.name();
         if let ContainerFormat::Enum(variants, _, _) = ctx.container.format {
-            write_enum_type_body(w, name, variants)
+            write_enum_type_body(w, name, variants, ctx.config)
         } else {
-            write_struct_type_body(w, name, &ctx.fields())
+            write_struct_type_body(w, name, &ctx.fields(), ctx.config)
         }
     }
 }
@@ -282,6 +289,7 @@ fn write_struct_type_body(
     w: &mut dyn IndentWrite,
     name: &str,
     fields: &[Named<Format>],
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w)?;
     write!(
@@ -291,12 +299,12 @@ fn write_struct_type_body(
     with_block(w, Newlines::BOTH, |w| {
         push_serializer(w)?;
         for field in fields {
-            let fname = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
             write_format_serialize(w, &field.value, &format!("self.{fname}"))?;
         }
         pop_serializer(w)
     })?;
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
 
     writeln!(w)?;
     write!(
@@ -315,12 +323,15 @@ fn write_struct_type_body(
             if i > 0 {
                 write!(w, ", ")?;
             }
-            let fname = field.name.to_lower_camel_case();
-            write!(w, "{fname}: {fname}")?;
+            // The argument *label* is the bare name: Swift warns that a
+            // keyword does not need escaping in an argument list.
+            let label = field.name.to_lower_camel_case();
+            let fname = field_name(&field.name);
+            write!(w, "{label}: {fname}")?;
         }
         writeln!(w, ")")
     })?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
 
     Ok(())
 }
@@ -333,6 +344,7 @@ fn write_enum_type_body(
     w: &mut dyn IndentWrite,
     name: &str,
     variants: &BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w)?;
     write!(
@@ -352,7 +364,7 @@ fn write_enum_type_body(
         })?;
         pop_serializer(w)
     })?;
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
 
     writeln!(w)?;
     write!(
@@ -379,7 +391,7 @@ fn write_enum_type_body(
             Ok(())
         })
     })?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
 
     Ok(())
 }
@@ -393,7 +405,7 @@ fn write_variant_serialize_case(
     variant: &Named<VariantFormat>,
     index: usize,
 ) -> io::Result<()> {
-    let name = variant.name.to_lower_camel_case();
+    let name = case_name(&variant.name);
     match &variant.value {
         VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
         VariantFormat::Unit => {
@@ -431,15 +443,15 @@ fn write_variant_serialize_case(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                let field_name = named.name.to_lower_camel_case();
-                write!(w, "let {field_name}")?;
+                let binding = field_name(&named.name);
+                write!(w, "let {binding}")?;
             }
             writeln!(w, "):")?;
             w.indent();
             writeln!(w, "try serializer.serialize_variant_index(value: {index})")?;
             for named in nameds {
-                let field_name = named.name.to_lower_camel_case();
-                write_format_serialize(w, &named.value, &field_name)?;
+                let binding = field_name(&named.name);
+                write_format_serialize(w, &named.value, &binding)?;
             }
             w.unindent();
         }
@@ -452,7 +464,7 @@ fn write_variant_deserialize_case(
     variant: &Named<VariantFormat>,
     index: usize,
 ) -> io::Result<()> {
-    let name = variant.name.to_lower_camel_case();
+    let name = case_name(&variant.name);
     writeln!(w, "case {index}:")?;
     w.indent();
     match &variant.value {
@@ -482,8 +494,7 @@ fn write_variant_deserialize_case(
         }
         VariantFormat::Struct(nameds) => {
             for named in nameds {
-                let field_name = named.name.to_lower_camel_case();
-                write_format_deserialize(w, &named.value, &field_name)?;
+                write_format_deserialize(w, &named.value, &named.name.to_lower_camel_case())?;
             }
             pop_deserializer(w)?;
             write!(w, "return .{name}(")?;
@@ -491,8 +502,9 @@ fn write_variant_deserialize_case(
                 if i > 0 {
                     write!(w, ", ")?;
                 }
-                let field_name = named.name.to_lower_camel_case();
-                write!(w, "{field_name}: {field_name}")?;
+                let label = named.name.to_lower_camel_case();
+                let binding = field_name(&named.name);
+                write!(w, "{label}: {binding}")?;
             }
             writeln!(w, ")")?;
         }
@@ -505,12 +517,13 @@ fn write_variant_deserialize_case(
 // Serialization wrappers
 // ---------------------------------------------------------------------------
 
-fn write_bincode_serialize(w: &mut dyn IndentWrite) -> io::Result<()> {
+fn write_bincode_serialize(w: &mut dyn IndentWrite, cfg: &CodeGeneratorConfig) -> io::Result<()> {
+    let byte = naming::builtin("UInt8", cfg);
     writeln!(w)?;
     writedoc!(
         w,
         r"
-        public func bincodeSerialize() throws -> [UInt8] {{
+        public func bincodeSerialize() throws -> [{byte}] {{
             let serializer = BincodeSerializer.init();
             try self.serialize(serializer: serializer)
             return serializer.get_bytes()
@@ -519,12 +532,17 @@ fn write_bincode_serialize(w: &mut dyn IndentWrite) -> io::Result<()> {
     )
 }
 
-fn write_bincode_deserialize(w: &mut dyn IndentWrite, name: &str) -> io::Result<()> {
+fn write_bincode_deserialize(
+    w: &mut dyn IndentWrite,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> io::Result<()> {
+    let byte = naming::builtin("UInt8", cfg);
     writeln!(w)?;
     writedoc!(
         w,
         r#"
-        public static func bincodeDeserialize(input: [UInt8]) throws -> {name} {{
+        public static func bincodeDeserialize(input: [{byte}]) throws -> {name} {{
             let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {{
@@ -539,6 +557,36 @@ fn write_bincode_deserialize(w: &mut dyn IndentWrite, name: &str) -> io::Result<
 // ---------------------------------------------------------------------------
 // Format serialisation helpers
 // ---------------------------------------------------------------------------
+
+/// Write the bincode serialization statement(s) for `value_expr`, a Swift
+/// expression of the type described by `format`.
+///
+/// This is the same code the plugin emits for a struct field, exposed for
+/// plugins that need to serialize a value of a type they looked up with
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+///
+/// # Preconditions
+///
+/// A variable named `serializer`, conforming to `Serializer`, must be in
+/// scope at the point of the emitted code, and the code must be inside a
+/// `throws` context (every statement is written with `try`). Container depth
+/// is *not* managed here — that is the caller's job, exactly as it is for the
+/// generated `serialize` methods.
+///
+/// `config` is accepted for symmetry with the other languages; Swift's
+/// serialization does not vary with the configuration.
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub fn write_serialize_value(
+    w: &mut dyn IndentWrite,
+    value_expr: &str,
+    format: &Format,
+    _config: &CodeGeneratorConfig,
+) -> io::Result<()> {
+    write_format_serialize(w, format, value_expr)
+}
 
 fn write_format_serialize(
     w: &mut dyn IndentWrite,
@@ -624,7 +672,7 @@ fn write_format_deserialize(w: &mut dyn IndentWrite, format: &Format, var: &str)
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_deserialize(w, fmt, &format!("{var}Field{i}"))?;
             }
-            write!(w, "let {var} = (")?;
+            write!(w, "let {} = (", escape_identifier(var))?;
             for i in 0..formats.len() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -634,7 +682,7 @@ fn write_format_deserialize(w: &mut dyn IndentWrite, format: &Format, var: &str)
             writeln!(w, ")")
         }
         _ => {
-            write!(w, "let {var} = ")?;
+            write!(w, "let {} = ", escape_identifier(var))?;
             write_deserialize_expr(w, format)?;
             writeln!(w)
         }
@@ -979,5 +1027,47 @@ mod tests {
         assert!(output.contains("return .withValue(x)"));
         assert!(output.contains("bincodeSerialize"));
         assert!(output.contains("bincodeDeserialize"));
+    }
+
+    // -------------------------------------------------------------------------
+    // write_serialize_value — public helper for plugin authors
+    // -------------------------------------------------------------------------
+
+    fn render(f: impl FnOnce(&mut dyn IndentWrite) -> io::Result<()>) -> String {
+        use crate::generation::indent::IndentConfig;
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            f(&mut w).unwrap();
+        }
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_primitive_call() {
+        let cfg = make_config(&[]);
+        let out = render(|w| write_serialize_value(w, "output", &Format::Str, &cfg));
+        insta::assert_snapshot!(out, @"try serializer.serialize_str(value: output)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_method_call_for_a_named_type() {
+        use crate::reflection::format::QualifiedTypeName;
+        let cfg = make_config(&[]);
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"try output.serialize(serializer: serializer)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_helper_call_for_a_container() {
+        let cfg = make_config(&[]);
+        let format = Format::Seq(Box::new(Format::U8));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"
+        try serializeArray(value: output, serializer: serializer) { item, serializer in
+            try serializer.serialize_u8(value: item)
+        }
+        ");
     }
 }

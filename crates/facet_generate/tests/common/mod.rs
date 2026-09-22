@@ -615,3 +615,148 @@ pub fn get_swift_positive_samples() -> Vec<Vec<u8>> {
         .map(|v| bincode::serialize(v).unwrap())
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// Keyword fixture — shared by the per-language compilation tests.
+//
+// Every field and variant name here collides with a keyword in at least one
+// target language, except `import` and `type`, which are soft or contextual
+// keywords everywhere and must come through untouched.
+// ---------------------------------------------------------------------------
+
+#[derive(Facet)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct KeywordFields {
+    pub r#default: String,
+    pub r#in: i32,
+    pub class: bool,
+    pub object: String,
+    pub r#static: bool,
+    pub r#let: String,
+    pub when: i32,
+    pub is: bool,
+    pub fun: String,
+    pub operator: String,
+    pub import: String,
+    pub r#type: String,
+    pub function: Option<String>,
+    /// A tuple field: the Swift plugin derives `whereField0` / `whereField1`
+    /// locals from this name, which must stay unescaped.
+    pub r#where: (i32, String),
+}
+
+#[derive(Facet)]
+pub struct KeywordTuple(pub String, pub i32);
+
+#[derive(Facet)]
+pub struct KeywordNewType(pub String);
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum KeywordEnum {
+    Default,
+    Case,
+    Switch(String),
+    Where { r#in: i32, r#default: String },
+}
+
+/// Registry of the keyword fixture types, used by the per-language
+/// compilation tests.
+pub fn get_keyword_registry() -> Registry {
+    reflect!(KeywordFields, KeywordTuple, KeywordNewType, KeywordEnum).unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// Builtin-shadowing fixture — shared by the per-language compilation tests.
+//
+// `Set` is declared as a top-level struct, so every `Set<T>` the generated
+// module writes must be qualified (`kotlin.collections.Set`, `Swift.Set`, …)
+// while the declaration itself keeps its name.
+// ---------------------------------------------------------------------------
+
+#[derive(Facet)]
+pub struct Get {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct Set {
+    pub key: String,
+    #[facet(fg::bytes)]
+    pub value: Vec<u8>,
+}
+
+#[derive(Facet)]
+pub struct Delete {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct Exists {
+    pub key: String,
+}
+
+#[derive(Facet)]
+pub struct ListKeys {
+    pub prefix: String,
+    pub cursor: u64,
+}
+
+#[derive(Facet)]
+pub struct Keys {
+    // Named `items` rather than `keys`: a C# property may not share its name
+    // with its enclosing type (CS0542).
+    pub items: Vec<String>,
+    pub next_cursor: u64,
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum ValueResult {
+    Ok(Option<Vec<u8>>),
+    Err(String),
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum BoolResult {
+    Ok(bool),
+    Err(String),
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(dead_code)]
+pub enum KeysResult {
+    Ok(Keys),
+    Err(String),
+}
+
+#[derive(Facet)]
+pub struct Store {
+    pub tags: std::collections::HashSet<String>,
+    pub entries: BTreeMap<String, String>,
+    pub blob: Vec<u8>,
+    pub pair: (i32, String),
+}
+
+/// Registry of the builtin-shadowing fixture types, used by the per-language
+/// compilation tests.
+pub fn get_shadowing_registry() -> Registry {
+    reflect!(
+        Get,
+        Set,
+        Delete,
+        Exists,
+        ListKeys,
+        Keys,
+        ValueResult,
+        BoolResult,
+        KeysResult,
+        Store
+    )
+    .unwrap()
+}

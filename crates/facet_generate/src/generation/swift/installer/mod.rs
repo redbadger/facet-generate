@@ -17,9 +17,14 @@
 //!    serve as Swift's module-level namespacing. Cross-module type references
 //!    use `Module.Type` syntax (e.g. `Foo.Tree`).
 //!
-//! 3. **`Package.swift`** — generates an SPM manifest with library products,
-//!    targets (one per namespace plus `Serde` runtime), and dependencies
-//!    (external URL or path packages).
+//! 3. **Companion files** — writes any file a plugin contributes through
+//!    [`companion_files`](crate::generation::plugin::EmitterPlugin::companion_files)
+//!    into the module's own directory, next to the generated source file.
+//!
+//! 4. **`Package.swift`** — generates an SPM manifest with library products,
+//!    targets (one per namespace plus `Serde` runtime), deployment
+//!    [`platforms`](Installer::platforms), and dependencies (external URL or
+//!    path packages, plus any the plugins declare).
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -49,7 +54,16 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     targets: BTreeMap<String, BTreeSet<String>>,
+    /// Plugin-provided dependency edges, keyed by target name.
+    ///
+    /// Kept apart from [`targets`](Self::targets) because these are raw
+    /// `Target.Dependency` expressions (e.g.
+    /// `.product(name: "Shared", package: "Shared")`): they must be written
+    /// verbatim rather than quoted, and they must not be mistaken for local
+    /// targets when deciding which targets are top-level.
+    plugin_target_dependencies: BTreeMap<String, BTreeSet<String>>,
     external_packages: ExternalPackages,
+    platforms: Vec<String>,
     plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
 }
 
@@ -65,7 +79,9 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             targets: BTreeMap::new(),
+            plugin_target_dependencies: BTreeMap::new(),
             external_packages: ExternalPackages::new(),
+            platforms: vec![],
             plugins: vec![],
         }
     }
@@ -87,6 +103,18 @@ impl Installer {
             .iter()
             .map(|d| (d.for_namespace.clone(), d.clone()))
             .collect();
+        self
+    }
+
+    /// Set the deployment targets declared by the generated `Package.swift`.
+    ///
+    /// Each entry is a raw SPM platform expression, e.g. `".iOS(.v16)"`; they
+    /// are rendered, in order, as `platforms: [.iOS(.v16), .macOS(.v13)],`.
+    /// With no entries the manifest has no `platforms:` line, which leaves SPM
+    /// on its own defaults.
+    #[must_use]
+    pub fn platforms(mut self, platforms: &[String]) -> Self {
+        self.platforms = platforms.to_vec();
         self
     }
 
@@ -184,10 +212,44 @@ impl Installer {
     /// dependencies, and a library product exposing the top-level targets.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
+        let all_targets = self.all_targets_with_package(package_name);
+        let external_package_names = self.external_package_names();
+        let library_targets_str =
+            Self::library_targets_str(package_name, &all_targets, &external_package_names);
+        let targets = self.render_targets(&all_targets, &external_package_names);
+        let dependencies_section = self.dependencies_section();
+        let platforms_section = self.platforms_section();
+
+        formatdoc! {r#"
+            // swift-tools-version: 5.8
+            import PackageDescription
+
+            let package = Package(
+                name: "{package}",{platforms}
+                products: [
+                    .library(
+                        name: "{package}",
+                        targets: [{library_targets}]
+                    )
+                ],{dependencies}
+                targets: [{targets}]
+            )
+            "#,
+            package = self.package_name,
+            platforms = platforms_section,
+            library_targets = library_targets_str,
+            dependencies = dependencies_section,
+            targets = format!("\n{}\n    ", targets.join("\n"))
+        }
+    }
+
+    /// All targets keyed by name, plus a synthetic package-level target
+    /// aggregating every namespace target (used to compute the library
+    /// product's target list).
+    fn all_targets_with_package(&self, package_name: &str) -> BTreeMap<String, BTreeSet<String>> {
         let mut all_targets = self.targets.clone();
 
         let mut package_targets = BTreeSet::new();
-
         for targets in all_targets.values() {
             for target in targets {
                 package_targets.insert(target.to_upper_camel_case());
@@ -195,14 +257,26 @@ impl Installer {
         }
         all_targets.insert(package_name.to_upper_camel_case(), package_targets);
 
-        // Get names of external dependencies to exclude from target creation
-        let external_package_names: BTreeSet<String> = self
-            .external_packages
+        all_targets
+    }
+
+    /// Names of external dependencies to exclude from target creation.
+    fn external_package_names(&self) -> BTreeSet<String> {
+        self.external_packages
             .values()
             .map(|d| d.for_namespace.to_upper_camel_case())
-            .collect();
+            .collect()
+    }
 
-        // Find all dependencies referenced by any target
+    /// The quoted, comma-joined list of targets exposed by the library
+    /// product: those that are not external packages and not a dependency
+    /// of any other target, falling back to the main package if every
+    /// target turns out to be a dependency.
+    fn library_targets_str(
+        package_name: &str,
+        all_targets: &BTreeMap<String, BTreeSet<String>>,
+        external_package_names: &BTreeSet<String>,
+    ) -> String {
         let mut all_dependencies = BTreeSet::new();
         for dependencies in all_targets.values() {
             for dep in dependencies {
@@ -210,7 +284,6 @@ impl Installer {
             }
         }
 
-        // Determine which targets are top-level (not dependencies of other targets)
         let top_level_targets: Vec<String> = all_targets
             .keys()
             .filter(|name| {
@@ -219,20 +292,41 @@ impl Installer {
             .cloned()
             .collect();
 
-        // If no top-level targets found (all are dependencies), include the main package
         let library_targets = if top_level_targets.is_empty() {
             vec![package_name.to_string()]
         } else {
             top_level_targets
         };
 
-        let targets: Vec<String> = all_targets
+        library_targets
+            .iter()
+            .map(|t| format!(r#""{t}""#))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// Render each local target's `.target(name:dependencies:)` declaration.
+    fn render_targets(
+        &self,
+        all_targets: &BTreeMap<String, BTreeSet<String>>,
+        external_package_names: &BTreeSet<String>,
+    ) -> Vec<String> {
+        all_targets
             .iter()
             .filter(|(name, _)| !external_package_names.contains(*name))
             .map(|(name, dependencies)| {
+                // Local targets are quoted; plugin-provided edges are already
+                // `Target.Dependency` expressions and go in verbatim.
                 let dependencies = dependencies
                     .iter()
                     .map(|dep| format!(r#""{dep}""#))
+                    .chain(
+                        self.plugin_target_dependencies
+                            .get(name)
+                            .into_iter()
+                            .flatten()
+                            .cloned(),
+                    )
                     .collect::<Vec<String>>()
                     .join(", ");
 
@@ -244,65 +338,43 @@ impl Installer {
 
                 indent_all_with("        ", &base_target)
             })
+            .collect()
+    }
+
+    /// Package-level `dependencies:` section: the external packages, plus
+    /// every `.package(...)` entry the plugins ask for (they arrive
+    /// unindented).
+    fn dependencies_section(&self) -> String {
+        let dependencies: Vec<String> = self
+            .external_packages
+            .values()
+            .cloned()
+            .map(|d| ExternalPackage::to_swift(d, 2))
+            .chain(
+                self.plugins
+                    .iter()
+                    .flat_map(|p| p.manifest_dependencies())
+                    .map(|d| indent_all_with("        ", &d)),
+            )
             .collect();
 
-        let library_targets_str = library_targets
-            .iter()
-            .map(|t| format!(r#""{t}""#))
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        if self.external_packages.is_empty() {
-            formatdoc! {r#"
-                // swift-tools-version: 5.8
-                import PackageDescription
-
-                let package = Package(
-                    name: "{package}",
-                    products: [
-                        .library(
-                            name: "{package}",
-                            targets: [{library_targets}]
-                        )
-                    ],
-                    targets: [{targets}]
-                )
-                "#,
-                package = self.package_name,
-                library_targets = library_targets_str,
-                targets = format!("\n{}\n    ", targets.join("\n"))
-            }
+        if dependencies.is_empty() {
+            String::new()
         } else {
-            let external_packages = self
-                .external_packages
-                .values()
-                .cloned()
-                .map(|d| ExternalPackage::to_swift(d, 2))
-                .collect::<Vec<_>>()
-                .join(",\n");
+            format!(
+                "\n    dependencies: [\n{}\n    ],",
+                dependencies.join(",\n")
+            )
+        }
+    }
 
-            let dependencies_section = format!("\n{external_packages}\n    ");
-            formatdoc! {r#"
-                // swift-tools-version: 5.8
-                import PackageDescription
-
-                let package = Package(
-                    name: "{package}",
-                    products: [
-                        .library(
-                            name: "{package}",
-                            targets: [{library_targets}]
-                        )
-                    ],
-                    dependencies: [{dependencies}],
-                    targets: [{targets}]
-                )
-                "#,
-                package = self.package_name,
-                library_targets = library_targets_str,
-                dependencies = dependencies_section,
-                targets = format!("\n{}\n    ", targets.join("\n"))
-            }
+    /// Package-level `platforms:` section, omitted entirely when empty so
+    /// SPM falls back to its own defaults.
+    fn platforms_section(&self) -> String {
+        if self.platforms.is_empty() {
+            String::new()
+        } else {
+            format!("\n    platforms: [{}],", self.platforms.join(", "))
         }
     }
 }
@@ -337,6 +409,20 @@ impl SourceInstaller for Installer {
             targets.insert("Serde".to_string());
         }
 
+        // Plugin-provided target edges (e.g. `.product(name: "Shared", …)`)
+        // belong to this module's target, not to the runtime targets.
+        let plugin_target_dependencies: Vec<String> = self
+            .plugins
+            .iter()
+            .flat_map(|p| p.target_dependencies())
+            .collect();
+        if !plugin_target_dependencies.is_empty() {
+            self.plugin_target_dependencies
+                .entry(module_name.clone())
+                .or_default()
+                .extend(plugin_target_dependencies);
+        }
+
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;
         let source_path = dir_path.join(format!("{module_name}.swift"));
@@ -349,6 +435,12 @@ impl SourceInstaller for Installer {
 
         let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
+
+        // Companion files live beside the module's own source file, whether or
+        // not the serde runtime is external.
+        for companion in generator.companion_files(registry)? {
+            std::fs::write(dir_path.join(&companion.file_name), companion.contents)?;
+        }
 
         Ok(())
     }

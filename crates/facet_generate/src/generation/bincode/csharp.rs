@@ -20,7 +20,6 @@
 //! | `type_body` | `Serialize`/`Deserialize`/`BincodeSerialize`/`BincodeDeserialize` methods |
 //! | `after_type` | `{EnumName}Bincode` static helper class for all-unit enums |
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
@@ -30,8 +29,9 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
     CodeGeneratorConfig, Feature,
-    csharp::CSharp,
+    csharp::{CSharp, escape_identifier, naming},
     indent::{IndentWrite, Newlines, with_block},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{
@@ -161,7 +161,13 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
         config: &CodeGeneratorConfig,
     ) -> io::Result<()> {
         if config.features.contains(&Feature::Uuid) {
-            write!(w, "{FEATURE_UUID}")?;
+            write!(
+                w,
+                "{}",
+                qualify_helper(FEATURE_UUID, naming::QUALIFIED, |name| naming::shadows(
+                    name, config
+                ))
+            )?;
             writeln!(w)?;
         }
         Ok(())
@@ -201,13 +207,20 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
                 return Ok(());
             }
             let variants: Vec<Named<VariantFormat>> = variants_map.values().cloned().collect();
-            write_record_bincode_helpers(w, ctx.name(), &variants, &ctx.config.unit_variant_enums)
+            write_record_bincode_helpers(
+                w,
+                ctx.name(),
+                &variants,
+                &ctx.config.unit_variant_enums,
+                ctx.config,
+            )
         } else {
             write_class_bincode_methods(
                 w,
                 &ctx.name().to_upper_camel_case(),
                 &ctx.fields(),
                 &ctx.config.unit_variant_enums,
+                ctx.config,
             )
         }
     }
@@ -240,100 +253,6 @@ fn is_all_unit_enum(format: &ContainerFormat) -> bool {
     }
 }
 
-/// Escapes an identifier when it is a reserved C# keyword.
-///
-/// C# verbatim identifiers preserve the identifier's spelling while allowing a
-/// keyword to be used in declaration and reference positions. Contextual
-/// keywords are intentionally omitted because the generated identifiers are
-/// method locals, where those words are valid without escaping.
-fn escape_identifier(identifier: &str) -> Cow<'_, str> {
-    const RESERVED_KEYWORDS: &[&str] = &[
-        "abstract",
-        "as",
-        "base",
-        "bool",
-        "break",
-        "byte",
-        "case",
-        "catch",
-        "char",
-        "checked",
-        "class",
-        "const",
-        "continue",
-        "decimal",
-        "default",
-        "delegate",
-        "do",
-        "double",
-        "else",
-        "enum",
-        "event",
-        "explicit",
-        "extern",
-        "false",
-        "finally",
-        "fixed",
-        "float",
-        "for",
-        "foreach",
-        "goto",
-        "if",
-        "implicit",
-        "in",
-        "int",
-        "interface",
-        "internal",
-        "is",
-        "lock",
-        "long",
-        "namespace",
-        "new",
-        "null",
-        "object",
-        "operator",
-        "out",
-        "override",
-        "params",
-        "private",
-        "protected",
-        "public",
-        "readonly",
-        "ref",
-        "return",
-        "sbyte",
-        "sealed",
-        "short",
-        "sizeof",
-        "stackalloc",
-        "static",
-        "string",
-        "struct",
-        "switch",
-        "this",
-        "throw",
-        "true",
-        "try",
-        "typeof",
-        "uint",
-        "ulong",
-        "unchecked",
-        "unsafe",
-        "ushort",
-        "using",
-        "virtual",
-        "void",
-        "volatile",
-        "while",
-    ];
-
-    if RESERVED_KEYWORDS.contains(&identifier) {
-        Cow::Owned(format!("@{identifier}"))
-    } else {
-        Cow::Borrowed(identifier)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Main code-generation functions
 // ---------------------------------------------------------------------------
@@ -345,13 +264,14 @@ fn write_class_bincode_methods(
     class_name: &str,
     fields: &[Named<Format>],
     c_style_enums: &BTreeSet<String>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w, "public void Serialize(ISerializer serializer)")?;
     with_block(w, Newlines::BOTH, |w| {
         writeln!(w, "serializer.IncreaseContainerDepth();")?;
         for field in fields {
             let field_name = field.name.to_upper_camel_case();
-            write_serialize_value(w, &field_name, &field.value, c_style_enums)?;
+            write_serialize_statement(w, &field_name, &field.value, c_style_enums)?;
         }
         writeln!(w, "serializer.DecreaseContainerDepth();")?;
         Ok(())
@@ -367,7 +287,7 @@ fn write_class_bincode_methods(
         for field in fields {
             let lower_camel_name = field.name.to_lower_camel_case();
             let local_name = escape_identifier(&lower_camel_name);
-            write_deserialize_binding(w, &local_name, &field.value, c_style_enums)?;
+            write_deserialize_binding(w, &local_name, &field.value, c_style_enums, cfg)?;
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
         if fields.is_empty() {
@@ -440,6 +360,7 @@ fn write_record_bincode_helpers(
     base_name: &str,
     variants: &[Named<VariantFormat>],
     c_style_enums: &BTreeSet<String>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     writeln!(w, "public abstract void Serialize(ISerializer serializer);")?;
     writeln!(w)?;
@@ -452,7 +373,7 @@ fn write_record_bincode_helpers(
             "private static {base_name} Deserialize{variant_name}(IDeserializer deserializer)"
         )?;
         with_block(w, Newlines::BOTH, |w| {
-            deserializer_variant_body(w, variant, c_style_enums)
+            deserializer_variant_body(w, variant, c_style_enums, cfg)
         })?;
         writeln!(w)?;
 
@@ -652,16 +573,18 @@ fn serializer_variant_body_write(
 ) -> io::Result<()> {
     match &variant.value {
         VariantFormat::Unit => Ok(()),
-        VariantFormat::NewType(format) => write_serialize_value(w, "Value", format, c_style_enums),
+        VariantFormat::NewType(format) => {
+            write_serialize_statement(w, "Value", format, c_style_enums)
+        }
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_serialize_value(w, &format!("Field{index}"), format, c_style_enums)?;
+                write_serialize_statement(w, &format!("Field{index}"), format, c_style_enums)?;
             }
             Ok(())
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_serialize_value(
+                write_serialize_statement(
                     w,
                     &field.name.to_upper_camel_case(),
                     &field.value,
@@ -680,13 +603,14 @@ fn deserializer_variant_body(
     w: &mut dyn IndentWrite,
     variant: &Named<VariantFormat>,
     c_style_enums: &BTreeSet<String>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     match &variant.value {
         VariantFormat::Unit => {
             writeln!(w, "return new {}();", variant.name.to_upper_camel_case())
         }
         VariantFormat::NewType(format) => {
-            write_deserialize_binding(w, "value", format, c_style_enums)?;
+            write_deserialize_binding(w, "value", format, c_style_enums, cfg)?;
             writeln!(
                 w,
                 "return new {}(value);",
@@ -695,7 +619,7 @@ fn deserializer_variant_body(
         }
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("field{index}"), format, c_style_enums)?;
+                write_deserialize_binding(w, &format!("field{index}"), format, c_style_enums, cfg)?;
             }
             let args = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -712,7 +636,7 @@ fn deserializer_variant_body(
             for field in fields {
                 let lower_camel_name = field.name.to_lower_camel_case();
                 let local_name = escape_identifier(&lower_camel_name);
-                write_deserialize_binding(w, &local_name, &field.value, c_style_enums)?;
+                write_deserialize_binding(w, &local_name, &field.value, c_style_enums, cfg)?;
             }
             let args = fields
                 .iter()
@@ -823,11 +747,13 @@ fn write_deserialize_expr(
             let type_name = format_qualified_type_name(qtn);
             write!(w, "{type_name}Bincode.Deserialize({de})")
         }
-        Format::TypeName(type_name) => write!(
-            w,
-            "{}.Deserialize({de})",
-            csharp_type(&Format::TypeName(type_name.clone()))
-        ),
+        Format::TypeName(type_name) => {
+            write!(
+                w,
+                "{}.Deserialize({de})",
+                format_qualified_type_name(type_name)
+            )
+        }
         Format::Unit => write!(w, "{de}.DeserializeUnit()"),
         Format::Bool => write!(w, "{de}.DeserializeBool()"),
         Format::I8 => write!(w, "{de}.DeserializeI8()"),
@@ -878,11 +804,41 @@ fn write_deserialize_expr(
     }
 }
 
+/// Write the bincode serialization statement(s) for `value_expr`, a C#
+/// expression of the type described by `format`.
+///
+/// This is the same code the plugin emits for a property, exposed for plugins
+/// that need to serialize a value of a type they looked up with
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+///
+/// # Preconditions
+///
+/// A variable named `serializer`, of type `ISerializer`, must be in scope at
+/// the point of the emitted code. Container depth is *not* managed here —
+/// that is the caller's job, exactly as it is for the generated `Serialize`
+/// methods. `config` decides how a named type is serialized: C-style enums
+/// (all-unit-variant enums) become plain C# `enum`s and go through their
+/// static `{Enum}Bincode` helper, and the emitter recognises them through
+/// `config.unit_variant_enums`, so pass the config for the module being
+/// generated.
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub fn write_serialize_value(
+    w: &mut dyn IndentWrite,
+    value_expr: &str,
+    format: &Format,
+    config: &CodeGeneratorConfig,
+) -> io::Result<()> {
+    write_serialize_statement(w, value_expr, format, &config.unit_variant_enums)
+}
+
 /// Writes a top-level serialize statement: `expr;\n`.
 ///
 /// Tuples are expanded inline — each element becomes its own statement, accessing
 /// `.Item1`, `.Item2`, etc. on the value expression.
-fn write_serialize_value(
+fn write_serialize_statement(
     w: &mut dyn IndentWrite,
     value_expr: &str,
     format: &Format,
@@ -890,7 +846,7 @@ fn write_serialize_value(
 ) -> io::Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_serialize_value(
+            write_serialize_statement(
                 w,
                 &format!("{value_expr}.Item{}", index + 1),
                 inner,
@@ -913,6 +869,7 @@ fn write_deserialize_binding(
     var_name: &str,
     format: &Format,
     c_style_enums: &BTreeSet<String>,
+    cfg: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
@@ -921,10 +878,15 @@ fn write_deserialize_binding(
                 &format!("{var_name}_item{}", index + 1),
                 inner,
                 c_style_enums,
+                cfg,
             )?;
         }
         if formats.is_empty() {
-            writeln!(w, "var {var_name} = new Unit();")
+            writeln!(
+                w,
+                "var {var_name} = new {}();",
+                naming::builtin("Unit", cfg)
+            )
         } else {
             let values = (0..formats.len())
                 .map(|i| format!("{var_name}_item{}", i + 1))
@@ -1063,52 +1025,8 @@ fn option_deserialize_helper(inner: &Format, c_style_enums: &BTreeSet<String>) -
 }
 
 // ---------------------------------------------------------------------------
-// Type rendering helpers (duplicated from csharp/emitter/mod.rs)
+// Type rendering helpers
 // ---------------------------------------------------------------------------
-
-/// Maps a [`Format`] to its C# type name.
-fn csharp_type(format: &Format) -> String {
-    match format {
-        Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qualified_type_name) => format_qualified_type_name(qualified_type_name),
-        Format::Unit => "Unit".to_string(),
-        Format::Bool => "bool".to_string(),
-        Format::I8 => "sbyte".to_string(),
-        Format::I16 => "short".to_string(),
-        Format::I32 => "int".to_string(),
-        Format::I64 => "long".to_string(),
-        Format::I128 => "Int128".to_string(),
-        Format::U8 => "byte".to_string(),
-        Format::U16 => "ushort".to_string(),
-        Format::U32 => "uint".to_string(),
-        Format::U64 => "ulong".to_string(),
-        Format::U128 => "UInt128".to_string(),
-        Format::F32 => "float".to_string(),
-        Format::F64 => "double".to_string(),
-        Format::Char => "char".to_string(),
-        Format::Str => "string".to_string(),
-        Format::Bytes => "byte[]".to_string(),
-        Format::Uuid => "Guid".to_string(),
-        Format::Option(inner) => format!("{}?", csharp_type(inner)),
-        Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
-        Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),
-        Format::Map { key, value } => {
-            format!("Dictionary<{}, {}>", csharp_type(key), csharp_type(value))
-        }
-        Format::Tuple(formats) => {
-            if formats.is_empty() {
-                return "Unit".to_string();
-            }
-            let values = formats
-                .iter()
-                .map(csharp_type)
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("({values})")
-        }
-        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content)),
-    }
-}
 
 /// Formats a [`QualifiedTypeName`] as a C# dotted name.
 fn format_qualified_type_name(qualified_type_name: &QualifiedTypeName) -> String {
@@ -1359,5 +1277,33 @@ mod tests {
 
         let out = render(|w| plugin.after_type(w, &ctx));
         assert!(out.is_empty(), "expected empty output, got:\n{out}");
+    }
+
+    // -------------------------------------------------------------------------
+    // write_serialize_value — public helper for plugin authors
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn write_serialize_value_emits_a_primitive_call() {
+        let cfg = CodeGeneratorConfig::new("test".to_string());
+        let out = render(|w| write_serialize_value(w, "output", &Format::Str, &cfg));
+        insta::assert_snapshot!(out, @"serializer.SerializeStr(output);");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_method_call_for_a_named_type() {
+        let cfg = CodeGeneratorConfig::new("test".to_string());
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"output.Serialize(serializer);");
+    }
+
+    #[test]
+    fn write_serialize_value_routes_c_style_enums_through_their_helper() {
+        let mut cfg = CodeGeneratorConfig::new("test".to_string());
+        cfg.unit_variant_enums.insert("Flag".to_string());
+        let format = Format::TypeName(QualifiedTypeName::root("Flag".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"FlagBincode.Serialize(output, serializer);");
     }
 }

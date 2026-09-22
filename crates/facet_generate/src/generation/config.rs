@@ -75,6 +75,15 @@ pub struct CodeGeneratorConfig {
     /// branch `Format::TypeName` serialization: enums use standalone
     /// `serializeX(value, serializer)` functions while structs use `.serialize(serializer)`.
     pub enum_type_names: BTreeSet<String>,
+    /// Every type name the generated module declares, in raw registry spelling:
+    /// each container name, plus the variant names of every enum that has at
+    /// least one non-unit variant (Kotlin and C# nest those as classes and
+    /// records).
+    ///
+    /// Populated by `update_from`. Used to decide whether a builtin type name
+    /// the generated code would otherwise write bare (`Set`, `Map`, `String`,
+    /// …) is shadowed by a declaration and must be written fully qualified.
+    pub declared_type_names: BTreeSet<String>,
 }
 
 /// Container or leaf types in the registry that need a runtime support file
@@ -159,6 +168,7 @@ impl CodeGeneratorConfig {
             referenced_namespaces: BTreeSet::new(),
             unit_variant_enums: BTreeSet::new(),
             enum_type_names: BTreeSet::new(),
+            declared_type_names: BTreeSet::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -311,6 +321,8 @@ impl CodeGeneratorConfig {
                 entry.push(name.name.clone());
             }
 
+            self.declared_type_names.insert(name.name.clone());
+
             if let ContainerFormat::Enum(variants, _, _) = format {
                 self.enum_type_names.insert(name.name.clone());
                 if variants
@@ -318,6 +330,13 @@ impl CodeGeneratorConfig {
                     .all(|v| matches!(v.value, VariantFormat::Unit))
                 {
                     self.unit_variant_enums.insert(name.name.clone());
+                } else {
+                    // A data-carrying enum is emitted as a nested class or
+                    // record per variant, so each variant name is a declared
+                    // type too.
+                    for variant in variants.values() {
+                        self.declared_type_names.insert(variant.name.clone());
+                    }
                 }
             }
         }
@@ -344,6 +363,18 @@ pub struct Config {
     /// External packages to reference.
     #[builder(default = vec![], setter(each(name = "reference")))]
     pub external_packages: Vec<ExternalPackage>,
+    /// Swift only: the deployment targets the generated package declares.
+    ///
+    /// Each entry is a raw SPM platform expression — `".iOS(.v16)"` — and they
+    /// are rendered in the order given as
+    /// `platforms: [.iOS(.v16), .macOS(.v13)],`. Leave empty to omit the
+    /// `platforms:` line, which leaves SPM on its own defaults.
+    ///
+    /// This is configuration rather than a plugin hook because the floor
+    /// depends on the app the generated package is linked into, which no
+    /// plugin can know.
+    #[builder(default = vec![], setter(each(name = "platform", into)))]
+    pub platforms: Vec<String>,
 }
 
 impl Config {
@@ -393,6 +424,7 @@ pub struct ExternalPackage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reflection::format::{Doc, EnumTagging, Named, QualifiedTypeName};
 
     #[test]
     fn with_parent() {
@@ -410,6 +442,62 @@ mod tests {
             .module_name;
         let expected = format!("{root_package}.{child_package}");
         assert_eq!(&actual, &expected);
+    }
+
+    #[test]
+    fn declared_type_names_includes_variants_of_data_carrying_enums_only() {
+        let mut variants = BTreeMap::new();
+        variants.insert(
+            0u32,
+            Named::new(&VariantFormat::Unit, "UnitOnly".to_string()),
+        );
+        let unit_enum = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
+
+        let mut variants = BTreeMap::new();
+        variants.insert(0u32, Named::new(&VariantFormat::Unit, "Err".to_string()));
+        variants.insert(
+            1u32,
+            Named::new(
+                &VariantFormat::NewType(Box::new(Format::Str)),
+                "Ok".to_string(),
+            ),
+        );
+        let data_enum = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
+
+        let mut registry = Registry::new();
+        registry.insert(
+            QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "Set".to_string(),
+            },
+            ContainerFormat::UnitStruct(Doc::default()),
+        );
+        registry.insert(
+            QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "UnitEnum".to_string(),
+            },
+            unit_enum,
+        );
+        registry.insert(
+            QualifiedTypeName {
+                namespace: Namespace::Root,
+                name: "DataEnum".to_string(),
+            },
+            data_enum,
+        );
+
+        let mut config = CodeGeneratorConfig::new("test".to_string());
+        config.update_from(&registry);
+
+        let names: Vec<&str> = config
+            .declared_type_names
+            .iter()
+            .map(String::as_str)
+            .collect();
+        // Container names, plus the variants of the data-carrying enum — but
+        // not `UnitOnly`, which becomes an enum constant rather than a type.
+        assert_eq!(names, ["DataEnum", "Err", "Ok", "Set", "UnitEnum"]);
     }
 
     #[test]
@@ -438,5 +526,21 @@ mod tests {
     fn config_builder_defaults_external_packages_to_empty() {
         let config = Config::builder("MyPackage", "/tmp/out").build();
         assert!(config.external_packages.is_empty());
+    }
+
+    #[test]
+    fn config_builder_populates_platforms_in_order() {
+        let config = Config::builder("MyPackage", "/tmp/out")
+            .platform(".iOS(.v16)")
+            .platform(".macOS(.v13)")
+            .build();
+
+        assert_eq!(config.platforms, vec![".iOS(.v16)", ".macOS(.v13)"]);
+    }
+
+    #[test]
+    fn config_builder_defaults_platforms_to_empty() {
+        let config = Config::builder("MyPackage", "/tmp/out").build();
+        assert!(config.platforms.is_empty());
     }
 }

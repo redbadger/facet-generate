@@ -2,6 +2,102 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.21.0] - unreleased
+
+Extensibility work for **out-of-tree `EmitterPlugin` implementations**. Everything a
+plugin needs to emit code *about* a type — where to hook in, how to name it, how to
+render it, how to serialize it — is now part of the public API, so a plugin no longer
+has to re-implement (and drift from) the emitters' own naming and rendering rules.
+Nothing the in-tree plugins generate changes for types that compiled before: every
+existing snapshot and expect-file is byte-for-byte identical. Alongside that, generated
+code no longer trips over the target language's reserved words or builtin type names. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs`
+is unchanged and stays at 0.18.0.
+
+Motivated by, but not specific to, the effect-handler code generation in
+[redbadger/crux#581](https://github.com/redbadger/crux/pull/581).
+
+### 💥 Breaking Changes
+
+- **`CodeGeneratorConfig` gained a public `declared_type_names: BTreeSet<String>` field.**
+  As with `parent` in 0.20.0, the struct has all-public fields and is not
+  `#[non_exhaustive]`, so a struct literal or exhaustive destructuring no longer compiles;
+  use `CodeGeneratorConfig::new()` and the builder methods. The field is filled in by
+  `update_from` with every type and data-carrying variant the module declares, and is what
+  lets `render_type` decide whether a builtin needs qualifying [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **`swift::case_name` now escapes Swift keywords**, so a plugin that used it for a
+  variant named `Struct` or `Default` sees `` `struct` `` / `` `default` `` where it
+  previously saw the bare (uncompilable) word [#126](https://github.com/redbadger/facet-generate/pull/126)
+
+### 🚀 Features
+
+- **`RegistryBuilder::format_of::<T>()`** — the `Format` a struct field of type `T`
+  would be given, so a plugin can name and serialize a type it did not receive as the
+  container being emitted. Named containers become `TypeName(qualified)` honouring
+  `rename` / `fg::namespace` / `transparent`, `()` becomes `Unit`, and `Option`, `Vec`,
+  maps, tuples and primitives become the corresponding structural format. `T`'s
+  container types should be added with `add_type` first [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Public `write_serialize_value` per language** — `generation::bincode::{swift, kotlin, typescript, csharp}::write_serialize_value(w, value_expr, format, config)` emits exactly the bincode serialization statements the plugin writes for a field of that format. Each documents its precondition: a `serializer` variable of the language's conventional type in scope, and container depth managed by the caller [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Public naming and type-rendering helpers** so plugins reproduce emitter naming exactly: `generation::{swift,kotlin,typescript,csharp}::render_type(format, config)`, plus `swift::case_name`, `kotlin::variant_class_name`, `kotlin::enum_constant_name` and `csharp::escape_identifier` (which was private in `bincode::csharp`) [#123](https://github.com/redbadger/facet-generate/pull/123)
+- **Reserved words are escaped in every language.** A field or variant whose generated
+  identifier is a keyword (`default`, `in`, `class`, `where`, …) is now written with the
+  language's own escape — backticks in Swift and Kotlin, `@` in C#, and in TypeScript a
+  `_`-suffixed parameter or local while the property keeps its name — everywhere the
+  emitters and the bincode/JSON plugins spell it: declarations, initialiser labels,
+  bindings, patterns and property accesses. Escaping is pure quoting, so wire names are
+  untouched. New public helpers `swift::field_name`, `swift::escape_identifier`,
+  `kotlin::property_name`, `kotlin::escape_identifier`, `typescript::param_name` and
+  `typescript::is_reserved_word` let plugins reproduce the emitters' spelling exactly;
+  the word lists live in one `naming` module per language with a shared driver [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **Builtin type names are qualified when a generated type shadows them.** A Rust type
+  called `Set`, `List`, `Map`, `String`, `Dictionary`… is emitted under its own name, and
+  every reference to the builtin of the same name in that module is written fully
+  qualified instead — `kotlin.collections.Set<T>`, `Swift.Set<T>`,
+  `global::System.Collections.Generic.HashSet<T>`, `globalThis.Map<K, V>` — including the
+  module-level serialization helpers. Prompted by `crux_kv`'s `Set` operation struct, which
+  previously hid `kotlin.collections.Set` for the whole generated package. Nothing changes
+  when no name is shadowed [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **Names that can be neither escaped nor qualified are rejected before anything is
+  written.** A type named after an explicit import the generated code depends on
+  (`Serializer`, `Bytes`, `UUID`, the TypeScript `str`/`Seq` aliases…), or a field that
+  would become a member the language or the generated code already provides (`toString`,
+  `copy`, `hashCode`, `GetHashCode`, a C# property named like its class, `serializer`,
+  `deserializer`), now fails generation with an `InvalidInput` error that names the
+  language, the offending type or field, why it clashes, and suggests
+  `#[facet(rename = "...")]` [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **`EmitContext::variants()`** — the container's variants keyed by discriminant, or `None` when it is not an enum [#123](https://github.com/redbadger/facet-generate/pull/123)
+
+### 🐛 Bug Fixes
+
+- **Keyword-named fields and variants generated code that did not compile** — a Rust
+  `r#default` field came out as `public var default: String` in Swift and `val in: Int` in
+  Kotlin, a `Default` variant as `case default`, and a TypeScript constructor took a
+  parameter literally named `class`. All four targets now compile such types; the
+  `generate_types_with_keywords` fixture (dormant since the typeshare days) is live again
+  for every language, and Swift, Kotlin and TypeScript gained compile tests alongside the
+  existing C# one [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **fix(kotlin): `#[facet(bytes)]` fields compile under the JSON plugin** — the emitter
+  writes such a field as `Bytes`, but the JSON plugin never imported it, and the runtime's
+  `com.novi.serde.Bytes` is not `@Serializable` anyway, so `gradle build` failed with
+  `Unresolved reference 'Bytes'`. The plugin now emits a `BytesSerializer` and a
+  `typealias Bytes` that binds it, on the same pattern as `UUID`, encoding the value as a
+  JSON array of bytes [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **The Kotlin compile test compiles something now.** The installer writes the package tree
+  at the project root while Gradle reads `src/main/kotlin`, so `test_that_kotlin_code_compiles`
+  had always ended in `compileKotlin NO-SOURCE` and asserted nothing. All Kotlin compile tests
+  now share one setup that moves the sources into the source set, pins the JVM target, and
+  fails unless `compileKotlin` genuinely ran. Making it real exposed two generator bugs that
+  are recorded in the test rather than fixed here: Kotlin JSON cannot serialise `u128`/`i128`
+  because the unconditional `import java.math.BigInteger` outranks the plugin's
+  `typealias BigInteger`, and Kotlin bincode output for the main fixture does not compile
+  (128-bit integers, `char`, and `Vec<()>` / maps of unit) [#126](https://github.com/redbadger/facet-generate/pull/126)
+- **`after_type` now fires for every top-level type, in every language** — it was only called for TypeScript enums and C# all-unit enums, which made it unusable as the "emit something alongside this type" hook it is documented to be. It is now called after every top-level container: Swift structs and enums, Kotlin `data class` / `data object` / `enum class` / `sealed interface`, TypeScript classes (as well as enums), and C# classes, sealed records and `abstract record` variant hierarchies (as well as enums). It is still never called for an individual enum variant, and the context is always a top-level one [#123](https://github.com/redbadger/facet-generate/pull/123)
+
+  **A third-party plugin implementing `after_type` will now be called at call sites it
+  never saw before**, and must guard on the container shape (`ctx.container.format`, or
+  the new `ctx.variants()`) and return `Ok(())` for the rest — as the in-tree bincode
+  and JSON plugins already did. The hook table in the `generation::plugin` module docs
+  records exactly where it fires.
+
 ## [0.20.0] - 2026-08-26
 
 Two generated-output fixes, released as a minor bump because one of them widens the

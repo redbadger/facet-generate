@@ -1088,7 +1088,7 @@ fn enum_with_mixed_variants() {
         case unit
         case newType(String)
         case tuple(String, Int32)
-        case struct(field: Bool)
+        case `struct`(field: Bool)
 
         public func serialize<S: Serializer>(serializer: S) throws {
             try serializer.increase_container_depth()
@@ -1102,7 +1102,7 @@ fn enum_with_mixed_variants() {
                 try serializer.serialize_variant_index(value: 2)
                 try serializer.serialize_str(value: x0)
                 try serializer.serialize_i32(value: x1)
-            case .struct(let field):
+            case .`struct`(let field):
                 try serializer.serialize_variant_index(value: 3)
                 try serializer.serialize_bool(value: field)
             }
@@ -1134,7 +1134,7 @@ fn enum_with_mixed_variants() {
             case 3:
                 let field = try deserializer.deserialize_bool()
                 try deserializer.decrease_container_depth()
-                return .struct(field: field)
+                return .`struct`(field: field)
             default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
             }
         }
@@ -2213,6 +2213,143 @@ fn namespaced_child() {
         }
 
         public static func bincodeDeserialize(input: [UInt8]) throws -> Child {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
+}
+
+#[test]
+fn keyword_fields_struct() {
+    #[derive(Facet)]
+    #[allow(clippy::struct_excessive_bools)]
+    struct KeywordFields {
+        r#default: String,
+        r#in: i32,
+        object: bool,
+        import: bool,
+    }
+
+    let actual = emit!(KeywordFields as Swift with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public struct KeywordFields: Hashable, Equatable {
+        public var `default`: String
+        public var `in`: Int32
+        public var object: Bool
+        public var `import`: Bool
+
+        public init(`default`: String, `in`: Int32, object: Bool, `import`: Bool) {
+            self.`default` = `default`
+            self.`in` = `in`
+            self.object = object
+            self.`import` = `import`
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serializer.serialize_str(value: self.`default`)
+            try serializer.serialize_i32(value: self.`in`)
+            try serializer.serialize_bool(value: self.object)
+            try serializer.serialize_bool(value: self.`import`)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> KeywordFields {
+            try deserializer.increase_container_depth()
+            let `default` = try deserializer.deserialize_str()
+            let `in` = try deserializer.deserialize_i32()
+            let object = try deserializer.deserialize_bool()
+            let `import` = try deserializer.deserialize_bool()
+            try deserializer.decrease_container_depth()
+            return KeywordFields(default: `default`, in: `in`, object: object, import: `import`)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> KeywordFields {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+    }
+    "#);
+}
+
+#[test]
+fn keyword_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum KeywordEnum {
+        Default,
+        Switch(String),
+        Where { r#in: i32, r#default: String },
+    }
+
+    let actual = emit!(KeywordEnum as Swift with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    indirect public enum KeywordEnum: Hashable, Equatable {
+        case `default`
+        case `switch`(String)
+        case `where`(`in`: Int32, `default`: String)
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            switch self {
+            case .`default`:
+                try serializer.serialize_variant_index(value: 0)
+            case .`switch`(let x):
+                try serializer.serialize_variant_index(value: 1)
+                try serializer.serialize_str(value: x)
+            case .`where`(let `in`, let `default`):
+                try serializer.serialize_variant_index(value: 2)
+                try serializer.serialize_i32(value: `in`)
+                try serializer.serialize_str(value: `default`)
+            }
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> KeywordEnum {
+            let index = try deserializer.deserialize_variant_index()
+            try deserializer.increase_container_depth()
+            switch index {
+            case 0:
+                try deserializer.decrease_container_depth()
+                return .`default`
+            case 1:
+                let x = try deserializer.deserialize_str()
+                try deserializer.decrease_container_depth()
+                return .`switch`(x)
+            case 2:
+                let `in` = try deserializer.deserialize_i32()
+                let `default` = try deserializer.deserialize_str()
+                try deserializer.decrease_container_depth()
+                return .`where`(in: `in`, default: `default`)
+            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for KeywordEnum: \(index)")
+            }
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> KeywordEnum {
             let deserializer = BincodeDeserializer.init(input: input);
             let obj = try deserialize(deserializer: deserializer)
             if deserializer.get_buffer_offset() < input.count {

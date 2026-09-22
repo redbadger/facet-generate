@@ -54,7 +54,9 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
+use super::naming::builtin;
 use std::{
+    borrow::Cow,
     io::{Result, Write},
     sync::Arc,
 };
@@ -123,21 +125,44 @@ impl CSharp {
     }
 }
 
+/// Write the module header — the `using` directives (built-in,
+/// plugin-provided, and the caller's `extra_imports`, each a whole
+/// `using …;` directive) and the file-scoped `namespace` declaration.
+///
+/// Shared by [`Module`]'s emitter and by the generator when it renders a
+/// plugin's companion file, which needs the same header but none of the module
+/// helpers (they are declared once, in the module file).
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub(crate) fn write_module_header<W: IndentWrite>(
+    w: &mut W,
+    config: &CodeGeneratorConfig,
+    lang: &CSharp,
+    extra_imports: &[String],
+) -> Result<()> {
+    let CodeGeneratorConfig { module_name, .. } = config;
+    writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
+    writeln!(w, "using Facet.Runtime.Serde;")?;
+    writeln!(w, "using System.Collections.Generic;")?;
+    writeln!(w, "using System.Collections.ObjectModel;")?;
+    // Plugin-provided using directives (e.g. Facet.Runtime.Json / Bincode).
+    for plugin in lang.plugins() {
+        for import in plugin.imports(config) {
+            writeln!(w, "{import}")?;
+        }
+    }
+    for import in extra_imports {
+        writeln!(w, "{import}")?;
+    }
+    writeln!(w)?;
+    writeln!(w, "namespace {};", namespace_name(module_name))
+}
+
 impl Emitter<CSharp> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &CSharp) -> Result<()> {
-        let CodeGeneratorConfig { module_name, .. } = self.config();
-        writeln!(w, "using CommunityToolkit.Mvvm.ComponentModel;")?;
-        writeln!(w, "using Facet.Runtime.Serde;")?;
-        writeln!(w, "using System.Collections.Generic;")?;
-        writeln!(w, "using System.Collections.ObjectModel;")?;
-        // Plugin-provided using directives (e.g. Facet.Runtime.Json / Bincode).
-        for plugin in lang.plugins() {
-            for import in plugin.imports(self.config()) {
-                writeln!(w, "{import}")?;
-            }
-        }
-        writeln!(w)?;
-        writeln!(w, "namespace {};", namespace_name(module_name))?;
+        write_module_header(w, self.config(), lang, &[])?;
         // Plugin module helpers (e.g. UuidSerde from BincodePlugin).
         // These are emitted per-module file rather than into a shared runtime
         // file because they reference types (e.g. Guid) that may not be in
@@ -215,7 +240,7 @@ impl Emitter<CSharp> for Named<Format> {
         writeln!(
             w,
             "private {} _{};",
-            csharp_type(&self.value),
+            csharp_type(&self.value, &lang.config),
             self.name.to_lower_camel_case()
         )
     }
@@ -237,7 +262,7 @@ fn write_field<W: IndentWrite>(
     writeln!(
         w,
         "private {} _{};",
-        csharp_type(&field.value),
+        csharp_type(&field.value, &lang.config),
         field.name.to_lower_camel_case()
     )
 }
@@ -272,7 +297,7 @@ fn write_sealed_record<W: IndentWrite>(
 
     if !any_plugin(lang.plugins(), |p| p.has_type_body(&ctx)) {
         writeln!(w, "public sealed record {record_name}{conforms};")?;
-        return Ok(());
+        return write_after_type(w, &ctx, lang);
     }
 
     write!(w, "public sealed record {record_name}{conforms} ")?;
@@ -283,6 +308,15 @@ fn write_sealed_record<W: IndentWrite>(
         }
     }
 
+    write_after_type(w, &ctx, lang)
+}
+
+/// Run the plugin `after_type` hook for a top-level type, at the indentation
+/// level of the type declaration itself.
+fn write_after_type<W: IndentWrite>(w: &mut W, ctx: &EmitContext<'_>, lang: &CSharp) -> Result<()> {
+    for plugin in lang.plugins() {
+        plugin.after_type(w as &mut dyn IndentWrite, ctx)?;
+    }
     Ok(())
 }
 
@@ -315,24 +349,26 @@ fn write_class<W: IndentWrite>(
 
     if fields.is_empty() && !has_plugin_body {
         let _ = w.block(Newlines::CLOSE)?;
-        return Ok(());
+        return write_after_type(w, &ctx, lang);
     }
 
-    let mut w = w.block(Newlines::BOTH)?;
-    for field in fields {
-        write_field(&mut w, field, &ctx, lang)?;
-    }
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        for field in fields {
+            write_field(&mut w, field, &ctx, lang)?;
+        }
 
-    for plugin in lang.plugins() {
-        if plugin.has_type_body(&ctx) {
-            if !fields.is_empty() {
-                writeln!(w)?;
+        for plugin in lang.plugins() {
+            if plugin.has_type_body(&ctx) {
+                if !fields.is_empty() {
+                    writeln!(w)?;
+                }
+                plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
             }
-            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
         }
     }
 
-    Ok(())
+    write_after_type(w, &ctx, lang)
 }
 
 fn write_enum<W: IndentWrite>(
@@ -369,11 +405,7 @@ fn write_enum<W: IndentWrite>(
     }
 
     // After-type content from plugins (e.g. {EnumName}Bincode static class).
-    for plugin in lang.plugins() {
-        plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
-    }
-
-    Ok(())
+    write_after_type(w, &ctx, lang)
 }
 
 fn write_variant_record_hierarchy<W: IndentWrite>(
@@ -411,10 +443,31 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     };
 
     write!(w, "public abstract record {base_name}{conforms} ")?;
-    let mut w = w.block(Newlines::BOTH)?;
+    {
+        let mut w = w.block(Newlines::BOTH)?;
+        write_variant_records(&mut w, base_name.as_str(), variants, partial, lang)?;
 
+        // Plugin type bodies (JSON helpers or Bincode abstract method +
+        // partial record overrides).
+        for plugin in lang.plugins() {
+            plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
+        }
+    }
+
+    write_after_type(w, &ctx, lang)
+}
+
+/// Write the `sealed record` declaration for each variant of an
+/// `abstract record` hierarchy.
+fn write_variant_records<W: IndentWrite>(
+    w: &mut W,
+    base_name: &str,
+    variants: &[Named<VariantFormat>],
+    partial: &str,
+    lang: &CSharp,
+) -> Result<()> {
     for variant in variants {
-        variant.doc.write(&mut w, lang)?;
+        variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
         write!(w, "public sealed{partial} record {variant_name}")?;
         match &variant.value {
@@ -422,7 +475,12 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
                 writeln!(w, "() : {base_name};")?;
             }
             VariantFormat::NewType(inner) => {
-                writeln!(w, "({} Value) : {};", csharp_type(inner), base_name)?;
+                writeln!(
+                    w,
+                    "({} Value) : {};",
+                    csharp_type(inner, &lang.config),
+                    base_name
+                )?;
             }
             VariantFormat::Tuple(values) => {
                 write!(w, "(")?;
@@ -430,7 +488,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
                     if index > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{} Field{}", csharp_type(format), index)?;
+                    write!(w, "{} Field{}", csharp_type(format, &lang.config), index)?;
                 }
                 writeln!(w, ") : {base_name};")?;
             }
@@ -443,7 +501,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
                     write!(
                         w,
                         "{} {}",
-                        csharp_type(&field.value),
+                        csharp_type(&field.value, &lang.config),
                         field.name.to_upper_camel_case()
                     )?;
                 }
@@ -454,54 +512,93 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
         writeln!(w)?;
     }
 
-    // Plugin type bodies (JSON helpers or Bincode abstract method + partial record overrides).
-    for plugin in lang.plugins() {
-        plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
-    }
-
     Ok(())
 }
 
-fn csharp_type(format: &Format) -> String {
+// ---------------------------------------------------------------------------
+// Public helpers for plugin authors
+// ---------------------------------------------------------------------------
+
+/// Render `format` as the C# type expression the emitter would use for a
+/// property of that type — for example `int`, `ObservableCollection<string>`,
+/// `Foo?`, `Dictionary<string, Bar>`, or `Other.Child` for a type in another
+/// namespace.
+///
+/// `config` supplies the set of type names the module declares, so a builtin
+/// a declaration shadows (`HashSet`, `Dictionary`, …) is written with its
+/// `global::` qualified name.
+#[must_use]
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    csharp_type(format, config)
+}
+
+/// Escapes an identifier when it is a reserved C# keyword.
+///
+/// C# verbatim identifiers preserve the identifier's spelling while allowing a
+/// keyword to be used in declaration and reference positions. Contextual
+/// keywords are intentionally omitted because the generated identifiers are
+/// method locals, where those words are valid without escaping.
+///
+/// Plugins that generate parameter or local names from field or variant names
+/// should route them through this so the result matches the emitter.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
+}
+
+fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
         Format::TypeName(qualified_type_name) => format_qualified_type_name(qualified_type_name),
-        Format::Unit => "Unit".to_string(),
+        Format::Unit => builtin("Unit", config).into_owned(),
         Format::Bool => "bool".to_string(),
         Format::I8 => "sbyte".to_string(),
         Format::I16 => "short".to_string(),
         Format::I32 => "int".to_string(),
         Format::I64 => "long".to_string(),
-        Format::I128 => "Int128".to_string(),
+        Format::I128 => builtin("Int128", config).into_owned(),
         Format::U8 => "byte".to_string(),
         Format::U16 => "ushort".to_string(),
         Format::U32 => "uint".to_string(),
         Format::U64 => "ulong".to_string(),
-        Format::U128 => "UInt128".to_string(),
+        Format::U128 => builtin("UInt128", config).into_owned(),
         Format::F32 => "float".to_string(),
         Format::F64 => "double".to_string(),
         Format::Char => "char".to_string(),
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
-        Format::Uuid => "Guid".to_string(),
-        Format::Option(inner) => format!("{}?", csharp_type(inner)),
-        Format::Seq(inner) => format!("ObservableCollection<{}>", csharp_type(inner)),
-        Format::Set(inner) => format!("HashSet<{}>", csharp_type(inner)),
+        Format::Uuid => builtin("Guid", config).into_owned(),
+        Format::Option(inner) => format!("{}?", csharp_type(inner, config)),
+        Format::Seq(inner) => format!(
+            "{}<{}>",
+            builtin("ObservableCollection", config),
+            csharp_type(inner, config)
+        ),
+        Format::Set(inner) => format!(
+            "{}<{}>",
+            builtin("HashSet", config),
+            csharp_type(inner, config)
+        ),
         Format::Map { key, value } => {
-            format!("Dictionary<{}, {}>", csharp_type(key), csharp_type(value))
+            format!(
+                "{}<{}, {}>",
+                builtin("Dictionary", config),
+                csharp_type(key, config),
+                csharp_type(value, config)
+            )
         }
         Format::Tuple(formats) => {
             if formats.is_empty() {
-                return "Unit".to_string();
+                return builtin("Unit", config).into_owned();
             }
             let values = formats
                 .iter()
-                .map(csharp_type)
+                .map(|f| csharp_type(f, config))
                 .collect::<Vec<_>>()
                 .join(", ");
             format!("({values})")
         }
-        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content)),
+        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content, config)),
     }
 }
 

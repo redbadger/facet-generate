@@ -155,3 +155,68 @@ fn output_bincode_encoding_adds_runtime_imports() {
     assert!(output.contains("using Facet.Runtime.Serde;"));
     assert!(output.contains("using Facet.Runtime.Bincode;"));
 }
+
+// ---------------------------------------------------------------------------
+// Reserved-name pre-pass
+// ---------------------------------------------------------------------------
+
+#[test]
+fn type_named_bincode_serializer_is_rejected() {
+    #[derive(facet::Facet)]
+    #[facet(rename = "BincodeSerializer")]
+    struct Renamed {
+        name: String,
+    }
+
+    let registry = crate::reflect!(Renamed).unwrap();
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    let err = CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "C#: type `BincodeSerializer` collides with the runtime type `Facet.Runtime.Bincode.BincodeSerializer` used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+#[test]
+fn field_named_get_hash_code_is_rejected() {
+    #[derive(facet::Facet)]
+    struct Foo {
+        get_hash_code: String,
+    }
+
+    let registry = crate::reflect!(Foo).unwrap();
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    let err = CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "C#: field `get_hash_code` of `Foo` would become `GetHashCode`, which hides an inherited member of every C# object; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+#[test]
+fn field_named_after_its_enclosing_type_is_rejected() {
+    #[derive(facet::Facet)]
+    struct Keys {
+        keys: Vec<String>,
+    }
+
+    let registry = crate::reflect!(Keys).unwrap();
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    let err = CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "C#: field `keys` of `Keys` would become property `Keys`, the same name as its enclosing type (CS0542); rename it with #[facet(rename = \"...\")]"
+    );
+}

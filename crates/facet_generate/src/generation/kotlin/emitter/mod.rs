@@ -45,6 +45,7 @@
 //! (`generation/json/kotlin.rs`).
 
 use std::{
+    borrow::Cow,
     collections::BTreeMap,
     io::{Result, Write},
     string::ToString,
@@ -53,12 +54,14 @@ use std::{
 
 use heck::ToLowerCamelCase;
 
+use super::naming::{self, builtin};
 use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Feature,
         indent::{IndentWrite, Newlines},
         module::Module,
+        naming::qualify_helper,
         plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
@@ -131,47 +134,79 @@ impl Kotlin {
     }
 }
 
+/// Write the module header — the `package` declaration and the sorted,
+/// deduplicated `import` lines (feature-driven, plugin-provided, and the
+/// caller's `extra_imports`, each a whole `import …` line).
+///
+/// Shared by [`Module`]'s emitter and by the generator when it renders a
+/// plugin's companion file, which needs the same header but none of the module
+/// helpers (they are declared once, in the module file).
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub(crate) fn write_module_header<W: IndentWrite>(
+    w: &mut W,
+    config: &CodeGeneratorConfig,
+    lang: &Kotlin,
+    extra_imports: &[String],
+) -> Result<()> {
+    let CodeGeneratorConfig {
+        module_name,
+        features,
+        ..
+    } = config;
+
+    writeln!(w, "package {module_name}")?;
+    writeln!(w)?;
+
+    // --- Imports ---
+    // Language-level imports that are NOT driven by plugins stay here.
+    // Bincode imports are now provided by BincodePlugin::imports().
+    let mut imports: Vec<String> = vec![];
+
+    // `import java.math.BigInteger` is needed regardless of plugins, including
+    // when no plugin runs. Plugin-specific BigInt imports (JSON KSerializer,
+    // Bincode Int128) are added by their respective plugins.
+    if features.contains(&Feature::BigInt) {
+        imports.push("import java.math.BigInteger".to_string());
+    }
+
+    // --- Plugin imports ---
+    for plugin in lang.plugins() {
+        imports.extend(plugin.imports(config));
+    }
+
+    imports.extend(extra_imports.iter().cloned());
+
+    imports.sort_unstable();
+    imports.dedup();
+    if !imports.is_empty() {
+        for import in imports {
+            writeln!(w, "{import}")?;
+        }
+        writeln!(w)?;
+    }
+
+    Ok(())
+}
+
 impl Emitter<Kotlin> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
-        let CodeGeneratorConfig {
-            module_name,
-            features,
-            ..
-        } = self.config();
+        write_module_header(w, self.config(), lang, &[])?;
 
-        writeln!(w, "package {module_name}")?;
-        writeln!(w)?;
-
-        // --- Imports ---
-        // Language-level imports that are NOT driven by plugins stay here.
-        // Bincode imports are now provided by BincodePlugin::imports().
-        let mut imports: Vec<String> = vec![];
-
-        // --- Feature-driven imports (non-plugin) ---
+        // --- Feature helpers (non-plugin) ---
         let mut features_out = vec![];
-        for feature in features {
-            match feature {
-                Feature::BigInt => {
-                    // `import java.math.BigInteger` is needed regardless of plugins,
-                    // including when no plugin runs.
-                    // Plugin-specific BigInt imports (JSON KSerializer, Bincode
-                    // Int128) are added by their respective plugins.
-                    imports.push("import java.math.BigInteger".to_string());
-                }
-                Feature::TupleArray => {
-                    // TupleArray is encoding-independent — stays in the emitter.
-                    write!(features_out, "{FEATURE_TUPLE_ARRAY}")?;
-                    writeln!(features_out)?;
-                }
-                // Bincode feature helpers (ListOfT, SetOfT, MapOfT, OptionOfT, Bytes)
-                // are now provided by BincodePlugin::module_helpers() / imports().
-                _ => {}
-            }
-        }
-
-        // --- Plugin imports ---
-        for plugin in lang.plugins() {
-            imports.extend(plugin.imports(self.config()));
+        if self.config().features.contains(&Feature::TupleArray) {
+            // TupleArray is encoding-independent — stays in the emitter.
+            write!(
+                features_out,
+                "{}",
+                qualify_helper(FEATURE_TUPLE_ARRAY, naming::QUALIFIED, |name| {
+                    naming::shadows(name, self.config())
+                })
+            )?;
+            writeln!(features_out)?;
         }
 
         // --- Plugin module helpers ---
@@ -180,20 +215,6 @@ impl Emitter<Kotlin> for Module {
             for plugin in lang.plugins() {
                 plugin.module_helpers(&mut fw, self.config())?;
             }
-        }
-
-        let mut imports = imports
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>();
-
-        imports.sort_unstable();
-        imports.dedup();
-        if !imports.is_empty() {
-            for import in imports {
-                writeln!(w, "{import}")?;
-            }
-            writeln!(w)?;
         }
 
         w.write_all(&features_out)?;
@@ -249,6 +270,15 @@ impl Emitter<Kotlin> for Container<'_> {
             }
         }
 
+        // Plugin after-type hook — fires once per top-level type, after its
+        // closing brace. `data_class` / `data_object` deliberately do not call
+        // it: they are reused for sealed-interface variants (with a temporary
+        // container), and `after_type` is a top-level-only hook.
+        let ctx = EmitContext::top_level(self, &lang.config);
+        for plugin in lang.plugins() {
+            plugin.after_type(w as &mut dyn IndentWrite, &ctx)?;
+        }
+
         Ok(())
     }
 }
@@ -257,7 +287,7 @@ impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         self.doc.write(w, lang)?;
 
-        let name = &self.name.to_lower_camel_case();
+        let name = &property_name(&self.name);
         write!(w, "val {name}: ")?;
 
         self.value.write(w, lang)?;
@@ -383,6 +413,85 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Public helpers for plugin authors
+// ---------------------------------------------------------------------------
+
+/// Render `format` as the Kotlin type expression the emitter would use for a
+/// property of that type — for example `Int`, `List<String>`, `Foo?`,
+/// `Map<String, Bar>`, or `other.Child` for a type in another namespace.
+///
+/// `config` is accepted for symmetry with the other languages and to keep the
+/// helper stable if Kotlin's type rendering becomes configuration-dependent.
+///
+/// # Panics
+///
+/// Panics if `format` is a placeholder ([`Format::Variable`]), which never
+/// survives registry construction.
+#[must_use]
+pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    let lang = Kotlin {
+        config: config.clone(),
+        plugins: vec![],
+    };
+    let mut buf = Vec::new();
+    {
+        let mut w = crate::generation::indent::IndentedWriter::new(
+            &mut buf,
+            crate::generation::indent::IndentConfig::Space(0),
+        );
+        format
+            .write(&mut w, &lang)
+            .expect("writing to a Vec cannot fail");
+    }
+    String::from_utf8(buf).expect("type expression should be valid UTF-8")
+}
+
+/// The name of the nested `data class` / `data object` the emitter generates
+/// for a variant of a `sealed interface` (an enum with at least one variant
+/// that carries data).
+///
+/// The variant name is used verbatim, so from outside the interface the class
+/// is referred to as `Parent.Variant`.
+#[must_use]
+pub fn variant_class_name(variant_name: &str) -> String {
+    variant_name.to_string()
+}
+
+/// The name of the constant the emitter generates for a variant of an
+/// `enum class` (an enum whose variants are all unit variants).
+#[must_use]
+pub fn enum_constant_name(variant_name: &str) -> String {
+    variant_name.to_uppercase()
+}
+
+/// The Kotlin property name the emitter gives to a struct field, a
+/// struct-variant field, or a tuple/newtype member.
+///
+/// Field names are lower-camel-cased (`not_found` → `notFound`) and Kotlin
+/// hard keywords are escaped with backticks (`in` → `` `in` ``). Soft
+/// keywords — including the synthetic member names `value` and `field0` — are
+/// left alone.
+///
+/// Plugins that emit a property access, a local binding, or a constructor
+/// argument derived from a field name should route it through this so the
+/// result matches the emitter.
+#[must_use]
+pub fn property_name(name: &str) -> String {
+    escape_identifier(&name.to_lower_camel_case()).into_owned()
+}
+
+/// Escapes an identifier when it is a Kotlin hard keyword, by wrapping it in
+/// backticks.
+///
+/// Backticks are pure quoting: the identifier's spelling is unchanged, so the
+/// name a serialization format sees (a `@SerialName`, a JSON key) is the bare
+/// one. Already-escaped identifiers are returned unchanged.
+#[must_use]
+pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
+    super::naming::RULES.escape(identifier)
+}
+
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
@@ -394,20 +503,20 @@ impl Emitter<Kotlin> for Format {
                     ty = qualified_type_name.format(ToString::to_string, ".")
                 )
             }
-            Self::Unit => write!(w, "Unit"),
-            Self::Bool => write!(w, "Boolean"),
-            Self::I8 => write!(w, "Byte"),
-            Self::I16 => write!(w, "Short"),
-            Self::I32 => write!(w, "Int"),
-            Self::I64 => write!(w, "Long"),
-            Self::U8 => write!(w, "UByte"),
-            Self::U16 => write!(w, "UShort"),
-            Self::U32 => write!(w, "UInt"),
-            Self::U64 => write!(w, "ULong"),
+            Self::Unit => write!(w, "{}", builtin("Unit", &lang.config)),
+            Self::Bool => write!(w, "{}", builtin("Boolean", &lang.config)),
+            Self::I8 => write!(w, "{}", builtin("Byte", &lang.config)),
+            Self::I16 => write!(w, "{}", builtin("Short", &lang.config)),
+            Self::I32 => write!(w, "{}", builtin("Int", &lang.config)),
+            Self::I64 => write!(w, "{}", builtin("Long", &lang.config)),
+            Self::U8 => write!(w, "{}", builtin("UByte", &lang.config)),
+            Self::U16 => write!(w, "{}", builtin("UShort", &lang.config)),
+            Self::U32 => write!(w, "{}", builtin("UInt", &lang.config)),
+            Self::U64 => write!(w, "{}", builtin("ULong", &lang.config)),
             Self::I128 | Self::U128 => write!(w, "BigInteger"),
-            Self::F32 => write!(w, "Float"),
-            Self::F64 => write!(w, "Double"),
-            Self::Char | Self::Str => write!(w, "String"),
+            Self::F32 => write!(w, "{}", builtin("Float", &lang.config)),
+            Self::F64 => write!(w, "{}", builtin("Double", &lang.config)),
+            Self::Char | Self::Str => write!(w, "{}", builtin("String", &lang.config)),
             Self::Bytes => write!(w, "Bytes"),
             Self::Uuid => write!(w, "UUID"),
 
@@ -416,17 +525,17 @@ impl Emitter<Kotlin> for Format {
                 write!(w, "?")
             }
             Self::Seq(format) => {
-                write!(w, "List<")?;
+                write!(w, "{}<", builtin("List", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
             Self::Set(format) => {
-                write!(w, "Set<")?;
+                write!(w, "{}<", builtin("Set", &lang.config))?;
                 format.write(w, lang)?;
                 write!(w, ">")
             }
             Self::Map { key, value } => {
-                write!(w, "Map<")?;
+                write!(w, "{}<", builtin("Map", &lang.config))?;
                 key.write(w, lang)?;
                 write!(w, ", ")?;
                 value.write(w, lang)?;
@@ -435,20 +544,20 @@ impl Emitter<Kotlin> for Format {
             Self::Tuple(formats) => {
                 let len = formats.len();
                 match len {
-                    0 => write!(w, "Unit"),
+                    0 => write!(w, "{}", builtin("Unit", &lang.config)),
                     1 => {
                         // A single-element tuple is just the element itself
                         formats[0].write(w, lang)
                     }
                     2 => {
-                        write!(w, "Pair<")?;
+                        write!(w, "{}<", builtin("Pair", &lang.config))?;
                         formats[0].write(w, lang)?;
                         write!(w, ", ")?;
                         formats[1].write(w, lang)?;
                         write!(w, ">")
                     }
                     3 => {
-                        write!(w, "Triple<")?;
+                        write!(w, "{}<", builtin("Triple", &lang.config))?;
                         formats[0].write(w, lang)?;
                         write!(w, ", ")?;
                         formats[1].write(w, lang)?;
@@ -470,7 +579,7 @@ impl Emitter<Kotlin> for Format {
                 }
             }
             Self::TupleArray { content, size: _ } => {
-                write!(w, "List<")?;
+                write!(w, "{}<", builtin("List", &lang.config))?;
                 content.write(w, lang)?;
                 write!(w, ">")
             }

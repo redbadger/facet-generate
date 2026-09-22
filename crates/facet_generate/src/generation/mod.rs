@@ -58,6 +58,10 @@ pub mod typescript;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
+/// Shared machinery for keeping generated identifiers out of the target
+/// language's reserved words.
+pub(crate) mod naming;
+
 use std::io::{Result, Write};
 
 pub use config::*;

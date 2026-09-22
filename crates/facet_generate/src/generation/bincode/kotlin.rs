@@ -10,17 +10,23 @@
 
 use std::io::{self, Result, Write};
 
-use heck::ToLowerCamelCase;
 use indoc::writedoc;
 
 use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::Kotlin,
+    kotlin::{Kotlin, naming, property_name},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, Format, Named, VariantFormat};
+
+/// Rewrite the builtin type names in a module-level helper snippet to their
+/// fully qualified form where the generated module shadows them.
+fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
+    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
+}
 
 /// Look up the package path for `namespace` in the config's external packages.
 /// Falls back to `default` when no override is configured.
@@ -151,11 +157,12 @@ fun Deserializer.deserializeUuid(): UUID {
 }
 "#;
 
-fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
+fn write_bincode_serialize<W: Write>(w: &mut W, cfg: &CodeGeneratorConfig) -> Result<()> {
+    let byte_array = naming::builtin("ByteArray", cfg);
     writedoc!(
         w,
         r"
-        fun bincodeSerialize(): ByteArray {{
+        fun bincodeSerialize(): {byte_array} {{
             val serializer = BincodeSerializer()
             serialize(serializer)
             return serializer.get_bytes()
@@ -164,12 +171,18 @@ fn write_bincode_serialize<W: Write>(w: &mut W) -> Result<()> {
     )
 }
 
-fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
+fn write_bincode_deserialize<W: Write>(
+    w: &mut W,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> Result<()> {
+    let byte_array = naming::builtin("ByteArray", cfg);
+    let throws = naming::builtin("Throws", cfg);
     writedoc!(
         w,
         r#"
-        @Throws(DeserializationError::class)
-        fun bincodeDeserialize(input: ByteArray?): {name} {{
+        @{throws}(DeserializationError::class)
+        fun bincodeDeserialize(input: {byte_array}?): {name} {{
             if (input == null) {{
                 throw DeserializationError("Cannot deserialize null array")
             }}
@@ -182,6 +195,41 @@ fn write_bincode_deserialize<W: Write>(w: &mut W, name: &str) -> Result<()> {
         }}
         "#
     )
+}
+
+/// Write the bincode serialization statement(s) for `value_expr`, a Kotlin
+/// expression of the type described by `format`.
+///
+/// This is the same code the plugin emits for a `data class` property,
+/// exposed for plugins that need to serialize a value of a type they looked
+/// up with
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+///
+/// # Preconditions
+///
+/// A variable named `serializer`, of type `Serializer`, must be in scope at
+/// the point of the emitted code. Container depth is *not* managed here —
+/// that is the caller's job, exactly as it is for the generated `serialize`
+/// methods.
+///
+/// `config` is accepted for symmetry with the other languages; Kotlin's
+/// serialization does not vary with the configuration.
+///
+/// # Errors
+///
+/// Returns an error if writing to `w` fails.
+pub fn write_serialize_value(
+    w: &mut dyn IndentWrite,
+    value_expr: &str,
+    format: &Format,
+    _config: &CodeGeneratorConfig,
+) -> Result<()> {
+    // `write_serialize` needs a sized writer (it opens `{ }` blocks for
+    // lambdas); an `IndentedWriter` writing *through* the trait object keeps
+    // the caller's indentation as the baseline. Nesting level starts at 0.
+    let config = w.config();
+    let mut w = IndentedWriter::new(w, config);
+    write_serialize(&mut w, value_expr, format, 0)
 }
 
 fn write_serialize<W: IndentWrite>(
@@ -481,12 +529,16 @@ fn pop_deserializer<W: Write>(w: &mut W) -> Result<()> {
 
 /// Write the bincode type body for a top-level `data object` (unit struct or
 /// empty struct).
-fn write_data_object_top_level<W: IndentWrite>(w: &mut W, name: &str) -> Result<()> {
+fn write_data_object_top_level<W: IndentWrite>(
+    w: &mut W,
+    name: &str,
+    cfg: &CodeGeneratorConfig,
+) -> Result<()> {
     write!(w, "fun serialize(serializer: Serializer) ")?;
     let _ = w.block(Newlines::CLOSE)?;
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     write!(w, "fun deserialize(deserializer: Deserializer): {name} ")?;
@@ -495,7 +547,7 @@ fn write_data_object_top_level<W: IndentWrite>(w: &mut W, name: &str) -> Result<
         writeln!(w, "return {name}")?;
     }
     writeln!(w)?;
-    write_bincode_deserialize(w, name)?;
+    write_bincode_deserialize(w, name, cfg)?;
     Ok(())
 }
 
@@ -529,6 +581,7 @@ fn write_data_class_top_level<W: IndentWrite>(
     w: &mut W,
     name: &str,
     fields: &[Named<Format>],
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     // serialize
     write!(w, "fun serialize(serializer: Serializer) ")?;
@@ -538,13 +591,13 @@ fn write_data_class_top_level<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         push_serializer(&mut w)?;
         for field in fields {
-            write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
+            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     // companion object
@@ -561,7 +614,7 @@ fn write_data_class_top_level<W: IndentWrite>(
                 for field in fields {
                     write_deserialize(
                         &mut w,
-                        Some(&field.name.to_lower_camel_case()),
+                        Some(&property_name(&field.name)),
                         &field.value,
                         true,
                     )?;
@@ -572,13 +625,13 @@ fn write_data_class_top_level<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", field.name.to_lower_camel_case())?;
+                    write!(w, "{}", property_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
         }
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -600,7 +653,7 @@ fn write_data_class_variant<W: IndentWrite>(
         push_serializer(&mut w)?;
         writeln!(w, "serializer.serialize_variant_index({variant_index})")?;
         for field in fields {
-            write_serialize(&mut w, &field.name.to_lower_camel_case(), &field.value, 0)?;
+            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -620,7 +673,7 @@ fn write_data_class_variant<W: IndentWrite>(
                 for field in fields {
                     write_deserialize(
                         &mut w,
-                        Some(&field.name.to_lower_camel_case()),
+                        Some(&property_name(&field.name)),
                         &field.value,
                         true,
                     )?;
@@ -631,7 +684,7 @@ fn write_data_class_variant<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", field.name.to_lower_camel_case())?;
+                    write!(w, "{}", property_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
@@ -645,6 +698,7 @@ fn write_enum_class_body<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     writeln!(w)?;
     write!(w, "fun serialize(serializer: Serializer) ")?;
@@ -656,7 +710,7 @@ fn write_enum_class_body<W: IndentWrite>(
     }
     writeln!(w)?;
 
-    write_bincode_serialize(w)?;
+    write_bincode_serialize(w, cfg)?;
     writeln!(w)?;
 
     write!(w, "companion object ")?;
@@ -684,7 +738,7 @@ fn write_enum_class_body<W: IndentWrite>(
             }
         }
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -695,6 +749,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
     w: &mut W,
     name: &str,
     variants: &std::collections::BTreeMap<u32, Named<VariantFormat>>,
+    cfg: &CodeGeneratorConfig,
 ) -> Result<()> {
     writeln!(w)?;
     write!(w, "companion object ")?;
@@ -720,7 +775,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
         }
 
         writeln!(w)?;
-        write_bincode_deserialize(&mut w, name)?;
+        write_bincode_deserialize(&mut w, name, cfg)?;
     }
     Ok(())
 }
@@ -807,23 +862,23 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         for feature in &config.features {
             match feature {
                 Feature::ListOfT => {
-                    write!(w, "{FEATURE_LIST_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::OptionOfT => {
-                    write!(w, "{FEATURE_OPTION_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::SetOfT => {
-                    write!(w, "{FEATURE_SET_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::MapOfT => {
-                    write!(w, "{FEATURE_MAP_OF_T}")?;
+                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
                     writeln!(w)?;
                 }
                 Feature::Uuid => {
-                    write!(w, "{FEATURE_UUID}")?;
+                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
                     writeln!(w)?;
                 }
                 // BigInt and Bytes add imports (handled above); TupleArray is
@@ -862,7 +917,7 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                     let mut iw = IndentedWriter::new(&mut *w, config);
                     writeln!(iw, "fun serialize(serializer: Serializer)")?;
                     writeln!(iw)?;
-                    write_bincode_serialize(&mut iw)?;
+                    write_bincode_serialize(&mut iw, ctx.config)?;
                     writeln!(iw)?;
                 }
             }
@@ -920,9 +975,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 let config = w.config();
                 let mut iw = IndentedWriter::new(&mut *w, config);
                 if all_unit {
-                    write_enum_class_body(&mut iw, name, variants)?;
+                    write_enum_class_body(&mut iw, name, variants, ctx.config)?;
                 } else {
-                    write_sealed_interface_body(&mut iw, name, variants)?;
+                    write_sealed_interface_body(&mut iw, name, variants, ctx.config)?;
                 }
             }
             return Ok(());
@@ -933,9 +988,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
             let config = w.config();
             let mut iw = IndentedWriter::new(&mut *w, config);
             if fields.is_empty() {
-                write_data_object_top_level(&mut iw, name)?;
+                write_data_object_top_level(&mut iw, name, ctx.config)?;
             } else {
-                write_data_class_top_level(&mut iw, name, &fields)?;
+                write_data_class_top_level(&mut iw, name, &fields, ctx.config)?;
             }
         }
 
@@ -1206,5 +1261,47 @@ mod tests {
         assert!(!output.is_empty());
         assert!(output.contains("fun serialize(serializer: Serializer)"));
         assert!(output.contains("fun deserialize(deserializer: Deserializer)"));
+    }
+
+    // -------------------------------------------------------------------------
+    // write_serialize_value — public helper for plugin authors
+    // -------------------------------------------------------------------------
+
+    fn render(f: impl FnOnce(&mut dyn IndentWrite) -> Result<()>) -> String {
+        use crate::generation::indent::IndentConfig;
+        let mut buf = Vec::new();
+        {
+            let mut w = IndentedWriter::new(&mut buf, IndentConfig::Space(4));
+            f(&mut w).unwrap();
+        }
+        String::from_utf8(buf).unwrap()
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_primitive_call() {
+        let cfg = make_config(&[]);
+        let out = render(|w| write_serialize_value(w, "output", &Format::Str, &cfg));
+        insta::assert_snapshot!(out, @"serializer.serialize_str(output)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_method_call_for_a_named_type() {
+        use crate::reflection::format::QualifiedTypeName;
+        let cfg = make_config(&[]);
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"output.serialize(serializer)");
+    }
+
+    #[test]
+    fn write_serialize_value_emits_a_lambda_for_a_container() {
+        let cfg = make_config(&[]);
+        let format = Format::Seq(Box::new(Format::U8));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"
+        output.serialize(serializer) {
+            serializer.serialize_u8(it)
+        }
+        ");
     }
 }

@@ -49,6 +49,25 @@ const FEATURE_UUID: &str = r#"private object UUIDSerializer : KSerializer<java.u
 typealias UUID = @Serializable(with = UUIDSerializer::class) java.util.UUID
 "#;
 
+/// The `Bytes` JSON helper — a custom `KSerializer<com.novi.serde.Bytes>` that
+/// round-trips the serde runtime's `Bytes` value class as a JSON array of byte
+/// values, plus the `Bytes` alias that binds it to the emitted type name.
+///
+/// The emitter writes a bare `Bytes` for [`Format::Bytes`](crate::reflection::format::Format::Bytes),
+/// and `com.novi.serde.Bytes` is not itself `@Serializable`, so without this
+/// alias kotlinx.serialization has neither a name nor a serializer for it.
+const FEATURE_BYTES: &str = r"private object BytesSerializer : KSerializer<com.novi.serde.Bytes> {
+    private val delegate = ByteArraySerializer()
+    override val descriptor = delegate.descriptor
+    override fun deserialize(decoder: Decoder): com.novi.serde.Bytes =
+        com.novi.serde.Bytes(decoder.decodeSerializableValue(delegate))
+    override fun serialize(encoder: Encoder, value: com.novi.serde.Bytes) =
+        encoder.encodeSerializableValue(delegate, value.content)
+}
+
+typealias Bytes = @Serializable(with = BytesSerializer::class) com.novi.serde.Bytes
+";
+
 impl EmitterPlugin<Kotlin> for JsonPlugin {
     /// Returns the serde Kotlin runtime sources needed for JSON encoding.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
@@ -82,6 +101,16 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
             "import kotlinx.serialization.SerialName".to_string(),
         ];
 
+        // Bytes JSON-specific imports
+        if config.features.contains(&Feature::Bytes) {
+            imports.extend([
+                "import kotlinx.serialization.KSerializer".to_string(),
+                "import kotlinx.serialization.builtins.ByteArraySerializer".to_string(),
+                "import kotlinx.serialization.encoding.Decoder".to_string(),
+                "import kotlinx.serialization.encoding.Encoder".to_string(),
+            ]);
+        }
+
         // UUID JSON-specific imports
         if config.features.contains(&Feature::Uuid) {
             imports.extend([
@@ -111,15 +140,20 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
         imports
     }
 
-    /// `BigInt` JSON helper snippet for a Kotlin module.
+    /// JSON helper snippets for a Kotlin module.
     ///
-    /// When `BigInt` types are present, emits the custom `KSerializer<BigInteger>`
-    /// that serializes big integers as unquoted JSON number literals.
+    /// Emits the custom `KSerializer`s (and, where the underlying type is not
+    /// `@Serializable`, the `typealias` that binds them to the emitted type
+    /// name) for whichever of `Bytes`, `UUID` and `BigInteger` the module uses.
     fn module_helpers(
         &self,
         w: &mut dyn IndentWrite,
         config: &CodeGeneratorConfig,
     ) -> io::Result<()> {
+        if config.features.contains(&Feature::Bytes) {
+            write!(w, "{FEATURE_BYTES}")?;
+            writeln!(w)?;
+        }
         if config.features.contains(&Feature::Uuid) {
             write!(w, "{FEATURE_UUID}")?;
             writeln!(w)?;
@@ -205,6 +239,30 @@ mod tests {
 
         assert!(imports.iter().any(|i| i.contains("Serializable")));
         assert!(imports.iter().any(|i| i.contains("SerialName")));
+    }
+
+    #[test]
+    fn bytes_adds_json_imports_and_alias() {
+        let cfg = make_config(&[Feature::Bytes]);
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<Kotlin>;
+        let imports = plugin.imports(&cfg);
+
+        assert!(imports.iter().any(|i| i.contains("KSerializer")));
+        assert!(imports.iter().any(|i| i.contains("ByteArraySerializer")));
+        assert!(imports.iter().any(|i| i.contains("encoding.Decoder")));
+        assert!(imports.iter().any(|i| i.contains("encoding.Encoder")));
+
+        let mut buf = Vec::new();
+        {
+            use crate::generation::indent::IndentedWriter;
+            let mut w = IndentedWriter::new(&mut buf, cfg.indent);
+            plugin.module_helpers(&mut w, &cfg).unwrap();
+        }
+
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains(
+            "typealias Bytes = @Serializable(with = BytesSerializer::class) com.novi.serde.Bytes"
+        ));
     }
 
     #[test]
