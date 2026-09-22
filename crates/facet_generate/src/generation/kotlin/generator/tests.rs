@@ -970,6 +970,120 @@ fn type_named_serializer_is_rejected() {
     );
 }
 
+/// A nested class only shadows the file's imports inside the enum that
+/// declares it, so a variant may take the name of an import as long as nothing
+/// in its own enum refers to that import — even when another type in the
+/// module does, and the import is written.
+#[test]
+fn variant_named_bytes_is_allowed_when_its_enum_has_no_bytes_field() {
+    use crate as fg;
+
+    #[derive(facet::Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Value {
+        None,
+        Bytes(Vec<u8>),
+    }
+
+    #[derive(facet::Facet)]
+    struct Set {
+        key: String,
+        #[facet(fg::bytes)]
+        value: Vec<u8>,
+    }
+
+    let registry = crate::reflect!(Value, Set).unwrap();
+    let mut cfg = CodeGeneratorConfig::new("com.example".to_string());
+    cfg.update_from(&registry);
+    let mut out = Vec::new();
+    KotlinCodeGenerator::new(&cfg)
+        .output(&mut out, &registry)
+        .unwrap();
+
+    let source = String::from_utf8(out).unwrap();
+    assert!(source.contains("class Bytes("), "{source}");
+    assert!(source.contains("val value: Bytes"), "{source}");
+}
+
+/// Inside that enum, though, `Bytes` would name the nested class, so a bytes
+/// field in a sibling variant makes the name a genuine collision.
+#[test]
+fn variant_named_bytes_is_rejected_when_its_enum_has_a_bytes_field() {
+    use crate as fg;
+
+    #[derive(facet::Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Blob {
+        Bytes(Vec<u8>),
+        Raw(#[facet(fg::bytes)] Vec<u8>),
+    }
+
+    let registry = crate::reflect!(Blob).unwrap();
+    let cfg = CodeGeneratorConfig::new("com.example".to_string());
+    let err = KotlinCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Kotlin: type `Bytes` collides with the `Bytes` import used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
+/// The `Bytes` import is only written for a module with a bytes field, so a
+/// top-level type of that name is fine in a module without one.
+#[test]
+fn type_named_bytes_is_allowed_when_nothing_in_the_module_is_bytes() {
+    #[derive(facet::Facet)]
+    #[facet(rename = "Bytes")]
+    struct Renamed {
+        name: String,
+    }
+
+    let registry = crate::reflect!(Renamed).unwrap();
+    let cfg = CodeGeneratorConfig::new("com.example".to_string());
+    let mut out = Vec::new();
+    KotlinCodeGenerator::new(&cfg)
+        .output(&mut out, &registry)
+        .unwrap();
+
+    assert!(String::from_utf8(out).unwrap().contains("class Bytes("));
+}
+
+/// And it is rejected as soon as one is, because the import then outranks the
+/// same-package declaration everywhere.
+#[test]
+fn type_named_bytes_is_rejected_when_the_module_has_a_bytes_field() {
+    use crate as fg;
+
+    #[derive(facet::Facet)]
+    #[facet(rename = "Bytes")]
+    struct Renamed {
+        name: String,
+    }
+
+    #[derive(facet::Facet)]
+    struct Set {
+        #[facet(fg::bytes)]
+        value: Vec<u8>,
+    }
+
+    let registry = crate::reflect!(Renamed, Set).unwrap();
+    let cfg = CodeGeneratorConfig::new("com.example".to_string());
+    let err = KotlinCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        err.to_string()
+            .starts_with("Kotlin: type `Bytes` collides with")
+    );
+}
+
 #[test]
 fn field_named_to_string_is_rejected() {
     #[derive(facet::Facet)]

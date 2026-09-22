@@ -14,7 +14,7 @@ use std::{borrow::Cow, io};
 
 use crate::{
     Registry,
-    reflection::format::{ContainerFormat, Format, Named, VariantFormat},
+    reflection::format::{ContainerFormat, Format, FormatHolder, Named, VariantFormat},
 };
 
 /// How a target language makes a reserved word usable as an identifier.
@@ -33,6 +33,11 @@ pub(crate) enum EscapeStyle {
 /// A forbidden name together with the clause explaining why, used to build the
 /// pre-pass error message. Entries are sorted by name for `binary_search`.
 pub(crate) type ForbiddenNames = &'static [(&'static str, &'static str)];
+
+/// A forbidden name that only matters beside a field of a particular format,
+/// together with the test for that format. Entries are sorted by name for
+/// `binary_search`.
+pub(crate) type FormatBoundNames = &'static [(&'static str, fn(&Format) -> bool)];
 
 /// The naming rules for one target language.
 ///
@@ -53,6 +58,14 @@ pub(crate) struct NamingRules {
     /// Member names the generated code cannot accommodate, each with the clause
     /// explaining why.
     pub forbidden_members: ForbiddenNames,
+    /// The entries of `forbidden_types` that the generated code mentions only
+    /// beside a field of a particular format, each with the test for that
+    /// format. Where no such field exists the import is not even written, so a
+    /// declaration of that name only collides within the scope that has one:
+    /// the whole module for a top-level type, and the enclosing enum for a
+    /// variant that becomes a nested type (a nested class outranks the file's
+    /// imports inside the class that declares it). Sorted by name.
+    pub format_bound_types: FormatBoundNames,
     /// How a container or variant name is cased in the generated source.
     pub type_case: fn(&str) -> String,
     /// How a field name is cased in the generated source.
@@ -108,6 +121,15 @@ impl NamingRules {
             .binary_search_by_key(&name, |(n, _)| *n)
             .ok()
             .map(|i| self.forbidden_members[i].1)
+    }
+
+    /// The format test for a forbidden type name that only matters beside a
+    /// field of that format, if it is one.
+    fn format_bound(&self, name: &str) -> Option<fn(&Format) -> bool> {
+        self.format_bound_types
+            .binary_search_by_key(&name, |(n, _)| *n)
+            .ok()
+            .map(|i| self.format_bound_types[i].1)
     }
 
     fn reason_for(&self, key: &str) -> &'static str {
@@ -207,7 +229,11 @@ pub(crate) fn qualify_helper<'a>(
 /// Returns [`io::ErrorKind::InvalidInput`] naming the offending type or field.
 pub(crate) fn check_reserved_names(registry: &Registry, rules: &NamingRules) -> io::Result<()> {
     for (type_name, container) in registry {
-        check_type_name(&type_name.name, rules)?;
+        // A top-level declaration competes with the module's imports, which
+        // are written for the module as a whole.
+        check_type_name(&type_name.name, rules, |uses| {
+            registry.values().any(|container| mentions(container, uses))
+        })?;
 
         match container {
             ContainerFormat::UnitStruct(_) => {}
@@ -224,7 +250,7 @@ pub(crate) fn check_reserved_names(registry: &Registry, rules: &NamingRules) -> 
             }
             ContainerFormat::Enum(variants, _, _) => {
                 for variant in variants.values() {
-                    check_variant(&type_name.name, variant, rules)?;
+                    check_variant(&type_name.name, container, variant, rules)?;
                 }
             }
         }
@@ -233,28 +259,62 @@ pub(crate) fn check_reserved_names(registry: &Registry, rules: &NamingRules) -> 
     Ok(())
 }
 
-fn check_type_name(name: &str, rules: &NamingRules) -> io::Result<()> {
+/// Returns `true` if any format reachable from `container` satisfies `uses`.
+///
+/// Types the container refers to by name are not followed: their fields are
+/// written in their own scope, not this one.
+fn mentions(container: &ContainerFormat, uses: fn(&Format) -> bool) -> bool {
+    let mut found = false;
+    // The visitor only fails on an unresolved variable, which a finished
+    // registry never contains; a failure would just leave `found` as is.
+    let _ = container.visit(&mut |format| {
+        found |= uses(format);
+        Ok(())
+    });
+    found
+}
+
+/// Reject `name` if the generated code already uses it for something else.
+///
+/// `scope_uses` says whether the scope the declaration lands in has a field of
+/// a given format, which decides the format-bound names: those are only
+/// written — imported, aliased, or generated — beside such a field.
+fn check_type_name(
+    name: &str,
+    rules: &NamingRules,
+    scope_uses: impl Fn(fn(&Format) -> bool) -> bool,
+) -> io::Result<()> {
     let cased = (rules.type_case)(name);
-    let reason = rules
-        .forbidden_type(name)
-        .or_else(|| rules.forbidden_type(&cased));
-    if let Some(what) = reason {
-        return Err(invalid(format!(
-            "{lang}: type `{name}` collides with {what} used by the generated code; \
-             rename it with #[facet(rename = \"...\")]",
-            lang = rules.language,
-        )));
+    let spelling = if rules.forbidden_type(name).is_some() {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(cased)
+    };
+    let Some(what) = rules.forbidden_type(&spelling) else {
+        return Ok(());
+    };
+    if let Some(uses) = rules.format_bound(&spelling)
+        && !scope_uses(uses)
+    {
+        return Ok(());
     }
-    Ok(())
+    Err(invalid(format!(
+        "{lang}: type `{name}` collides with {what} used by the generated code; \
+         rename it with #[facet(rename = \"...\")]",
+        lang = rules.language,
+    )))
 }
 
 fn check_variant(
     enum_name: &str,
+    enum_format: &ContainerFormat,
     variant: &Named<VariantFormat>,
     rules: &NamingRules,
 ) -> io::Result<()> {
     if rules.variants_are_types {
-        check_type_name(&variant.name, rules)?;
+        // A nested class is only visible inside the enum that declares it, so
+        // it only shadows an import there.
+        check_type_name(&variant.name, rules, |uses| mentions(enum_format, uses))?;
     }
 
     // The type that encloses a variant's members is the variant itself where
@@ -349,6 +409,7 @@ mod tests {
             escape_style,
             forbidden_types: &[],
             forbidden_members: &[],
+            format_bound_types: &[],
             type_case: identity,
             member_case: identity,
             variants_are_types: false,
