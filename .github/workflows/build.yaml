@@ -65,10 +65,13 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # The path is relative to the workspace root, where there is no `src/` —
+      # the old glob matched nothing, `hashFiles` returned the empty string, and
+      # the key was a constant `<os>-nuget-` that could never invalidate.
       - uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('src/generation/csharp/installer/mod.rs') }}
+          key: ${{ runner.os }}-nuget-${{ hashFiles('crates/facet_generate/src/generation/csharp/installer/mod.rs') }}
           restore-keys: |
             ${{ runner.os }}-nuget-
 
@@ -76,7 +79,33 @@ jobs:
         with:
           distribution: "temurin"
           java-version: "21"
-          cache: "gradle"
+
+      # Not `setup-java`'s own `cache: gradle`. Its key is a hash of Gradle
+      # files that effectively never change here, and `actions/cache` will not
+      # re-save over an exact key hit — so the first snapshot ever written is
+      # the one every later run restores, permanently. The 95MB Windows cache
+      # it left behind was saved while `compileKotlin` was still NO-SOURCE, so
+      # it holds no compiler jars at all, and nothing would ever replace it.
+      #
+      # Instead: restore on every run, and write a fresh entry on each push to
+      # `main`, where the Linux job does compile Kotlin and so populates the
+      # full compiler classpath. Keying the save on `run_id` guarantees a miss
+      # and therefore a write; `restore-keys` picks the most recent entry.
+      # Confining writes to `main` keeps this from filling the 10GB repository
+      # cache and evicting sccache.
+      #
+      # Windows is excluded because it no longer runs Gradle at all.
+      - name: Restore the Gradle cache
+        if: runner.os != 'Windows'
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('crates/facet_generate/src/generation/kotlin/installer/mod.rs') }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-${{ hashFiles('crates/facet_generate/src/generation/kotlin/installer/mod.rs') }}-
+            ${{ runner.os }}-gradle-
 
       - name: Setup Additional Languages for codegen tests (deno — TypeScript test runner)
         uses: denoland/setup-deno@v2
@@ -96,15 +125,23 @@ jobs:
         if: runner.os != 'Windows'
         run: just swift-test
 
-      # The Kotlin tests leave a Gradle daemon running, and on Windows it keeps
-      # `~/.gradle/caches/**/*.lock` open. `setup-java`'s post step tars that
-      # directory to save the cache, tar fails to read the locked files
-      # ("Device or resource busy") and exits 2, so the save is abandoned —
-      # which is why every Windows run reported "gradle cache is not found" and
-      # re-downloaded the whole Kotlin toolchain, taking 318s over Linux's 25s.
-      # Stopping the daemon releases the locks so the cache can actually be
-      # written.
+      # The Kotlin tests leave a Gradle daemon running, which holds
+      # `~/.gradle/caches/**/*.lock` open. This is what broke the save on
+      # Windows before that job stopped running Gradle at all: tar could not
+      # read the locked files ("Device or resource busy") and exited 2, so no
+      # cache was ever written and every run re-downloaded the whole Kotlin
+      # toolchain. Linux tolerates reading open files, but stopping the daemon
+      # before the save is still the correct order.
       - name: Stop the Gradle daemon so its caches can be saved
-        if: always()
+        if: ${{ !cancelled() && runner.os != 'Windows' }}
         continue-on-error: true
         run: gradle --stop
+
+      - name: Save the Gradle cache
+        if: ${{ !cancelled() && runner.os != 'Windows' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('crates/facet_generate/src/generation/kotlin/installer/mod.rs') }}-${{ github.run_id }}
