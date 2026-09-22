@@ -20,9 +20,22 @@ clean:
     rm -rf crates/facet_generate/runtime/swift/.build
 
 # runs tests
+[unix]
 test:
     @echo '{{ style("command") }}test:{{ NORMAL }}'
     cargo nextest run --all-features
+
+# Windows runs Gradle around twelve times slower than Linux: the same Kotlin
+# compile test that takes 86s on a Linux runner does not finish inside ten
+# minutes on a Windows one, and the suite as a whole went from four minutes to
+# over twenty-six. Nothing is lost by skipping it — the generated Kotlin is
+# byte-identical whichever host produced it, and the Linux job compiles and
+# runs it on every push. `kotlin_runtime` is excluded for the same reason it
+# already skipped itself here: `kotlinc` is not on a Windows runner's PATH.
+[windows]
+test:
+    @echo '{{ style("command") }}test: (Kotlin toolchain tests skipped on Windows){{ NORMAL }}'
+    cargo nextest run --all-features -E 'not binary(~kotlin)'
 
 # runs Swift runtime tests (macOS and Linux only)
 [unix]
