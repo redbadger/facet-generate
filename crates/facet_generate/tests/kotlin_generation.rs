@@ -184,3 +184,17 @@ fn test_that_kotlin_code_shadowing_builtin_names_compiles() {
         assert_generated_code_compiles(&registry, encoding);
     }
 }
+
+/// Types referencing enums and structs in other namespaces, including a type
+/// in one named namespace referencing another.
+#[test]
+fn test_that_kotlin_code_with_types_from_other_namespaces_compiles() {
+    for registry in [
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+    ] {
+        for encoding in [Encoding::Bincode, Encoding::Json] {
+            assert_generated_code_compiles(&registry, encoding);
+        }
+    }
+}

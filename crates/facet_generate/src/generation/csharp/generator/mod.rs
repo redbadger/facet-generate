@@ -78,6 +78,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         check_reserved_names(registry, &naming::RULES)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
@@ -111,6 +112,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
@@ -145,39 +147,45 @@ impl<'a> CSharpCodeGenerator<'a> {
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
                 if let Format::TypeName(qualified_name) = format {
-                    match &qualified_name.namespace {
-                        Namespace::Named(namespace) => {
-                            let namespace = namespace.clone();
-                            let current_leaf_namespace = config
-                                .module_name()
-                                .rsplit_once('.')
-                                .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                            if namespace == current_leaf_namespace {
-                                *qualified_name =
-                                    QualifiedTypeName::root(qualified_name.name.clone());
-                            } else {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    format!("{}.{}", config.module_name(), namespace),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                        Namespace::Root => {
-                            if config.module_name().contains('.') {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    config.module_name().to_string(),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                    }
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            Namespace::Named(namespace) => {
+                let current_leaf_namespace = config
+                    .module_name()
+                    .rsplit_once('.')
+                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
+
+                if namespace == current_leaf_namespace {
+                    QualifiedTypeName::root(name.name.clone())
+                } else {
+                    QualifiedTypeName::namespaced(
+                        format!("{}.{}", config.module_name(), namespace),
+                        name.name.clone(),
+                    )
+                }
+            }
+            Namespace::Root => {
+                if config.module_name().contains('.') {
+                    QualifiedTypeName::namespaced(
+                        config.module_name().to_string(),
+                        name.name.clone(),
+                    )
+                } else {
+                    name.clone()
+                }
+            }
+        }
     }
 }
 

@@ -582,8 +582,8 @@ fn write_deserialize_variant_return(
 /// the point of the emitted code. `config` decides how a named type is
 /// serialized: enums are unions with standalone `serialize{Name}` functions,
 /// everything else has a `serialize` method, and the emitter tells the two
-/// apart with `config.enum_type_names`, so pass the config for the module
-/// being generated.
+/// apart with [`CodeGeneratorConfig::is_enum`], so pass the config for the
+/// module being generated.
 ///
 /// # Errors
 ///
@@ -605,9 +605,9 @@ fn write_serialize(
 ) -> io::Result<()> {
     match format {
         Format::TypeName(qualified_name) => {
-            let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
-            if config.enum_type_names.contains(&type_name) {
-                writeln!(w, "serialize{type_name}({value_expr}, serializer);")
+            if config.is_enum(qualified_name) {
+                let function = naming::enum_function("serialize", qualified_name);
+                writeln!(w, "{function}({value_expr}, serializer);")
             } else {
                 writeln!(w, "{value_expr}.serialize(serializer);")
             }
@@ -699,10 +699,11 @@ fn write_serialize(
 fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> String {
     match format {
         Format::TypeName(qualified_name) => {
-            let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
-            if config.enum_type_names.contains(&type_name) {
-                format!("deserialize{type_name}(deserializer)")
+            if config.is_enum(qualified_name) {
+                let function = naming::enum_function("deserialize", qualified_name);
+                format!("{function}(deserializer)")
             } else {
+                let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
                 format!("{type_name}.deserialize(deserializer)")
             }
         }
@@ -1195,9 +1196,32 @@ mod tests {
     #[test]
     fn write_serialize_value_routes_enums_through_the_standalone_function() {
         let mut cfg = make_config(&[]);
-        cfg.enum_type_names.insert("HttpResult".to_string());
+        cfg.enum_type_names
+            .insert(QualifiedTypeName::root("HttpResult".to_string()));
         let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
         let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
         insta::assert_snapshot!(out, @"serializeHttpResult(output, serializer);");
+    }
+
+    #[test]
+    fn write_serialize_value_reaches_an_enum_in_another_namespace_through_its_import() {
+        let mut cfg = make_config(&[]);
+        let name = QualifiedTypeName::namespaced("kit".to_string(), "HttpResult".to_string());
+        cfg.enum_type_names.insert(name.clone());
+        let format = Format::TypeName(name);
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"Kit.serializeHttpResult(output, serializer);");
+    }
+
+    #[test]
+    fn a_same_named_enum_in_another_namespace_does_not_make_a_struct_an_enum() {
+        let mut cfg = make_config(&[]);
+        cfg.enum_type_names.insert(QualifiedTypeName::namespaced(
+            "kit".to_string(),
+            "HttpResult".to_string(),
+        ));
+        let format = Format::TypeName(QualifiedTypeName::root("HttpResult".to_string()));
+        let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
+        insta::assert_snapshot!(out, @"output.serialize(serializer);");
     }
 }

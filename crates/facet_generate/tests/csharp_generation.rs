@@ -191,3 +191,30 @@ fn test_that_csharp_code_shadowing_builtin_names_compiles_with_bincode() {
 
     dotnet_build(&dir);
 }
+
+/// A unit-only enum from another namespace goes through its helper class,
+/// qualified like the type (`Example.Kit.PresenceBincode`), and the ROOT
+/// `Unit` struct, which shadows the runtime's `Unit` in the `Kit` namespace
+/// too, makes that namespace qualify it.
+///
+/// A reference between two named namespaces (`common::across_namespaces::
+/// get_sibling_registry`) is not compiled: the type itself is still rooted at
+/// the wrong namespace there (#149).
+#[test]
+fn test_that_csharp_code_with_types_from_other_namespaces_compiles() {
+    let registry = common::across_namespaces::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

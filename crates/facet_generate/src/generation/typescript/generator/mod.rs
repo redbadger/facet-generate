@@ -75,6 +75,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = TypeScript::new(&config, registry);
@@ -106,18 +107,26 @@ impl<'a> TypeScriptCodeGenerator<'a> {
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format
-                    && let Namespace::Named(namespace) = &qualified_name.namespace
-                    && namespace == config.module_name()
-                {
-                    // Same-module type: strip namespace so it renders as a bare name
-                    *qualified_name = QualifiedTypeName::root(qualified_name.name.clone());
+                if let Format::TypeName(qualified_name) = format {
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            // Same-module type: strip namespace so it renders as a bare name
+            Namespace::Named(namespace) if namespace == config.module_name() => {
+                QualifiedTypeName::root(name.name.clone())
+            }
+            _ => name.clone(),
+        }
     }
 }
 

@@ -608,3 +608,39 @@ fn test_that_swift_code_follow_case_convention() {
     assert!(content.contains(r"public var fBool: Bool"));
     assert!(!content.contains(r"public var f_bool: Bool"));
 }
+
+/// Generate `registry` as a Swift package with the installer and `plugin`,
+/// then build it.
+fn assert_installed_package_compiles(
+    registry: &Registry,
+    plugin: impl EmitterPlugin<SwiftLang> + 'static,
+) {
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(plugin)
+        .generate(registry)
+        .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// Types referencing enums and structs in other namespaces, including a type
+/// in one named namespace referencing another. `Kit` declares a `Set`, which
+/// shadows `Swift.Set` in every module that imports it.
+#[test]
+fn test_that_swift_code_with_types_from_other_namespaces_compiles() {
+    for registry in [
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+    ] {
+        // Not with the JSON plugin: the Swift runtime has no `JsonSerializer`
+        // or `JsonDeserializer`, so its output never builds, namespaces or
+        // not (#157).
+        assert_installed_package_compiles(&registry, BincodePlugin);
+    }
+}

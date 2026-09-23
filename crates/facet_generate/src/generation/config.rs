@@ -33,7 +33,9 @@ use thiserror::Error;
 use crate::{
     Registry,
     generation::indent::IndentConfig,
-    reflection::format::{ContainerFormat, Format, FormatHolder, Namespace, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
+    },
 };
 
 /// Code generation options meant to be supported by all languages.
@@ -66,15 +68,26 @@ pub struct CodeGeneratorConfig {
     /// External namespaces actually referenced via `Format::TypeName` in the registry.
     /// Populated by `update_from`. Used to generate namespace import statements.
     pub referenced_namespaces: BTreeSet<String>,
-    /// Names of all enums in the registry whose every variant is a unit variant.
-    /// Populated by `update_from`. Used by the C# Bincode plugin to dispatch
-    /// enum-typed fields through `{TypeName}Bincode.Serialize(...)` helpers.
-    pub unit_variant_enums: BTreeSet<String>,
-    /// Names of all enum types in the registry.
-    /// Populated by `update_from`. Used by TypeScript bincode/json plugins to
-    /// branch `Format::TypeName` serialization: enums use standalone
-    /// `serializeX(value, serializer)` functions while structs use `.serialize(serializer)`.
-    pub enum_type_names: BTreeSet<String>,
+    /// Every enum whose variants are all unit variants, in whichever module
+    /// of the registry it lives.
+    ///
+    /// Populated by `update_from` for the module's own types and by
+    /// [`module::split`](super::module::split) for every other module's, so an
+    /// enum from another namespace is known too. Keyed by qualified name, and
+    /// the generators respell the keys the way they rewrite type references,
+    /// so query it with [`is_unit_enum`](Self::is_unit_enum) and the name as
+    /// it appears in the registry the emitter sees. Used by the C# Bincode
+    /// plugin to dispatch enum-typed fields through
+    /// `{TypeName}Bincode.Serialize(...)` helpers.
+    pub unit_variant_enums: BTreeSet<QualifiedTypeName>,
+    /// Every enum type, in whichever module of the registry it lives.
+    ///
+    /// Filled and keyed like [`unit_variant_enums`](Self::unit_variant_enums);
+    /// query it with [`is_enum`](Self::is_enum). Used by TypeScript
+    /// bincode/json plugins to branch `Format::TypeName` serialization: enums
+    /// use standalone `serializeX(value, serializer)` functions while structs
+    /// use `.serialize(serializer)`.
+    pub enum_type_names: BTreeSet<QualifiedTypeName>,
     /// Every type name the generated module declares, in raw registry spelling:
     /// each container name, plus the variant names of every enum that has at
     /// least one non-unit variant (Kotlin and C# nest those as classes and
@@ -84,6 +97,15 @@ pub struct CodeGeneratorConfig {
     /// the generated code would otherwise write bare (`Set`, `Map`, `String`,
     /// …) is shadowed by a declaration and must be written fully qualified.
     pub declared_type_names: BTreeSet<String>,
+    /// Every container in the registry this module was split from, in raw
+    /// registry spelling (unlike the enum sets, these keys are not respelled).
+    ///
+    /// Populated by `update_from` and [`module::split`](super::module::split).
+    /// Used where a declaration in *another* module is in scope in this one —
+    /// a C# namespace sees the types of its enclosing namespace, and a Swift
+    /// module sees those of every module it imports — to decide whether it
+    /// shadows a builtin type name.
+    pub registry_type_names: BTreeSet<QualifiedTypeName>,
 }
 
 /// Container or leaf types in the registry that need a runtime support file
@@ -169,6 +191,7 @@ impl CodeGeneratorConfig {
             unit_variant_enums: BTreeSet::new(),
             enum_type_names: BTreeSet::new(),
             declared_type_names: BTreeSet::new(),
+            registry_type_names: BTreeSet::new(),
             indent: IndentConfig::Space(4),
         }
     }
@@ -323,24 +346,96 @@ impl CodeGeneratorConfig {
 
             self.declared_type_names.insert(name.name.clone());
 
-            if let ContainerFormat::Enum(variants, _, _) = format {
-                self.enum_type_names.insert(name.name.clone());
-                if variants
-                    .values()
-                    .all(|v| matches!(v.value, VariantFormat::Unit))
-                {
-                    self.unit_variant_enums.insert(name.name.clone());
-                } else {
-                    // A data-carrying enum is emitted as a nested class or
-                    // record per variant, so each variant name is a declared
-                    // type too.
-                    for variant in variants.values() {
-                        self.declared_type_names.insert(variant.name.clone());
-                    }
+            if let ContainerFormat::Enum(variants, _, _) = format
+                && !is_unit_only(format)
+            {
+                // A data-carrying enum is emitted as a nested class or
+                // record per variant, so each variant name is a declared
+                // type too.
+                for variant in variants.values() {
+                    self.declared_type_names.insert(variant.name.clone());
+                }
+            }
+        }
+
+        self.index_types(registry);
+    }
+
+    /// Records every container of `registry`, and which of them are enums, so
+    /// that a module knows about types declared in the other modules too.
+    ///
+    /// [`module::split`](super::module::split) calls this with the whole
+    /// registry for each module it produces.
+    pub(crate) fn index_types(&mut self, registry: &Registry) {
+        for (name, format) in registry {
+            self.registry_type_names.insert(name.clone());
+            if let ContainerFormat::Enum(..) = format {
+                self.enum_type_names.insert(name.clone());
+                if is_unit_only(format) {
+                    self.unit_variant_enums.insert(name.clone());
                 }
             }
         }
     }
+
+    /// Respells the keys of the enum sets with `requalify`, the function the
+    /// generator rewrites each type reference in `local` (this module's
+    /// registry) with, so that [`is_enum`](Self::is_enum) and
+    /// [`is_unit_enum`](Self::is_unit_enum) can be asked with the name the
+    /// emitter sees.
+    ///
+    /// A rewrite can give a type in another module the spelling of one this
+    /// module declares (a TypeScript namespaced module writes both its own
+    /// types and ROOT ones bare), and the bare name then means the local
+    /// declaration, so the module's own types decide their spelling.
+    pub(crate) fn requalify_enums(
+        &mut self,
+        local: &Registry,
+        requalify: impl Fn(&Self, &QualifiedTypeName) -> QualifiedTypeName,
+    ) {
+        let respell = |set: &BTreeSet<QualifiedTypeName>| -> BTreeSet<QualifiedTypeName> {
+            set.iter().map(|name| requalify(self, name)).collect()
+        };
+        let mut enums = respell(&self.enum_type_names);
+        let mut unit_enums = respell(&self.unit_variant_enums);
+
+        for (name, format) in local {
+            let name = requalify(self, name);
+            unit_enums.remove(&name);
+            if let ContainerFormat::Enum(..) = format {
+                if is_unit_only(format) {
+                    unit_enums.insert(name.clone());
+                }
+                enums.insert(name);
+            } else {
+                enums.remove(&name);
+            }
+        }
+
+        self.enum_type_names = enums;
+        self.unit_variant_enums = unit_enums;
+    }
+
+    /// Whether `name` is an enum, in the spelling the emitter sees (see
+    /// [`enum_type_names`](Self::enum_type_names)).
+    #[must_use]
+    pub fn is_enum(&self, name: &QualifiedTypeName) -> bool {
+        self.enum_type_names.contains(name)
+    }
+
+    /// Whether `name` is an enum whose variants are all unit variants, in the
+    /// spelling the emitter sees (see
+    /// [`unit_variant_enums`](Self::unit_variant_enums)).
+    #[must_use]
+    pub fn is_unit_enum(&self, name: &QualifiedTypeName) -> bool {
+        self.unit_variant_enums.contains(name)
+    }
+}
+
+/// Returns `true` for an enum whose variants are all unit variants.
+fn is_unit_only(format: &ContainerFormat) -> bool {
+    matches!(format, ContainerFormat::Enum(variants, _, _)
+        if variants.values().all(|v| matches!(v.value, VariantFormat::Unit)))
 }
 
 /// Public API entry point for configuring a generation run.
@@ -498,6 +593,62 @@ mod tests {
         // Container names, plus the variants of the data-carrying enum — but
         // not `UnitOnly`, which becomes an enum constant rather than a type.
         assert_eq!(names, ["DataEnum", "Err", "Ok", "Set", "UnitEnum"]);
+    }
+
+    fn unit_enum() -> ContainerFormat {
+        let mut variants = BTreeMap::new();
+        variants.insert(0u32, Named::new(&VariantFormat::Unit, "On".to_string()));
+        ContainerFormat::Enum(variants, EnumTagging::External, Doc::default())
+    }
+
+    #[test]
+    fn split_tells_every_module_about_the_enums_of_the_others() {
+        let kit_presence = QualifiedTypeName::namespaced("kit".to_string(), "Presence".to_string());
+        let root_presence = QualifiedTypeName::root("Presence".to_string());
+
+        let mut registry = Registry::new();
+        registry.insert(kit_presence.clone(), unit_enum());
+        registry.insert(
+            root_presence.clone(),
+            ContainerFormat::UnitStruct(Doc::default()),
+        );
+
+        let modules = crate::generation::module::split("root", &registry);
+        let root = modules
+            .keys()
+            .find(|module| module.config().module_name() == "root")
+            .unwrap()
+            .config();
+
+        assert!(root.is_enum(&kit_presence));
+        assert!(root.is_unit_enum(&kit_presence));
+        // The same name in another namespace is a different type.
+        assert!(!root.is_enum(&root_presence));
+    }
+
+    #[test]
+    fn requalified_enum_names_defer_to_the_module_s_own_types() {
+        let kit_presence = QualifiedTypeName::namespaced("kit".to_string(), "Presence".to_string());
+        let root_presence = QualifiedTypeName::root("Presence".to_string());
+
+        // A ROOT enum, and a struct of the same name in the module being
+        // generated, whose references are respelled bare like ROOT ones.
+        let mut local = Registry::new();
+        local.insert(kit_presence, ContainerFormat::UnitStruct(Doc::default()));
+        let mut config = CodeGeneratorConfig::new("kit".to_string());
+        config.index_types(&Registry::from([(root_presence.clone(), unit_enum())]));
+        config.update_from(&local);
+
+        config.requalify_enums(&local, |config, name| match &name.namespace {
+            Namespace::Named(namespace) if namespace == config.module_name() => {
+                QualifiedTypeName::root(name.name.clone())
+            }
+            _ => name.clone(),
+        });
+
+        // A bare `Presence` in this module means the local struct.
+        assert!(!config.is_enum(&root_presence));
+        assert!(!config.is_unit_enum(&root_presence));
     }
 
     #[test]

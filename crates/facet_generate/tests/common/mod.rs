@@ -772,3 +772,157 @@ pub fn get_shadowing_registry() -> Registry {
     )
     .unwrap()
 }
+
+// ---------------------------------------------------------------------------
+// Cross-namespace fixtures — shared by the per-language compilation tests.
+//
+// Types that reference types in another namespace, where the generated code
+// depends on what kind of type the referenced one is (an enum is serialized
+// differently from a struct) or on which names it brings into scope.
+//
+// There is no registry for a namespaced type referencing a ROOT one: that
+// reference does not compile in any language yet (#148, #149, #150, #151), so
+// it is covered by the `with_enums_across_namespaces` snapshots only.
+// ---------------------------------------------------------------------------
+
+pub mod across_namespaces {
+    use std::collections::BTreeSet;
+
+    use facet::Facet;
+    use facet_generate as fg;
+    use facet_generate::{Registry, reflect};
+
+    pub mod kit {
+        use std::collections::BTreeSet;
+
+        use facet::Facet;
+        use facet_generate as fg;
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[facet(fg::namespace = "kit")]
+        #[allow(dead_code)]
+        pub enum Presence {
+            Online,
+            Offline,
+        }
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[facet(fg::namespace = "kit")]
+        #[allow(dead_code)]
+        pub enum Shape {
+            Circle(f64),
+            Empty,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Badge {
+            pub presence: Presence,
+            pub shape: Shape,
+        }
+
+        /// Shadows `Swift.Set` in every module that imports `Kit`.
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Set {
+            pub value: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Tray {
+            pub nothing: (),
+            pub ids: BTreeSet<u32>,
+        }
+    }
+
+    /// Shares its name with the `kit` enum, and is still a class.
+    #[derive(Facet)]
+    pub struct Presence {
+        pub since: u64,
+    }
+
+    /// Holds the ROOT `Presence`, beside [`Card`] holding the `kit` one.
+    ///
+    /// Not a field of `Card`: C# would resolve `Presence.Deserialize` inside
+    /// `Card` to its `Presence` property (#159).
+    #[derive(Facet)]
+    pub struct Sighting {
+        pub last_seen: Presence,
+    }
+
+    /// Shadows the C# runtime's `Unit` in the namespaces nested in the root
+    /// one.
+    #[derive(Facet)]
+    pub struct Unit {
+        pub value: u32,
+    }
+
+    /// A ROOT type holding enums from `kit`, beside a `kit` type holding them.
+    #[derive(Facet)]
+    pub struct Card {
+        pub presence: kit::Presence,
+        pub shape: kit::Shape,
+        pub shapes: Vec<Option<kit::Shape>>,
+        pub badge: kit::Badge,
+    }
+
+    /// Builtin names declared in the other module: `kit::Set` for Swift, and
+    /// the ROOT `Unit` for C# (which `kit::Tray` has to spell out).
+    ///
+    /// `kit::Tray` is not a field: its `()` makes it not `Hashable` in Swift,
+    /// and Swift decides a ROOT type's conformance as if every type from
+    /// another module were `Hashable` (#156).
+    #[derive(Facet)]
+    pub struct Shelf {
+        pub set: kit::Set,
+        pub ids: BTreeSet<u32>,
+        pub unit: Unit,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(fg::namespace = "b")]
+    #[allow(dead_code)]
+    pub enum Status {
+        Up,
+        Down,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(fg::namespace = "b")]
+    #[allow(dead_code)]
+    pub enum Signal {
+        Level(u8),
+        Silent,
+    }
+
+    /// A type in namespace `a` holding enums from namespace `b`.
+    #[derive(Facet)]
+    #[facet(fg::namespace = "a")]
+    pub struct Row {
+        pub status: Status,
+        pub signal: Signal,
+    }
+
+    /// References from ROOT into `kit`, and from `kit` into `kit`.
+    pub fn get_registry() -> Registry {
+        use kit::Tray;
+        reflect!(Card, Sighting, Shelf, Tray).unwrap()
+    }
+
+    /// Gives the root module a type, which a Swift package needs for its root
+    /// target to have sources.
+    #[derive(Facet)]
+    pub struct Table {
+        pub row: Row,
+    }
+
+    /// References from namespace `a` into namespace `b`.
+    pub fn get_sibling_registry() -> Registry {
+        reflect!(Table).unwrap()
+    }
+}
