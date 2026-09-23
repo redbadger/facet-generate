@@ -33,3 +33,38 @@ pub use installer::Installer;
 mod emitter;
 mod generator;
 mod installer;
+
+use heck::ToUpperCamelCase;
+
+use crate::{
+    generation::{CodeGeneratorConfig, other_modules},
+    reflection::format::QualifiedTypeName,
+};
+
+/// The standalone function `{prefix}{Name}` (`serializeColor`,
+/// `deserializeColor`) that the plugins emit beside an enum, if `name` (as the
+/// emitter sees it) is one: bare for an enum the module declares, and through
+/// the namespace import for one from another module (`Kit.serializeColor`).
+///
+/// `None` if `name` is not an enum, and the plugins then call its
+/// `serialize` / `deserialize` methods instead.
+pub(crate) fn enum_function(
+    prefix: &str,
+    name: &QualifiedTypeName,
+    config: &CodeGeneratorConfig,
+) -> Option<String> {
+    let is_enum = other_modules::kind(name).map_or_else(
+        || {
+            let type_name = name.format(ToUpperCamelCase::to_upper_camel_case, ".");
+            config.enum_type_names.contains(&type_name)
+        },
+        other_modules::Kind::is_enum,
+    );
+    is_enum.then(|| {
+        QualifiedTypeName {
+            namespace: name.namespace.clone(),
+            name: format!("{prefix}{}", name.name),
+        }
+        .format(ToUpperCamelCase::to_upper_camel_case, ".")
+    })
+}

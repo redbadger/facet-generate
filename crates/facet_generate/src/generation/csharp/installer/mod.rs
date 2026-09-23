@@ -95,7 +95,7 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file operation or code generation step fails.
-    pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+    pub fn generate(self, registry: &Registry) -> Result<(), Error> {
         // Unit.cs is always required (even with no plugins) because Format::Unit
         // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
@@ -132,7 +132,7 @@ impl Installer {
 
         for (m, module_registry) in module::split(&self.package_name, registry) {
             let config = m.config().clone().with_parent(&self.package_name);
-            self.install_module(&config, &module_registry)?;
+            self.write_module(&config, &module_registry, Some(registry))?;
         }
 
         let package_name = self.package_name.clone();
@@ -260,6 +260,30 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Error> {
+        self.write_module(config, registry, None)
+    }
+
+    /// Write the `.csproj` manifest to the output directory.
+    fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
+        let manifest = self.make_manifest(package_name);
+
+        let manifest_path = self.install_dir.join(format!("{package_name}.csproj"));
+        let mut file = std::fs::File::create(manifest_path)?;
+        file.write_all(manifest.as_bytes())?;
+
+        Ok(())
+    }
+}
+
+impl Installer {
+    /// [`install_module`](SourceInstaller::install_module), given the whole
+    /// registry `registry` was split from when there is one.
+    fn write_module(
+        &self,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+        whole_registry: Option<&Registry>,
+    ) -> std::result::Result<(), Error> {
         let namespace = config.module_name().rsplit('.').next().unwrap_or_default();
         let skip_module = self.external_packages.contains_key(namespace);
         if skip_module {
@@ -282,20 +306,10 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator =
-            CSharpCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let generator = CSharpCodeGenerator::new(&updated_config)
+            .with_plugins(self.plugins.clone())
+            .with_whole_registry(whole_registry);
         generator.output(&mut file, registry)?;
-
-        Ok(())
-    }
-
-    /// Write the `.csproj` manifest to the output directory.
-    fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
-        let manifest = self.make_manifest(package_name);
-
-        let manifest_path = self.install_dir.join(format!("{package_name}.csproj"));
-        let mut file = std::fs::File::create(manifest_path)?;
-        file.write_all(manifest.as_bytes())?;
 
         Ok(())
     }

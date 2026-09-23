@@ -615,3 +615,131 @@ pub fn get_swift_positive_samples() -> Vec<Vec<u8>> {
         .map(|v| bincode::serialize(v).unwrap())
         .collect()
 }
+
+// ---------------------------------------------------------------------------
+// Cross-namespace fixtures (#154), shared by the compilation and runtime
+// tests.
+//
+// A type referencing an enum in another namespace: TypeScript serializes an
+// enum through the standalone functions beside it, and C# an all-unit enum
+// through its `…Bincode` helper class, so the generated code depends on the
+// referenced type being known to be an enum.
+//
+// There is no registry for a namespaced type referencing a ROOT one: that
+// reference does not compile yet (#148, #149, #150, #151), so it is covered
+// by the `with_enums_across_namespaces` snapshots only.
+// ---------------------------------------------------------------------------
+
+pub mod across_namespaces {
+    use facet::Facet;
+    use facet_generate as fg;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    pub mod kit {
+        use facet::Facet;
+        use facet_generate as fg;
+        use serde::{Deserialize, Serialize};
+
+        #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+        #[repr(C)]
+        #[facet(fg::namespace = "kit")]
+        pub enum Presence {
+            Online,
+            Offline,
+        }
+
+        #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+        #[repr(C)]
+        #[facet(fg::namespace = "kit")]
+        pub enum Shape {
+            Circle(f64),
+            Empty,
+        }
+
+        /// A `kit` type holding `kit` enums: the case that always worked.
+        #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Badge {
+            pub presence: Presence,
+            pub shape: Shape,
+        }
+    }
+
+    /// Shares its name with the `kit` enum, and is still a class.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct Presence {
+        pub since: u64,
+    }
+
+    /// Holds the ROOT `Presence`, beside [`Card`] holding the `kit` one.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct Sighting {
+        pub last_seen: Presence,
+    }
+
+    /// A ROOT type holding enums from `kit`, beside a `kit` type holding them.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct Card {
+        pub presence: kit::Presence,
+        pub shape: kit::Shape,
+        pub shapes: Vec<Option<kit::Shape>>,
+        pub badge: kit::Badge,
+    }
+
+    /// References from ROOT into `kit`, and from `kit` into `kit`.
+    pub fn get_registry() -> Registry {
+        reflect!(Card, Sighting).unwrap()
+    }
+
+    /// A value of every type in [`get_registry`], for the runtime tests.
+    pub fn get_card() -> Card {
+        Card {
+            presence: kit::Presence::Offline,
+            shape: kit::Shape::Circle(1.5),
+            shapes: vec![
+                Some(kit::Shape::Empty),
+                None,
+                Some(kit::Shape::Circle(-2.25)),
+            ],
+            badge: kit::Badge {
+                presence: kit::Presence::Online,
+                shape: kit::Shape::Empty,
+            },
+        }
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    #[repr(C)]
+    #[facet(fg::namespace = "b")]
+    pub enum Status {
+        Up,
+        Down,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    #[repr(C)]
+    #[facet(fg::namespace = "b")]
+    pub enum Signal {
+        Level(u8),
+        Silent,
+    }
+
+    /// A type in namespace `a` holding enums from namespace `b`.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    #[facet(fg::namespace = "a")]
+    pub struct Row {
+        pub status: Status,
+        pub signal: Signal,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct Table {
+        pub row: Row,
+    }
+
+    /// References from namespace `a` into namespace `b`.
+    pub fn get_sibling_registry() -> Registry {
+        reflect!(Table).unwrap()
+    }
+}

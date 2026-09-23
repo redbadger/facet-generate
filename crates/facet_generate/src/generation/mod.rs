@@ -58,6 +58,10 @@ pub mod typescript;
 /// Common configuration objects and traits used in public APIs.
 mod config;
 
+/// What a module knows about the types of the other modules (#154).
+#[cfg(any(feature = "typescript", feature = "csharp"))]
+mod other_modules;
+
 use std::io::{Result, Write};
 
 pub use config::*;

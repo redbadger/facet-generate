@@ -32,6 +32,7 @@ use crate::generation::{
     CodeGeneratorConfig, Feature,
     csharp::CSharp,
     indent::{IndentWrite, Newlines, with_block},
+    other_modules,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{
@@ -752,7 +753,7 @@ fn write_serialize_expr(
 ) -> io::Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) if c_style_enums.contains(&qtn.name) => {
+        Format::TypeName(qtn) if is_c_style_enum(qtn, c_style_enums) => {
             let type_name = format_qualified_type_name(qtn);
             write!(w, "{type_name}Bincode.Serialize({val}, {ser})")
         }
@@ -819,7 +820,7 @@ fn write_deserialize_expr(
 ) -> io::Result<()> {
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) if c_style_enums.contains(&qtn.name) => {
+        Format::TypeName(qtn) if is_c_style_enum(qtn, c_style_enums) => {
             let type_name = format_qualified_type_name(qtn);
             write!(w, "{type_name}Bincode.Deserialize({de})")
         }
@@ -1106,6 +1107,19 @@ fn csharp_type(format: &Format) -> String {
         }
         Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content)),
     }
+}
+
+/// Whether `qtn` (as the emitter sees it) is a C-style enum, which is
+/// serialized through its `{EnumName}Bincode` helper class.
+///
+/// A type from another module is looked up in the whole registry, when the
+/// installer provides it (see [`other_modules`]): `c_style_enums` holds the
+/// bare names of the module's own C-style enums only.
+fn is_c_style_enum(qtn: &QualifiedTypeName, c_style_enums: &BTreeSet<String>) -> bool {
+    other_modules::kind(qtn).map_or_else(
+        || c_style_enums.contains(&qtn.name),
+        other_modules::Kind::is_unit_enum,
+    )
 }
 
 /// Formats a [`QualifiedTypeName`] as a C# dotted name.

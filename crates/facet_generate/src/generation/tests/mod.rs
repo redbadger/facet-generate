@@ -27,6 +27,7 @@ impl Display for TargetLanguage {
 
 mod basic;
 mod with_bytes;
+mod with_enums_across_namespaces;
 mod with_namespaces_as_external;
 mod with_namespaces_as_internal;
 mod with_serialization;

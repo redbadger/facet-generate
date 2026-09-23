@@ -13,7 +13,7 @@ use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, csharp::emitter::CSharp,
-        indent::IndentedWriter, module::Module, plugin::EmitterPlugin,
+        indent::IndentedWriter, module::Module, other_modules::OtherModules, plugin::EmitterPlugin,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -27,6 +27,10 @@ pub struct CSharpCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Pre-built plugins to apply during code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
+    /// The whole registry the module was split from, when the installer
+    /// generates it, so that references to types in other modules can be
+    /// serialized according to their kind (see [`OtherModules`]).
+    pub(crate) whole_registry: Option<&'a Registry>,
 }
 
 impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
@@ -34,6 +38,7 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
         Self {
             config,
             plugins: vec![],
+            whole_registry: None,
         }
     }
 
@@ -51,6 +56,7 @@ impl<'a> CSharpCodeGenerator<'a> {
         Self {
             config,
             plugins: vec![],
+            whole_registry: None,
         }
     }
 
@@ -58,6 +64,17 @@ impl<'a> CSharpCodeGenerator<'a> {
     #[must_use]
     pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>) -> Self {
         self.plugins = plugins;
+        self
+    }
+
+    /// Tell the generator the whole registry that the module it generates
+    /// was split from, if there is one.
+    #[must_use]
+    pub(crate) const fn with_whole_registry(
+        mut self,
+        whole_registry: Option<&'a Registry>,
+    ) -> Self {
+        self.whole_registry = whole_registry;
         self
     }
 
@@ -80,14 +97,18 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         Module::new(&config).write(w, &lang)?;
 
-        for (index, container) in updated_registry.iter().map(Container::from).enumerate() {
-            if index > 0 {
-                writeln!(w)?;
+        let other_modules = self
+            .whole_registry
+            .map(|whole| OtherModules::new(whole, registry, |name| Self::requalify(&config, name)));
+        OtherModules::scope(other_modules, || {
+            for (index, container) in updated_registry.iter().map(Container::from).enumerate() {
+                if index > 0 {
+                    writeln!(w)?;
+                }
+                container.write(w, &lang)?;
             }
-            container.write(w, &lang)?;
-        }
-
-        Ok(())
+            Ok(())
+        })
     }
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.
@@ -105,39 +126,45 @@ impl<'a> CSharpCodeGenerator<'a> {
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
                 if let Format::TypeName(qualified_name) = format {
-                    match &qualified_name.namespace {
-                        Namespace::Named(namespace) => {
-                            let namespace = namespace.clone();
-                            let current_leaf_namespace = config
-                                .module_name()
-                                .rsplit_once('.')
-                                .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                            if namespace == current_leaf_namespace {
-                                *qualified_name =
-                                    QualifiedTypeName::root(qualified_name.name.clone());
-                            } else {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    format!("{}.{}", config.module_name(), namespace),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                        Namespace::Root => {
-                            if config.module_name().contains('.') {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    config.module_name().to_string(),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                    }
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            Namespace::Named(namespace) => {
+                let current_leaf_namespace = config
+                    .module_name()
+                    .rsplit_once('.')
+                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
+
+                if namespace == current_leaf_namespace {
+                    QualifiedTypeName::root(name.name.clone())
+                } else {
+                    QualifiedTypeName::namespaced(
+                        format!("{}.{}", config.module_name(), namespace),
+                        name.name.clone(),
+                    )
+                }
+            }
+            Namespace::Root => {
+                if config.module_name().contains('.') {
+                    QualifiedTypeName::namespaced(
+                        config.module_name().to_string(),
+                        name.name.clone(),
+                    )
+                } else {
+                    name.clone()
+                }
+            }
+        }
     }
 }
 

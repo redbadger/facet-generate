@@ -107,7 +107,7 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file operation or code generation step fails.
-    pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+    pub fn generate(self, registry: &Registry) -> Result<(), Error> {
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
@@ -138,7 +138,7 @@ impl Installer {
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
             let config = m.config().clone();
-            self.install_module(&config, &module_registry)?;
+            self.write_module(&config, &module_registry, Some(registry))?;
         }
 
         // Write the package manifest
@@ -270,6 +270,31 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> Result<(), Error> {
+        self.write_module(config, registry, None)
+    }
+
+    /// Write `package.json` to the output directory.
+    fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
+        let manifest = self.make_manifest(package_name);
+        let manifest = serde_json::to_string_pretty(&manifest)?;
+
+        let manifest_path = self.install_dir.join("package.json");
+        let mut file = File::create(manifest_path)?;
+        file.write_all(manifest.as_bytes())?;
+
+        Ok(())
+    }
+}
+
+impl Installer {
+    /// [`install_module`](SourceInstaller::install_module), given the whole
+    /// registry `registry` was split from when there is one.
+    fn write_module(
+        &self,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+        whole_registry: Option<&Registry>,
+    ) -> Result<(), Error> {
         let skip_module = self.external_packages.contains_key(config.module_name());
         if skip_module {
             return Ok(());
@@ -283,21 +308,10 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
-        let generator =
-            TypeScriptCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let generator = TypeScriptCodeGenerator::new(&updated_config)
+            .with_plugins(self.plugins.clone())
+            .with_whole_registry(whole_registry);
         generator.output(&mut file, registry)?;
-
-        Ok(())
-    }
-
-    /// Write `package.json` to the output directory.
-    fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
-        let manifest = self.make_manifest(package_name);
-        let manifest = serde_json::to_string_pretty(&manifest)?;
-
-        let manifest_path = self.install_dir.join("package.json");
-        let mut file = File::create(manifest_path)?;
-        file.write_all(manifest.as_bytes())?;
 
         Ok(())
     }

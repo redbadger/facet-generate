@@ -336,3 +336,60 @@ Console.WriteLine($"Supported types roundtrip + mutation: {{passed}}/{{positiveI
 
     dotnet_run(&dir);
 }
+
+/// A ROOT type holding enums from namespace `kit`, and a `kit` type holding
+/// them too, round-trip through the generated C# (#154).
+///
+/// Rust writes the bytes, so this checks the wire format of a unit-only enum
+/// serialized through another namespace's helper class
+/// (`Example.Kit.PresenceBincode`), not just that the code compiles.
+#[test]
+fn test_csharp_bincode_runtime_on_enums_across_namespaces() {
+    let registry = common::across_namespaces::get_registry();
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let reference = bincode::serialize(&common::across_namespaces::get_card()).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] input = {bytes};
+var value = Card.BincodeDeserialize(input);
+
+Assert(value.Presence == Example.Kit.Presence.Offline, "Presence should be Offline");
+Assert(value.Shape == new Example.Kit.Shape.Circle(1.5), "Shape should be Circle(1.5)");
+Assert(value.Shapes.Count == 3, "Shapes should have 3 elements");
+Assert(value.Shapes[0] == new Example.Kit.Shape.Empty(), "Shapes[0] should be Empty");
+Assert(value.Shapes[1] == null, "Shapes[1] should be null");
+Assert(value.Shapes[2] == new Example.Kit.Shape.Circle(-2.25), "Shapes[2] should be Circle(-2.25)");
+Assert(value.Badge.Presence == Example.Kit.Presence.Online, "Badge.Presence should be Online");
+Assert(value.Badge.Shape == new Example.Kit.Shape.Empty(), "Badge.Shape should be Empty");
+
+var output = value.BincodeSerialize();
+Assert(input.SequenceEqual(output), "Roundtrip failed: serialized bytes don't match");
+
+Console.WriteLine("Enums across namespaces roundtrip: PASSED");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}

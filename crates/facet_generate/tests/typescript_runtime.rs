@@ -392,3 +392,64 @@ Deno.test("truncated input throws instead of yielding a short value", () => {
 
     project.run();
 }
+
+/// A ROOT type holding enums from namespace `kit`, and a `kit` type holding
+/// them too, round-trip through the modules the installer writes (#154).
+///
+/// Rust writes the bytes, so this checks the wire format of an enum
+/// serialized through another module's standalone functions
+/// (`Kit.serializeShape`), not just that the code type-checks.
+#[test]
+fn test_typescript_runtime_bincode_enums_across_namespaces_roundtrip() {
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(BincodePlugin)
+        .generate(&common::across_namespaces::get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&common::across_namespaces::get_card()).unwrap();
+
+    let source_path = dir.path().join("test.ts");
+    std::fs::write(
+        &source_path,
+        format!(
+            r#"import {{ assertEquals }} from "https://deno.land/std@0.110.0/testing/asserts.ts";
+import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
+import {{ Card }} from "./example.ts";
+import * as Kit from "./kit.ts";
+
+Deno.test("enums across namespaces bincode roundtrip", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  const card = Card.deserialize(new BincodeDeserializer(expectedBytes));
+
+  const expected = new Card(
+    Kit.presenceOffline(),
+    Kit.shapeCircle(1.5),
+    [Kit.shapeEmpty(), null, Kit.shapeCircle(-2.25)],
+    new Kit.Badge(Kit.presenceOnline(), Kit.shapeEmpty()),
+  );
+  assertEquals(card, expected, "the deserialized value should match");
+
+  const serializer = new BincodeSerializer();
+  card.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes, "roundtrip bytes should match");
+}});
+"#,
+            bytes = reference
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+        ),
+    )
+    .unwrap();
+
+    let status = Command::new("deno")
+        .current_dir(dir.path())
+        .arg("test")
+        .arg("--sloppy-imports")
+        .arg(&source_path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

@@ -13,7 +13,8 @@ use crate::{
     Registry,
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter, indent::IndentedWriter,
-        module::Module, plugin::EmitterPlugin, typescript::emitter::TypeScript,
+        module::Module, other_modules::OtherModules, plugin::EmitterPlugin,
+        typescript::emitter::TypeScript,
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -27,6 +28,10 @@ pub struct TypeScriptCodeGenerator<'a> {
     pub(crate) config: &'a CodeGeneratorConfig,
     /// Plugins that control encoding-specific code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>,
+    /// The whole registry the module was split from, when the installer
+    /// generates it, so that references to types in other modules can be
+    /// serialized according to their kind (see [`OtherModules`]).
+    pub(crate) whole_registry: Option<&'a Registry>,
 }
 
 impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
@@ -34,6 +39,7 @@ impl<'a> CodeGenerator<'a> for TypeScriptCodeGenerator<'a> {
         Self {
             config,
             plugins: vec![],
+            whole_registry: None,
         }
     }
 
@@ -51,6 +57,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         Self {
             config,
             plugins: vec![],
+            whole_registry: None,
         }
     }
 
@@ -58,6 +65,17 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     #[must_use]
     pub fn with_plugins(mut self, plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>) -> Self {
         self.plugins = plugins;
+        self
+    }
+
+    /// Tell the generator the whole registry that the module it generates
+    /// was split from, if there is one.
+    #[must_use]
+    pub(crate) const fn with_whole_registry(
+        mut self,
+        whole_registry: Option<&'a Registry>,
+    ) -> Self {
+        self.whole_registry = whole_registry;
         self
     }
 
@@ -80,11 +98,15 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         Module::new(&config).write(w, &lang)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
-        for container in updated_registry.iter().map(Container::from) {
-            container.write(w, &lang)?;
-        }
-
-        Ok(())
+        let other_modules = self
+            .whole_registry
+            .map(|whole| OtherModules::new(whole, registry, |name| Self::requalify(&config, name)));
+        OtherModules::scope(other_modules, || {
+            for container in updated_registry.iter().map(Container::from) {
+                container.write(w, &lang)?;
+            }
+            Ok(())
+        })
     }
 
     /// Updates [`QualifiedTypeName`] instances for TypeScript's ES-module
@@ -101,18 +123,26 @@ impl<'a> TypeScriptCodeGenerator<'a> {
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format
-                    && let Namespace::Named(namespace) = &qualified_name.namespace
-                    && namespace == config.module_name()
-                {
-                    // Same-module type: strip namespace so it renders as a bare name
-                    *qualified_name = QualifiedTypeName::root(qualified_name.name.clone());
+                if let Format::TypeName(qualified_name) = format {
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            // Same-module type: strip namespace so it renders as a bare name
+            Namespace::Named(namespace) if namespace == config.module_name() => {
+                QualifiedTypeName::root(name.name.clone())
+            }
+            _ => name.clone(),
+        }
     }
 }
 
