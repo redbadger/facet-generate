@@ -376,6 +376,82 @@ Console.WriteLine("Simple data roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// Round-trips values across a namespaced module and the root one: the ROOT
+/// `App` holds a `kv::Entry`, which holds ROOT types (a struct, unit and data
+/// enums, and an enum sharing its name with a `kv` struct). Each module names
+/// the other's types from the root package (`Company.Models.Shared`,
+/// `Company.Models.Kv.Entry`), and a unit enum through its helper class.
+#[test]
+fn test_csharp_bincode_runtime_across_root_and_namespace() {
+    use common::across_namespaces::to_root::{App, Level, Outcome, Presence, Shared, kv};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Company.Models", &dir)
+        .plugin(BincodePlugin)
+        .generate(&common::across_namespaces::to_root::get_registry())
+        .unwrap();
+
+    let entry = kv::Entry {
+        shared: Shared { id: 7 },
+        level: Level::High,
+        outcome: Outcome::Score(42),
+        status: Presence::Offline,
+        local: kv::Presence { since: 9 },
+    };
+    let entry_bytes = bincode::serialize(&entry).unwrap();
+    let app_bytes = bincode::serialize(&App {
+        entry,
+        shared: Shared { id: 3 },
+    })
+    .unwrap();
+
+    make_executable(&dir, "Company.Models");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+static void AssertEntry(Company.Models.Kv.Entry entry, string context)
+{{
+    Assert(entry.Shared.Id == 7, context + ": Shared.Id should be 7");
+    Assert(entry.Level == Company.Models.Level.High, context + ": Level should be High");
+    Assert(entry.Outcome is Company.Models.Outcome.Score {{ Value: 42 }}, context + ": Outcome should be Score(42)");
+    Assert(entry.Status == Company.Models.Presence.Offline, context + ": Status should be Offline");
+    Assert(entry.Local.Since == 9, context + ": Local.Since should be 9");
+}}
+
+// kv -> ROOT: a namespaced type deserializing ROOT types
+byte[] entryBytes = {entry_bytes};
+var entry = Company.Models.Kv.Entry.BincodeDeserialize(entryBytes);
+AssertEntry(entry, "entry");
+Assert(entryBytes.SequenceEqual(entry.BincodeSerialize()), "entry did not roundtrip");
+
+// ROOT -> kv -> ROOT
+byte[] appBytes = {app_bytes};
+var app = Company.Models.App.BincodeDeserialize(appBytes);
+AssertEntry(app.Entry, "app.Entry");
+Assert(app.Shared.Id == 3, "app.Shared.Id should be 3");
+Assert(appBytes.SequenceEqual(app.BincodeSerialize()), "app did not roundtrip");
+
+Console.WriteLine("Root and namespace roundtrip: PASSED");
+"#,
+            entry_bytes = quote_bytes(&entry_bytes),
+            app_bytes = quote_bytes(&app_bytes),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 #[test]
 #[ignore = "too slow for now, let's fix it later"]
 fn test_csharp_bincode_runtime_on_supported_types() {

@@ -134,13 +134,24 @@ impl<'a> CSharpCodeGenerator<'a> {
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.
     ///
+    /// Every namespace is declared under the *root package* (the parent the
+    /// installer nested this module under, or the module itself when it has
+    /// none), so references are rooted there rather than at `module_name()`,
+    /// which for a namespaced module already ends in its own namespace.
+    ///
     /// 1. **Same leaf namespace** — a `Named("Users")` reference inside module
     ///    `Company.Models.Users` is stripped to `Root` (bare name).
-    /// 2. **External namespace** — a `Named("Payments")` reference inside module
-    ///    `Company.Models` becomes `Named("Company.Models.Payments")` (rooted
-    ///    under the configured module name).
-    /// 3. **Root with dotted module** — a `Root` reference inside module
-    ///    `Company.Models` is promoted to `Named("Company.Models")`.
+    /// 2. **Other namespace** — a `Named("Payments")` reference inside module
+    ///    `Company.Models`, or inside its child `Company.Models.Users`, becomes
+    ///    `Named("Company.Models.Payments")`.
+    /// 3. **Root from a dotted root module** — a `Root` reference inside module
+    ///    `Company.Models` is promoted to `Named("Company.Models")`, and stays
+    ///    bare inside an undotted one (`Example`).
+    /// 4. **Root from a namespaced module** — a `Root` reference inside
+    ///    `Company.Models.Users` (parent `Company.Models`) becomes
+    ///    `Named("Company.Models")`, and inside `Example.Users` (parent
+    ///    `Example`) becomes `Named("Example")`, so that it cannot mean a
+    ///    same-named type of the module's own.
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
@@ -170,15 +181,15 @@ impl<'a> CSharpCodeGenerator<'a> {
                     QualifiedTypeName::root(name.name.clone())
                 } else {
                     QualifiedTypeName::namespaced(
-                        format!("{}.{}", config.module_name(), namespace),
+                        format!("{}.{}", config.root_package(), namespace),
                         name.name.clone(),
                     )
                 }
             }
             Namespace::Root => {
-                if config.module_name().contains('.') {
+                if config.parent.is_some() || config.module_name().contains('.') {
                     QualifiedTypeName::namespaced(
-                        config.module_name().to_string(),
+                        config.root_package().to_string(),
                         name.name.clone(),
                     )
                 } else {

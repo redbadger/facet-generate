@@ -197,24 +197,41 @@ fn test_that_csharp_code_shadowing_builtin_names_compiles_with_bincode() {
 /// `Unit` struct, which shadows the runtime's `Unit` in the `Kit` namespace
 /// too, makes that namespace qualify it.
 ///
-/// A reference between two named namespaces (`common::across_namespaces::
-/// get_sibling_registry`) is not compiled: the type itself is still rooted at
-/// the wrong namespace there (#149).
+/// A reference out of a namespaced module, to a sibling namespace
+/// (`Example.B.Status` from `Example.A`) or to a ROOT type (`Example.Shared`
+/// from `Example.Kv`), is rooted at the root package rather than at the
+/// referring module, with an undotted root package and with a dotted one.
 #[test]
 fn test_that_csharp_code_with_types_from_other_namespaces_compiles() {
-    let registry = common::across_namespaces::get_registry();
+    for registry in [
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
+    ] {
+        let dir = tempdir().unwrap();
+        csharp::Installer::new("Example", &dir)
+            .plugin(BincodePlugin)
+            .generate(&registry)
+            .unwrap();
+        dotnet_build(&dir);
 
-    let dir = tempdir().unwrap();
-    csharp::Installer::new("Example", &dir)
-        .plugin(BincodePlugin)
-        .generate(&registry)
-        .unwrap();
-    dotnet_build(&dir);
+        let dir = tempdir().unwrap();
+        csharp::Installer::new("Example", &dir)
+            .plugin(JsonPlugin)
+            .generate(&registry)
+            .unwrap();
+        dotnet_build(&dir);
+    }
 
-    let dir = tempdir().unwrap();
-    csharp::Installer::new("Example", &dir)
-        .plugin(JsonPlugin)
-        .generate(&registry)
-        .unwrap();
-    dotnet_build(&dir);
+    for registry in [
+        common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
+    ] {
+        let dir = tempdir().unwrap();
+        csharp::Installer::new("Company.Models", &dir)
+            .plugin(BincodePlugin)
+            .generate(&registry)
+            .unwrap();
+        dotnet_build(&dir);
+    }
 }

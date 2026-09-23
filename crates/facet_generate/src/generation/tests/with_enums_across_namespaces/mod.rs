@@ -158,8 +158,9 @@ fn root_to_kit() {
 
 /// A type in namespace `a` holding enums from namespace `b`.
 ///
-/// C# qualifies the helper class the same way as the type, which is still
-/// rooted at the wrong namespace (`Example.A.B`, #149).
+/// C# qualifies the helper class the same way as the type, from the root
+/// package rather than from the referring namespace (`Example.B`, not
+/// `Example.A.B`).
 #[test]
 fn a_to_b() {
     #[derive(Facet)]
@@ -198,9 +199,11 @@ fn a_to_b() {
 /// A type in namespace `kv` holding enums pinned to ROOT.
 ///
 /// TypeScript imports the root module as `Example` and reaches the enums and
-/// their functions through it. The enums are serialized as enums in every
+/// their functions through it, and C# qualifies them and the unit enum's
+/// helper class with the root package (`Example.Level`,
+/// `Example.LevelBincode`). The enums are serialized as enums in every
 /// language, but the references themselves are still broken in the others:
-/// #148 (Kotlin), #149 (C#) and #151 (Swift).
+/// #148 (Kotlin) and #151 (Swift).
 #[test]
 fn namespace_to_root() {
     #[derive(Facet)]

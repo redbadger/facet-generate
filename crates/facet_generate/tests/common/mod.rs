@@ -781,8 +781,8 @@ pub fn get_shadowing_registry() -> Registry {
 // differently from a struct) or on which names it brings into scope.
 //
 // A namespaced type referencing a ROOT one (`across_namespaces::to_root`) is
-// compiled and run in TypeScript only: the reference does not compile in the
-// other languages yet (#148, #149, #151), so for them it is covered by the
+// compiled and run in TypeScript and C# only: the reference does not compile
+// in Kotlin or Swift yet (#148, #151), so for them it is covered by the
 // `with_enums_across_namespaces` snapshots only.
 // ---------------------------------------------------------------------------
 
@@ -953,7 +953,9 @@ pub mod across_namespaces {
                 pub shared: super::Shared,
                 pub level: super::Level,
                 pub outcome: super::Outcome,
-                pub presence: super::Presence,
+                /// Not called `presence`: C# would resolve the local
+                /// `Presence.Deserialize` inside `Entry` to that property (#159).
+                pub status: super::Presence,
                 pub local: Presence,
             }
         }

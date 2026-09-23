@@ -415,7 +415,7 @@ fn test_typescript_runtime_bincode_roundtrip_across_root_and_namespace() {
         shared: Shared { id: 7 },
         level: Level::High,
         outcome: Outcome::Score(42),
-        presence: Presence::Offline,
+        status: Presence::Offline,
         local: kv::Presence { since: 9 },
     };
     let entry_bytes = to_byte_list(&bincode::serialize(&entry).unwrap());

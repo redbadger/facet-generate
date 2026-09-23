@@ -48,8 +48,9 @@ pub struct CodeGeneratorConfig {
     /// Kept because `module_name` alone cannot be decomposed: once a namespaced
     /// module becomes `com.example.auth`, nothing in the string says whether
     /// `auth` is a namespace or the last segment of the root package. Kotlin
-    /// needs the answer to qualify a type living in a *sibling* namespace —
-    /// that path is rooted at the parent, not at this module.
+    /// and C# need the answer to qualify a type living in a *sibling*
+    /// namespace — that path is rooted at the parent, not at this module — and
+    /// C# to qualify a ROOT type too.
     ///
     /// The TypeScript installer sets it for a namespaced module without
     /// renaming the module, whose name is also its file's, so that the module

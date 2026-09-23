@@ -8,14 +8,14 @@ namespace Example.Kv;
 
 public partial class Entry : ObservableObject, IFacetSerializable, IFacetDeserializable<Entry> {
     [ObservableProperty]
-    private Example.Kv.Level _level;
+    private Example.Level _level;
     [ObservableProperty]
-    private Example.Kv.Outcome _outcome;
+    private Example.Outcome _outcome;
 
     public void Serialize(ISerializer serializer)
     {
         serializer.IncreaseContainerDepth();
-        Example.Kv.LevelBincode.Serialize(Level, serializer);
+        Example.LevelBincode.Serialize(Level, serializer);
         Outcome.Serialize(serializer);
         serializer.DecreaseContainerDepth();
     }
@@ -23,8 +23,8 @@ public partial class Entry : ObservableObject, IFacetSerializable, IFacetDeseria
     public static Entry Deserialize(IDeserializer deserializer)
     {
         deserializer.IncreaseContainerDepth();
-        var level = Example.Kv.LevelBincode.Deserialize(deserializer);
-        var outcome = Example.Kv.Outcome.Deserialize(deserializer);
+        var level = Example.LevelBincode.Deserialize(deserializer);
+        var outcome = Example.Outcome.Deserialize(deserializer);
         deserializer.DecreaseContainerDepth();
         return new Entry {
             Level = level,

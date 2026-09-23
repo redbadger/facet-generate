@@ -8,14 +8,14 @@ namespace Example.A;
 
 public partial class Row : ObservableObject, IFacetSerializable, IFacetDeserializable<Row> {
     [ObservableProperty]
-    private Example.A.B.Status _status;
+    private Example.B.Status _status;
     [ObservableProperty]
-    private Example.A.B.Signal _signal;
+    private Example.B.Signal _signal;
 
     public void Serialize(ISerializer serializer)
     {
         serializer.IncreaseContainerDepth();
-        Example.A.B.StatusBincode.Serialize(Status, serializer);
+        Example.B.StatusBincode.Serialize(Status, serializer);
         Signal.Serialize(serializer);
         serializer.DecreaseContainerDepth();
     }
@@ -23,8 +23,8 @@ public partial class Row : ObservableObject, IFacetSerializable, IFacetDeseriali
     public static Row Deserialize(IDeserializer deserializer)
     {
         deserializer.IncreaseContainerDepth();
-        var status = Example.A.B.StatusBincode.Deserialize(deserializer);
-        var signal = Example.A.B.Signal.Deserialize(deserializer);
+        var status = Example.B.StatusBincode.Deserialize(deserializer);
+        var signal = Example.B.Signal.Deserialize(deserializer);
         deserializer.DecreaseContainerDepth();
         return new Row {
             Status = status,

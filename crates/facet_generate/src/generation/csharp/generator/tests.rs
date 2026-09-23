@@ -9,6 +9,9 @@
 //! - Same-leaf-namespace stripping (`Users` inside `Company.Models.Users` → bare name)
 //! - External namespace rooting under module (`Payments` → `Company.Models.Payments`)
 //! - Root-to-dotted promotion (`Root` inside `Company.Models` → `Named("Company.Models")`)
+//! - References from a namespaced module rooted at the root package, not the
+//!   module (`Root` and `kit` inside `Company.Models.feature` →
+//!   `Company.Models.Shared`, `Company.Models.Kit.Row`)
 //! - Preamble (`using` directives + `namespace` declaration)
 //! - Plugin-specific imports (JSON adds `System.Text.Json.Serialization`,
 //!   Bincode adds `Facet.Runtime.Bincode`)
@@ -111,6 +114,135 @@ fn update_qualified_names_roots_root_namespace_for_dotted_module() {
         Namespace::Named("Company.Models".to_string())
     );
     assert_eq!(type_name.name, "User");
+}
+
+/// A module named `namespace` (or the root module, for `None`) the way the
+/// installer configures it under `root_package`.
+fn module_config(root_package: &str, namespace: Option<&str>) -> CodeGeneratorConfig {
+    CodeGeneratorConfig::new(namespace.unwrap_or(root_package).to_string())
+        .with_parent(root_package)
+}
+
+fn requalified(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    CSharpCodeGenerator::requalify(config, name)
+}
+
+#[test]
+fn requalify_roots_a_root_reference_at_the_root_package() {
+    let shared = QualifiedTypeName::root("Shared".to_string());
+
+    // From the root module: qualified when the package is dotted, bare when
+    // it is not (the bare name is declared right there).
+    assert_eq!(
+        requalified(&module_config("Company.Models", None), &shared),
+        QualifiedTypeName::namespaced("Company.Models".to_string(), "Shared".to_string())
+    );
+    assert_eq!(
+        requalified(&module_config("Example", None), &shared),
+        shared
+    );
+
+    // From a namespaced module: always the root package, never the module's
+    // own namespace (`Company.Models.kv`), dotted or not.
+    assert_eq!(
+        requalified(&module_config("Company.Models", Some("kv")), &shared),
+        QualifiedTypeName::namespaced("Company.Models".to_string(), "Shared".to_string())
+    );
+    assert_eq!(
+        requalified(&module_config("Example", Some("kv")), &shared),
+        QualifiedTypeName::namespaced("Example".to_string(), "Shared".to_string())
+    );
+}
+
+#[test]
+fn requalify_roots_a_sibling_namespace_at_the_root_package() {
+    let row = QualifiedTypeName::namespaced("kit".to_string(), "Row".to_string());
+
+    for root_package in ["Company.Models", "Example"] {
+        let expected =
+            QualifiedTypeName::namespaced(format!("{root_package}.kit"), "Row".to_string());
+
+        // From the root module, and from another namespace, which must not
+        // nest `kit` inside itself (`Company.Models.feature.kit`).
+        assert_eq!(
+            requalified(&module_config(root_package, None), &row),
+            expected
+        );
+        assert_eq!(
+            requalified(&module_config(root_package, Some("feature")), &row),
+            expected
+        );
+    }
+}
+
+#[test]
+fn requalify_leaves_a_same_namespace_reference_bare() {
+    let row = QualifiedTypeName::namespaced("kit".to_string(), "Row".to_string());
+
+    for root_package in ["Company.Models", "Example"] {
+        assert_eq!(
+            requalified(&module_config(root_package, Some("kit")), &row),
+            QualifiedTypeName::root("Row".to_string())
+        );
+    }
+}
+
+/// The qualified paths match the `namespace` declaration each module writes,
+/// which upper-camel-cases every segment (`Company.Models.Kit`).
+#[test]
+fn output_from_a_namespaced_module_names_root_and_sibling_types_as_declared() {
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("feature".to_string(), "FeatureView".to_string()),
+        ContainerFormat::Struct(
+            vec![
+                Named {
+                    name: "row".to_string(),
+                    doc: Doc::new(),
+                    value: Format::TypeName(QualifiedTypeName::namespaced(
+                        "kit".to_string(),
+                        "Row".to_string(),
+                    )),
+                },
+                Named {
+                    name: "shared".to_string(),
+                    doc: Doc::new(),
+                    value: Format::TypeName(QualifiedTypeName::root("Shared".to_string())),
+                },
+            ],
+            Doc::new(),
+        ),
+    );
+
+    let output = render_output(
+        &module_config("Company.Models", Some("feature")),
+        vec![],
+        &registry,
+    );
+    assert!(
+        output.contains("namespace Company.Models.Feature;"),
+        "{output}"
+    );
+    assert!(
+        output.contains("private Company.Models.Kit.Row _row;"),
+        "{output}"
+    );
+    assert!(
+        output.contains("private Company.Models.Shared _shared;"),
+        "{output}"
+    );
+
+    let output = render_output(
+        &module_config("Example", Some("feature")),
+        vec![],
+        &registry,
+    );
+    assert!(output.contains("namespace Example.Feature;"), "{output}");
+    assert!(output.contains("private Example.Kit.Row _row;"), "{output}");
+    assert!(
+        output.contains("private Example.Shared _shared;"),
+        "{output}"
+    );
 }
 
 #[test]
