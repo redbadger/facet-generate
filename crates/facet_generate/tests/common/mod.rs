@@ -781,9 +781,9 @@ pub fn get_shadowing_registry() -> Registry {
 // differently from a struct) or on which names it brings into scope.
 //
 // A namespaced type referencing a ROOT one (`across_namespaces::to_root`) is
-// compiled and run in TypeScript and C# only: the reference does not compile
-// in Kotlin or Swift yet (#148, #151), so for them it is covered by the
-// `with_enums_across_namespaces` snapshots only.
+// compiled in every language. Swift compiles it without the ROOT type holding
+// the namespaced one (`to_root::get_namespace_registry`): its targets cannot
+// depend on each other, so it rejects `to_root::get_registry`.
 // ---------------------------------------------------------------------------
 
 pub mod across_namespaces {
@@ -1003,6 +1003,12 @@ pub mod across_namespaces {
         /// References from ROOT into `kv`, and from `kv` back into ROOT.
         pub fn get_registry() -> Registry {
             reflect!(App).unwrap()
+        }
+
+        /// References from `kv` into ROOT only.
+        pub fn get_namespace_registry() -> Registry {
+            use kv::Entry;
+            reflect!(Entry).unwrap()
         }
     }
 }

@@ -630,13 +630,15 @@ fn assert_installed_package_compiles(
 }
 
 /// Types referencing enums and structs in other namespaces, including a type
-/// in one named namespace referencing another. `Kit` declares a `Set`, which
+/// in one named namespace referencing another, and one referencing ROOT types
+/// (one of them named like a type of its own). `Kit` declares a `Set`, which
 /// shadows `Swift.Set` in every module that imports it.
 #[test]
 fn test_that_swift_code_with_types_from_other_namespaces_compiles() {
     for registry in [
         common::across_namespaces::get_registry(),
         common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_namespace_registry(),
     ] {
         // Not with the JSON plugin: the Swift runtime has no `JsonSerializer`
         // or `JsonDeserializer`, so its output never builds, namespaces or

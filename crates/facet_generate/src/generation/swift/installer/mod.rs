@@ -62,6 +62,10 @@ pub struct Installer {
     /// verbatim rather than quoted, and they must not be mistaken for local
     /// targets when deciding which targets are top-level.
     plugin_target_dependencies: BTreeMap<String, BTreeSet<String>>,
+    /// The type names behind each edge of [`targets`](Self::targets), keyed by
+    /// target and then by the target it depends on, for naming the types when
+    /// the edges form a cycle.
+    target_references: BTreeMap<String, BTreeMap<String, BTreeSet<String>>>,
     external_packages: ExternalPackages,
     platforms: Vec<String>,
     plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
@@ -80,6 +84,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             targets: BTreeMap::new(),
             plugin_target_dependencies: BTreeMap::new(),
+            target_references: BTreeMap::new(),
             external_packages: ExternalPackages::new(),
             platforms: vec![],
             plugins: vec![],
@@ -246,18 +251,115 @@ impl Installer {
     /// All targets keyed by name, plus a synthetic package-level target
     /// aggregating every namespace target (used to compute the library
     /// product's target list).
+    ///
+    /// The aggregate leaves out the package target itself and every target
+    /// that depends on it (a namespaced module that references a ROOT type),
+    /// which would otherwise make a cycle.
     fn all_targets_with_package(&self, package_name: &str) -> BTreeMap<String, BTreeSet<String>> {
         let mut all_targets = self.targets.clone();
+        let package_target = package_name.to_upper_camel_case();
 
         let mut package_targets = BTreeSet::new();
         for targets in all_targets.values() {
             for target in targets {
-                package_targets.insert(target.to_upper_camel_case());
+                let target = target.to_upper_camel_case();
+                if target != package_target
+                    && !self.depends_on(&target, &package_target, &mut BTreeSet::new())
+                {
+                    package_targets.insert(target);
+                }
             }
         }
-        all_targets.insert(package_name.to_upper_camel_case(), package_targets);
+        all_targets.insert(package_target, package_targets);
 
         all_targets
+    }
+
+    /// Whether `target` depends on `dependency`, directly or through other
+    /// targets.
+    fn depends_on(&self, target: &str, dependency: &str, visited: &mut BTreeSet<String>) -> bool {
+        if !visited.insert(target.to_string()) {
+            return false;
+        }
+        self.targets.get(target).is_some_and(|dependencies| {
+            dependencies
+                .iter()
+                .any(|d| d == dependency || self.depends_on(d, dependency, visited))
+        })
+    }
+
+    /// Fails when the targets' dependencies form a cycle, which `SwiftPM`
+    /// rejects: typically a namespaced module referencing a ROOT type while
+    /// the root module references that namespace.
+    fn check_acyclic(&self) -> Result<(), Error> {
+        let Some(cycle) = self.find_cycle() else {
+            return Ok(());
+        };
+
+        let edges = cycle
+            .windows(2)
+            .map(|edge| {
+                let types = self
+                    .target_references
+                    .get(&edge[0])
+                    .and_then(|references| references.get(&edge[1]))
+                    .map(|types| {
+                        types
+                            .iter()
+                            .map(|t| format!("`{t}`"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .unwrap_or_default();
+                format!("`{}` references {types} in `{}`", edge[0], edge[1])
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "Swift targets cannot depend on each other in a cycle, and these would: \
+                 {edges}. Move the types that one of these targets references into a \
+                 namespace of their own (`#[facet(fg::namespace = \"…\")]`), which the \
+                 targets can both depend on"
+            ),
+        )
+        .into())
+    }
+
+    /// The first cycle in the targets' dependencies, as the targets along it,
+    /// starting and ending with the same one.
+    fn find_cycle(&self) -> Option<Vec<String>> {
+        fn visit(
+            targets: &BTreeMap<String, BTreeSet<String>>,
+            target: &str,
+            path: &mut Vec<String>,
+            done: &mut BTreeSet<String>,
+        ) -> Option<Vec<String>> {
+            if let Some(start) = path.iter().position(|t| t == target) {
+                let mut cycle = path[start..].to_vec();
+                cycle.push(target.to_string());
+                return Some(cycle);
+            }
+            if done.contains(target) {
+                return None;
+            }
+            path.push(target.to_string());
+            for dependency in targets.get(target).into_iter().flatten() {
+                if let Some(cycle) = visit(targets, dependency, path, done) {
+                    return Some(cycle);
+                }
+            }
+            path.pop();
+            done.insert(target.to_string());
+            None
+        }
+
+        let mut done = BTreeSet::new();
+        self.targets
+            .keys()
+            .find_map(|target| visit(&self.targets, target, &mut Vec::new(), &mut done))
     }
 
     /// Names of external dependencies to exclude from target creation.
@@ -398,9 +500,28 @@ impl SourceInstaller for Installer {
 
         let module_name = config.module_name().to_upper_camel_case();
 
+        // Update config with external packages from installer
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+
+        // A namespaced module qualifies the ROOT types it references with the
+        // root package, whose target it then depends on.
+        if config.module_name() != self.package_name {
+            updated_config.parent = Some(self.package_name.clone());
+        }
+        SwiftCodeGenerator::reference_root_types(&mut updated_config, registry);
+
         let targets = self.targets.entry(module_name.clone()).or_default();
-        for target in config.external_definitions.keys() {
+        let references = self
+            .target_references
+            .entry(module_name.clone())
+            .or_default();
+        for (target, types) in &updated_config.external_definitions {
             targets.insert(target.to_upper_camel_case());
+            references
+                .entry(target.to_upper_camel_case())
+                .or_default()
+                .extend(types.iter().cloned());
         }
 
         // Depend on the Serde target when the installer has plugins
@@ -429,10 +550,6 @@ impl SourceInstaller for Installer {
 
         let mut file = std::fs::File::create(source_path)?;
 
-        // Update config with external packages from installer
-        let mut updated_config = config.clone();
-        updated_config.external_packages = self.external_packages.clone();
-
         let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
@@ -446,7 +563,14 @@ impl SourceInstaller for Installer {
     }
 
     /// Write `Package.swift` to the output directory root.
+    ///
+    /// # Errors
+    ///
+    /// Fails, without writing the manifest, when the targets' dependencies
+    /// form a cycle.
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
+        self.check_acyclic()?;
+
         let manifest = self.make_manifest(package_name);
 
         let manifest_path = self.install_dir.join("Package.swift");

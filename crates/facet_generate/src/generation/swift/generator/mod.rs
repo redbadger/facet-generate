@@ -22,7 +22,9 @@ use crate::{
             naming,
         },
     },
-    reflection::format::{ContainerFormat, Format, QualifiedTypeName, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Format, FormatHolder, Namespace, QualifiedTypeName, VariantFormat,
+    },
 };
 
 /// Main configuration object for Swift code generation.
@@ -82,8 +84,10 @@ impl<'a> SwiftCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        Self::reference_root_types(&mut config, registry);
         check_reserved_names(registry, &naming::RULES)?;
 
+        let registry = &Self::update_qualified_names(&config, registry);
         let mut lang = Swift::new(&config, registry);
         for p in &self.plugins {
             lang = lang.with_plugin(p.clone());
@@ -112,6 +116,7 @@ impl<'a> SwiftCodeGenerator<'a> {
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let mut config = self.config.clone();
         config.update_from(registry);
+        Self::reference_root_types(&mut config, registry);
 
         let mut lang = Swift::new(&config, registry);
         for p in &self.plugins {
@@ -128,6 +133,76 @@ impl<'a> SwiftCodeGenerator<'a> {
             )?;
             String::from_utf8(header).map_err(std::io::Error::other)
         })
+    }
+
+    /// Rewrites every type reference in `registry` with
+    /// [`requalify`](Self::requalify), returning a new registry.
+    fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
+        let mut updated_registry = registry.clone();
+
+        for container_format in updated_registry.values_mut() {
+            let _ = container_format.visit_mut(&mut |format| {
+                if let Format::TypeName(qualified_name) = format {
+                    *qualified_name = Self::requalify(config, qualified_name);
+                }
+                Ok(())
+            });
+        }
+
+        updated_registry
+    }
+
+    /// The spelling a reference to `name` is written with.
+    ///
+    /// A ROOT type seen from a namespaced module lives in the root package's
+    /// target, so it is qualified with it (`Example.Shared`), which also keeps
+    /// a same-named type of the module's own from capturing it. Only when the
+    /// config knows the root package ([`CodeGeneratorConfig::parent`], which
+    /// the installer sets); otherwise, and in the root module itself, every
+    /// reference is unchanged.
+    pub(crate) fn requalify(
+        config: &CodeGeneratorConfig,
+        name: &QualifiedTypeName,
+    ) -> QualifiedTypeName {
+        match &name.namespace {
+            Namespace::Root if config.root_package() != config.module_name() => {
+                QualifiedTypeName::namespaced(config.root_package().to_string(), name.name.clone())
+            }
+            _ => name.clone(),
+        }
+    }
+
+    /// Records the ROOT types a namespaced module references in its
+    /// [`external_definitions`](CodeGeneratorConfig::external_definitions),
+    /// under the root package, so that the module imports the root package's
+    /// target and the installer makes it a dependency.
+    pub(crate) fn reference_root_types(config: &mut CodeGeneratorConfig, registry: &Registry) {
+        let root_package = config.root_package().to_string();
+        if root_package == config.module_name() {
+            return;
+        }
+
+        let mut names = BTreeSet::new();
+        for format in registry.values() {
+            let _ = format.visit(&mut |format| {
+                if let Format::TypeName(name) = format
+                    && name.namespace == Namespace::Root
+                {
+                    names.insert(name.name.clone());
+                }
+                Ok(())
+            });
+        }
+        if names.is_empty() {
+            return;
+        }
+
+        let known = config.external_definitions.entry(root_package).or_default();
+        for name in names {
+            if !known.contains(&name) {
+                known.push(name);
+            }
+        }
     }
 }
 

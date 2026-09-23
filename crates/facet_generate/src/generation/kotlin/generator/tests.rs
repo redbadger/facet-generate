@@ -946,6 +946,85 @@ fn test_update_qualified_names_mixed_external_and_local() {
 }
 
 // ---------------------------------------------------------------------------
+// References to ROOT types
+// ---------------------------------------------------------------------------
+
+/// A namespaced module nested under `package` by the installer.
+fn namespaced_config(package: &str, namespace: &str) -> CodeGeneratorConfig {
+    CodeGeneratorConfig::new(namespace.to_string()).with_parent(package)
+}
+
+#[test]
+fn root_reference_from_a_namespaced_module_is_rooted_at_the_root_package() {
+    let shared = QualifiedTypeName::root("Shared".to_string());
+
+    // Dotted and undotted packages, and one whose last segment is the
+    // module's own namespace.
+    for package in ["com.example", "example", "com.kv"] {
+        let config = namespaced_config(package, "kv");
+        assert_eq!(
+            KotlinCodeGenerator::requalify(&config, &shared),
+            QualifiedTypeName::namespaced(package.to_string(), "Shared".to_string()),
+            "from {}",
+            config.module_name(),
+        );
+    }
+}
+
+#[test]
+fn root_reference_from_the_root_module_is_unchanged() {
+    let shared = QualifiedTypeName::root("Shared".to_string());
+
+    for package in ["com.example", "example"] {
+        // The installer's `with_parent` leaves the root module as it is.
+        let config = CodeGeneratorConfig::new(package.to_string()).with_parent(package);
+        assert_eq!(
+            KotlinCodeGenerator::requalify(&config, &shared),
+            QualifiedTypeName::namespaced(package.to_string(), "Shared".to_string()),
+        );
+    }
+}
+
+#[test]
+fn own_namespace_reference_is_unchanged_when_the_package_ends_in_it() {
+    // `com.kv` + `kv` is `com.kv.kv`: the leaf is still the module's own
+    // namespace, so its types stay in `com.kv.kv`, and the ROOT ones (above)
+    // in `com.kv`.
+    let config = namespaced_config("com.kv", "kv");
+    let entry = QualifiedTypeName::namespaced("kv".to_string(), "Entry".to_string());
+    assert_eq!(
+        KotlinCodeGenerator::requalify(&config, &entry),
+        QualifiedTypeName::namespaced("com.kv.kv".to_string(), "Entry".to_string()),
+    );
+}
+
+#[test]
+fn root_reference_is_written_with_the_root_package() {
+    let mut registry = Registry::new();
+    registry.insert(
+        QualifiedTypeName::namespaced("kv".to_string(), "Entry".to_string()),
+        ContainerFormat::Struct(
+            vec![Named {
+                name: "shared".to_string(),
+                doc: Doc::new(),
+                value: Format::TypeName(QualifiedTypeName::root("Shared".to_string())),
+            }],
+            Doc::new(),
+        ),
+    );
+
+    let config = namespaced_config("com.example", "kv");
+    let mut out = Vec::new();
+    KotlinCodeGenerator::new(&config)
+        .output(&mut out, &registry)
+        .unwrap();
+    let out = String::from_utf8(out).unwrap();
+
+    assert!(out.contains("val shared: com.example.Shared,"), "{out}");
+    assert!(!out.contains("com.example.kv.Shared"), "{out}");
+}
+
+// ---------------------------------------------------------------------------
 // Reserved-name pre-pass
 // ---------------------------------------------------------------------------
 

@@ -1009,3 +1009,141 @@ fn a_plugin_can_scope_its_target_edge_to_one_module() {
     )
     "#);
 }
+
+#[derive(Facet)]
+#[facet(fg::namespace)]
+struct Shared {
+    id: u32,
+}
+
+/// A namespaced module that references a ROOT type depends on the root
+/// package's target, which in turn no longer aggregates it.
+#[test]
+fn namespace_referencing_root_depends_on_the_root_target() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    struct Entry {
+        shared: Shared,
+    }
+
+    // `app` reaches the root target only through `kv`.
+    #[derive(Facet)]
+    #[facet(fg::namespace = "app")]
+    struct View {
+        entry: Entry,
+    }
+
+    let registry = reflect!(View).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["App"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "App",
+                dependencies: ["Kv", "Serde"]
+            ),
+            .target(
+                name: "Example",
+                dependencies: ["Serde"]
+            ),
+            .target(
+                name: "Kv",
+                dependencies: ["Example", "Serde"]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+
+    let kv = std::fs::read_to_string(install_dir.path().join("Sources/Kv/Kv.swift")).unwrap();
+    assert!(kv.starts_with("import Example\nimport Serde\n"), "{kv}");
+    assert!(kv.contains("public var shared: Example.Shared\n"), "{kv}");
+}
+
+/// ROOT and `kv` referencing each other would make their targets depend on
+/// each other, which `SwiftPM` rejects, so no manifest is written.
+#[test]
+fn root_and_namespace_referencing_each_other_is_rejected() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    struct Entry {
+        shared: Shared,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        entry: Entry,
+    }
+
+    let registry = reflect!(App).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Swift targets cannot depend on each other in a cycle, and these would: \
+         `Example` references `Entry` in `Kv`; `Kv` references `Shared` in `Example`. \
+         Move the types that one of these targets references into a namespace of their \
+         own (`#[facet(fg::namespace = \"…\")]`), which the targets can both depend on"
+    );
+    assert!(!install_dir.path().join("Package.swift").exists());
+}
+
+/// The same for two named namespaces.
+#[test]
+fn namespaces_referencing_each_other_are_rejected() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    struct Leaf {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "a")]
+    struct Up {
+        down: Down,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    struct Down {
+        leaf: Leaf,
+        up: Option<Box<Up>>,
+    }
+
+    let registry = reflect!(Up).unwrap();
+
+    let error = Installer::new("Example", tempfile::tempdir().unwrap().path())
+        .generate(&registry)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.contains("`A` references `Down` in `B`; `B` references `Up` in `A`."),
+        "{error}"
+    );
+}

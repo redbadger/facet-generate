@@ -27,6 +27,11 @@ type Generate = fn(&Registry, &Path);
 /// The runtime sources are removed before comparing: they do not depend on the
 /// registry, and the other fixtures already cover them.
 fn check_all(layout: &str, registry: &Registry) {
+    check_targets(layout, registry, |_| true);
+}
+
+/// [`check_all`] for the targets that `include` accepts.
+fn check_targets(layout: &str, registry: &Registry, include: impl Fn(&str) -> bool) {
     let snapshot_root = source_dir!().join("snapshots").join(layout);
 
     let targets: [(&str, &[&str], Generate); 7] = [
@@ -75,6 +80,9 @@ fn check_all(layout: &str, registry: &Registry) {
     ];
 
     for (target, runtime_dirs, generate) in targets {
+        if !include(target) {
+            continue;
+        }
         let tmp_dir = tempdir().unwrap();
         let tmp_path = tmp_dir.path();
         generate(registry, tmp_path);
@@ -199,11 +207,15 @@ fn a_to_b() {
 /// A type in namespace `kv` holding enums pinned to ROOT.
 ///
 /// TypeScript imports the root module as `Example` and reaches the enums and
-/// their functions through it, and C# qualifies them and the unit enum's
-/// helper class with the root package (`Example.Level`,
-/// `Example.LevelBincode`). The enums are serialized as enums in every
-/// language, but the references themselves are still broken in the others:
-/// #148 (Kotlin) and #151 (Swift).
+/// their functions through it, C# qualifies them and the unit enum's helper
+/// class with the root package (`Example.Level`, `Example.LevelBincode`), and
+/// Kotlin with the root package (`com.example.Level`, not
+/// `com.example.kv.Level`).
+///
+/// Swift imports the root target into `Kv` and qualifies the enums with it
+/// (`Example.Level`). The ROOT `App` holding `Entry` would make the targets
+/// depend on each other, which `SwiftPM` forbids, so Swift rejects that registry
+/// and its snapshots are of `Entry` alone.
 #[test]
 fn namespace_to_root() {
     #[derive(Facet)]
@@ -236,7 +248,23 @@ fn namespace_to_root() {
         entry: Entry,
     }
 
-    check_all("namespace_to_root", &reflect!(App).unwrap());
+    let is_swift = |target: &str| target.starts_with("swift");
+    check_targets("namespace_to_root", &reflect!(App).unwrap(), |t| {
+        !is_swift(t)
+    });
+    check_targets("namespace_to_root", &reflect!(Entry).unwrap(), is_swift);
+
+    let error = swift::Installer::new("Example", tempdir().unwrap().path())
+        .plugin(BincodePlugin)
+        .generate(&reflect!(App).unwrap())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains(
+            "`Example` references `Entry` in `Kv`; `Kv` references `Level`, `Outcome` in `Example`"
+        ),
+        "{error}"
+    );
 }
 
 /// Builtin type names shadowed by a declaration in *another* module.

@@ -1,10 +1,11 @@
+import Example
 import Serde
 
 public struct Entry: Hashable, Equatable {
-    public var level: Level
-    public var outcome: Outcome
+    public var level: Example.Level
+    public var outcome: Example.Outcome
 
-    public init(level: Level, outcome: Outcome) {
+    public init(level: Example.Level, outcome: Example.Outcome) {
         self.level = level
         self.outcome = outcome
     }
@@ -24,8 +25,8 @@ public struct Entry: Hashable, Equatable {
 
     public static func deserialize<D: Deserializer>(deserializer: D) throws -> Entry {
         try deserializer.increase_container_depth()
-        let level = try Level.deserialize(deserializer: deserializer)
-        let outcome = try Outcome.deserialize(deserializer: deserializer)
+        let level = try Example.Level.deserialize(deserializer: deserializer)
+        let outcome = try Example.Outcome.deserialize(deserializer: deserializer)
         try deserializer.decrease_container_depth()
         return Entry(level: level, outcome: outcome)
     }

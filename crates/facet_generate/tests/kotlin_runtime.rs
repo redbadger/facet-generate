@@ -58,21 +58,55 @@ fn quote_bytes_kotlin(bytes: &[u8]) -> String {
     format!("byteArrayOf({})", elems.join(", "))
 }
 
+/// Whether `kotlinc` is on `PATH`, so that a test can skip gracefully when it
+/// is not (e.g. Windows CI runners that have Gradle but not the standalone
+/// kotlinc compiler).
+fn kotlinc_available() -> bool {
+    match Command::new("kotlinc").arg("-version").output() {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            eprintln!("kotlinc not found on PATH — skipping runtime test");
+            false
+        }
+        Err(e) => panic!("failed to probe kotlinc: {e}"),
+        Ok(_) => true,
+    }
+}
+
+/// Compile every `.kt` file under `dir` (generated types, serde runtime and
+/// a top-level `Main.kt`) into a single self-contained JAR, and run it.
+fn compile_and_run(dir: &Path) {
+    let jar_path = dir.join("test.jar");
+    let kt_files = collect_kt_files(dir);
+
+    let status = Command::new("kotlinc")
+        .args(&kt_files)
+        .arg("-include-runtime")
+        .arg("-d")
+        .arg(&jar_path)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "kotlinc compilation failed");
+
+    // `Main.kt` in the default package compiles to the JVM class `MainKt`.
+    let status = Command::new("java")
+        .arg("-classpath")
+        .arg(&jar_path)
+        .arg("MainKt")
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "round-trip test failed");
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_kotlin_bincode_runtime_on_uuid_data() {
-    // Skip gracefully when kotlinc is not on PATH (e.g. Windows CI runners
-    // that have Gradle but not the standalone kotlinc compiler).
-    match Command::new("kotlinc").arg("-version").output() {
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            eprintln!("kotlinc not found on PATH — skipping runtime test");
-            return;
-        }
-        Err(e) => panic!("failed to probe kotlinc: {e}"),
-        Ok(_) => {}
+    if !kotlinc_available() {
+        return;
     }
 
     let registry = common::get_uuid_registry();
@@ -122,29 +156,83 @@ fun main() {{
     )
     .unwrap();
 
-    // Compile all .kt files (generated types + serde runtime + Main.kt) into
-    // a single self-contained JAR.
-    let jar_path = dir.join("test.jar");
-    let kt_files = collect_kt_files(&dir);
+    compile_and_run(&dir);
+}
 
-    let status = Command::new("kotlinc")
-        .args(&kt_files)
-        .arg("-include-runtime")
-        .arg("-d")
-        .arg(&jar_path)
-        .current_dir(&dir)
-        .status()
-        .unwrap();
-    assert!(status.success(), "kotlinc compilation failed");
+/// Round-trips values across a namespaced module and the root one: the ROOT
+/// `App` holds a `kv::Entry`, which holds ROOT types (a struct, unit and data
+/// enums, and an enum sharing its name with a `kv` struct). Each module names
+/// the other's types from the root package (`com.example.testing.Shared`,
+/// `com.example.testing.kv.Entry`).
+#[test]
+fn test_kotlin_bincode_runtime_across_root_and_namespace() {
+    use common::across_namespaces::to_root::{App, Level, Outcome, Presence, Shared, kv};
 
-    // Run the JVM entry-point. `Main.kt` in the default package compiles to
-    // the JVM class `MainKt`.
-    let status = Command::new("java")
-        .arg("-classpath")
-        .arg(&jar_path)
-        .arg("MainKt")
-        .current_dir(&dir)
-        .status()
+    if !kotlinc_available() {
+        return;
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&common::across_namespaces::to_root::get_registry())
         .unwrap();
-    assert!(status.success(), "UUID round-trip test failed");
+
+    let entry = kv::Entry {
+        shared: Shared { id: 7 },
+        level: Level::High,
+        outcome: Outcome::Score(42),
+        status: Presence::Offline,
+        local: kv::Presence { since: 9 },
+    };
+    let entry_bytes = bincode::serialize(&entry).unwrap();
+    let app_bytes = bincode::serialize(&App {
+        entry,
+        shared: Shared { id: 3 },
+    })
+    .unwrap();
+
+    fs::write(
+        dir.join("Main.kt"),
+        format!(
+            r#"import com.example.testing.App
+import com.example.testing.Level
+import com.example.testing.Outcome
+import com.example.testing.Presence
+import com.example.testing.Shared
+import com.example.testing.kv.Entry
+
+fun main() {{
+    val expected = Entry(
+        Shared(7u),
+        Level.HIGH,
+        Outcome.Score(42u),
+        Presence.OFFLINE,
+        com.example.testing.kv.Presence(9UL),
+    )
+
+    // kv -> ROOT: a namespaced type deserializing ROOT types
+    val entryBytes = {entry_bytes}
+    val entry = Entry.bincodeDeserialize(entryBytes)
+    check(entry == expected) {{ "entry mismatch: $entry" }}
+    check(entryBytes.contentEquals(entry.bincodeSerialize())) {{ "entry did not roundtrip" }}
+
+    // ROOT -> kv -> ROOT
+    val appBytes = {app_bytes}
+    val app = App.bincodeDeserialize(appBytes)
+    check(app == App(expected, Shared(3u))) {{ "app mismatch: $app" }}
+    check(appBytes.contentEquals(app.bincodeSerialize())) {{ "app did not roundtrip" }}
+
+    println("Root and namespace roundtrip: PASSED")
+}}
+"#,
+            entry_bytes = quote_bytes_kotlin(&entry_bytes),
+            app_bytes = quote_bytes_kotlin(&app_bytes),
+        ),
+    )
+    .unwrap();
+
+    compile_and_run(&dir);
 }

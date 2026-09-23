@@ -1,41 +1,4 @@
-import Kv
 import Serde
-
-public struct App: Hashable, Equatable {
-    public var entry: Kv.Entry
-
-    public init(entry: Kv.Entry) {
-        self.entry = entry
-    }
-
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        try self.entry.serialize(serializer: serializer)
-        try serializer.decrease_container_depth()
-    }
-
-    public func bincodeSerialize() throws -> [UInt8] {
-        let serializer = BincodeSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> App {
-        try deserializer.increase_container_depth()
-        let entry = try Kv.Entry.deserialize(deserializer: deserializer)
-        try deserializer.decrease_container_depth()
-        return App(entry: entry)
-    }
-
-    public static func bincodeDeserialize(input: [UInt8]) throws -> App {
-        let deserializer = BincodeDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
-    }
-}
 
 indirect public enum Level: Hashable, Equatable {
     case low

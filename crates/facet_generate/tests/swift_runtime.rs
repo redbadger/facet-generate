@@ -294,3 +294,100 @@ fn quote_bytes(bytes: &[u8]) -> String {
             .join(", ")
     )
 }
+
+/// Round-trips a `kv::Entry`, which holds ROOT types (a struct, unit and data
+/// enums, and an enum sharing its name with a `kv` struct), through the `Kv`
+/// target, which names them from the root package's target (`Example.Shared`).
+///
+/// Only `kv` references ROOT: a ROOT type holding `kv::Entry` would make the
+/// two targets depend on each other, which the installer rejects.
+#[test]
+fn test_swift_bincode_runtime_from_namespace_to_root() {
+    use common::across_namespaces::to_root::{Level, Outcome, Presence, Shared, kv};
+
+    let dir = tempfile::tempdir().unwrap();
+    swift::Installer::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .generate(&common::across_namespaces::to_root::get_namespace_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&kv::Entry {
+        shared: Shared { id: 7 },
+        level: Level::High,
+        outcome: Outcome::Score(42),
+        status: Presence::Offline,
+        local: kv::Presence { since: 9 },
+    })
+    .unwrap();
+
+    std::fs::create_dir_all(dir.path().join("Sources/main")).unwrap();
+    let mut main = File::create(dir.path().join("Sources/main/main.swift")).unwrap();
+    writeln!(
+        main,
+        r#"
+import Example
+import Kv
+
+let input: [UInt8] = [{bytes}]
+let value = try Kv.Entry.bincodeDeserialize(input: input)
+
+let expected = Kv.Entry(
+    shared: Example.Shared(id: 7),
+    level: Example.Level.high,
+    outcome: Example.Outcome.score(42),
+    status: Example.Presence.offline,
+    local: Kv.Presence(since: 9)
+)
+assert(value == expected, "value mismatch: \(value)")
+
+let output = try value.bincodeSerialize()
+assert(input == output, "roundtrip failed: \(input) != \(output)")
+
+print("Namespace to root roundtrip: PASSED")
+"#,
+        bytes = reference
+            .iter()
+            .map(|x| format!("{x}"))
+            .collect::<Vec<_>>()
+            .join(", "),
+    )
+    .unwrap();
+
+    // The generated manifest, plus an executable target to run.
+    let mut file = File::create(dir.path().join("Package.swift")).unwrap();
+    write!(
+        file,
+        r#"// swift-tools-version:6.0
+
+import PackageDescription
+
+let package = Package(
+    name: "Example",
+    platforms: [.macOS(.v15)],
+    targets: [
+        .target(
+            name: "Serde",
+            dependencies: []),
+        .target(
+            name: "Example",
+            dependencies: ["Serde"]),
+        .target(
+            name: "Kv",
+            dependencies: ["Example", "Serde"]),
+        .target(
+            name: "main",
+            dependencies: ["Example", "Kv"]
+        ),
+    ]
+)
+"#
+    )
+    .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .arg("run")
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

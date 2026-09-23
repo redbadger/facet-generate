@@ -7,8 +7,8 @@ import com.novi.serde.Deserializer
 import com.novi.serde.Serializer
 
 data class Entry(
-    val level: com.example.kv.Level,
-    val outcome: com.example.kv.Outcome,
+    val level: com.example.Level,
+    val outcome: com.example.Outcome,
 ) {
     fun serialize(serializer: Serializer) {
         serializer.increase_container_depth()
@@ -26,8 +26,8 @@ data class Entry(
     companion object {
         fun deserialize(deserializer: Deserializer): Entry {
             deserializer.increase_container_depth()
-            val level = com.example.kv.Level.deserialize(deserializer)
-            val outcome = com.example.kv.Outcome.deserialize(deserializer)
+            val level = com.example.Level.deserialize(deserializer)
+            val outcome = com.example.Outcome.deserialize(deserializer)
             deserializer.decrease_container_depth()
             return Entry(level, outcome)
         }

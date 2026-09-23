@@ -159,8 +159,11 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///    module name (no double-nesting).
     ///    Module `com.example.other`, namespace `other` → `com.example.other.LocalType`
     ///
-    /// 4. **[`Namespace::Root`]** — uses the current module name.
+    /// 4. **[`Namespace::Root`]** — uses the *root package*, for the same
+    ///    reason as rule 2.
     ///    Module `com.example.service` → `com.example.service.RootType`
+    ///    Module `com.example.kv` (parent `com.example`) →
+    ///    `com.example.RootType` — *not* `com.example.kv.RootType`
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
@@ -225,8 +228,9 @@ impl<'a> KotlinCodeGenerator<'a> {
                 }
             }
             Namespace::Root => {
-                // Root namespace types get current module name
-                QualifiedTypeName::namespaced(config.module_name().to_string(), name.name.clone())
+                // Root types live in the root package, which is not
+                // `module_name()` for a namespaced module (#148)
+                QualifiedTypeName::namespaced(config.root_package().to_string(), name.name.clone())
             }
         }
     }

@@ -6,6 +6,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 @SerialName("Entry")
 data class Entry(
-    val level: com.example.kv.Level,
-    val outcome: com.example.kv.Outcome,
+    val level: com.example.Level,
+    val outcome: com.example.Outcome,
 )
