@@ -8,11 +8,12 @@ use std::sync::Arc;
 
 use facet::Facet;
 use facet_generate::generation::{
-    CodeGeneratorConfig, SourceInstaller, bincode::BincodePlugin, plugin::EmitterPlugin, typescript,
+    CodeGeneratorConfig, SourceInstaller, bincode::BincodePlugin, json::JsonPlugin,
+    plugin::EmitterPlugin, typescript,
 };
 use facet_generate::reflection::RegistryBuilder;
 use serde_json::Value;
-use std::{collections::BTreeMap, fs::File, path::Path};
+use std::{collections::BTreeMap, fs::File, path::Path, process::Command};
 use tempfile::tempdir;
 
 fn test_typescript_code_generates_with_config(
@@ -151,4 +152,48 @@ fn test_typescript_code_generation_file_layout() {
     let binary_deserializer_content = std::fs::read_to_string(&binary_deserializer).unwrap();
     assert!(binary_deserializer_content.contains("from \"./deserializer\""));
     assert!(!binary_deserializer_content.contains("from \"./deserializer.ts\""));
+}
+
+/// Generate `registry` with the installer and `plugin`, then type-check every
+/// module it wrote.
+fn assert_installed_modules_type_check(
+    registry: &facet_generate::Registry,
+    plugin: impl EmitterPlugin<typescript::TypeScript> + 'static,
+) {
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(plugin)
+        .generate(registry)
+        .unwrap();
+
+    let mut modules: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "ts"))
+        .collect();
+    modules.sort();
+    assert!(!modules.is_empty(), "the installer wrote no modules");
+
+    let status = Command::new("deno")
+        .current_dir(dir.path())
+        .arg("check")
+        .arg("--sloppy-imports")
+        .args(&modules)
+        .status()
+        .unwrap();
+    assert!(status.success(), "deno check failed");
+}
+
+/// An enum from another namespace is serialized through the standalone
+/// functions its own module exports (`Kit.serializePresence`), not as if it
+/// were a class, and a type in a module keeps its own enum's bare name (#154).
+#[test]
+fn test_that_typescript_code_with_enums_from_other_namespaces_type_checks() {
+    for registry in [
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+    ] {
+        assert_installed_modules_type_check(&registry, BincodePlugin);
+        assert_installed_modules_type_check(&registry, JsonPlugin);
+    }
 }

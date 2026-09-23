@@ -149,3 +149,29 @@ fn test_csharp_code_with_external_definitions() {
         "Generated code should reference external namespace: {generated}"
     );
 }
+
+/// A unit-only enum from another namespace goes through its helper class,
+/// qualified like the type (`Example.Kit.PresenceBincode`), rather than being
+/// serialized as if it were a class (#154).
+///
+/// A reference between two named namespaces (`common::across_namespaces::
+/// get_sibling_registry`) is not compiled: the type itself is still rooted at
+/// the wrong namespace there (#149).
+#[test]
+fn test_that_csharp_code_with_enums_from_other_namespaces_compiles() {
+    let registry = common::across_namespaces::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
