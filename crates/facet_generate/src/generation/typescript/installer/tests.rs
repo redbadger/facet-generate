@@ -371,3 +371,47 @@ fn manifest_with_plugin_and_external_dependencies() {
     }
     "#);
 }
+
+/// A namespaced module imports the root types it references from the root
+/// package's module, bound and located the way every namespace import is:
+/// `my-package` is written to `my-package.ts` and bound as `MyPackage`.
+#[test]
+fn namespaced_module_imports_the_root_package_for_root_types() {
+    #[derive(Facet)]
+    #[facet(fg::namespace)]
+    struct Shared {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    struct Entry {
+        shared: Shared,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        entry: Entry,
+        shared: Shared,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("my-package", install_dir.path())
+        .generate(&registry)
+        .unwrap();
+
+    let kv = std::fs::read_to_string(install_dir.path().join("kv.ts")).unwrap();
+    insta::assert_snapshot!(kv, @r#"
+    import * as MyPackage from "./my-package";
+
+    export class Entry {
+        constructor (public shared: MyPackage.Shared) {
+        }
+    }
+    "#);
+
+    // The root module's own references are unchanged.
+    let root = std::fs::read_to_string(install_dir.path().join("my-package.ts")).unwrap();
+    assert!(root.contains("constructor (public entry: Kv.Entry, public shared: Shared)"));
+}

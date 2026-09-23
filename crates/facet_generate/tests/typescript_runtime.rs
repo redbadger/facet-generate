@@ -392,3 +392,115 @@ Deno.test("truncated input throws instead of yielding a short value", () => {
 
     project.run();
 }
+
+/// Round-trips values across a namespaced module and the root one, which
+/// import each other: the ROOT `App` holds a `kv::Entry`, which holds ROOT
+/// types (a struct, unit and data enums, and an enum sharing its name with a
+/// `kv` struct).
+///
+/// Each test file imports the two modules in a different order, so each one
+/// is evaluated first once. Nothing in either runs at load time, only when
+/// called, so neither order sees the other half-initialised.
+#[test]
+fn test_typescript_runtime_bincode_roundtrip_across_root_and_namespace() {
+    use common::across_namespaces::to_root::{App, Level, Outcome, Presence, Shared, kv};
+
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(BincodePlugin)
+        .generate(&common::across_namespaces::to_root::get_registry())
+        .unwrap();
+
+    let entry = kv::Entry {
+        shared: Shared { id: 7 },
+        level: Level::High,
+        outcome: Outcome::Score(42),
+        presence: Presence::Offline,
+        local: kv::Presence { since: 9 },
+    };
+    let entry_bytes = to_byte_list(&bincode::serialize(&entry).unwrap());
+    let app_bytes = to_byte_list(
+        &bincode::serialize(&App {
+            entry,
+            shared: Shared { id: 3 },
+        })
+        .unwrap(),
+    );
+
+    let body = format!(
+        r#"import {{ BincodeDeserializer, BincodeSerializer }} from "./bincode/index.ts";
+
+Deno.test("ROOT and kv round-trip through each other", () => {{
+  const expectedEntry = new Kv.Entry(
+    new Example.Shared(7),
+    Example.levelHigh(),
+    Example.outcomeScore(42),
+    Example.presenceOffline(),
+    new Kv.Presence(BigInt(9)),
+  );
+
+  // kv -> ROOT: a namespaced type deserializing ROOT types
+  const entryBytes = new Uint8Array([{entry_bytes}]);
+  const entry = Kv.Entry.deserialize(new BincodeDeserializer(entryBytes));
+  assertEquals(entry, expectedEntry);
+  assert(entry.shared instanceof Example.Shared);
+  assert(entry.local instanceof Kv.Presence);
+  const entrySerializer = new BincodeSerializer();
+  entry.serialize(entrySerializer);
+  assertEquals(entrySerializer.getBytes(), entryBytes);
+
+  // ROOT -> kv -> ROOT
+  const appBytes = new Uint8Array([{app_bytes}]);
+  const app = Example.App.deserialize(new BincodeDeserializer(appBytes));
+  assertEquals(app, new Example.App(expectedEntry, new Example.Shared(3)));
+  assert(app.entry instanceof Kv.Entry);
+  const appSerializer = new BincodeSerializer();
+  app.serialize(appSerializer);
+  assertEquals(appSerializer.getBytes(), appBytes);
+}});
+"#
+    );
+
+    let asserts = r#"import { assert, assertEquals } from "https://deno.land/std@0.110.0/testing/asserts.ts";"#;
+    let root_first = dir.path().join("root_first.test.ts");
+    std::fs::write(
+        &root_first,
+        format!(
+            "{asserts}\nimport * as Example from \"./example.ts\";\nimport * as Kv from \"./kv.ts\";\n{body}"
+        ),
+    )
+    .unwrap();
+    let kv_first = dir.path().join("kv_first.test.ts");
+    std::fs::write(
+        &kv_first,
+        format!(
+            "{asserts}\nimport * as Kv from \"./kv.ts\";\nimport * as Example from \"./example.ts\";\n{body}"
+        ),
+    )
+    .unwrap();
+
+    // One process per file, so that each order is the first evaluation of
+    // the modules.
+    for test_file in [root_first, kv_first] {
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("test")
+            .arg("--sloppy-imports")
+            .arg(&test_file)
+            .status()
+            .unwrap();
+        assert!(
+            status.success(),
+            "deno test failed for {}",
+            test_file.display()
+        );
+    }
+}
+
+fn to_byte_list(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .map(u8::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}

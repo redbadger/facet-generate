@@ -197,9 +197,10 @@ fn a_to_b() {
 
 /// A type in namespace `kv` holding enums pinned to ROOT.
 ///
-/// The enums are serialized as enums, but the references themselves are
-/// still broken in every language: #148 (Kotlin), #149 (C#), #150
-/// (TypeScript) and #151 (Swift).
+/// TypeScript imports the root module as `Example` and reaches the enums and
+/// their functions through it. The enums are serialized as enums in every
+/// language, but the references themselves are still broken in the others:
+/// #148 (Kotlin), #149 (C#) and #151 (Swift).
 #[test]
 fn namespace_to_root() {
     #[derive(Facet)]

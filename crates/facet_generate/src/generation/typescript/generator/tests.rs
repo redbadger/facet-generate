@@ -12,6 +12,7 @@
 //! | Same-module stripping | `Named` namespace matching module name → stripped to `Root` (bare name) |
 //! | External namespace | `Named` namespace for a different module → preserved as `Namespace.Type` |
 //! | Root namespace | Already-`Root` names pass through unchanged |
+//! | Root from a namespaced module | `Root` names are qualified with the root package (`parent`) and imported; bare without it |
 //! | Nested complex types | `Option<Seq<TypeName>>` — namespace stripping recurses into nested formats |
 //! | Enum variants | Variant payloads containing `TypeName` are updated correctly |
 //! | Immutability | `update_qualified_names` does not mutate the input registry |
@@ -134,6 +135,136 @@ fn update_qualified_names_root_namespace_is_unchanged() {
     };
     assert_eq!(type_name.namespace, Namespace::Root);
     assert_eq!(type_name.name, "Child");
+}
+
+#[test]
+fn update_qualified_names_qualifies_root_type_with_root_package_from_namespaced_module() {
+    let mut config = CodeGeneratorConfig::new("kv".to_string());
+    config.parent = Some("example".to_string());
+    let registry = registry_with_struct_field(Format::TypeName(QualifiedTypeName::root(
+        "Shared".to_string(),
+    )));
+
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
+
+    let Format::TypeName(type_name) = first_field_type(&updated) else {
+        panic!("expected type name");
+    };
+    assert_eq!(type_name.namespace, Namespace::Named("example".to_string()));
+    assert_eq!(type_name.name, "Shared");
+}
+
+#[test]
+fn update_qualified_names_leaves_root_type_bare_in_root_module() {
+    // `with_parent` of the root package itself leaves `parent` unset, but a
+    // root module that has it set to its own name must not qualify its types.
+    let mut config = CodeGeneratorConfig::new("example".to_string());
+    config.parent = Some("example".to_string());
+    let registry = registry_with_struct_field(Format::TypeName(QualifiedTypeName::root(
+        "Shared".to_string(),
+    )));
+
+    let updated = TypeScriptCodeGenerator::update_qualified_names(&config, &registry);
+
+    let Format::TypeName(type_name) = first_field_type(&updated) else {
+        panic!("expected type name");
+    };
+    assert_eq!(type_name.namespace, Namespace::Root);
+}
+
+fn unit_enum(variant: &str) -> ContainerFormat {
+    let mut variants = BTreeMap::new();
+    variants.insert(
+        0,
+        Named {
+            name: variant.to_string(),
+            doc: Doc::new(),
+            value: VariantFormat::Unit,
+        },
+    );
+    ContainerFormat::Enum(variants, EnumTagging::External, Doc::new())
+}
+
+/// A `kv` struct holding the ROOT enums `Level` and `Presence`, and the `kv`
+/// struct `Presence`, with the config the installer gives the `kv` module
+/// (the ROOT enums indexed, and `parent` set if `parent` is given).
+fn namespace_to_root(parent: Option<&str>) -> (CodeGeneratorConfig, Registry) {
+    let field = |name: &str, type_name: QualifiedTypeName| Named {
+        name: name.to_string(),
+        doc: Doc::new(),
+        value: Format::TypeName(type_name),
+    };
+    let kv = |name: &str| QualifiedTypeName::namespaced("kv".to_string(), name.to_string());
+
+    let mut registry = Registry::new();
+    registry.insert(
+        kv("Entry"),
+        ContainerFormat::Struct(
+            vec![
+                field("level", QualifiedTypeName::root("Level".to_string())),
+                field("presence", QualifiedTypeName::root("Presence".to_string())),
+                field("local", kv("Presence")),
+            ],
+            Doc::new(),
+        ),
+    );
+    registry.insert(
+        kv("Presence"),
+        ContainerFormat::Struct(
+            vec![Named {
+                name: "since".to_string(),
+                doc: Doc::new(),
+                value: Format::U64,
+            }],
+            Doc::new(),
+        ),
+    );
+
+    let mut config = CodeGeneratorConfig::new("kv".to_string());
+    config.parent = parent.map(str::to_string);
+    config.index_types(&Registry::from([
+        (
+            QualifiedTypeName::root("Level".to_string()),
+            unit_enum("Low"),
+        ),
+        (
+            QualifiedTypeName::root("Presence".to_string()),
+            unit_enum("Online"),
+        ),
+    ]));
+    (config, registry)
+}
+
+#[test]
+fn output_reaches_root_types_through_the_root_package_import() {
+    let (config, registry) = namespace_to_root(Some("example"));
+
+    let output = render_output(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(output.contains(r#"import * as Example from "./example";"#));
+    assert!(output.contains(
+        "constructor (public level: Example.Level, public presence: Example.Presence, public local: Presence)"
+    ));
+    // ROOT enums go through the functions the root module exports
+    assert!(output.contains("Example.serializeLevel(this.level, serializer);"));
+    assert!(output.contains("Example.serializePresence(this.presence, serializer);"));
+    assert!(output.contains("const level = Example.deserializeLevel(deserializer);"));
+    // and the local struct of the same name is still a class
+    assert!(output.contains("this.local.serialize(serializer);"));
+    assert!(output.contains("const local = Presence.deserialize(deserializer);"));
+}
+
+#[test]
+fn output_leaves_root_types_bare_without_the_root_package() {
+    let (config, registry) = namespace_to_root(None);
+
+    let output = render_output(&config, vec![Arc::new(BincodePlugin)], &registry);
+
+    assert!(!output.contains("import * as"));
+    assert!(output.contains("public level: Level,"));
+    assert!(output.contains("serializeLevel(this.level, serializer);"));
+    // The bare `Presence` means the local struct.
+    assert!(output.contains("this.presence.serialize(serializer);"));
 }
 
 #[test]

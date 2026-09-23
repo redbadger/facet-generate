@@ -50,6 +50,10 @@ pub struct CodeGeneratorConfig {
     /// `auth` is a namespace or the last segment of the root package. Kotlin
     /// needs the answer to qualify a type living in a *sibling* namespace —
     /// that path is rooted at the parent, not at this module.
+    ///
+    /// The TypeScript installer sets it for a namespaced module without
+    /// renaming the module, whose name is also its file's, so that the module
+    /// can import the root types it references from the root package.
     pub parent: Option<String>,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
@@ -385,9 +389,10 @@ impl CodeGeneratorConfig {
     /// emitter sees.
     ///
     /// A rewrite can give a type in another module the spelling of one this
-    /// module declares (a TypeScript namespaced module writes both its own
-    /// types and ROOT ones bare), and the bare name then means the local
-    /// declaration, so the module's own types decide their spelling.
+    /// module declares (a TypeScript namespaced module that does not know the
+    /// root package writes both its own types and ROOT ones bare), and the
+    /// bare name then means the local declaration, so the module's own types
+    /// decide their spelling.
     pub(crate) fn requalify_enums(
         &mut self,
         local: &Registry,

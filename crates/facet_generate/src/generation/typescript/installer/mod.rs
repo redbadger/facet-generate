@@ -305,6 +305,13 @@ impl SourceInstaller for Installer {
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
 
+        // A namespaced module imports the root types it references from the
+        // root package's module. Its name stays the namespace's, which is also
+        // its file name, so this sets the parent without `with_parent`.
+        if module_name != self.package_name {
+            updated_config.parent = Some(self.package_name.clone());
+        }
+
         let generator =
             TypeScriptCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;

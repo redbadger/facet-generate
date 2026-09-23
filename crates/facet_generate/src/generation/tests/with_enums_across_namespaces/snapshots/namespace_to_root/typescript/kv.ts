@@ -1,17 +1,18 @@
 import type { Serializer, Deserializer } from "./serde";
+import * as Example from "./example";
 
 export class Entry {
-    constructor (public level: Level, public outcome: Outcome) {
+    constructor (public level: Example.Level, public outcome: Example.Outcome) {
     }
 
     public serialize(serializer: Serializer): void {
-        serializeLevel(this.level, serializer);
-        serializeOutcome(this.outcome, serializer);
+        Example.serializeLevel(this.level, serializer);
+        Example.serializeOutcome(this.outcome, serializer);
     }
 
     static deserialize(deserializer: Deserializer): Entry {
-        const level = deserializeLevel(deserializer);
-        const outcome = deserializeOutcome(deserializer);
+        const level = Example.deserializeLevel(deserializer);
+        const outcome = Example.deserializeOutcome(deserializer);
         return new Entry(level,outcome);
     }
 }

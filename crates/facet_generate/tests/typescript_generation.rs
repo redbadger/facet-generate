@@ -256,12 +256,15 @@ fn assert_installed_modules_type_check(
 
 /// An enum from another namespace is serialized through the standalone
 /// functions its own module exports (`Kit.serializePresence`), not as if it
-/// were a class, and a type in a module keeps its own enum's bare name.
+/// were a class, and a type in a module keeps its own enum's bare name. A
+/// namespaced module reaches ROOT types through the root module
+/// (`Example.Shared`), and its own `Presence` still means the local struct.
 #[test]
 fn test_that_typescript_code_with_enums_from_other_namespaces_type_checks() {
     for registry in [
         common::across_namespaces::get_registry(),
         common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
     ] {
         assert_installed_modules_type_check(&registry, BincodePlugin);
         assert_installed_modules_type_check(&registry, JsonPlugin);

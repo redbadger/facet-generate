@@ -780,9 +780,10 @@ pub fn get_shadowing_registry() -> Registry {
 // depends on what kind of type the referenced one is (an enum is serialized
 // differently from a struct) or on which names it brings into scope.
 //
-// There is no registry for a namespaced type referencing a ROOT one: that
-// reference does not compile in any language yet (#148, #149, #150, #151), so
-// it is covered by the `with_enums_across_namespaces` snapshots only.
+// A namespaced type referencing a ROOT one (`across_namespaces::to_root`) is
+// compiled and run in TypeScript only: the reference does not compile in the
+// other languages yet (#148, #149, #151), so for them it is covered by the
+// `with_enums_across_namespaces` snapshots only.
 // ---------------------------------------------------------------------------
 
 pub mod across_namespaces {
@@ -924,5 +925,82 @@ pub mod across_namespaces {
     /// References from namespace `a` into namespace `b`.
     pub fn get_sibling_registry() -> Registry {
         reflect!(Table).unwrap()
+    }
+
+    /// A type in namespace `kv` holding types pinned to ROOT, held in turn by
+    /// a ROOT type, so the root module and `kv` reference each other.
+    pub mod to_root {
+        use facet::Facet;
+        use facet_generate as fg;
+        use facet_generate::{Registry, reflect};
+        use serde::{Deserialize, Serialize};
+
+        pub mod kv {
+            use facet::Facet;
+            use facet_generate as fg;
+            use serde::{Deserialize, Serialize};
+
+            /// Shares its name with the ROOT enum, and is still a class.
+            #[derive(Facet, Serialize, Deserialize)]
+            #[facet(fg::namespace = "kv")]
+            pub struct Presence {
+                pub since: u64,
+            }
+
+            #[derive(Facet, Serialize, Deserialize)]
+            #[facet(fg::namespace = "kv")]
+            pub struct Entry {
+                pub shared: super::Shared,
+                pub level: super::Level,
+                pub outcome: super::Outcome,
+                pub presence: super::Presence,
+                pub local: Presence,
+            }
+        }
+
+        #[derive(Facet, Serialize, Deserialize)]
+        #[facet(fg::namespace)]
+        pub struct Shared {
+            pub id: u32,
+        }
+
+        #[derive(Facet, Serialize, Deserialize)]
+        #[repr(C)]
+        #[facet(fg::namespace)]
+        #[allow(dead_code)]
+        pub enum Level {
+            Low,
+            High,
+        }
+
+        #[derive(Facet, Serialize, Deserialize)]
+        #[repr(C)]
+        #[facet(fg::namespace)]
+        #[allow(dead_code)]
+        pub enum Outcome {
+            Score(u32),
+            Missing,
+        }
+
+        /// Shares its name with the `kv` struct.
+        #[derive(Facet, Serialize, Deserialize)]
+        #[repr(C)]
+        #[facet(fg::namespace)]
+        #[allow(dead_code)]
+        pub enum Presence {
+            Online,
+            Offline,
+        }
+
+        #[derive(Facet, Serialize, Deserialize)]
+        pub struct App {
+            pub entry: kv::Entry,
+            pub shared: Shared,
+        }
+
+        /// References from ROOT into `kv`, and from `kv` back into ROOT.
+        pub fn get_registry() -> Registry {
+            reflect!(App).unwrap()
+        }
     }
 }
