@@ -49,6 +49,24 @@ fn single_namespace() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "ChildOne",
+                    },
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "ChildTwo",
+                    },
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "GrandChild",
+                    },
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {
@@ -200,6 +218,30 @@ fn root_namespace_with_two_child_namespaces() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "ChildOne",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "GrandChild",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "two",
+                        ),
+                        name: "ChildTwo",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {
@@ -258,6 +300,30 @@ fn root_namespace_with_two_child_namespaces() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "ChildOne",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "GrandChild",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "two",
+                        ),
+                        name: "ChildTwo",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {
@@ -323,6 +389,30 @@ fn root_namespace_with_two_child_namespaces() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "ChildOne",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "one",
+                        ),
+                        name: "GrandChild",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "two",
+                        ),
+                        name: "ChildTwo",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {
@@ -419,6 +509,22 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Child",
+                    },
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "api",
+                        ),
+                        name: "GrandChild",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {
@@ -485,6 +591,22 @@ fn same_namespace_with_external_dependency_bug_regression() {
                 unit_variant_enums: {},
                 enum_type_names: {},
                 declared_type_names: {},
+                registry_type_names: {
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Child",
+                    },
+                    QualifiedTypeName {
+                        namespace: Root,
+                        name: "Parent",
+                    },
+                    QualifiedTypeName {
+                        namespace: Named(
+                            "api",
+                        ),
+                        name: "GrandChild",
+                    },
+                },
             },
         ): {
             QualifiedTypeName {

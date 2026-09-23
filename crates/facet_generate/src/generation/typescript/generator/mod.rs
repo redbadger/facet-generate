@@ -75,6 +75,8 @@ impl<'a> TypeScriptCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
+        Self::reference_requalified_namespaces(&mut config, registry);
         check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = TypeScript::new(&config, registry);
@@ -101,23 +103,63 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     ///    which renders as `Namespace.Type` (e.g. `Other.Child`) via the
     ///    wildcard import added by the [`Module`](super::super::module::Module)
     ///    emitter.
+    /// 3. **Root type seen from a namespaced module** — qualify it with the
+    ///    root package (e.g. `Example.Shared`), which lives in a module of its
+    ///    own. Only when the config knows the root package
+    ///    ([`CodeGeneratorConfig::parent`], which the installer sets);
+    ///    otherwise, and in the root module itself, it stays bare.
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format
-                    && let Namespace::Named(namespace) = &qualified_name.namespace
-                    && namespace == config.module_name()
-                {
-                    // Same-module type: strip namespace so it renders as a bare name
-                    *qualified_name = QualifiedTypeName::root(qualified_name.name.clone());
+                if let Format::TypeName(qualified_name) = format {
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            // Same-module type: strip namespace so it renders as a bare name
+            Namespace::Named(namespace) if namespace == config.module_name() => {
+                QualifiedTypeName::root(name.name.clone())
+            }
+            // Root type from a namespaced module: reach it through the root
+            // module's namespace import
+            Namespace::Root if config.root_package() != config.module_name() => {
+                QualifiedTypeName::namespaced(config.root_package().to_string(), name.name.clone())
+            }
+            _ => name.clone(),
+        }
+    }
+
+    /// Adds the namespace of every reference that [`requalify`](Self::requalify)
+    /// points into another module to
+    /// [`referenced_namespaces`](CodeGeneratorConfig::referenced_namespaces),
+    /// so that the module imports it. `update_from` has already recorded the
+    /// references that name their namespace; this adds the root package for
+    /// the root types a namespaced module references.
+    fn reference_requalified_namespaces(config: &mut CodeGeneratorConfig, registry: &Registry) {
+        let mut namespaces = Vec::new();
+        for format in registry.values() {
+            let _ = format.visit(&mut |format| {
+                if let Format::TypeName(name) = format
+                    && let Namespace::Named(namespace) = Self::requalify(config, name).namespace
+                    && namespace != config.module_name()
+                {
+                    namespaces.push(namespace);
+                }
+                Ok(())
+            });
+        }
+        config.referenced_namespaces.extend(namespaces);
     }
 }
 

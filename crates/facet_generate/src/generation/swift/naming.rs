@@ -12,9 +12,12 @@ use std::borrow::Cow;
 
 use heck::ToLowerCamelCase;
 
-use crate::generation::{
-    config::CodeGeneratorConfig,
-    naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+use crate::{
+    generation::{
+        config::CodeGeneratorConfig,
+        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+    },
+    reflection::format::Namespace,
 };
 
 /// Swift keywords, sorted.
@@ -200,9 +203,24 @@ pub(crate) const RULES: NamingRules = NamingRules {
     numbered_components_forbidden: false,
 };
 
-/// Returns `true` if the module declares a type spelled `name`.
+/// Returns `true` if a type spelled `name` is in scope in the module: one it
+/// declares, or one declared by a module it imports (a namespaced module
+/// imports the root package's when it references a ROOT type).
 pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
+    let imports_root = config.root_package() != config.module_name()
+        && config
+            .external_definitions
+            .contains_key(config.root_package());
     config.declared_type_names.contains(name)
+        || config.registry_type_names.iter().any(|declared| {
+            declared.name == name
+                && match &declared.namespace {
+                    Namespace::Named(namespace) => {
+                        config.external_definitions.contains_key(namespace)
+                    }
+                    Namespace::Root => imports_root,
+                }
+        })
 }
 
 /// The Swift spelling of the builtin type `name`: fully qualified when a

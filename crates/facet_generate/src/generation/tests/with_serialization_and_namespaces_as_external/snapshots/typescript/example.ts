@@ -6,11 +6,11 @@ export class Child {
     }
 
     public serialize(serializer: Serializer): void {
-        this.external.serialize(serializer);
+        Other.serializeOtherParent(this.external, serializer);
     }
 
     static deserialize(deserializer: Deserializer): Child {
-        const external = Other.OtherParent.deserialize(deserializer);
+        const external = Other.deserializeOtherParent(deserializer);
         return new Child(external);
     }
 }

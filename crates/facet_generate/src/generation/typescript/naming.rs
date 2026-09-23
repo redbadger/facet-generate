@@ -12,9 +12,12 @@ use std::borrow::Cow;
 
 use heck::ToUpperCamelCase;
 
-use crate::generation::{
-    config::CodeGeneratorConfig,
-    naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+use crate::{
+    generation::{
+        config::CodeGeneratorConfig,
+        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+    },
+    reflection::format::QualifiedTypeName,
 };
 
 /// TypeScript reserved words, sorted.
@@ -179,6 +182,18 @@ pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
 /// otherwise.
 pub(crate) fn builtin<'a>(name: &'a str, config: &CodeGeneratorConfig) -> Cow<'a, str> {
     qualify(name, QUALIFIED, |n| shadows(n, config))
+}
+
+/// A reference to the standalone function `{prefix}{Name}` that the plugins
+/// emit beside an enum (`serializeColor`, `deserializeColor`), qualified the
+/// same way as a reference to the enum itself: bare within its own module,
+/// and through the namespace import otherwise (`Kit.serializeColor`).
+pub(crate) fn enum_function(prefix: &str, name: &QualifiedTypeName) -> String {
+    QualifiedTypeName {
+        namespace: name.namespace.clone(),
+        name: format!("{prefix}{}", name.name),
+    }
+    .format(ToUpperCamelCase::to_upper_camel_case, ".")
 }
 
 #[cfg(test)]

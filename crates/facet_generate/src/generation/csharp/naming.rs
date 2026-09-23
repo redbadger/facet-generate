@@ -8,9 +8,12 @@ use std::borrow::Cow;
 
 use heck::ToUpperCamelCase;
 
-use crate::generation::{
-    config::CodeGeneratorConfig,
-    naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+use crate::{
+    generation::{
+        config::CodeGeneratorConfig,
+        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+    },
+    reflection::format::Namespace,
 };
 
 /// C# keywords, sorted.
@@ -244,12 +247,20 @@ pub(crate) const RULES: NamingRules = NamingRules {
     numbered_components_forbidden: false,
 };
 
-/// Returns `true` if the module declares a type whose `UpperCamelCase` name is
-/// `name`.
+/// Returns `true` if a type whose `UpperCamelCase` name is `name` is in scope
+/// in the module: one it declares, or a ROOT type, which a namespaced module
+/// sees because its namespace is nested inside the root module's.
 pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
     config
         .declared_type_names
         .iter()
+        .chain(
+            config
+                .registry_type_names
+                .iter()
+                .filter(|declared| declared.namespace == Namespace::Root)
+                .map(|declared| &declared.name),
+        )
         .any(|declared| declared.to_upper_camel_case() == name)
 }
 

@@ -78,6 +78,7 @@ impl<'a> KotlinCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = Kotlin::new(&config, registry);
@@ -158,88 +159,80 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///    module name (no double-nesting).
     ///    Module `com.example.other`, namespace `other` → `com.example.other.LocalType`
     ///
-    /// 4. **[`Namespace::Root`]** — uses the current module name.
+    /// 4. **[`Namespace::Root`]** — uses the *root package*, for the same
+    ///    reason as rule 2.
     ///    Module `com.example.service` → `com.example.service.RootType`
+    ///    Module `com.example.kv` (parent `com.example`) →
+    ///    `com.example.RootType` — *not* `com.example.kv.RootType`
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
                 if let Format::TypeName(qualified_name) = format {
-                    match &qualified_name.namespace {
-                        Namespace::Named(namespace) => {
-                            let namespace = namespace.clone();
-                            // First check if this namespace has an external package configuration with a Path
-                            let external_package_handled = if let Some(external_package) =
-                                config.external_packages.get(&namespace)
-                            {
-                                if let PackageLocation::Path(path) = &external_package.location {
-                                    let full_namespace = format!("{path}.{namespace}");
-                                    *qualified_name = QualifiedTypeName::namespaced(
-                                        full_namespace,
-                                        qualified_name.name.clone(),
-                                    );
-                                    true
-                                } else {
-                                    // PackageLocation::Url is ignored for Kotlin generation - fall through
-                                    false
-                                }
-                            } else {
-                                false
-                            };
-
-                            if !external_package_handled {
-                                // Check if this type's namespace matches the current module's namespace
-                                let current_leaf_namespace = config
-                                    .module_name()
-                                    .rsplit_once('.')
-                                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                                if config.external_definitions.contains_key(&namespace)
-                                    && namespace != current_leaf_namespace
-                                {
-                                    // A sibling namespace, so the path is rooted at the
-                                    // parent package — NOT at `module_name()`, which already
-                                    // ends in *this* module's namespace and would yield
-                                    // `com.example.main.Directory.Kit.Row`.
-                                    let full_namespace =
-                                        format!("{}.{namespace}", config.root_package());
-                                    *qualified_name = QualifiedTypeName::namespaced(
-                                        full_namespace,
-                                        qualified_name.name.clone(),
-                                    );
-                                } else if namespace == current_leaf_namespace {
-                                    // For same-module types, use current module name only
-                                    *qualified_name = QualifiedTypeName::namespaced(
-                                        config.module_name().to_string(),
-                                        qualified_name.name.clone(),
-                                    );
-                                } else {
-                                    // Same reasoning as the external case above: a named
-                                    // namespace that is not our own hangs off the parent.
-                                    let full_namespace =
-                                        format!("{}.{namespace}", config.root_package());
-                                    *qualified_name = QualifiedTypeName::namespaced(
-                                        full_namespace,
-                                        qualified_name.name.clone(),
-                                    );
-                                }
-                            }
-                        }
-                        Namespace::Root => {
-                            // Root namespace types get current module name
-                            *qualified_name = QualifiedTypeName::namespaced(
-                                config.module_name().to_string(),
-                                qualified_name.name.clone(),
-                            );
-                        }
-                    }
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            Namespace::Named(namespace) => {
+                // First check if this namespace has an external package configuration with a Path
+                if let Some(external_package) = config.external_packages.get(namespace)
+                    && let PackageLocation::Path(path) = &external_package.location
+                {
+                    return QualifiedTypeName::namespaced(
+                        format!("{path}.{namespace}"),
+                        name.name.clone(),
+                    );
+                }
+                // PackageLocation::Url is ignored for Kotlin generation - fall through
+
+                // Check if this type's namespace matches the current module's namespace
+                let current_leaf_namespace = config
+                    .module_name()
+                    .rsplit_once('.')
+                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
+
+                if config.external_definitions.contains_key(namespace)
+                    && namespace != current_leaf_namespace
+                {
+                    // A sibling namespace, so the path is rooted at the
+                    // parent package — NOT at `module_name()`, which already
+                    // ends in *this* module's namespace and would yield
+                    // `com.example.main.Directory.Kit.Row`.
+                    QualifiedTypeName::namespaced(
+                        format!("{}.{namespace}", config.root_package()),
+                        name.name.clone(),
+                    )
+                } else if namespace == current_leaf_namespace {
+                    // For same-module types, use current module name only
+                    QualifiedTypeName::namespaced(
+                        config.module_name().to_string(),
+                        name.name.clone(),
+                    )
+                } else {
+                    // Same reasoning as the external case above: a named
+                    // namespace that is not our own hangs off the parent.
+                    QualifiedTypeName::namespaced(
+                        format!("{}.{namespace}", config.root_package()),
+                        name.name.clone(),
+                    )
+                }
+            }
+            Namespace::Root => {
+                // Root types live in the root package, which is not
+                // `module_name()` for a namespaced module (#148)
+                QualifiedTypeName::namespaced(config.root_package().to_string(), name.name.clone())
+            }
+        }
     }
 }
 

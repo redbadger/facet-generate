@@ -67,7 +67,8 @@ impl Ord for Module {
 /// Types with [`Namespace::Root`] are assigned to the `root` module name.
 /// For each module, any `Format::TypeName` references that point to a
 /// *different* namespace are recorded as external definitions so generators
-/// can emit import statements.
+/// can emit import statements, and every type in the registry is indexed in
+/// the module's config (see [`CodeGeneratorConfig::is_enum`]).
 ///
 /// # Panics
 ///
@@ -113,9 +114,12 @@ pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
                 .expect("should not have any remaining placeholders");
         }
 
-        // Create the module with all collected external dependencies
-        let config = CodeGeneratorConfig::new(namespace_key)
+        // Create the module with all collected external dependencies, and
+        // tell it about every type in the registry: how a module references a
+        // type from another one can depend on what kind of type it is.
+        let mut config = CodeGeneratorConfig::new(namespace_key)
             .with_external_definitions(all_external_definitions);
+        config.index_types(registry);
         let module = Module(config);
 
         // Add all types to this module's registry

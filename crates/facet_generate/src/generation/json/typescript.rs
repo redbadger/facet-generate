@@ -536,9 +536,9 @@ fn write_serialize(
 ) -> io::Result<()> {
     match format {
         Format::TypeName(qualified_name) => {
-            let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
-            if config.enum_type_names.contains(&type_name) {
-                writeln!(w, "serialize{type_name}({value_expr}, serializer);")
+            if config.is_enum(qualified_name) {
+                let function = naming::enum_function("serialize", qualified_name);
+                writeln!(w, "{function}({value_expr}, serializer);")
             } else {
                 writeln!(w, "{value_expr}.serialize(serializer);")
             }
@@ -630,10 +630,11 @@ fn write_serialize(
 fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> String {
     match format {
         Format::TypeName(qualified_name) => {
-            let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
-            if config.enum_type_names.contains(&type_name) {
-                format!("deserialize{type_name}(deserializer)")
+            if config.is_enum(qualified_name) {
+                let function = naming::enum_function("deserialize", qualified_name);
+                format!("{function}(deserializer)")
             } else {
+                let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
                 format!("{type_name}.deserialize(deserializer)")
             }
         }

@@ -223,3 +223,50 @@ fn test_that_typescript_code_shadowing_builtin_names_type_checks() {
         assert!(status.success(), "deno check failed");
     }
 }
+
+/// Generate `registry` with the installer and `plugin`, then type-check every
+/// module it wrote.
+fn assert_installed_modules_type_check(
+    registry: &facet_generate::Registry,
+    plugin: impl EmitterPlugin<typescript::TypeScript> + 'static,
+) {
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(plugin)
+        .generate(registry)
+        .unwrap();
+
+    let mut modules: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "ts"))
+        .collect();
+    modules.sort();
+    assert!(!modules.is_empty(), "the installer wrote no modules");
+
+    let status = Command::new("deno")
+        .current_dir(dir.path())
+        .arg("check")
+        .arg("--sloppy-imports")
+        .args(&modules)
+        .status()
+        .unwrap();
+    assert!(status.success(), "deno check failed");
+}
+
+/// An enum from another namespace is serialized through the standalone
+/// functions its own module exports (`Kit.serializePresence`), not as if it
+/// were a class, and a type in a module keeps its own enum's bare name. A
+/// namespaced module reaches ROOT types through the root module
+/// (`Example.Shared`), and its own `Presence` still means the local struct.
+#[test]
+fn test_that_typescript_code_with_enums_from_other_namespaces_type_checks() {
+    for registry in [
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
+    ] {
+        assert_installed_modules_type_check(&registry, BincodePlugin);
+        assert_installed_modules_type_check(&registry, JsonPlugin);
+    }
+}

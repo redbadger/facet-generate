@@ -78,6 +78,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         check_reserved_names(registry, &naming::RULES)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
@@ -111,6 +112,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
@@ -132,52 +134,69 @@ impl<'a> CSharpCodeGenerator<'a> {
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.
     ///
+    /// Every namespace is declared under the *root package* (the parent the
+    /// installer nested this module under, or the module itself when it has
+    /// none), so references are rooted there rather than at `module_name()`,
+    /// which for a namespaced module already ends in its own namespace.
+    ///
     /// 1. **Same leaf namespace** — a `Named("Users")` reference inside module
     ///    `Company.Models.Users` is stripped to `Root` (bare name).
-    /// 2. **External namespace** — a `Named("Payments")` reference inside module
-    ///    `Company.Models` becomes `Named("Company.Models.Payments")` (rooted
-    ///    under the configured module name).
-    /// 3. **Root with dotted module** — a `Root` reference inside module
-    ///    `Company.Models` is promoted to `Named("Company.Models")`.
+    /// 2. **Other namespace** — a `Named("Payments")` reference inside module
+    ///    `Company.Models`, or inside its child `Company.Models.Users`, becomes
+    ///    `Named("Company.Models.Payments")`.
+    /// 3. **Root from a dotted root module** — a `Root` reference inside module
+    ///    `Company.Models` is promoted to `Named("Company.Models")`, and stays
+    ///    bare inside an undotted one (`Example`).
+    /// 4. **Root from a namespaced module** — a `Root` reference inside
+    ///    `Company.Models.Users` (parent `Company.Models`) becomes
+    ///    `Named("Company.Models")`, and inside `Example.Users` (parent
+    ///    `Example`) becomes `Named("Example")`, so that it cannot mean a
+    ///    same-named type of the module's own.
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
             let _ = container_format.visit_mut(&mut |format| {
                 if let Format::TypeName(qualified_name) = format {
-                    match &qualified_name.namespace {
-                        Namespace::Named(namespace) => {
-                            let namespace = namespace.clone();
-                            let current_leaf_namespace = config
-                                .module_name()
-                                .rsplit_once('.')
-                                .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                            if namespace == current_leaf_namespace {
-                                *qualified_name =
-                                    QualifiedTypeName::root(qualified_name.name.clone());
-                            } else {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    format!("{}.{}", config.module_name(), namespace),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                        Namespace::Root => {
-                            if config.module_name().contains('.') {
-                                *qualified_name = QualifiedTypeName::namespaced(
-                                    config.module_name().to_string(),
-                                    qualified_name.name.clone(),
-                                );
-                            }
-                        }
-                    }
+                    *qualified_name = Self::requalify(config, qualified_name);
                 }
                 Ok(())
             });
         }
 
         updated_registry
+    }
+
+    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
+    /// gives a reference to `name`.
+    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+        match &name.namespace {
+            Namespace::Named(namespace) => {
+                let current_leaf_namespace = config
+                    .module_name()
+                    .rsplit_once('.')
+                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
+
+                if namespace == current_leaf_namespace {
+                    QualifiedTypeName::root(name.name.clone())
+                } else {
+                    QualifiedTypeName::namespaced(
+                        format!("{}.{}", config.root_package(), namespace),
+                        name.name.clone(),
+                    )
+                }
+            }
+            Namespace::Root => {
+                if config.parent.is_some() || config.module_name().contains('.') {
+                    QualifiedTypeName::namespaced(
+                        config.root_package().to_string(),
+                        name.name.clone(),
+                    )
+                } else {
+                    name.clone()
+                }
+            }
+        }
     }
 }
 

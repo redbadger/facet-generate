@@ -909,3 +909,143 @@ fn field_named_serializer_is_rejected() {
         "Swift: field `serializer` of `Foo` would become `serializer`, which shadows the `serializer` parameter in the generated serialize method; rename it with #[facet(rename = \"...\")]"
     );
 }
+
+// ---------------------------------------------------------------------------
+// References to ROOT types
+// ---------------------------------------------------------------------------
+
+/// A `kv` struct holding the ROOT `Shared` and `Presence`, and the `kv`
+/// `Presence` that shares the ROOT enum's name.
+fn kv_registry() -> Registry {
+    let field = |name: &str, qtn: QualifiedTypeName| Named {
+        name: name.to_string(),
+        doc: Doc::new(),
+        value: Format::TypeName(qtn),
+    };
+    let kv = |name: &str| QualifiedTypeName::namespaced("kv".to_string(), name.to_string());
+
+    let mut registry = Registry::new();
+    registry.insert(
+        kv("Entry"),
+        ContainerFormat::Struct(
+            vec![
+                field("shared", QualifiedTypeName::root("Shared".to_string())),
+                field("status", QualifiedTypeName::root("Presence".to_string())),
+                field("local", kv("Presence")),
+            ],
+            Doc::new(),
+        ),
+    );
+    registry.insert(
+        kv("Presence"),
+        ContainerFormat::Struct(
+            vec![Named {
+                name: "since".to_string(),
+                doc: Doc::new(),
+                value: Format::U64,
+            }],
+            Doc::new(),
+        ),
+    );
+    registry
+}
+
+/// The `kv` module as the installer configures it for package `Example`.
+fn kv_config() -> CodeGeneratorConfig {
+    let mut config = CodeGeneratorConfig::new("kv".to_string());
+    config.parent = Some("Example".to_string());
+    config
+}
+
+#[test]
+fn root_reference_from_a_namespaced_module_is_qualified_with_the_root_package() {
+    let shared = QualifiedTypeName::root("Shared".to_string());
+    assert_eq!(
+        SwiftCodeGenerator::requalify(&kv_config(), &shared),
+        QualifiedTypeName::namespaced("Example".to_string(), "Shared".to_string()),
+    );
+
+    // The module's own types and those of other namespaces are unchanged.
+    for name in [
+        QualifiedTypeName::namespaced("kv".to_string(), "Entry".to_string()),
+        QualifiedTypeName::namespaced("kit".to_string(), "Row".to_string()),
+    ] {
+        assert_eq!(SwiftCodeGenerator::requalify(&kv_config(), &name), name);
+    }
+}
+
+#[test]
+fn root_reference_is_unchanged_in_the_root_module_or_without_a_parent() {
+    let shared = QualifiedTypeName::root("Shared".to_string());
+    for config in [
+        CodeGeneratorConfig::new("Example".to_string()),
+        CodeGeneratorConfig::new("kv".to_string()),
+    ] {
+        assert_eq!(SwiftCodeGenerator::requalify(&config, &shared), shared);
+    }
+}
+
+#[test]
+fn namespaced_module_imports_the_root_package_and_qualifies_its_types() {
+    let output = generate(&kv_config(), vec![Arc::new(BincodePlugin)], &kv_registry());
+
+    assert!(output.contains("import Example\n"), "{output}");
+    assert!(
+        output.contains("public var shared: Example.Shared\n"),
+        "{output}"
+    );
+    assert!(
+        output.contains("let shared = try Example.Shared.deserialize(deserializer: deserializer)"),
+        "{output}"
+    );
+    // The ROOT enum is qualified, and the module's own type of the same name
+    // is not.
+    assert!(
+        output.contains("public var status: Example.Presence\n"),
+        "{output}"
+    );
+    assert!(output.contains("public var local: Presence\n"), "{output}");
+}
+
+#[test]
+fn namespaced_module_without_a_parent_is_unchanged() {
+    let config = CodeGeneratorConfig::new("kv".to_string());
+    let output = generate(&config, vec![Arc::new(BincodePlugin)], &kv_registry());
+
+    assert!(!output.contains("Example"), "{output}");
+    assert!(output.contains("public var shared: Shared\n"), "{output}");
+}
+
+#[test]
+fn root_type_imported_into_a_namespaced_module_shadows_a_builtin() {
+    let mut registry = kv_registry();
+    registry.insert(
+        QualifiedTypeName::namespaced("kv".to_string(), "Tags".to_string()),
+        ContainerFormat::Struct(
+            vec![Named {
+                name: "ids".to_string(),
+                doc: Doc::new(),
+                value: Format::Set(Box::new(Format::U32)),
+            }],
+            Doc::new(),
+        ),
+    );
+
+    // A ROOT struct `Set`, in scope in `kv` once it imports `Example`.
+    let mut config = kv_config();
+    config
+        .registry_type_names
+        .insert(QualifiedTypeName::root("Set".to_string()));
+
+    let output = generate(&config, vec![], &registry);
+    assert!(
+        output.contains("public var ids: Swift.Set<UInt32>\n"),
+        "{output}"
+    );
+
+    // Without a ROOT reference, `kv` does not import `Example`, so `Set` is
+    // the builtin.
+    registry.retain(|name, _| name.name == "Tags");
+    let output = generate(&config, vec![], &registry);
+    assert!(output.contains("public var ids: Set<UInt32>\n"), "{output}");
+}
