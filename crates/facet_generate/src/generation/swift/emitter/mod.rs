@@ -403,6 +403,10 @@ impl Emitter<Swift> for Container<'_> {
 /// property of that type — for example `Int32`, `[String]`, `Foo?`,
 /// `[String: Bar]`, or `Other.Child` for a type in another namespace.
 ///
+/// The type names in `format` must be in the emitter's spelling: a format
+/// from [`EmitContext`] already is, and a name a plugin knows from elsewhere
+/// goes through [`requalify`] first.
+///
 /// `config` supplies the current module name, which decides whether a
 /// namespaced type is qualified.
 ///
@@ -432,6 +436,72 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
             .expect("Swift type expression is not renderable");
     }
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
+}
+
+/// The spelling the emitter gives a reference to `name`, a type name in
+/// registry spelling, from the module `config` describes.
+///
+/// Before emitting a module the generator rewrites every type reference in its
+/// registry with this rule: a ROOT type seen from a namespaced module is
+/// qualified with the root package, whose target it lives in (`Root/Event` →
+/// `Named("SharedTypes")/Event`, rendered `SharedTypes.Event`, inside `kv`
+/// under root package `SharedTypes`). Only when the config knows the root
+/// package ([`CodeGeneratorConfig::parent`], which the installer sets);
+/// otherwise, and in the root module itself, and for every namespaced type,
+/// the name is unchanged — [`render_type`] decides how a namespaced type is
+/// written (bare in its own module, `Other.Child` elsewhere).
+///
+/// # Registry spelling and emitter spelling
+///
+/// The formats a plugin receives through [`EmitContext`] are already
+/// requalified. A name a plugin knows from elsewhere is in registry spelling —
+/// the key of the [`container`](EmitContext::container) being emitted, a name
+/// the plugin built itself, or a type name inside a format from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of) —
+/// and must go through `requalify` (a whole format through
+/// [`requalify_format`]) before it is passed to [`render_type`],
+/// [`write_serialize_value`](crate::generation::bincode::swift::write_serialize_value),
+/// [`CodeGeneratorConfig::is_enum`] /
+/// [`is_unit_enum`](CodeGeneratorConfig::is_unit_enum), or any other function
+/// that expects the emitter's spelling. Without it, a ROOT type named from a
+/// namespaced module is written bare, and a same-named type of the module's
+/// own captures it.
+///
+/// To requalify every type name inside a format, use [`requalify_format`].
+///
+/// Unlike the other languages' `requalify`, Swift's happens to be idempotent
+/// (it only ever produces a namespaced name, which it leaves alone), but it is
+/// still meant to be applied once, to a registry-spelled name.
+#[must_use]
+pub fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    super::generator::SwiftCodeGenerator::requalify(config, name)
+}
+
+/// Requalifies every type name in `format` with [`requalify`], as the
+/// generator does to each container of the module before emitting it.
+///
+/// Apply it exactly once, to a format in registry spelling such as one from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+/// The formats in [`EmitContext`] are already requalified; requalifying one
+/// again happens to change nothing in Swift, but does in the other languages.
+///
+/// ```
+/// use facet_generate::{
+///     generation::{CodeGeneratorConfig, swift},
+///     reflection::format::{Format, QualifiedTypeName},
+/// };
+///
+/// let mut config = CodeGeneratorConfig::new("kv".to_string());
+/// config.parent = Some("SharedTypes".to_string());
+///
+/// let event = QualifiedTypeName::root("Event".to_string());
+/// let mut format = Format::Option(Box::new(Format::TypeName(event)));
+/// swift::requalify_format(&config, &mut format);
+///
+/// assert_eq!(swift::render_type(&format, &config), "SharedTypes.Event?");
+/// ```
+pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
+    super::generator::SwiftCodeGenerator::requalify_type_names(config, format);
 }
 
 /// The Swift `case` name the emitter gives to an enum variant.

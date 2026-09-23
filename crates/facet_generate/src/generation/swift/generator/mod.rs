@@ -84,6 +84,7 @@ impl<'a> SwiftCodeGenerator<'a> {
 
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         Self::reference_root_types(&mut config, registry);
         check_reserved_names(registry, &naming::RULES)?;
 
@@ -116,6 +117,7 @@ impl<'a> SwiftCodeGenerator<'a> {
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let mut config = self.config.clone();
         config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
         Self::reference_root_types(&mut config, registry);
 
         let mut lang = Swift::new(&config, registry);
@@ -141,15 +143,25 @@ impl<'a> SwiftCodeGenerator<'a> {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
-            let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format {
-                    *qualified_name = Self::requalify(config, qualified_name);
-                }
-                Ok(())
-            });
+            Self::requalify_type_names(config, container_format);
         }
 
         updated_registry
+    }
+
+    /// Rewrites every type reference in `holder` with
+    /// [`requalify`](Self::requalify), exported to plugins for a [`Format`] as
+    /// [`swift::requalify_format`](crate::generation::swift::requalify_format).
+    pub(crate) fn requalify_type_names(
+        config: &CodeGeneratorConfig,
+        holder: &mut impl FormatHolder,
+    ) {
+        let _ = holder.visit_mut(&mut |format| {
+            if let Format::TypeName(qualified_name) = format {
+                *qualified_name = Self::requalify(config, qualified_name);
+            }
+            Ok(())
+        });
     }
 
     /// The spelling a reference to `name` is written with.
@@ -159,7 +171,8 @@ impl<'a> SwiftCodeGenerator<'a> {
     /// a same-named type of the module's own from capturing it. Only when the
     /// config knows the root package ([`CodeGeneratorConfig::parent`], which
     /// the installer sets); otherwise, and in the root module itself, every
-    /// reference is unchanged.
+    /// reference is unchanged. Exported to plugins as
+    /// [`swift::requalify`](crate::generation::swift::requalify).
     pub(crate) fn requalify(
         config: &CodeGeneratorConfig,
         name: &QualifiedTypeName,

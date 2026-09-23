@@ -59,7 +59,9 @@ use crate::{
         naming::qualify_helper,
         plugin::{EmitContext, EmitterPlugin, collect_from_plugins},
     },
-    reflection::format::{ContainerFormat, Doc, EnumTagging, Format, Named, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Doc, EnumTagging, Format, Named, QualifiedTypeName, VariantFormat,
+    },
 };
 
 /// Language tag for TypeScript code generation.
@@ -306,6 +308,10 @@ impl Emitter<TypeScript> for Named<Format> {
 /// `Optional<Foo>`, `Map<str,Bar>`, or `Other.Child` for a type in another
 /// namespace.
 ///
+/// The type names in `format` must be in the emitter's spelling: a format
+/// from [`EmitContext`] already is, and a name a plugin knows from elsewhere
+/// goes through [`requalify`] first.
+///
 /// `config` supplies the set of type names the module declares, so a global a
 /// declaration shadows (`Map`, …) is reached through `globalThis`.
 #[must_use]
@@ -315,6 +321,71 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
         plugins: vec![],
     };
     quote_type(format, &lang)
+}
+
+/// The spelling the emitter gives a reference to `name`, a type name in
+/// registry spelling, from the module `config` describes.
+///
+/// Before emitting a module the generator rewrites every type reference in its
+/// registry with this rule: a type of the module's own is written bare
+/// (`Named("kv")/Row` → `Row` inside `kv`), and a ROOT type seen from a
+/// namespaced module is reached through the root package's namespace import
+/// (`Root/Event` → `Named("example")/Event`, rendered `Example.Event`, inside
+/// `kv` under root package `example`), when the config knows the root
+/// package ([`CodeGeneratorConfig::parent`], which the installer sets).
+/// Everything else is unchanged.
+///
+/// # Registry spelling and emitter spelling
+///
+/// The formats a plugin receives through [`EmitContext`] are already
+/// requalified. A name a plugin knows from elsewhere is in registry spelling —
+/// the key of the [`container`](EmitContext::container) being emitted, a name
+/// the plugin built itself, or a type name inside a format from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of) —
+/// and must go through `requalify` (a whole format through
+/// [`requalify_format`]) before it is passed to [`render_type`],
+/// [`write_serialize_value`](crate::generation::bincode::typescript::write_serialize_value),
+/// [`CodeGeneratorConfig::is_enum`] /
+/// [`is_unit_enum`](CodeGeneratorConfig::is_unit_enum), or any other function
+/// that expects the emitter's spelling. Without it an enum lookup misses, and
+/// an enum is serialized as though it were a class.
+///
+/// To requalify every type name inside a format, use [`requalify_format`].
+///
+/// Apply it once, to a registry-spelled name: it is not idempotent. Inside a
+/// namespaced module a second pass would qualify the module's own types,
+/// which the first made bare, with the root package.
+#[must_use]
+pub fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    super::generator::TypeScriptCodeGenerator::requalify(config, name)
+}
+
+/// Requalifies every type name in `format` with [`requalify`], as the
+/// generator does to each container of the module before emitting it.
+///
+/// Apply it exactly once, to a format in registry spelling such as one from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+/// The formats in [`EmitContext`] are already requalified; requalifying one
+/// again qualifies, inside a namespaced module, the module's own types with the
+/// root package.
+///
+/// ```
+/// use facet_generate::{
+///     generation::{CodeGeneratorConfig, typescript},
+///     reflection::format::{Format, QualifiedTypeName},
+/// };
+///
+/// let mut config = CodeGeneratorConfig::new("kv".to_string());
+/// config.parent = Some("example".to_string());
+///
+/// let event = QualifiedTypeName::root("Event".to_string());
+/// let mut format = Format::Option(Box::new(Format::TypeName(event)));
+/// typescript::requalify_format(&config, &mut format);
+///
+/// assert_eq!(typescript::render_type(&format, &config), "Optional<Example.Event>");
+/// ```
+pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
+    super::generator::TypeScriptCodeGenerator::requalify_type_names(config, format);
 }
 
 /// The TypeScript binding name the emitter gives to a constructor parameter

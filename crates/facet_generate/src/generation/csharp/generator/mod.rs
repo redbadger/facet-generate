@@ -156,20 +156,34 @@ impl<'a> CSharpCodeGenerator<'a> {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
-            let _ = container_format.visit_mut(&mut |format| {
-                if let Format::TypeName(qualified_name) = format {
-                    *qualified_name = Self::requalify(config, qualified_name);
-                }
-                Ok(())
-            });
+            Self::requalify_type_names(config, container_format);
         }
 
         updated_registry
     }
 
+    /// Rewrites every type reference in `holder` with
+    /// [`requalify`](Self::requalify), exported to plugins for a [`Format`] as
+    /// [`csharp::requalify_format`](crate::generation::csharp::requalify_format).
+    pub(crate) fn requalify_type_names(
+        config: &CodeGeneratorConfig,
+        holder: &mut impl FormatHolder,
+    ) {
+        let _ = holder.visit_mut(&mut |format| {
+            if let Format::TypeName(qualified_name) = format {
+                *qualified_name = Self::requalify(config, qualified_name);
+            }
+            Ok(())
+        });
+    }
+
     /// The spelling [`update_qualified_names`](Self::update_qualified_names)
-    /// gives a reference to `name`.
-    fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    /// gives a reference to `name`, exported to plugins as
+    /// [`csharp::requalify`](crate::generation::csharp::requalify).
+    pub(crate) fn requalify(
+        config: &CodeGeneratorConfig,
+        name: &QualifiedTypeName,
+    ) -> QualifiedTypeName {
         match &name.namespace {
             Namespace::Named(namespace) => {
                 let current_leaf_namespace = config

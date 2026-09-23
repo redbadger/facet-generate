@@ -166,3 +166,7 @@ pub trait Emitter<L> {
 
 #[cfg(all(test, feature = "generate"))]
 mod tests;
+
+#[cfg(all(test, feature = "generate"))]
+#[path = "./requalify_tests.rs"]
+mod requalify_tests;

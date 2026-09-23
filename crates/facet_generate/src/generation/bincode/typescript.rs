@@ -576,6 +576,11 @@ fn write_deserialize_variant_return(
 /// plugins that need to serialize a value of a type they looked up with
 /// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
 ///
+/// The type names in `format` must be in the emitter's spelling. A format from
+/// [`EmitContext`] already is, but one from `format_of` is in registry
+/// spelling, so requalify it with
+/// [`typescript::requalify_format`](crate::generation::typescript::requalify_format) first.
+///
 /// # Preconditions
 ///
 /// A variable named `serializer`, of type `Serializer`, must be in scope at

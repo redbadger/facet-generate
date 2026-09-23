@@ -33,7 +33,8 @@ mod installer;
 pub(crate) mod naming;
 
 pub use emitter::{
-    Kotlin, enum_constant_name, escape_identifier, property_name, render_type, variant_class_name,
+    Kotlin, enum_constant_name, escape_identifier, property_name, render_type, requalify,
+    requalify_format, variant_class_name,
 };
 pub use generator::KotlinCodeGenerator;
 pub use installer::Installer;
