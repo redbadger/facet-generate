@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.19.1] - 2026-09-23
+
+A patch release for crux_core 0.20.x. It carries one fix from the 0.22 line, re-implemented for 0.19: there's no public API change, and output only changes for code that didn't compile before. `facet-generate-attrs` is unchanged at 0.18.0.
+
+### 🐛 Bug Fixes
+
+- **An enum from another namespace is serialized through its own functions (TypeScript, C#)**:
+  the installers generate each namespace as its own module, and a module only knew about its own
+  enums. So a type holding an enum from a different namespace serialized it as if it were a class:
+  `this.presence.serialize(serializer)` and `Kit.Presence.deserialize(deserializer)` in TypeScript
+  (for unit and data enums), and `Presence.Serialize(serializer)` in C# (for all-unit enums). None of
+  that compiles.
+  - TypeScript now calls the enum's free functions through the namespace import:
+    `Kit.serializePresence(value, serializer)` and `Kit.deserializePresence(deserializer)`.
+  - C# now calls the enum's `…Bincode` helper, qualified the same way as the type.
+  - Enums in the same namespace, and everything else, generate exactly as in 0.19.0.
+  - The fix applies to generation through `Installer::generate`. It was reported downstream as
+    [redbadger/crux#603](https://github.com/redbadger/crux/issues/603).
+  [#154](https://github.com/redbadger/facet-generate/issues/154)
+
 ## [unreleased]
 
 ## [0.19.0] - 2026-08-06
