@@ -768,7 +768,8 @@ fn transparent_struct_explicit_namespace() {
     : STRUCT:
         - - wrapped_id:
               - TYPENAME:
-                  namespace: ROOT
+                  namespace:
+                    NAMED: wrappers
                   name: UserId
               - []
         - []
@@ -1040,7 +1041,8 @@ fn collections_with_explicit_namespace() {
           - optional_user:
               - OPTION:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: system
                     name: UnnamedUser
               - []
           - role_map:
@@ -1331,6 +1333,12 @@ fn transparent_struct_chains() {
         - []
     ? namespace:
         NAMED: identity
+      name: CoreId
+    : NEWTYPESTRUCT:
+        - STR
+        - []
+    ? namespace:
+        NAMED: identity
       name: NamespacedWrapper
     : NEWTYPESTRUCT:
         - TYPENAME:
@@ -1400,13 +1408,15 @@ fn mixed_containers_with_explicit_namespace() {
           - option:
               - OPTION:
                   TYPENAME:
-                    namespace: ROOT
+                    namespace:
+                      NAMED: storage
                     name: Item
               - []
           - tuple:
               - TUPLE:
                   - TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: storage
                       name: Item
                   - STR
               - []
@@ -1414,7 +1424,8 @@ fn mixed_containers_with_explicit_namespace() {
               - OPTION:
                   SEQ:
                     TYPENAME:
-                      namespace: ROOT
+                      namespace:
+                        NAMED: storage
                       name: Item
               - []
           - complex_map:
@@ -2866,28 +2877,4 @@ fn test_namespace_action_helper_methods() {
         )))
         .is_explicit()
     );
-
-    // Test should_move_to_namespace()
-    assert!(
-        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
-            "test".to_string()
-        )))
-        .should_move_to_namespace("test")
-    );
-    assert!(
-        !NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Named(
-            "test".to_string()
-        )))
-        .should_move_to_namespace("other")
-    );
-    assert!(
-        NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Root))
-            .should_move_to_namespace("")
-    );
-    assert!(
-        !NamespaceAction::SetContext(NamespaceContext::explicit(Namespace::Root))
-            .should_move_to_namespace("test")
-    );
-    assert!(NamespaceAction::SetContext(NamespaceContext::cleared()).should_move_to_namespace(""));
-    assert!(NamespaceAction::Inherit.should_move_to_namespace("anything"));
 }

@@ -936,6 +936,8 @@ pub mod across_namespaces {
         use serde::{Deserialize, Serialize};
 
         pub mod kv {
+            use std::collections::BTreeMap;
+
             use facet::Facet;
             use facet_generate as fg;
             use serde::{Deserialize, Serialize};
@@ -957,6 +959,16 @@ pub mod across_namespaces {
                 /// `Presence.Deserialize` inside `Entry` to that property (#159).
                 pub status: super::Presence,
                 pub local: Presence,
+            }
+
+            /// ROOT types nested in generics, which keep their pin to ROOT.
+            #[derive(Facet)]
+            #[facet(fg::namespace = "kv")]
+            pub struct Batch {
+                pub many: Vec<Option<super::Shared>>,
+                pub levels: BTreeMap<String, super::Level>,
+                pub outcome: Option<super::Outcome>,
+                pub statuses: Option<Vec<super::Presence>>,
             }
         }
 
@@ -1002,13 +1014,64 @@ pub mod across_namespaces {
 
         /// References from ROOT into `kv`, and from `kv` back into ROOT.
         pub fn get_registry() -> Registry {
-            reflect!(App).unwrap()
+            use kv::Batch;
+            reflect!(App, Batch).unwrap()
         }
 
         /// References from `kv` into ROOT only.
         pub fn get_namespace_registry() -> Registry {
-            use kv::Entry;
-            reflect!(Entry).unwrap()
+            use kv::{Batch, Entry};
+            reflect!(Entry, Batch).unwrap()
+        }
+    }
+
+    /// Types with no namespace attribute, reached only from a type in
+    /// `detail`, so they are generated in `detail` too, and every reference
+    /// to them, however it is wrapped, is to `detail` (#167). A ROOT type holds
+    /// the `detail` one, so a reference from `detail` to ROOT would make each
+    /// module depend on the other.
+    pub mod inherited {
+        use std::collections::BTreeMap;
+
+        use facet::Facet;
+        use facet_generate as fg;
+        use facet_generate::{Registry, reflect};
+
+        #[derive(Facet)]
+        pub struct Neighbour {
+            pub id: u32,
+        }
+
+        #[derive(Facet)]
+        #[repr(C)]
+        #[allow(dead_code)]
+        pub enum Visit {
+            Planned(Option<Neighbour>),
+            Done,
+        }
+
+        #[derive(Facet)]
+        pub struct Neighbourhood {
+            pub manager: Option<Neighbour>,
+            pub reports: Vec<Neighbour>,
+            pub by_name: BTreeMap<String, Neighbour>,
+            pub deputies: Option<Vec<Neighbour>>,
+            pub visits: Vec<Visit>,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "detail")]
+        pub struct ViewModel {
+            pub neighbourhood: Neighbourhood,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            pub detail: ViewModel,
+        }
+
+        pub fn get_registry() -> Registry {
+            reflect!(App).unwrap()
         }
     }
 }

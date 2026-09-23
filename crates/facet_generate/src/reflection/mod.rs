@@ -38,9 +38,9 @@ use std::{
 };
 
 use facet::{
-    ArrayDef, ConstTypeId, DeclId, Def, EnumType, Facet, Field, FieldFlags, ListDef, MapDef,
-    NumericType, OptionDef, PointerDef, PointerType, PrimitiveType, SequenceType, SetDef, Shape,
-    SliceDef, StructKind, StructType, TextualType, Type, UserType, Variant,
+    ArrayDef, ConstTypeId, DeclId, Def, EnumType, Facet, Field, FieldFlags, NumericType,
+    PointerDef, PointerType, PrimitiveType, Shape, StructKind, StructType, TextualType, Type,
+    UserType, Variant,
 };
 use regex::Regex;
 
@@ -100,6 +100,23 @@ fn generated_shape(mut shape: &Shape) -> &Shape {
     shape
 }
 
+/// The type a chain of transparent wrappers is generated as, with the namespace context that the
+/// innermost wrapper with an `fg::namespace` of its own sets for it, if any.
+///
+/// A shape that is not a transparent wrapper is returned as it is, with no context.
+fn strip_transparent(mut shape: &Shape) -> Result<(&Shape, Option<NamespaceContext>), Error> {
+    let mut context = None;
+    while is_transparent_shape(shape)
+        && let Some(inner) = shape.inner
+    {
+        if let NamespaceAction::SetContext(wrapper) = extract_namespace_from_shape(shape)? {
+            context = Some(wrapper);
+        }
+        shape = inner;
+    }
+    Ok((shape, context))
+}
+
 /// A namespace context with its source information
 #[derive(Debug, Clone, PartialEq)]
 struct NamespaceContext {
@@ -152,28 +169,6 @@ impl NamespaceAction {
             Self::Inherit => false, // Inheriting is not explicit
         }
     }
-
-    /// Returns true if this action should move a type to a specific namespace
-    fn should_move_to_namespace(&self, target_namespace: &str) -> bool {
-        match self {
-            Self::SetContext(ctx) if ctx.is_explicit() => {
-                match &ctx.namespace {
-                    Namespace::Named(type_ns) => {
-                        // Type has explicit namespace - only move if it matches the target namespace
-                        type_ns == target_namespace
-                    }
-                    Namespace::Root => {
-                        // Type explicitly wants to be in root - don't move to named namespace
-                        target_namespace.is_empty() // This would be unusual but handle it
-                    }
-                }
-            }
-            Self::SetContext(_) | Self::Inherit => {
-                // No type-level explicit annotation - field-level can override
-                true
-            }
-        }
-    }
 }
 
 /// The bridge between `facet` compile-time type metadata and the [`Registry`] consumed by
@@ -191,7 +186,6 @@ pub struct RegistryBuilder {
     processed: HashMap<QualifiedTypeName, Claim>,
     name_mappings: BTreeMap<QualifiedTypeName, Mapping>,
     generic_type_params: BTreeMap<DeclId, String>,
-    processing_nested: bool,
     namespace_context_stack: Vec<NamespaceContext>,
     type_namespace_sources: HashMap<QualifiedTypeName, bool>, // true = explicit, false = inherited
 }
@@ -216,6 +210,8 @@ impl RegistryBuilder {
             }
         }
 
+        check_references(&self.registry)?;
+
         Ok(self.registry)
     }
 
@@ -230,7 +226,7 @@ impl RegistryBuilder {
     /// * namespaces have invalid names, or
     /// * attributes are malformed.
     pub fn add_type<'a, T: Facet<'a>>(mut self) -> Result<Self, Error> {
-        self.format(T::SHAPE)?;
+        self.register_reachable(T::SHAPE)?;
         Ok(self)
     }
 
@@ -278,56 +274,44 @@ impl RegistryBuilder {
         self.format_of_shape(T::SHAPE)
     }
 
-    /// Read-only counterpart of [`Self::get_user_type_format`], used by
-    /// [`format_of`](Self::format_of).
-    fn format_of_shape(&self, mut shape: &Shape) -> Result<Format, Error> {
-        if is_transparent_shape(shape)
-            && let Some(inner) = shape.inner
-        {
-            shape = inner;
-        }
-
-        match &shape.ty {
-            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
-                if shape.type_identifier == "()" {
-                    Ok(Format::Unit)
-                } else if let Def::Option(option_def) = shape.def {
-                    Ok(Format::Option(Box::new(
-                        self.format_of_shape(option_def.t())?,
-                    )))
-                } else {
-                    Ok(Format::TypeName(self.mapped_name(shape)?))
-                }
-            }
-            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                get_inner_format(pt.target)
-            }
-            _ => get_inner_format(shape),
-        }
+    /// Read-only counterpart of [`Self::reference_to`], used by [`format_of`](Self::format_of).
+    fn format_of_shape(&self, shape: &Shape) -> Result<Format, Error> {
+        reference_format(shape, None, &mut |shape, wrapper| {
+            self.mapped_name(shape, wrapper)
+        })
     }
 
     /// Read-only counterpart of [`Self::get_name_with_mappings`].
     ///
     /// Namespace *contexts* are a property of an in-progress walk, and the
     /// stack is empty once the types have been added, so only the recorded
-    /// rename mappings and the type's own attributes contribute.
-    fn mapped_name(&self, shape: &Shape) -> Result<QualifiedTypeName, Error> {
+    /// rename mappings, the type's own attributes and the namespace of a
+    /// transparent wrapper around it (`wrapper`) contribute.
+    fn mapped_name(
+        &self,
+        shape: &Shape,
+        wrapper: Option<&NamespaceContext>,
+    ) -> Result<QualifiedTypeName, Error> {
         let base_key = QualifiedTypeName::root(shape.type_identifier.to_string());
         if let Some(mapping) = self.name_mappings.get(&base_key)
             && mapping.id == generated_shape(shape).id
         {
             return Ok(mapping.renamed.clone());
         }
-        get_name(shape)
+        let name = get_name(shape)?;
+        match wrapper {
+            Some(context) if !extract_namespace_from_shape(shape)?.is_explicit() => {
+                Ok(QualifiedTypeName {
+                    namespace: context.namespace.clone(),
+                    name: name.name,
+                })
+            }
+            _ => Ok(name),
+        }
     }
 }
 
 impl RegistryBuilder {
-    fn push(&mut self, name: QualifiedTypeName, container: ContainerFormat) {
-        self.registry.insert(name.clone(), container);
-        self.current.push(name);
-    }
-
     fn push_with_type_check(
         &mut self,
         name: QualifiedTypeName,
@@ -342,27 +326,6 @@ impl RegistryBuilder {
         self.registry.insert(name.clone(), container);
         self.current.push(name);
         Ok(())
-    }
-
-    fn push_temporary(
-        &mut self,
-        name: String,
-        container: ContainerFormat,
-        parent_context: Option<&Shape>,
-    ) -> QualifiedTypeName {
-        let temp_name = if let Some(parent) = parent_context {
-            let parent_name = parent.type_identifier.replace(['<', '>', ' ', ','], "_");
-            format!("{name}__in__{parent_name}")
-        } else {
-            name
-        };
-        let qualified_name = QualifiedTypeName {
-            namespace: Namespace::Named("__temp__".to_string()),
-            name: temp_name,
-        };
-
-        self.push(qualified_name.clone(), container);
-        qualified_name
     }
 
     fn register_type_mapping(
@@ -432,75 +395,16 @@ impl RegistryBuilder {
         }
     }
 
-    fn format_with_namespace_override(
-        &mut self,
-        shape: &Shape,
-        namespace: &str,
-    ) -> Result<(), Error> {
-        let base_name = shape.type_identifier.to_string();
-        let namespaced_key = QualifiedTypeName::namespaced(namespace.to_string(), base_name);
-
-        // The name may already be taken — by this same type, in which case there is nothing left
-        // to do, or by a different one, which is a conflict.
-        if self.is_claimed_by(&namespaced_key, shape)? {
-            return Ok(());
-        }
-
-        // Store the previous namespace context
-        let context = NamespaceContext::explicit(Namespace::Named(namespace.to_string()));
-        self.push_namespace(NamespaceAction::SetContext(context));
-
-        // Process the type with the namespace context so nested types inherit the namespace
-        self.format(shape)?;
-
-        // Restore the previous namespace context
-        self.pop_namespace();
-
-        // Check if the type has a conflicting type-level explicit namespace
-        // If type-level explicit matches what we want, or if no type-level explicit, then move is OK
-        let original_key = self.get_name_with_mappings(shape)?;
-
-        if original_key != namespaced_key {
-            let type_level_namespace = extract_namespace_from_shape(shape)?;
-
-            let should_move = type_level_namespace.should_move_to_namespace(namespace);
-
-            if should_move && let Some(format) = self.registry.remove(&original_key) {
-                self.registry.insert(namespaced_key.clone(), format);
-                // Record the moved name as this type's, so a later visit under it is recognised
-                // as the same type rather than reported as a duplicate.
-                self.record_claim(namespaced_key, shape);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn format(&mut self, mut shape: &Shape) -> Result<(), Error> {
-        if is_transparent_shape(shape)
-            && let Some(inner) = shape.inner
-        {
-            shape = inner;
-        }
-
+    /// Registers the struct or enum `shape`, and every container it reaches.
+    fn format_container(&mut self, shape: &Shape) -> Result<(), Error> {
         if !self.is_supported_generic_type(shape) {
             return Err(Error::UnsupportedGenericType(shape.to_string()));
         }
-
-        // First check for special cases in the def system (like Option)
-        if let Def::Option(option_def) = shape.def {
-            self.format_option(option_def)?;
-            return Ok(());
+        match &shape.ty {
+            Type::User(UserType::Struct(struct_type)) => self.format_struct(struct_type, shape),
+            Type::User(UserType::Enum(enum_type)) => self.format_enum(enum_type, shape),
+            _ => unreachable!("only structs and enums are containers"),
         }
-
-        // Try type system first
-        if self.try_format_from_type_system(shape)? {
-            return Ok(());
-        }
-
-        // Fall back to def system
-        self.format_from_def_system(shape)?;
-        Ok(())
     }
 
     fn is_supported_generic_type(&mut self, shape: &Shape) -> bool {
@@ -529,171 +433,12 @@ impl RegistryBuilder {
         *previous_params == current_params
     }
 
-    fn try_format_from_type_system(&mut self, shape: &Shape) -> Result<bool, Error> {
-        match &shape.ty {
-            Type::User(UserType::Struct(struct_def)) => {
-                self.handle_user_struct(shape, struct_def)?;
-                Ok(true)
-            }
-            Type::User(UserType::Enum(enum_def)) => {
-                self.format_enum(enum_def, shape)?;
-                Ok(true)
-            }
-            Type::Sequence(sequence_type) => {
-                self.handle_sequence_type(shape, sequence_type)?;
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    fn handle_user_struct(&mut self, shape: &Shape, struct_def: &StructType) -> Result<(), Error> {
-        let type_name = self.get_name_with_mappings(shape)?;
-
-        // Update container with the struct format only if not processing nested types
-        if !self.processing_nested {
-            let format = if shape.type_identifier == "()" {
-                Format::Unit
-            } else {
-                Format::TypeName(type_name)
-            };
-
-            self.update_container_format(format, UpdateMode::IfUnknown);
-        }
-
-        self.format_struct(struct_def, shape)?;
-        Ok(())
-    }
-
-    fn handle_sequence_type(
-        &mut self,
-        shape: &Shape,
-        sequence_type: &SequenceType,
-    ) -> Result<(), Error> {
-        match sequence_type {
-            SequenceType::Slice(slice_type) => {
-                // For slices, use the Def::Slice if available
-                if let Def::Slice(slice_def) = shape.def {
-                    self.format_slice(slice_def)?;
-                } else {
-                    // Fallback: create a slice format from the sequence type info
-                    let target_shape = slice_type.t;
-                    let inner_format = get_inner_format(target_shape)?;
-                    let slice_format = Format::Seq(Box::new(inner_format));
-                    self.update_container_format(slice_format, UpdateMode::Force);
-                    self.process_nested_types(target_shape)?;
-                }
-            }
-            SequenceType::Array(array_type) => {
-                // For arrays, use the Def::Array if available
-                if let Def::Array(array_def) = shape.def {
-                    self.format_array(array_def)?;
-                } else {
-                    // Fallback: create an array format from the sequence type info
-                    let target_shape = array_type.t;
-                    let inner_format = get_inner_format(target_shape)?;
-                    let array_format = Format::Seq(Box::new(inner_format)); // Arrays are also sequences
-                    self.update_container_format(array_format, UpdateMode::Force);
-                    self.process_nested_types(target_shape)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn format_from_def_system(&mut self, shape: &Shape) -> Result<(), Error> {
-        match shape.def {
-            Def::Scalar => self.format_scalar(shape)?,
-            Def::Map(map_def) => self.format_map(map_def)?,
-            Def::List(list_def) => self.format_list(list_def)?,
-            Def::Slice(slice_def) => self.format_slice(slice_def)?,
-            Def::Array(array_def) => self.format_array(array_def)?,
-            Def::Set(set_def) => self.format_set(set_def)?,
-            Def::Option(option_def) => self.format_option(option_def)?,
-            Def::Pointer(PointerDef {
-                pointee: Some(inner_shape),
-                ..
-            }) => {
-                self.handle_pointer(inner_shape)?;
-            }
-            Def::Pointer(PointerDef { pointee: None, .. }) => {
-                self.handle_opaque_pointee();
-            }
-            Def::Undefined => {
-                self.handle_undefined_def(shape)?;
-            }
-            _ => (),
-        }
-        Ok(())
-    }
-
-    fn handle_pointer(&mut self, inner_shape: &Shape) -> Result<(), Error> {
-        // For Pointer, we need to update the current container with the inner type's format
-        let inner_format = get_format_for_shape(inner_shape)?;
-
-        // Update the current container with the Pointer's inner format
-        self.update_container_format(inner_format, UpdateMode::IfUnknown);
-
-        // Also process the inner type if it's a user-defined type
-        self.process_nested_types(inner_shape)?;
-
-        Ok(())
-    }
-
-    fn handle_undefined_def(&mut self, shape: &Shape) -> Result<(), Error> {
-        // Handle the case when not yet migrated to the Type enum
-        // For primitives, we can try to infer the type
-        match &shape.ty {
-            Type::Primitive(primitive) => match primitive {
-                PrimitiveType::Boolean => {
-                    let format = Format::Bool;
-                    self.update_container_format(format, UpdateMode::Force);
-                }
-                PrimitiveType::Numeric(NumericType::Float) => {
-                    let format = Format::F32; // or F64, but F32 is more common
-                    self.update_container_format(format, UpdateMode::Force);
-                }
-                PrimitiveType::Textual(TextualType::Str) => {
-                    let format = Format::Str;
-                    self.update_container_format(format, UpdateMode::Force);
-                }
-                p => {
-                    unimplemented!("Unknown primitive type: {p:?}");
-                }
-            },
-            Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                self.format(pt.target)?;
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn format_scalar(&mut self, shape: &Shape) -> Result<(), Error> {
-        if let Some(format) = type_to_format(shape)? {
-            self.update_container_format(format, UpdateMode::Force);
-        }
-        // If type_to_format returns None, we skip this field
-        Ok(())
-    }
-
     fn format_struct(&mut self, struct_type: &StructType, shape: &Shape) -> Result<(), Error> {
-        // Anonymous tuples all arrive here under the shared name `(…)`, so `(i32, u8)` and
-        // `(String, bool)` would look like two types claiming one name. There is nothing to do
-        // for them anyway — `handle_user_struct` has already given the field its format, and no
-        // container is pushed for a tuple.
-        if struct_type.kind == StructKind::Tuple {
-            return Ok(());
-        }
-
         let struct_name = self.get_name_with_mappings(shape)?;
 
-        // Check if already processed using the full namespaced name
+        // Check if already processed using the full namespaced name. This is the recursion case:
+        // the reference to the struct was made by `reference_to`, so there is nothing to update.
         if self.claim(&struct_name, shape)? {
-            // This is a mutual recursion case - only update if there's an unknown format that needs updating
-            let format = Format::TypeName(struct_name);
-            self.update_container_format(format, UpdateMode::MutualRecursion);
             return Ok(());
         }
 
@@ -726,26 +471,14 @@ impl RegistryBuilder {
                     let field = struct_type.fields[0];
                     let field_shape = field.shape();
 
-                    // Check if this is a transparent struct
-                    let is_transparent = is_transparent_shape(shape);
-
-                    if is_transparent {
-                        // For transparent structs, don't create a container - just process the inner type
-                        // This will register the transparent struct with its inner type's format
-                        if !self.try_handle_bytes_attribute(&field) {
-                            self.format(field_shape)?;
-                        }
-                        self.pop_namespace();
-                        return Ok(());
-                    }
-
-                    // Handle regular newtype struct
+                    // A newtype struct; a transparent one never gets here, as it is registered as
+                    // the type it wraps
                     let container = ContainerFormat::NewTypeStruct(Box::default(), shape.into());
                     self.push_with_type_check(struct_name, container, shape)?;
 
                     // Process the inner field
                     if !self.try_handle_bytes_attribute(&field) {
-                        self.format(field_shape)?;
+                        self.push_positional_field(field_shape)?;
                     }
                 } else {
                     // Handle tuple struct with multiple fields
@@ -757,7 +490,7 @@ impl RegistryBuilder {
                             continue;
                         }
                         if !self.try_handle_bytes_attribute(field) {
-                            self.format(field.shape())?;
+                            self.push_positional_field(field.shape())?;
                         }
                     }
                 }
@@ -786,67 +519,83 @@ impl RegistryBuilder {
 
                 self.pop();
             }
-            StructKind::Tuple => unreachable!("anonymous tuples return early, above"),
+            StructKind::Tuple => unreachable!("anonymous tuples are not containers"),
         }
 
         self.pop_namespace();
         Ok(())
     }
 
-    fn handle_struct_field(&mut self, field: &Field) -> Result<(), Error> {
-        let field_shape = field.shape();
+    /// Gives the newtype or tuple struct being built its next field.
+    ///
+    /// A field whose type cannot be reflected is left out, as it always has been: a newtype keeps
+    /// its unknown format, which `build` reports.
+    fn push_positional_field(&mut self, field_shape: &Shape) -> Result<(), Error> {
+        let Some(format) = self.field_format(field_shape)? else {
+            return Ok(());
+        };
+        match self.get_mut() {
+            Some(ContainerFormat::NewTypeStruct(inner_format, _doc)) => **inner_format = format,
+            Some(ContainerFormat::TupleStruct(formats, _doc)) => formats.push(format),
+            _ => {}
+        }
+        Ok(())
+    }
 
-        // Check for field-level attributes first
+    fn handle_struct_field(&mut self, field: &Field) -> Result<(), Error> {
         if self.try_handle_bytes_attribute(field) {
             return Ok(());
         }
 
-        if self.try_handle_option_field(field)? {
-            return Ok(());
-        }
-
-        if self.try_handle_tuple_struct_field(field)? {
-            return Ok(());
-        }
-
-        // Check for field-level namespace annotation
-        let field_namespace = extract_namespace_from_field_attributes(field)?;
-
-        self.push_namespace(field_namespace.clone());
-
-        // Now determine the proper format with the field-level context in place
-        let Some(field_format) = self.get_user_type_format(field_shape)? else {
-            // Skip this field if format is None (e.g. unknown opaque types)
-            self.pop_namespace();
-            return Ok(());
+        // Unlike a struct variant's, a struct field's own `fg::namespace` has never applied to an
+        // `Option`, an anonymous tuple or a transparent wrapper, and still doesn't, so that the
+        // output for those fields is unchanged.
+        let field_shape = field.shape();
+        let ignores_field_namespace = match &field_shape.ty {
+            Type::User(UserType::Struct(struct_type)) => {
+                struct_type.kind == StructKind::Tuple || is_transparent_shape(field_shape)
+            }
+            _ => matches!(field_shape.def, Def::Option(_)),
+        };
+        let format = if ignores_field_namespace {
+            self.field_format(field_shape)?
+        } else {
+            self.named_field_format(field)?
         };
 
-        // Process the type under the field-level namespace context
-        if let NamespaceAction::SetContext(ctx) = &field_namespace {
-            if ctx.is_explicit() {
-                if let Namespace::Named(name) = &ctx.namespace {
-                    self.format_with_namespace_override(field_shape, name)?;
-                } else {
-                    self.format(field_shape)?;
-                }
-            } else {
-                self.format(field_shape)?;
-            }
-        } else {
-            self.format(field_shape)?;
-        }
-
-        self.pop_namespace();
-
-        if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-            let format = Named {
+        if let Some(value) = format
+            && let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut()
+        {
+            named_formats.push(Named {
                 name: field_display_name(field),
                 doc: field.into(),
-                value: field_format,
-            };
-            named_formats.push(format);
+                value,
+            });
         }
         Ok(())
+    }
+
+    /// The format of a named field, of a struct or a struct variant, made under the field's own
+    /// `fg::namespace` if it has one. See [`Self::field_format`].
+    fn named_field_format(&mut self, field: &Field) -> Result<Option<Format>, Error> {
+        let field_namespace = extract_namespace_from_field_attributes(field)?;
+        self.push_namespace(field_namespace);
+        let format = self.field_format(field.shape());
+        self.pop_namespace();
+        format
+    }
+
+    /// The format of a field of type `field_shape`, once the containers it reaches are registered,
+    /// or `None` if the field is to be skipped (see [`Self::get_user_type_format`]).
+    ///
+    /// The reference and the registration are made under the same namespace context, so they
+    /// agree, and the registration can't touch the container being built.
+    fn field_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
+        let Some(format) = self.get_user_type_format(field_shape)? else {
+            return Ok(None);
+        };
+        self.process_nested_types(field_shape)?;
+        Ok(Some(format))
     }
 
     fn try_handle_bytes_attribute(&mut self, field: &Field) -> bool {
@@ -867,106 +616,6 @@ impl RegistryBuilder {
             _ => return false,
         }
         true
-    }
-
-    fn try_handle_option_field(&mut self, field: &Field) -> Result<bool, Error> {
-        let field_shape = field.shape();
-        // Check if the field is an Option
-        if field_shape.type_identifier == "Option"
-            && let Def::Option(option_def) = field_shape.def
-        {
-            // Handle Option types directly
-            let inner_shape = option_def.t();
-            // Handle pointer types specially
-            let inner_format = get_format_for_shape(inner_shape)?;
-            let option_format = Format::Option(Box::new(inner_format));
-
-            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                named_formats.push(Named {
-                    name: field_display_name(field),
-                    doc: field.into(),
-                    value: option_format,
-                });
-            }
-
-            // If the inner type is a user-defined type, we need to process it too
-            if !matches!(inner_shape.def, Def::Scalar) {
-                self.format(inner_shape)?;
-            }
-            return Ok(true);
-        }
-        Ok(false)
-    }
-
-    fn try_handle_tuple_struct_field(&mut self, field: &Field) -> Result<bool, Error> {
-        let field_shape = field.shape();
-        // Check if the field is a tuple struct
-        if let Type::User(UserType::Struct(inner_struct)) = &field_shape.ty {
-            if inner_struct.kind == StructKind::Tuple {
-                // Handle tuple field specially
-                let mut tuple_formats = vec![];
-                for tuple_field in inner_struct.fields {
-                    let tuple_field_shape = tuple_field.shape();
-                    let field_format = get_inner_format(tuple_field_shape)?;
-                    tuple_formats.push(field_format);
-                }
-
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    let tuple_format = if tuple_formats.is_empty() {
-                        Format::Unit
-                    } else {
-                        Format::Tuple(tuple_formats)
-                    };
-                    named_formats.push(Named {
-                        name: field_display_name(field),
-                        doc: field.into(),
-                        value: tuple_format,
-                    });
-                }
-                return Ok(true);
-            }
-
-            // Check if the referenced struct is transparent
-            let is_referenced_transparent = inner_struct.kind == StructKind::TupleStruct
-                && inner_struct.fields.len() == 1
-                && is_transparent_shape(field_shape);
-
-            if is_referenced_transparent {
-                // For transparent struct references, use the inner type directly with namespace context
-                // Extract namespace from the transparent struct itself, not the parent
-                let transparent_namespace = extract_namespace_from_shape(field_shape)?;
-
-                let inner_field = inner_struct.fields[0];
-                let inner_field_shape = inner_field.shape();
-
-                // Check if the inner type is a user-defined type that needs namespace-aware naming
-                let inner_format = if let Type::User(UserType::Struct(_) | UserType::Enum(_)) =
-                    &inner_field_shape.ty
-                {
-                    let namespaced_name = self.get_name_with_mappings(inner_field_shape)?;
-                    Format::TypeName(namespaced_name)
-                } else {
-                    get_inner_format(inner_field_shape)?
-                };
-
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field_display_name(field),
-                        doc: field.into(),
-                        value: inner_format,
-                    });
-                }
-
-                // Process the inner type with the namespace context of the transparent struct
-                self.push_namespace(transparent_namespace);
-                self.format(inner_field_shape)?;
-                self.pop_namespace();
-
-                return Ok(true);
-            }
-        }
-
-        Ok(false)
     }
 
     fn format_enum(&mut self, enum_type: &EnumType, shape: &Shape) -> Result<(), Error> {
@@ -1049,117 +698,29 @@ impl RegistryBuilder {
                 .all(|c| c.is_ascii_digit());
 
             if is_struct_variant {
-                self.process_struct_variant(variant, shape)
+                self.process_struct_variant(variant)
             } else {
-                self.process_newtype_variant(variant, shape)
+                self.process_newtype_variant(variant)
             }
         } else {
             self.process_multi_field_variant(variant, shape)
         }
     }
 
-    fn process_newtype_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-    ) -> Result<VariantFormat, Error> {
+    fn process_newtype_variant(&mut self, variant: &Variant) -> Result<VariantFormat, Error> {
         let field = variant.data.fields[0];
         if let Some(value) = bytes_attribute_format(&field) {
             return Ok(VariantFormat::NewType(Box::new(value)));
         }
-        let field_shape = field.shape();
-        if is_transparent_shape(field_shape)
-            && let Some(inner) = field_shape.inner
-            && let Some(format) = self.get_user_type_format(inner)?
-        {
-            return Ok(VariantFormat::NewType(Box::new(format)));
-        }
-        if let Def::Option(v) = field_shape.def
-            && let Some(format) = self.get_user_type_format(v.t)?
-        {
-            return Ok(VariantFormat::NewType(Box::new(Format::Option(Box::new(
-                format,
-            )))));
+        if field.shape().type_identifier == "()" {
+            return Ok(VariantFormat::NewType(Box::new(Format::Unit)));
         }
 
-        if field_shape.type_identifier == "()" {
-            Ok(VariantFormat::NewType(Box::new(Format::Unit)))
-        } else if let Type::User(UserType::Struct(_) | UserType::Enum(_)) = &field_shape.ty {
-            // Check for field-level namespace annotation
-            let field_namespace = extract_namespace_from_field_attributes(&field)?;
-
-            match field_namespace {
-                NamespaceAction::SetContext(ctx) if ctx.is_explicit() => {
-                    // Process the type under the field-specified namespace and create qualified name
-                    let base_name = field_shape.type_identifier.to_string();
-                    let qualified_name = match &ctx.namespace {
-                        Namespace::Root => {
-                            let context = NamespaceContext::explicit(Namespace::Root);
-                            self.push_namespace(NamespaceAction::SetContext(context));
-                            self.format(field_shape)?;
-                            self.pop_namespace();
-                            QualifiedTypeName::root(base_name)
-                        }
-                        Namespace::Named(name) => {
-                            let context =
-                                NamespaceContext::explicit(Namespace::Named(name.clone()));
-                            self.push_namespace(NamespaceAction::SetContext(context));
-                            self.format(field_shape)?;
-                            self.pop_namespace();
-                            QualifiedTypeName::namespaced(name.clone(), base_name)
-                        }
-                    };
-                    Ok(VariantFormat::NewType(Box::new(Format::TypeName(
-                        qualified_name,
-                    ))))
-                }
-                NamespaceAction::SetContext(_) | NamespaceAction::Inherit => {
-                    // For user-defined struct/enum types, create a TypeName reference and process the type
-                    self.format(field_shape)?;
-                    let namespaced_name = self.get_name_with_mappings(field_shape)?;
-                    Ok(VariantFormat::NewType(Box::new(Format::TypeName(
-                        namespaced_name,
-                    ))))
-                }
-            }
-        } else {
-            // For other types, use the temporary container approach
-            self.process_newtype_variant_with_temp_container(variant, field_shape, shape)
-        }
-    }
-
-    fn process_newtype_variant_with_temp_container(
-        &mut self,
-        variant: &Variant,
-        field_shape: &Shape,
-        _shape: &Shape,
-    ) -> Result<VariantFormat, Error> {
-        let field = variant.data.fields[0];
-
-        // Check for field-level namespace annotation
-        let field_namespace = extract_namespace_from_field_attributes(&field)?;
-
-        self.push_namespace(field_namespace);
-
-        // Check if this field should be skipped (opaque types)
-        let Some(format) = self.get_user_type_format(field_shape)? else {
-            // If the field should be skipped, make this a unit variant
-            self.pop_namespace();
-            return Ok(VariantFormat::Unit);
-        };
-
-        // If the field is Unit (opaque), also make this a unit variant
-        if matches!(format, Format::Unit) {
-            self.pop_namespace();
-            return Ok(VariantFormat::Unit);
-        }
-
-        // Also ensure the type itself gets processed with the namespace context
-        self.format(field_shape)?;
-
-        self.pop_namespace();
-
-        Ok(VariantFormat::NewType(Box::new(format)))
+        // A payload that is skipped, as a struct field would be, makes this a unit variant.
+        Ok(match self.named_field_format(&field)? {
+            None | Some(Format::Unit) => VariantFormat::Unit,
+            Some(format) => VariantFormat::NewType(Box::new(format)),
+        })
     }
 
     fn process_multi_field_variant(
@@ -1172,102 +733,24 @@ impl RegistryBuilder {
         let is_struct_variant = !first_field.name.chars().all(|c| c.is_ascii_digit());
 
         if is_struct_variant {
-            self.process_struct_variant(variant, shape)
+            self.process_struct_variant(variant)
         } else {
             self.process_tuple_variant(variant, shape)
         }
     }
 
-    fn process_struct_variant(
-        &mut self,
-        variant: &Variant,
-        shape: &Shape,
-    ) -> Result<VariantFormat, Error> {
-        let temp = self.push_temporary(
-            variant_display_name(variant),
-            ContainerFormat::Struct(vec![], variant.into()),
-            Some(shape),
-        );
-
-        // Process all fields with their names
+    fn process_struct_variant(&mut self, variant: &Variant) -> Result<VariantFormat, Error> {
+        let mut fields = vec![];
         for field in variant.data.fields {
-            // Check for #[facet(skip)] attribute on the field
-            let skip = field.flags.contains(FieldFlags::SKIP);
-            if skip {
+            if field.flags.contains(FieldFlags::SKIP) {
                 continue;
             }
-
-            let field_shape = field.shape();
-
-            // Check for field-level attributes first
-            if let Some(value) = bytes_attribute_format(field) {
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field_display_name(field),
-                        doc: field.into(),
-                        value,
-                    });
-                }
-                continue;
-            }
-
-            // Check for field-level namespace annotation
-            let field_namespace = extract_namespace_from_field_attributes(field)?;
-
-            self.push_namespace(field_namespace.clone());
-
-            // Handle Option types specially (like handle_struct_field does)
-            if field_shape.type_identifier == "Option"
-                && let Def::Option(option_def) = field_shape.def
-            {
-                let inner_shape = option_def.t();
-                let inner_format =
-                    get_inner_format_with_context(inner_shape, self.current_namespace())?;
-                let option_format = Format::Option(Box::new(inner_format));
-
-                // Process any user-defined types in the nested structure
-                if !matches!(inner_shape.def, Def::Scalar) {
-                    self.format(inner_shape)?;
-                }
-
-                self.pop_namespace();
-
-                if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                    named_formats.push(Named {
-                        name: field_display_name(field),
-                        doc: field.into(),
-                        value: option_format,
-                    });
-                }
-                continue;
-            }
-
-            // Determine the proper format with the field-level context in place
-            let Some(value) = self.get_user_type_format(field_shape)? else {
-                // Skip this field if format couldn't be determined
-                self.pop_namespace();
-                continue;
+            let format = match bytes_attribute_format(field) {
+                Some(value) => Some(value),
+                None => self.named_field_format(field)?,
             };
-
-            // Process the type under the field-level namespace context
-            if let NamespaceAction::SetContext(ctx) = &field_namespace {
-                if ctx.is_explicit() {
-                    if let Namespace::Named(name) = &ctx.namespace {
-                        self.format_with_namespace_override(field_shape, name)?;
-                    } else {
-                        self.format(field_shape)?;
-                    }
-                } else {
-                    self.format(field_shape)?;
-                }
-            } else {
-                self.format(field_shape)?;
-            }
-
-            self.pop_namespace();
-
-            if let Some(ContainerFormat::Struct(named_formats, _doc)) = self.get_mut() {
-                named_formats.push(Named {
+            if let Some(value) = format {
+                fields.push(Named {
                     name: field_display_name(field),
                     doc: field.into(),
                     value,
@@ -1275,25 +758,12 @@ impl RegistryBuilder {
             }
         }
 
-        // Extract the formats from the temporary container
-        let variant_format = match self.registry.get(&temp) {
-            Some(ContainerFormat::Struct(named_formats, _doc)) => {
-                if named_formats.is_empty() {
-                    // If all fields were skipped, this should be a unit variant
-                    VariantFormat::Unit
-                } else {
-                    VariantFormat::Struct(named_formats.clone())
-                }
-            }
-            _ => VariantFormat::Unit, // Handles missing entries
-        };
-
-        // Clean up the temporary container
-        let _removed = self.registry.remove(&temp);
-
-        self.pop();
-
-        Ok(variant_format)
+        // If all fields were skipped, this is a unit variant
+        Ok(if fields.is_empty() {
+            VariantFormat::Unit
+        } else {
+            VariantFormat::Struct(fields)
+        })
     }
 
     fn process_tuple_variant(
@@ -1301,173 +771,27 @@ impl RegistryBuilder {
         variant: &Variant,
         shape: &Shape,
     ) -> Result<VariantFormat, Error> {
-        let temp = self.push_temporary(
-            variant_display_name(variant),
-            ContainerFormat::TupleStruct(vec![], variant.into()),
-            Some(shape),
-        );
+        // Use the namespace context of the current enum for its variant fields
+        let enum_namespace = extract_namespace_from_shape(shape)?;
 
-        // Process all fields
+        let mut formats = vec![];
         for field in variant.data.fields {
-            // Check for #[facet(skip)] attribute on the field
-            let skip = field.flags.contains(FieldFlags::SKIP);
-            if skip {
+            if field.flags.contains(FieldFlags::SKIP) {
                 continue;
             }
-
             if let Some(value) = bytes_attribute_format(field) {
-                if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.get_mut() {
-                    formats.push(value);
-                }
+                formats.push(value);
                 continue;
             }
-            // Use the namespace context of the current enum for its variant fields
-            let transparent_namespace = extract_namespace_from_shape(shape)?;
-
-            self.push_namespace(transparent_namespace);
-            self.format(field.shape())?;
+            self.push_namespace(enum_namespace.clone());
+            let format = self.field_format(field.shape());
             self.pop_namespace();
+            if let Some(format) = format? {
+                formats.push(format);
+            }
         }
 
-        // Extract the formats from the temporary container
-        let variant_format =
-            if let Some(ContainerFormat::TupleStruct(formats, _doc)) = self.registry.get(&temp) {
-                VariantFormat::Tuple(formats.clone())
-            } else {
-                VariantFormat::Unit
-            };
-
-        // Clean up the temporary container
-        let _removed = self.registry.remove(&temp);
-
-        self.pop();
-
-        Ok(variant_format)
-    }
-
-    fn format_list(&mut self, list_def: ListDef) -> Result<(), Error> {
-        // Get the inner type of the list
-        let inner_shape = list_def.t();
-
-        // Get the format for the inner type recursively
-        let inner_format = get_inner_format(inner_shape)?;
-        let seq_format = Format::Seq(Box::new(inner_format));
-
-        // Update the current container with the sequence format
-        self.update_container_format(seq_format, UpdateMode::Force);
-
-        // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape)?;
-
-        Ok(())
-    }
-
-    fn format_map(&mut self, map_def: MapDef) -> Result<(), Error> {
-        // Get the key and value types of the map
-        let key_shape = map_def.k();
-        let value_shape = map_def.v();
-
-        // Get the formats for key and value types
-        let key_format = get_inner_format(key_shape)?;
-        let value_format = get_inner_format(value_shape)?;
-
-        let map_format = Format::Map {
-            key: Box::new(key_format),
-            value: Box::new(value_format),
-        };
-
-        // Update the current container with the map format
-        self.update_container_format(map_format, UpdateMode::Force);
-
-        // Process any user-defined types in the nested structure
-        self.process_nested_types(key_shape)?;
-        self.process_nested_types(value_shape)?;
-
-        Ok(())
-    }
-
-    fn format_slice(&mut self, slice_def: SliceDef) -> Result<(), Error> {
-        // Get the inner type of the slice
-        let inner_shape = slice_def.t();
-
-        // Get the format for the inner type
-        let inner_format = get_format_for_shape(inner_shape)?;
-
-        let slice_format = Format::Seq(Box::new(inner_format));
-
-        // Update the current container with the slice format
-        self.update_container_format(slice_format, UpdateMode::Force);
-
-        // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape)?;
-
-        Ok(())
-    }
-
-    fn format_array(&mut self, array_def: ArrayDef) -> Result<(), Error> {
-        // Get the inner type and size of the array
-        let inner_shape = array_def.t();
-        let array_size = array_def.n;
-
-        // Determine the format for the inner type
-        let inner_format = get_inner_format(inner_shape)?;
-
-        let array_format = Format::TupleArray {
-            content: Box::new(inner_format),
-            size: array_size,
-        };
-
-        // Update the current container with the array format
-        self.update_container_format(array_format, UpdateMode::Force);
-
-        // If the inner type is a user-defined type, we need to process it too
-        if !matches!(inner_shape.def, Def::Scalar) {
-            self.format(inner_shape)?;
-        }
-
-        Ok(())
-    }
-
-    fn format_option(&mut self, option_def: OptionDef) -> Result<(), Error> {
-        // Get the inner type of the Option
-        let inner_shape = option_def.t();
-
-        // We need to determine what format to use for the Option based on the inner type
-        let inner_format = get_format_for_shape(inner_shape)?;
-        let option_format = Format::Option(Box::new(inner_format));
-
-        // Update the current container with the option format
-        self.update_container_format(option_format, UpdateMode::Force);
-
-        // Process any user-defined types in the nested structure
-        self.process_nested_types(inner_shape)?;
-
-        Ok(())
-    }
-
-    fn format_set(&mut self, set_def: SetDef) -> Result<(), Error> {
-        // Get the element type of the Set
-        let element_shape = set_def.t();
-
-        // Get the format for the element type recursively
-        let element_format = get_inner_format(element_shape)?;
-
-        // Sets are represented as sets in the format system
-        let set_format = Format::Set(Box::new(element_format));
-
-        // Update the current container with the set format
-        self.update_container_format(set_format, UpdateMode::Force);
-
-        // Process any user-defined types in the nested structure
-        self.process_nested_types(element_shape)?;
-
-        Ok(())
-    }
-
-    fn handle_opaque_pointee(&mut self) {
-        // For pointers that point to opaque types, treat as unit type for now
-        let format = Format::Unit;
-        self.update_container_format(format, UpdateMode::Force);
+        Ok(VariantFormat::Tuple(formats))
     }
 
     /// Push a namespace action onto the stack (always pushes something)
@@ -1502,146 +826,115 @@ impl RegistryBuilder {
         }
     }
 
-    /// Get the current namespace (if any) for use with format functions
-    fn current_namespace(&self) -> Option<&Namespace> {
-        self.current_namespace_context().map(|ctx| &ctx.namespace)
+    /// The format of a reference to `shape` from the container being built.
+    ///
+    /// Every container that the reference reaches, however deeply it is nested, is named by
+    /// [`Self::get_name_with_mappings`] under the namespace context in force, or under a
+    /// transparent wrapper's own namespace (see [`reference_format`]). That is how the container is
+    /// named when it is registered, by [`Self::process_nested_types`] under the same context, so the
+    /// reference names what is registered: an explicit namespace or ROOT pin is the container's
+    /// own, and an unannotated container takes the context's namespace.
+    fn reference_to(&mut self, shape: &Shape) -> Result<Format, Error> {
+        reference_format(shape, None, &mut |shape, wrapper| {
+            let Some(context) = wrapper else {
+                return self.get_name_with_mappings(shape);
+            };
+            self.push_namespace(NamespaceAction::SetContext(context.clone()));
+            let name = self.get_name_with_mappings(shape);
+            self.pop_namespace();
+            name
+        })
     }
 
-    /// Helper method to determine format for user-defined types with namespace context
-    fn get_user_type_format(&mut self, mut field_shape: &Shape) -> Result<Option<Format>, Error> {
-        if is_transparent_shape(field_shape)
-            && let Some(inner) = field_shape.inner
-        {
-            field_shape = inner;
+    /// The format of a field of type `field_shape`, or `None` if the field is to be skipped
+    /// because its type cannot be reflected: an opaque type, or an unsupported type (such as
+    /// `Result`) anywhere within it.
+    fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
+        let shape = generated_shape(field_shape);
+        // `#[facet(opaque)]` fields use `Def::Undefined`, as user types and pointers also do.
+        let opaque = matches!(shape.def, Def::Undefined)
+            && !matches!(
+                shape.ty,
+                Type::User(UserType::Struct(_) | UserType::Enum(_))
+                    | Type::Pointer(PointerType::Reference(_) | PointerType::Raw(_))
+            );
+        if opaque {
+            return Ok(None);
         }
-        match &field_shape.ty {
-            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
-                if field_shape.type_identifier == "()" {
-                    Ok(Some(Format::Unit))
-                } else if let Def::Option(v) = field_shape.def {
-                    let renamed_name = self.get_name_with_mappings(v.t)?;
-                    Ok(Some(Format::Option(Box::new(Format::TypeName(
-                        renamed_name,
-                    )))))
-                } else {
-                    let renamed_name = self.get_name_with_mappings(field_shape)?;
-                    Ok(Some(Format::TypeName(renamed_name)))
+        match self.reference_to(field_shape) {
+            Ok(format) => Ok(Some(format)),
+            // `reference_format` reports an unsupported type, and nothing else, as a
+            // `ReflectionError`; naming a container fails with other errors, which propagate.
+            Err(Error::ReflectionError { .. }) => Ok(None),
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Registers every container that a reference to `shape` reaches, under the namespace
+    /// context in force: the one that [`Self::reference_to`] named them under.
+    ///
+    /// The container being built is set aside while they are registered, so that registering
+    /// them cannot change it; its reference to `shape` is made by [`Self::reference_to`].
+    fn process_nested_types(&mut self, shape: &Shape) -> Result<(), Error> {
+        let current = std::mem::take(&mut self.current);
+        let result = self.register_reachable(shape);
+        self.current = current;
+        result
+    }
+
+    /// Registers every container that `shape` reaches.
+    ///
+    /// A transparent wrapper is registered as the type it wraps, under the wrapper's own namespace
+    /// if it has one, as [`reference_format`] names it.
+    fn register_reachable(&mut self, shape: &Shape) -> Result<(), Error> {
+        let (shape, wrapper) = strip_transparent(shape)?;
+        let Some(context) = wrapper else {
+            return self.register_structure(shape);
+        };
+        self.push_namespace(NamespaceAction::SetContext(context));
+        let result = self.register_structure(shape);
+        self.pop_namespace();
+        result
+    }
+
+    /// [`Self::register_reachable`] for a shape that is not a transparent wrapper.
+    fn register_structure(&mut self, shape: &Shape) -> Result<(), Error> {
+        if let Def::Option(option_def) = shape.def {
+            return self.register_reachable(option_def.t());
+        }
+        match &shape.ty {
+            // Anonymous tuples all share the name `(…)`, so `(i32, u8)` and `(String, bool)` would
+            // look like two types claiming one name. No container is registered for a tuple — a
+            // reference to it is a `Format::Tuple` — so only its elements are registered.
+            Type::User(UserType::Struct(struct_type)) if struct_type.kind == StructKind::Tuple => {
+                for field in struct_type.fields {
+                    self.register_reachable(field.shape())?;
                 }
+                return Ok(());
+            }
+            Type::User(UserType::Struct(_) | UserType::Enum(_)) => {
+                return self.format_container(shape);
             }
             Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => {
-                let target_shape = pt.target;
-                get_inner_format_with_context(target_shape, self.current_namespace())
-                    .map_or(Ok(None), |format| Ok(Some(format)))
+                return self.register_reachable(pt.target);
             }
-            _ => {
-                // Check if this is an opaque type that should be skipped.
-                // #[facet(opaque)] fields use Def::Undefined.
-                if matches!(field_shape.def, Def::Undefined) {
-                    Ok(None)
-                } else {
-                    get_inner_format_with_context(field_shape, self.current_namespace())
-                        .map_or(Ok(None), |format| Ok(Some(format)))
-                }
-            }
+            _ => {}
         }
-    }
-
-    fn update_container_format(&mut self, format: Format, mode: UpdateMode) {
-        if let Some(container_format) = self.get_mut() {
-            match container_format {
-                ContainerFormat::UnitStruct(_doc) => {}
-                ContainerFormat::NewTypeStruct(inner_format, _doc) => match mode {
-                    UpdateMode::Force => {
-                        **inner_format = format;
-                    }
-                    UpdateMode::IfUnknown | UpdateMode::MutualRecursion => {
-                        if inner_format.is_unknown() {
-                            **inner_format = format;
-                        }
-                    }
-                },
-                ContainerFormat::TupleStruct(formats, _doc) => {
-                    match mode {
-                        UpdateMode::Force | UpdateMode::IfUnknown => {
-                            formats.push(format);
-                        }
-                        UpdateMode::MutualRecursion => {
-                            // For mutual recursion, don't add duplicate entries to TupleStruct
-                            // They should already have the proper format from initial processing
-                        }
-                    }
-                }
-                ContainerFormat::Struct(fields, _doc) => {
-                    if let Some(last_named) = fields.last_mut() {
-                        match mode {
-                            UpdateMode::Force => {
-                                // Even in Force mode, struct fields are only updated if unknown
-                                // This preserves the original behavior where struct fields are set
-                                // when first processed and shouldn't be overwritten later
-                                if last_named.value.is_unknown() {
-                                    last_named.value = format;
-                                }
-                            }
-                            UpdateMode::IfUnknown | UpdateMode::MutualRecursion => {
-                                if last_named.value.is_unknown() {
-                                    last_named.value = format;
-                                }
-                            }
-                        }
-                    }
-                }
-                ContainerFormat::Enum(_, _, _doc) => {
-                    if matches!(mode, UpdateMode::Force) {
-                        todo!("Enum container format update not implemented");
-                    }
-                }
-            }
-        }
-    }
-
-    fn process_nested_types(&mut self, shape: &Shape) -> Result<(), Error> {
-        self.processing_nested = true;
         match shape.def {
-            Def::Scalar => {
-                // Scalar types don't need further processing
-            }
-            Def::List(inner_list_def) => {
-                // Recursively process nested lists
-                let inner_shape = inner_list_def.t();
-                self.process_nested_types(inner_shape)?;
-            }
-            Def::Option(option_def) => {
-                // Recursively process options
-                let inner_shape = option_def.t();
-                if should_process_nested_type(inner_shape) {
-                    self.process_nested_types(inner_shape)?;
-                }
-            }
+            Def::List(list_def) => self.register_reachable(list_def.t()),
+            Def::Slice(slice_def) => self.register_reachable(slice_def.t()),
+            Def::Set(set_def) => self.register_reachable(set_def.t()),
+            Def::Array(array_def) => self.register_reachable(array_def.t()),
             Def::Map(map_def) => {
-                // Recursively process maps
-                let key_shape = map_def.k();
-                let value_shape = map_def.v();
-                if should_process_nested_type(key_shape) {
-                    self.process_nested_types(key_shape)?;
-                }
-                if should_process_nested_type(value_shape) {
-                    self.process_nested_types(value_shape)?;
-                }
+                self.register_reachable(map_def.k())?;
+                self.register_reachable(map_def.v())
             }
-            Def::Slice(slice_def) => {
-                // Recursively process slice inner types
-                let inner_shape = slice_def.t();
-                self.process_nested_types(inner_shape)?;
-            }
-            _ => {
-                // For other user-defined types, process them
-                if should_process_nested_type(shape) {
-                    self.format(shape)?;
-                }
-            }
+            Def::Pointer(PointerDef {
+                pointee: Some(pointee),
+                ..
+            }) => self.register_reachable(pointee),
+            _ => Ok(()),
         }
-        self.processing_nested = false;
-        Ok(())
     }
 
     fn get_name_with_mappings(&mut self, shape: &Shape) -> Result<QualifiedTypeName, Error> {
@@ -1725,6 +1018,76 @@ impl RegistryBuilder {
     }
 }
 
+/// Checks that every [`Format::TypeName`] in the registry names a registered container.
+///
+/// A reference that names nothing would reach the generators as a type that no module declares.
+///
+/// # Errors
+/// Returns [`Error::DanglingTypeReference`] for the first reference that names no container.
+fn check_references(registry: &Registry) -> Result<(), Error> {
+    for (name, container) in registry {
+        let check =
+            |location: String, format: &Format| check_reference(registry, name, &location, format);
+        match container {
+            ContainerFormat::UnitStruct(_) => {}
+            ContainerFormat::NewTypeStruct(format, _) => check("0".to_string(), format)?,
+            ContainerFormat::TupleStruct(formats, _) => {
+                for (index, format) in formats.iter().enumerate() {
+                    check(index.to_string(), format)?;
+                }
+            }
+            ContainerFormat::Struct(fields, _) => {
+                for field in fields {
+                    check(field.name.clone(), &field.value)?;
+                }
+            }
+            ContainerFormat::Enum(variants, _, _) => {
+                for variant in variants.values() {
+                    let variant_name = &variant.name;
+                    match &variant.value {
+                        VariantFormat::Variable(_) | VariantFormat::Unit => {}
+                        VariantFormat::NewType(format) => check(variant_name.clone(), format)?,
+                        VariantFormat::Tuple(formats) => {
+                            for (index, format) in formats.iter().enumerate() {
+                                check(format!("{variant_name}.{index}"), format)?;
+                            }
+                        }
+                        VariantFormat::Struct(fields) => {
+                            for field in fields {
+                                check(format!("{variant_name}.{}", field.name), &field.value)?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Checks every type name in `format`, which is found at `location` in the container `name`.
+fn check_reference(
+    registry: &Registry,
+    name: &QualifiedTypeName,
+    location: &str,
+    format: &Format,
+) -> Result<(), Error> {
+    format.visit(&mut |format| {
+        if let Format::TypeName(missing) = format
+            && !registry.contains_key(missing)
+        {
+            return Err(Error::DanglingTypeReference {
+                name: name.name.clone(),
+                namespace: name.namespace.to_string(),
+                location: location.to_string(),
+                missing_name: missing.name.clone(),
+                missing_namespace: missing.namespace.to_string(),
+            });
+        }
+        Ok(())
+    })
+}
+
 fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
     // Check type_tag first (is this where facet rename is stored?)
     if let Some(type_tag) = shape.type_tag {
@@ -1759,19 +1122,6 @@ fn get_name(shape: &Shape) -> Result<QualifiedTypeName, Error> {
         },
         NamespaceAction::Inherit => QualifiedTypeName::root(base_name),
     })
-}
-
-fn get_format_for_shape(shape: &Shape) -> Result<Format, Error> {
-    let mut shape = match &shape.ty {
-        Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) => pt.target,
-        _ => shape,
-    };
-    if is_transparent_shape(shape)
-        && let Some(inner) = shape.inner
-    {
-        shape = inner;
-    }
-    get_inner_format(shape)
 }
 
 fn type_to_format(shape: &Shape) -> Result<Option<Format>, Error> {
@@ -1944,20 +1294,6 @@ fn is_transparent_shape(shape: &Shape) -> bool {
         .any(|attr| attr.ns.is_none() && attr.key == "transparent")
 }
 
-#[derive(Debug, Clone, Copy)]
-enum UpdateMode {
-    /// Unconditionally update the container format
-    Force,
-    /// Only update if the current format is unknown
-    IfUnknown,
-    /// Only update unknown formats, but don't add to `TupleStruct` (for mutual recursion)
-    MutualRecursion,
-}
-
-fn should_process_nested_type(shape: &Shape) -> bool {
-    !matches!(shape.def, Def::Scalar) && shape.type_identifier != "()"
-}
-
 fn bytes_attribute_format(field: &Field) -> Option<Format> {
     let mut shape = field.shape();
     let is_bytes_attr = |field: &Field| {
@@ -2048,20 +1384,41 @@ fn bytes_attribute_format(field: &Field) -> Option<Format> {
     None
 }
 
-fn get_inner_format(shape: &Shape) -> Result<Format, Error> {
-    get_inner_format_with_context(shape, None)
-}
+/// Names a container, given the namespace context of a transparent wrapper around it, if any.
+type NameOf<'a> =
+    dyn FnMut(&Shape, Option<&NamespaceContext>) -> Result<QualifiedTypeName, Error> + 'a;
 
-#[allow(clippy::too_many_lines)]
-fn get_inner_format_with_context(
-    mut shape: &Shape,
-    namespace_context: Option<&Namespace>,
+/// The [`Format`] of a reference to `shape`, naming every container it reaches with `name_of`.
+///
+/// This is the structure of the reference alone: `Option`, sequences, sets, maps, tuples, arrays,
+/// pointers and transparent wrappers are unwrapped, and a container is named by `name_of`, so that
+/// however deeply a container is nested its name comes from one place.
+///
+/// A transparent wrapper is referred to as the type it wraps, however long the chain of wrappers.
+/// The innermost wrapper with an `fg::namespace` of its own sets the namespace context for that
+/// type and everything within it, just as a container's own namespace does for its fields, so
+/// `name_of` is given that context (`wrapper`) along with the container to name.
+fn reference_format(
+    shape: &Shape,
+    wrapper: Option<&NamespaceContext>,
+    name_of: &mut NameOf,
 ) -> Result<Format, Error> {
-    if is_transparent_shape(shape)
-        && let Some(inner) = shape.inner
-    {
-        shape = inner;
+    let (shape, inner_wrapper) = strip_transparent(shape)?;
+    let wrapper = inner_wrapper.as_ref().or(wrapper);
+
+    // A struct or enum is a container whatever its `Def`, as `format_container` registers it:
+    // facet gives some std types that are user structs, such as `Range` and `PhantomData`,
+    // `Def::Scalar`. Only `Option` (an enum with `Def::Option`) and anonymous tuples are
+    // structural.
+    let is_container = match &shape.ty {
+        Type::User(UserType::Struct(struct_type)) => struct_type.kind != StructKind::Tuple,
+        Type::User(UserType::Enum(_)) => !matches!(shape.def, Def::Option(_)),
+        _ => false,
+    };
+    if is_container {
+        return Ok(Format::TypeName(name_of(shape, wrapper)?));
     }
+
     let format = match shape.def {
         Def::Scalar => match type_to_format(shape)? {
             Some(format) => format,
@@ -2072,115 +1429,69 @@ fn get_inner_format_with_context(
                 });
             }
         },
-        Def::List(inner_list_def) => {
-            // Recursively handle nested lists
-            let inner_shape = inner_list_def.t();
-            Format::Seq(Box::new(get_inner_format_with_context(
-                inner_shape,
-                namespace_context,
-            )?))
-        }
-        Def::Option(option_def) => {
-            // Handle Option<T> -> OPTION: T
-            let inner_shape = option_def.t();
-            let inner_format = get_inner_format_with_context(inner_shape, namespace_context)?;
-            Format::Option(Box::new(inner_format))
-        }
-        Def::Map(map_def) => {
-            // Handle Map<K, V> -> MAP: { KEY: K, VALUE: V }
-            let key_shape = map_def.k();
-            let value_shape = map_def.v();
-            let key_format = get_inner_format_with_context(key_shape, namespace_context)?;
-            let value_format = get_inner_format_with_context(value_shape, namespace_context)?;
-            Format::Map {
-                key: Box::new(key_format),
-                value: Box::new(value_format),
-            }
-        }
+        Def::List(inner_list_def) => Format::Seq(Box::new(reference_format(
+            inner_list_def.t(),
+            wrapper,
+            name_of,
+        )?)),
+        Def::Option(option_def) => Format::Option(Box::new(reference_format(
+            option_def.t(),
+            wrapper,
+            name_of,
+        )?)),
+        Def::Map(map_def) => Format::Map {
+            key: Box::new(reference_format(map_def.k(), wrapper, name_of)?),
+            value: Box::new(reference_format(map_def.v(), wrapper, name_of)?),
+        },
         Def::Set(set_def) => {
-            // Handle Set<T> -> SET: T
-            let inner_shape = set_def.t();
-            Format::Set(Box::new(get_inner_format_with_context(
-                inner_shape,
-                namespace_context,
-            )?))
+            Format::Set(Box::new(reference_format(set_def.t(), wrapper, name_of)?))
         }
-        Def::Array(array_def) => {
-            // Handle Array<T, N> -> TUPLEARRAY: { CONTENT: T, SIZE: N }
-            let inner_shape = array_def.t();
-            let inner_format = get_inner_format_with_context(inner_shape, namespace_context)?;
-            Format::TupleArray {
-                content: Box::new(inner_format),
-                size: array_def.n,
-            }
-        }
+        Def::Array(array_def) => Format::TupleArray {
+            content: Box::new(reference_format(array_def.t(), wrapper, name_of)?),
+            size: array_def.n,
+        },
         Def::Undefined => {
-            // Check if this is a tuple type by examining the type structure
             if let Type::User(UserType::Struct(struct_type)) = &shape.ty
                 && struct_type.kind == StructKind::Tuple
                 && !struct_type.fields.is_empty()
             {
-                // Handle tuple types -> TUPLE: [field1, field2, ...]
                 let mut tuple_formats = vec![];
                 for field in struct_type.fields {
-                    let field_shape = field.shape();
-                    let field_format =
-                        get_inner_format_with_context(field_shape, namespace_context)?;
-                    tuple_formats.push(field_format);
+                    tuple_formats.push(reference_format(field.shape(), wrapper, name_of)?);
                 }
                 return Ok(Format::Tuple(tuple_formats));
             }
 
-            // Special case for unit type
             if shape.type_identifier == "()" {
                 Format::Unit
             } else if let Type::Pointer(PointerType::Reference(pt) | PointerType::Raw(pt)) =
                 &shape.ty
             {
                 // For pointer types like &'static str, get the format of the target type
-                let target_shape = pt.target;
-                get_inner_format_with_context(target_shape, namespace_context)?
+                reference_format(pt.target, wrapper, name_of)?
             } else {
-                // For user-defined types, use TypeName with namespace context if available
-                let original_name = get_name(shape)?;
-                let name = if let Some(namespace) = namespace_context {
-                    // If the type doesn't have its own namespace annotation and we're in a namespace context,
-                    // apply the context namespace
-                    if matches!(original_name.namespace, Namespace::Root) {
-                        match namespace {
-                            Namespace::Root => QualifiedTypeName::root(original_name.name),
-                            Namespace::Named(name) => {
-                                QualifiedTypeName::namespaced(name.clone(), original_name.name)
-                            }
-                        }
-                    } else {
-                        original_name
-                    }
-                } else {
-                    original_name
-                };
-
-                Format::TypeName(name)
+                Format::TypeName(name_of(shape, wrapper)?)
             }
         }
         Def::Slice(slice_def) => {
-            // Handle Slice<T> -> SEQ: T
-            let inner_shape = slice_def.t();
-            Format::Seq(Box::new(get_inner_format_with_context(
-                inner_shape,
-                namespace_context,
-            )?))
+            Format::Seq(Box::new(reference_format(slice_def.t(), wrapper, name_of)?))
         }
         Def::Pointer(pointer_def) => {
             // Handle Pointer (Box, Arc, etc.) by recursively processing the inner type
             if let Some(inner_shape) = pointer_def.pointee {
-                get_inner_format_with_context(inner_shape, namespace_context)?
+                reference_format(inner_shape, wrapper, name_of)?
             } else {
                 // Fallback for pointers without a known pointee
                 Format::Unit
             }
         }
-        _ => todo!(),
+        _ => {
+            // For example `Result`, which is not supported
+            return Err(Error::ReflectionError {
+                type_name: shape.type_identifier.to_string(),
+                message: "Type is not supported and should be skipped".to_string(),
+            });
+        }
     };
 
     Ok(format)
@@ -2192,3 +1503,7 @@ mod tests;
 #[cfg(test)]
 #[path = "namespace_tests.rs"]
 mod namespace_tests;
+
+#[cfg(test)]
+#[path = "reference_tests.rs"]
+mod reference_tests;

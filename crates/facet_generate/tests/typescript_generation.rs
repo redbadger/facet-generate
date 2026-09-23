@@ -265,6 +265,7 @@ fn test_that_typescript_code_with_enums_from_other_namespaces_type_checks() {
         common::across_namespaces::get_registry(),
         common::across_namespaces::get_sibling_registry(),
         common::across_namespaces::to_root::get_registry(),
+        common::across_namespaces::inherited::get_registry(),
     ] {
         assert_installed_modules_type_check(&registry, BincodePlugin);
         assert_installed_modules_type_check(&registry, JsonPlugin);
