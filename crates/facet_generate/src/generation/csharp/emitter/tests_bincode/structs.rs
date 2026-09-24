@@ -893,3 +893,465 @@ fn struct_with_bytes_field_and_slice() {
     }
     "#);
 }
+
+/// A property named like a type hides it from a static call in the class's
+/// static `Deserialize` (CS0120) unless its type is that type, so the call
+/// goes through the type's `global::` qualified name (#159).
+#[test]
+fn property_named_like_a_type_qualifies_static_calls_on_it() {
+    #[derive(Facet)]
+    struct Presence {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct Card {
+        presence: Vec<Presence>,
+    }
+
+    #[derive(Facet)]
+    struct Badge {
+        presence: u32,
+        other: Presence,
+    }
+
+    let actual = emit!(Card, Badge as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class Badge : ObservableObject, IFacetSerializable, IFacetDeserializable<Badge> {
+        [ObservableProperty]
+        private uint _presence;
+        [ObservableProperty]
+        private Presence _other;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(Presence);
+            Other.Serialize(serializer);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Badge Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var presence = deserializer.DeserializeU32();
+            var other = global::Test.Presence.Deserialize(deserializer);
+            deserializer.DecreaseContainerDepth();
+            return new Badge {
+                Presence = presence,
+                Other = other,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Badge BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Card : ObservableObject, IFacetSerializable, IFacetDeserializable<Card> {
+        [ObservableProperty]
+        private ObservableCollection<Presence> _presence;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            FacetHelpers.SerializeCollection(Presence, serializer, (item, s) => item.Serialize(s));
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Card Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var presence = FacetHelpers.DeserializeList(deserializer, d => global::Test.Presence.Deserialize(d));
+            deserializer.DecreaseContainerDepth();
+            return new Card {
+                Presence = presence,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Card BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Presence : ObservableObject, IFacetSerializable, IFacetDeserializable<Presence> {
+        [ObservableProperty]
+        private uint _x;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(X);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Presence Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var x = deserializer.DeserializeU32();
+            deserializer.DecreaseContainerDepth();
+            return new Presence {
+                X = x,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Presence BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}
+
+/// A property of the type it's named after needs no qualification — C#'s
+/// "Color Color" rule lets the name mean the type — and stays bare.
+#[test]
+fn property_named_after_its_own_type_leaves_static_calls_bare() {
+    #[derive(Facet)]
+    struct Presence {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct Card {
+        presence: Presence,
+    }
+
+    #[derive(Facet)]
+    struct Pass {
+        presence: Option<Presence>,
+    }
+
+    let actual = emit!(Card, Pass as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class Card : ObservableObject, IFacetSerializable, IFacetDeserializable<Card> {
+        [ObservableProperty]
+        private Presence _presence;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            Presence.Serialize(serializer);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Card Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var presence = Presence.Deserialize(deserializer);
+            deserializer.DecreaseContainerDepth();
+            return new Card {
+                Presence = presence,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Card BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Pass : ObservableObject, IFacetSerializable, IFacetDeserializable<Pass> {
+        [ObservableProperty]
+        private Presence? _presence;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            FacetHelpers.SerializeOptionRef(Presence, serializer, (item, s) => item.Serialize(s));
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Pass Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var presence = FacetHelpers.DeserializeOptionRef(deserializer, d => Presence.Deserialize(d));
+            deserializer.DecreaseContainerDepth();
+            return new Pass {
+                Presence = presence,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Pass BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Presence : ObservableObject, IFacetSerializable, IFacetDeserializable<Presence> {
+        [ObservableProperty]
+        private uint _x;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(X);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Presence Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var x = deserializer.DeserializeU32();
+            deserializer.DecreaseContainerDepth();
+            return new Presence {
+                X = x,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Presence BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}
+
+/// A property named like a helper class (`{Enum}Bincode`, `FacetHelpers`,
+/// `UuidSerde`) hides it, in `Serialize` as well as `Deserialize`.
+#[test]
+fn property_named_like_a_helper_class_qualifies_calls_on_it() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Mood {
+        Happy,
+        Sad,
+    }
+
+    #[derive(Facet)]
+    struct Tally {
+        mood_bincode: u32,
+        mood: Mood,
+        facet_helpers: Vec<u32>,
+        uuid_serde: u32,
+        id: uuid::Uuid,
+    }
+
+    let actual = emit!(Tally as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public enum Mood {
+        Happy,
+        Sad
+    }
+
+    /// <summary>
+    /// Bincode serialization helpers for <see cref="Mood"/>.
+    /// </summary>
+    public static class MoodBincode {
+        public static void Serialize(Mood value, ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeVariantIndex((uint)value);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Mood Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var index = deserializer.DeserializeVariantIndex();
+            deserializer.DecreaseContainerDepth();
+            return index switch
+            {
+                0 => Mood.Happy,
+                1 => Mood.Sad,
+                _ => throw new DeserializationError("Unknown variant index for Mood: " + index),
+            }
+            ;
+        }
+
+        public static byte[] BincodeSerialize(Mood value)
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(value, serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Mood BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Tally : ObservableObject, IFacetSerializable, IFacetDeserializable<Tally> {
+        [ObservableProperty]
+        private uint _moodBincode;
+        [ObservableProperty]
+        private Mood _mood;
+        [ObservableProperty]
+        private ObservableCollection<uint> _facetHelpers;
+        [ObservableProperty]
+        private uint _uuidSerde;
+        [ObservableProperty]
+        private Guid _id;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(MoodBincode);
+            global::Test.MoodBincode.Serialize(Mood, serializer);
+            global::Facet.Runtime.Bincode.FacetHelpers.SerializeCollection(FacetHelpers, serializer, (item, s) => s.SerializeU32(item));
+            serializer.SerializeU32(UuidSerde);
+            global::Test.UuidSerde.Serialize(Id, serializer);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Tally Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var moodBincode = deserializer.DeserializeU32();
+            var mood = global::Test.MoodBincode.Deserialize(deserializer);
+            var facetHelpers = global::Facet.Runtime.Bincode.FacetHelpers.DeserializeList(deserializer, d => d.DeserializeU32());
+            var uuidSerde = deserializer.DeserializeU32();
+            var id = global::Test.UuidSerde.Deserialize(deserializer);
+            deserializer.DecreaseContainerDepth();
+            return new Tally {
+                MoodBincode = moodBincode,
+                Mood = mood,
+                FacetHelpers = facetHelpers,
+                UuidSerde = uuidSerde,
+                Id = id,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Tally BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}
