@@ -14,6 +14,7 @@ use facet_generate::{
     generation::{
         CodeGeneratorConfig, SourceInstaller,
         bincode::BincodePlugin,
+        json::JsonPlugin,
         plugin::EmitterPlugin,
         swift::{
             Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator, normalize_path,
@@ -368,6 +369,35 @@ fn test_that_swift_code_compiles_with_bincode() {
     );
 }
 
+/// JSON output builds for the broad fixture, and for the keyword and
+/// shadowing ones, with the generated manifest and the runtime the installer
+/// writes (#157).
+#[test]
+fn test_that_swift_code_compiles_with_json() {
+    for registry in [
+        get_swift_registry(),
+        common::get_keyword_registry(),
+        common::get_shadowing_registry(),
+        common::get_uuid_registry(),
+    ] {
+        assert_installed_package_compiles(&registry, JsonPlugin);
+    }
+
+    // Both encodings at once share the runtime target.
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&get_swift_registry())
+        .unwrap();
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
 // ---------------------------------------------------------------------------
 // Conformance compile-and-run tests
 //
@@ -644,10 +674,8 @@ fn test_that_swift_code_with_types_from_other_namespaces_compiles() {
         common::across_namespaces::to_root::get_namespace_registry(),
         common::across_namespaces::inherited::get_registry(),
     ] {
-        // Not with the JSON plugin: the Swift runtime has no `JsonSerializer`
-        // or `JsonDeserializer`, so its output never builds, namespaces or
-        // not (#157).
         assert_installed_package_compiles(&registry, BincodePlugin);
+        assert_installed_package_compiles(&registry, JsonPlugin);
     }
 }
 

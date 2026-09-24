@@ -1,6 +1,6 @@
 import Serde
 
-public struct Badge: Hashable, Equatable {
+public struct Badge: Hashable, Equatable, Codable {
     public var presence: Presence
     public var shape: Shape
 
@@ -9,125 +9,122 @@ public struct Badge: Hashable, Equatable {
         self.shape = shape
     }
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        try self.presence.serialize(serializer: serializer)
-        try self.shape.serialize(serializer: serializer)
-        try serializer.decrease_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case presence
+        case shape
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Badge {
-        try deserializer.increase_container_depth()
-        let presence = try Kit.Presence.deserialize(deserializer: deserializer)
-        let shape = try Kit.Shape.deserialize(deserializer: deserializer)
-        try deserializer.decrease_container_depth()
-        return Badge(presence: presence, shape: shape)
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Badge {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Badge.self, from: input)
     }
 }
 
-indirect public enum Presence: Hashable, Equatable {
+indirect public enum Presence: Hashable, Equatable, Codable {
     case online
     case offline
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case online = "Online"
+        case offline = "Offline"
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+            switch name {
+            case "Online":
+                self = .online
+            case "Offline":
+                self = .offline
+            default:
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for Presence")
+            }
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.allKeys.count == 1, let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of Presence"))
+        }
+        switch key {
+        case .online:
+            self = .online
+        case .offline:
+            self = .offline
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
         switch self {
         case .online:
-            try serializer.serialize_variant_index(value: 0)
+            var container = encoder.singleValueContainer()
+            try container.encode("Online")
         case .offline:
-            try serializer.serialize_variant_index(value: 1)
+            var container = encoder.singleValueContainer()
+            try container.encode("Offline")
         }
-        try serializer.decrease_container_depth()
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Presence {
-        let index = try deserializer.deserialize_variant_index()
-        try deserializer.increase_container_depth()
-        switch index {
-        case 0:
-            try deserializer.decrease_container_depth()
-            return .online
-        case 1:
-            try deserializer.decrease_container_depth()
-            return .offline
-        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Presence: \(index)")
-        }
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Presence {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Presence.self, from: input)
     }
 }
 
-indirect public enum Shape: Hashable, Equatable {
+indirect public enum Shape: Hashable, Equatable, Codable {
     case circle(Double)
     case empty
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        switch self {
-        case .circle(let x):
-            try serializer.serialize_variant_index(value: 0)
-            try serializer.serialize_f64(value: x)
-        case .empty:
-            try serializer.serialize_variant_index(value: 1)
+    enum CodingKeys: String, CodingKey {
+        case circle = "Circle"
+        case empty = "Empty"
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+            switch name {
+            case "Empty":
+                self = .empty
+            default:
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for Shape")
+            }
+            return
         }
-        try serializer.decrease_container_depth()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.allKeys.count == 1, let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of Shape"))
+        }
+        switch key {
+        case .circle:
+            self = .circle(
+                try container.decode(Double.self, forKey: .circle)
+            )
+        case .empty:
+            self = .empty
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .circle(let payload0):
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(payload0, forKey: .circle)
+        case .empty:
+            var container = encoder.singleValueContainer()
+            try container.encode("Empty")
+        }
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Shape {
-        let index = try deserializer.deserialize_variant_index()
-        try deserializer.increase_container_depth()
-        switch index {
-        case 0:
-            let x = try deserializer.deserialize_f64()
-            try deserializer.decrease_container_depth()
-            return .circle(x)
-        case 1:
-            try deserializer.decrease_container_depth()
-            return .empty
-        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Shape: \(index)")
-        }
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Shape {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Shape.self, from: input)
     }
 }

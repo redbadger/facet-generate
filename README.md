@@ -31,7 +31,7 @@ let registry = RegistryBuilder::new()
     .build()?;
 ```
 
-To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` or `JsonPlugin` to include `serialize`/`deserialize` methods and install the appropriate runtime library; omit `.plugin(...)` for plain type definitions only.
+To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` or `JsonPlugin` to include serialization code and install whatever runtime it needs; omit `.plugin(...)` for plain type definitions only. `BincodePlugin` adds `serialize`/`deserialize` methods in every language. `JsonPlugin` uses each platform's own JSON support where there is one: kotlinx.serialization in Kotlin, System.Text.Json in C#, and `Codable` in Swift, where it adds `jsonSerialize`/`jsonDeserialize`.
 
 ```rust
 use facet_generate::generation::bincode::BincodePlugin;

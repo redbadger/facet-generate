@@ -29,15 +29,16 @@
 //!
 //! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
 //!   `bincodeSerialize` / `bincodeDeserialize` wrappers.
-//! - `JsonPlugin` supplies the same `serialize` / `deserialize` methods and
-//!   `jsonSerialize` / `jsonDeserialize` wrappers.
+//! - `JsonPlugin` adds a `Codable` conformance (through
+//!   [`EmitterPlugin::type_conformances`], which the emitter appends after
+//!   `Hashable` / `Equatable`), the coding members `serde_json`'s format
+//!   needs, and `jsonSerialize` / `jsonDeserialize` wrappers.
 //! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
-//! The encoding-specific feature helpers (`serializeArray`, `serializeOption`,
-//! etc.) are inlined in `BincodePlugin` and `JsonPlugin`
-//! (`generation/bincode/swift.rs` and `generation/json/swift.rs`).
+//! The bincode feature helpers (`serializeArray`, `serializeOption`, etc.) are
+//! inlined in `BincodePlugin` (`generation/bincode/swift.rs`).
 //! They are emitted via the [`EmitterPlugin::module_helpers`] hook when the
 //! corresponding [`Feature`] flag is set by
 //! [`CodeGeneratorConfig::update_from`].
@@ -207,7 +208,7 @@ enum Usage {
 /// Returns `true` if a struct field of this format would create an
 /// infinite-size value-type cycle back to the containing struct named
 /// `struct_name`.
-fn needs_indirect(format: &Format, struct_name: &str) -> bool {
+pub(crate) fn needs_indirect(format: &Format, struct_name: &str) -> bool {
     match format {
         Format::TypeName(qtn) => qtn.name == struct_name,
         Format::Option(inner) => needs_indirect(inner, struct_name),
@@ -703,6 +704,8 @@ fn struct_<W: IndentWrite>(
     if all_equatable_auto || all_can_eq {
         implements.push(builtin("Equatable", &lang.config));
     }
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let implements = with_plugin_conformances(implements, &ctx, lang);
 
     if has_plugins && !implements.is_empty() {
         write!(w, "public struct {name}: {} ", implements.join(", "))?;
@@ -741,7 +744,6 @@ fn struct_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -817,6 +819,8 @@ fn enum_<W: IndentWrite>(
     if all_equatable_auto || all_can_eq {
         implements.push(builtin("Equatable", &lang.config));
     }
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let implements = with_plugin_conformances(implements, &ctx, lang);
 
     if has_plugins && !implements.is_empty() {
         write!(w, "indirect public enum {name}: {} ", implements.join(", "))?;
@@ -831,7 +835,6 @@ fn enum_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -935,6 +938,24 @@ fn write_enum_eq<W: IndentWrite>(
 // ---------------------------------------------------------------------------
 // Utility
 // ---------------------------------------------------------------------------
+
+/// `implements` followed by every plugin's
+/// [`type_conformances`](EmitterPlugin::type_conformances), without repeats.
+fn with_plugin_conformances<'a>(
+    implements: Vec<Cow<'a, str>>,
+    ctx: &EmitContext,
+    lang: &Swift,
+) -> Vec<Cow<'a, str>> {
+    let mut implements = implements;
+    for plugin in lang.plugins() {
+        for conformance in plugin.type_conformances(ctx) {
+            if !implements.iter().any(|c| *c == conformance) {
+                implements.push(Cow::Owned(conformance));
+            }
+        }
+    }
+    implements
+}
 
 fn named<Format: Clone>(formats: &[Format], prefix: &str) -> Vec<Named<Format>> {
     formats
