@@ -650,3 +650,71 @@ fn test_that_swift_code_with_types_from_other_namespaces_compiles() {
         assert_installed_package_compiles(&registry, BincodePlugin);
     }
 }
+
+/// A plugin whose output in the root module names `Kit.Presence`, a type
+/// nothing else in that module references.
+#[derive(Debug)]
+struct NamesPresencePlugin;
+
+impl EmitterPlugin<SwiftLang> for NamesPresencePlugin {
+    fn referenced_types(
+        &self,
+        config: &CodeGeneratorConfig,
+    ) -> Vec<facet_generate::reflection::format::QualifiedTypeName> {
+        if config.module_name() == "Example" {
+            vec![
+                facet_generate::reflection::format::QualifiedTypeName::namespaced(
+                    "kit".to_string(),
+                    "Presence".to_string(),
+                ),
+            ]
+        } else {
+            vec![]
+        }
+    }
+
+    fn module_helpers(
+        &self,
+        w: &mut dyn facet_generate::generation::indent::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        if config.module_name() == "Example" {
+            writeln!(w, "public typealias CurrentPresence = Kit.Presence")?;
+        }
+        Ok(())
+    }
+}
+
+/// A type that only a plugin's output names is imported, and its target is a
+/// dependency, so the package builds (redbadger/crux#614).
+#[test]
+fn test_that_swift_code_naming_a_plugin_s_referenced_type_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Presence {
+        online: bool,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+
+    // With `BincodePlugin` too: the installer makes every target depend on
+    // `Serde` once it has a plugin, and only a runtime plugin writes `Serde`.
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .plugin(NamesPresencePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

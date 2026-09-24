@@ -170,3 +170,7 @@ mod tests;
 #[cfg(all(test, feature = "generate"))]
 #[path = "./requalify_tests.rs"]
 mod requalify_tests;
+
+#[cfg(all(test, feature = "generate"))]
+#[path = "./generates_tests.rs"]
+mod generates_tests;

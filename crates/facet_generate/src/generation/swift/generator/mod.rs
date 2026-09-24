@@ -16,7 +16,8 @@ use crate::{
         indent::IndentedWriter,
         module::Module,
         naming::check_reserved_names,
-        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
+        plugin::{self, CompanionFile, EmitterPlugin, render_companion_files},
+        registry_references,
         swift::{
             emitter::{Swift, write_module_header},
             naming,
@@ -78,30 +79,11 @@ impl<'a> SwiftCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if writing to `out` fails.
+    /// Returns an error if writing to `out` fails, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
-        let w = &mut IndentedWriter::new(out, self.config.indent);
-
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
-        Self::reference_root_types(&mut config, registry);
-        check_reserved_names(registry, &naming::RULES)?;
-
-        let registry = &Self::update_qualified_names(&config, registry);
-        let mut lang = Swift::new(&config, registry);
-        for p in &self.plugins {
-            lang = lang.with_plugin(p.clone());
-        }
-
-        Module::new(&config).write(w, &lang)?;
-
-        for container in registry.iter().map(Container::from) {
-            writeln!(w)?;
-            container.write(w, &lang)?;
-        }
-
-        Ok(())
+        let config = self.module_config(registry)?;
+        self.write_module(out, &config, registry)
     }
 
     /// Render the companion files contributed by the plugins for `registry`.
@@ -113,23 +95,87 @@ impl<'a> SwiftCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if rendering a header fails.
+    /// Returns an error if rendering a header fails, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
+        let config = self.module_config(registry)?;
+        self.render_companion_files(&config, registry)
+    }
+
+    /// The config the module for `registry` is written with: this
+    /// generator's, updated from the registry, with every type reference the
+    /// registry and the plugins make recorded in
+    /// [`external_definitions`](CodeGeneratorConfig::external_definitions),
+    /// which decide the module's imports and its target's dependencies.
+    ///
+    /// Asks each plugin for its
+    /// [`referenced_types`](EmitterPlugin::referenced_types), so the installer
+    /// computes this once per module and hands it to
+    /// [`write_module`](Self::write_module) and
+    /// [`render_companion_files`](Self::render_companion_files).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a plugin declares a reference to a type that is not
+    /// in the registry.
+    pub(crate) fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
         let mut config = self.config.clone();
         config.update_from(registry);
         config.requalify_enums(registry, Self::requalify);
-        Self::reference_root_types(&mut config, registry);
+        Self::reference_root_types(&mut config, &registry_references(registry));
 
-        let mut lang = Swift::new(&config, registry);
+        let plugin_references = plugin::referenced_types(&self.plugins, &config)?;
+        config.reference_types(&plugin_references);
+        Self::reference_root_types(&mut config, &plugin_references);
+
+        Ok(config)
+    }
+
+    /// Write the module for `registry` with `config`, as returned by
+    /// [`module_config`](Self::module_config).
+    pub(crate) fn write_module(
+        &self,
+        out: &mut impl Write,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+    ) -> Result<()> {
+        let w = &mut IndentedWriter::new(out, self.config.indent);
+
+        check_reserved_names(registry, &naming::RULES)?;
+
+        let registry = &Self::update_qualified_names(config, registry);
+        let mut lang = Swift::new(config, registry);
         for p in &self.plugins {
             lang = lang.with_plugin(p.clone());
         }
 
-        render_companion_files(lang.plugins(), &config, |imports| {
+        Module::new(config).write(w, &lang)?;
+
+        for container in registry.iter().map(Container::from) {
+            writeln!(w)?;
+            container.write(w, &lang)?;
+        }
+
+        Ok(())
+    }
+
+    /// Render the companion files for `registry` with `config`, as returned
+    /// by [`module_config`](Self::module_config).
+    pub(crate) fn render_companion_files(
+        &self,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+    ) -> Result<Vec<CompanionFile>> {
+        let mut lang = Swift::new(config, registry);
+        for p in &self.plugins {
+            lang = lang.with_plugin(p.clone());
+        }
+
+        render_companion_files(lang.plugins(), config, |imports| {
             let mut header = Vec::new();
             write_module_header(
                 &mut IndentedWriter::new(&mut header, config.indent),
-                &config,
+                config,
                 &lang,
                 imports,
             )?;
@@ -185,35 +231,33 @@ impl<'a> SwiftCodeGenerator<'a> {
         }
     }
 
-    /// Records the ROOT types a namespaced module references in its
+    /// Records the ROOT types among `names` (the types a namespaced module
+    /// references, in registry spelling) in its
     /// [`external_definitions`](CodeGeneratorConfig::external_definitions),
     /// under the root package, so that the module imports the root package's
     /// target and the installer makes it a dependency.
-    pub(crate) fn reference_root_types(config: &mut CodeGeneratorConfig, registry: &Registry) {
+    pub(crate) fn reference_root_types<'n>(
+        config: &mut CodeGeneratorConfig,
+        names: impl IntoIterator<Item = &'n QualifiedTypeName>,
+    ) {
         let root_package = config.root_package().to_string();
         if root_package == config.module_name() {
             return;
         }
 
-        let mut names = BTreeSet::new();
-        for format in registry.values() {
-            let _ = format.visit(&mut |format| {
-                if let Format::TypeName(name) = format
-                    && name.namespace == Namespace::Root
-                {
-                    names.insert(name.name.clone());
-                }
-                Ok(())
-            });
-        }
+        let names: BTreeSet<&str> = names
+            .into_iter()
+            .filter(|name| name.namespace == Namespace::Root)
+            .map(|name| name.name.as_str())
+            .collect();
         if names.is_empty() {
             return;
         }
 
         let known = config.external_definitions.entry(root_package).or_default();
         for name in names {
-            if !known.contains(&name) {
-                known.push(name);
+            if !known.iter().any(|k| k == name) {
+                known.push(name.to_string());
             }
         }
     }

@@ -14,6 +14,8 @@
 //! - Plugin-provided package and target dependencies, and deployment
 //!   platforms.
 //! - Plugin companion files written beside the generated module.
+//! - Plugin-declared type references, which import and depend on their
+//!   module's target like the registry's own, cycle check included.
 
 use facet::Facet;
 use indoc::indoc;
@@ -28,6 +30,7 @@ use crate::{
         swift::{Swift, installer::Installer},
     },
     reflect,
+    reflection::format::QualifiedTypeName,
 };
 
 /// A plugin standing in for one that bridges to an FFI package: it adds a
@@ -1144,6 +1147,202 @@ fn namespaces_referencing_each_other_are_rejected() {
 
     assert!(
         error.contains("`A` references `Down` in `B`; `B` references `Up` in `A`."),
+        "{error}"
+    );
+}
+
+/// A plugin whose output, in the module `module`, names `types`.
+#[derive(Debug)]
+struct ReferencesPlugin {
+    module: &'static str,
+    types: Vec<QualifiedTypeName>,
+}
+
+impl EmitterPlugin<Swift> for ReferencesPlugin {
+    fn referenced_types(&self, config: &CodeGeneratorConfig) -> Vec<QualifiedTypeName> {
+        if config.module_name() == self.module {
+            self.types.clone()
+        } else {
+            vec![]
+        }
+    }
+}
+
+fn kit_presence() -> QualifiedTypeName {
+    QualifiedTypeName::namespaced("kit".to_string(), "Presence".to_string())
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "kit")]
+struct Presence {
+    online: bool,
+}
+
+/// A namespace that only a plugin's output names is imported, and its target
+/// is a dependency of the module's.
+#[test]
+fn a_plugin_s_reference_imports_and_depends_on_its_namespace() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["Example"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "Example",
+                dependencies: ["Kit", "Serde"]
+            ),
+            .target(
+                name: "Kit",
+                dependencies: ["Serde"]
+            ),
+        ]
+    )
+    "#);
+
+    let root =
+        std::fs::read_to_string(install_dir.path().join("Sources/Example/Example.swift")).unwrap();
+    assert_eq!(root.matches("import Kit\n").count(), 1, "{root}");
+}
+
+/// A namespace that both the registry and a plugin reference is imported, and
+/// depended on, once.
+#[test]
+fn a_plugin_s_reference_to_a_namespace_the_registry_references_is_not_repeated() {
+    #[derive(Facet)]
+    struct App {
+        presence: Presence,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence(), kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    assert!(
+        manifest.contains(concat!(
+            r#"name: "Example","#,
+            "\n",
+            "            ",
+            r#"dependencies: ["Kit", "Serde"]"#
+        )),
+        "{manifest}"
+    );
+
+    let root =
+        std::fs::read_to_string(install_dir.path().join("Sources/Example/Example.swift")).unwrap();
+    assert_eq!(root.matches("import Kit\n").count(), 1, "{root}");
+}
+
+/// A plugin's reference takes part in the cycle check: `kit` references a
+/// ROOT type, so the root module naming a `kit` type would close a cycle.
+#[test]
+fn a_plugin_s_reference_that_closes_a_cycle_is_rejected() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Row {
+        shared: Shared,
+    }
+
+    let registry = reflect!(Row).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![QualifiedTypeName::namespaced(
+                "kit".to_string(),
+                "Row".to_string(),
+            )],
+        })
+        .generate(&registry)
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Swift targets cannot depend on each other in a cycle, and these would: \
+         `Example` references `Row` in `Kit`; `Kit` references `Shared` in `Example`. \
+         Move the types that one of these targets references into a namespace of their \
+         own (`#[facet(fg::namespace = \"…\")]`), which the targets can both depend on"
+    );
+    assert!(!install_dir.path().join("Package.swift").exists());
+}
+
+/// A ROOT type a plugin names in a namespaced module makes it import, and
+/// depend on, the root package's target.
+#[test]
+fn a_plugin_s_reference_to_a_root_type_depends_on_the_root_target() {
+    let registry = reflect!(Shared, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "kit",
+            types: vec![QualifiedTypeName::root("Shared".to_string())],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    assert!(
+        manifest.contains(concat!(
+            r#"name: "Kit","#,
+            "\n",
+            "            ",
+            r#"dependencies: ["Example", "Serde"]"#
+        )),
+        "{manifest}"
+    );
+
+    let kit = std::fs::read_to_string(install_dir.path().join("Sources/Kit/Kit.swift")).unwrap();
+    assert!(kit.starts_with("import Example\n"), "{kit}");
+}
+
+/// A plugin naming a type the registry does not have is a bug in the plugin.
+#[test]
+fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
+    let registry = reflect!(Shared).unwrap();
+    let error = Installer::new("Example", tempfile::tempdir().unwrap().path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.ends_with(
+            "declares that module `Example` references `kit::Presence`, which is not a \
+             type in the registry"
+        ),
         "{error}"
     );
 }

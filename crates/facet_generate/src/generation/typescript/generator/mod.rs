@@ -16,7 +16,8 @@ use crate::{
         indent::IndentedWriter,
         module::Module,
         naming::check_reserved_names,
-        plugin::EmitterPlugin,
+        plugin::{self, EmitterPlugin},
+        registry_references,
         typescript::{emitter::TypeScript, naming},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
@@ -69,14 +70,18 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if writing to `out` fails.
+    /// Returns an error if writing to `out` fails, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let mut config = self.config.clone();
         config.update_from(registry);
         config.requalify_enums(registry, Self::requalify);
-        Self::reference_requalified_namespaces(&mut config, registry);
+        Self::reference_requalified_namespaces(&mut config, registry_references(registry).iter());
+        let plugin_references = plugin::referenced_types(&self.plugins, &config)?;
+        config.reference_types(&plugin_references);
+        Self::reference_requalified_namespaces(&mut config, plugin_references.iter());
         check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = TypeScript::new(&config, registry);
@@ -154,25 +159,25 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         }
     }
 
-    /// Adds the namespace of every reference that [`requalify`](Self::requalify)
-    /// points into another module to
+    /// Adds the namespace of every reference in `names` that
+    /// [`requalify`](Self::requalify) points into another module to
     /// [`referenced_namespaces`](CodeGeneratorConfig::referenced_namespaces),
-    /// so that the module imports it. `update_from` has already recorded the
-    /// references that name their namespace; this adds the root package for
-    /// the root types a namespaced module references.
-    fn reference_requalified_namespaces(config: &mut CodeGeneratorConfig, registry: &Registry) {
-        let mut namespaces = Vec::new();
-        for format in registry.values() {
-            let _ = format.visit(&mut |format| {
-                if let Format::TypeName(name) = format
-                    && let Namespace::Named(namespace) = Self::requalify(config, name).namespace
-                    && namespace != config.module_name()
-                {
-                    namespaces.push(namespace);
-                }
-                Ok(())
-            });
-        }
+    /// so that the module imports it. `update_from` (for the registry's
+    /// references) and
+    /// [`reference_types`](CodeGeneratorConfig::reference_types) (for the
+    /// plugins') have already recorded the references that name their
+    /// namespace; this adds the root package for the root types a namespaced
+    /// module references.
+    fn reference_requalified_namespaces<'n>(
+        config: &mut CodeGeneratorConfig,
+        names: impl Iterator<Item = &'n QualifiedTypeName>,
+    ) {
+        let namespaces: Vec<String> = names
+            .filter_map(|name| match Self::requalify(config, name).namespace {
+                Namespace::Named(namespace) if namespace != config.module_name() => Some(namespace),
+                _ => None,
+            })
+            .collect();
         config.referenced_namespaces.extend(namespaces);
     }
 }

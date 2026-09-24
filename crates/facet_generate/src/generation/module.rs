@@ -117,8 +117,14 @@ pub fn split(root: &str, registry: &Registry) -> BTreeMap<Module, Registry> {
         // Create the module with all collected external dependencies, and
         // tell it about every type in the registry: how a module references a
         // type from another one can depend on what kind of type it is.
+        let namespace = if namespace_key == root {
+            Namespace::Root
+        } else {
+            Namespace::Named(namespace_key.clone())
+        };
         let mut config = CodeGeneratorConfig::new(namespace_key)
             .with_external_definitions(all_external_definitions);
+        config.namespace = namespace;
         config.index_types(registry);
         let module = Module(config);
 

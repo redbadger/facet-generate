@@ -509,14 +509,19 @@ impl SourceInstaller for Installer {
         if config.module_name() != self.package_name {
             updated_config.parent = Some(self.package_name.clone());
         }
-        SwiftCodeGenerator::reference_root_types(&mut updated_config, registry);
+
+        // The references the registry and the plugins make decide both the
+        // module's imports and its target's dependencies, so the generator
+        // works out its config once and the installer reads the edges from it.
+        let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let module_config = generator.module_config(registry)?;
 
         let targets = self.targets.entry(module_name.clone()).or_default();
         let references = self
             .target_references
             .entry(module_name.clone())
             .or_default();
-        for (target, types) in &updated_config.external_definitions {
+        for (target, types) in &module_config.external_definitions {
             targets.insert(target.to_upper_camel_case());
             references
                 .entry(target.to_upper_camel_case())
@@ -550,12 +555,11 @@ impl SourceInstaller for Installer {
 
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
-        generator.output(&mut file, registry)?;
+        generator.write_module(&mut file, &module_config, registry)?;
 
         // Companion files live beside the module's own source file, whether or
         // not the serde runtime is external.
-        for companion in generator.companion_files(registry)? {
+        for companion in generator.render_companion_files(&module_config, registry)? {
             std::fs::write(dir_path.join(&companion.file_name), companion.contents)?;
         }
 

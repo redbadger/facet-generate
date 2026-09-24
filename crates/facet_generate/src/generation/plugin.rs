@@ -33,6 +33,7 @@
 //! | `companion_files` | During installation | an extra source file beside the module |
 //! | `manifest_dependencies` | When writing the build manifest | `kotlinx-serialization-json` |
 //! | `target_dependencies` | When writing the build manifest | `.product(name: "Shared", package: "Shared")` |
+//! | `referenced_types` | Once per module, before its header is written | a type the plugin's output names, so the module imports its namespace |
 //!
 //! ## Where `after_type` fires
 //!
@@ -73,7 +74,7 @@ use std::sync::Arc;
 use std::collections::BTreeMap;
 
 use super::{CodeGeneratorConfig, Container, indent::IndentWrite};
-use crate::reflection::format::{Format, Named, VariantFormat};
+use crate::reflection::format::{Format, Named, QualifiedTypeName, VariantFormat};
 
 // ---------------------------------------------------------------------------
 // Context types passed to plugin methods
@@ -474,8 +475,9 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// Called once per module, with that module's config — a type in a
     /// namespace is generated into a module of its own, and each gets its own
     /// SPM target. A plugin whose edge belongs to one module in particular
-    /// (the app's, say) compares [`CodeGeneratorConfig::module_name`] and
-    /// returns nothing for the rest; a plugin whose edge every target needs
+    /// (the app's, say) asks [`CodeGeneratorConfig::generates`] about a type
+    /// it knows lives there, and returns nothing for the rest; a plugin whose
+    /// edge every target needs
     /// ignores the argument. Contrast
     /// [`manifest_dependencies`](Self::manifest_dependencies), which takes no
     /// config because the manifest's `dependencies:` are the *package*'s and
@@ -487,6 +489,54 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// vec![r#".product(name: "Shared", package: "Shared")"#.into()]
     /// ```
     fn target_dependencies(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
+        vec![]
+    }
+
+    /// The types this plugin's output names in the module, beyond those the
+    /// module's own registry references.
+    ///
+    /// Each name is in **registry spelling** — the key the type has in the
+    /// [`Registry`](crate::Registry), as passed to `format_of`, not the
+    /// language's requalified spelling — and must name a type in the
+    /// registry: generation fails with an
+    /// [`InvalidInput`](io::ErrorKind::InvalidInput) error naming the plugin
+    /// and the type otherwise.
+    ///
+    /// The generator treats each one as a reference the module makes, exactly
+    /// as if one of its own types had a field of that type, so the plugin does
+    /// not add the import or the target dependency itself (and should not
+    /// return them from [`imports`](Self::imports) or
+    /// [`target_dependencies`](Self::target_dependencies) as well):
+    ///
+    /// | Language | What a reference into another module adds |
+    /// |---|---|
+    /// | Swift | the `import` of that module's target, and a dependency on it in `Package.swift`, which takes part in the check that the targets form no cycle |
+    /// | TypeScript | `import * as Ns from "<path>"` |
+    /// | Kotlin, C# | nothing — they write fully qualified names |
+    ///
+    /// A reference to a type in the module itself adds nothing.
+    ///
+    /// Called once per module, with that module's config — to return names
+    /// for one module only, ask [`CodeGeneratorConfig::generates`] whether it
+    /// is the module that generates a type of that module's (rather than
+    /// comparing the module name, which each language spells differently).
+    /// The config already holds everything derived from the module's
+    /// registry, including the references *it* makes
+    /// ([`referenced_namespaces`](CodeGeneratorConfig::referenced_namespaces),
+    /// [`external_definitions`](CodeGeneratorConfig::external_definitions)),
+    /// but not yet the ones the plugins declare here.
+    ///
+    /// # Examples
+    ///
+    /// ```text
+    /// // The app's module names `Kit.Presence` in code it writes.
+    /// if config.generates(&QualifiedTypeName::root("Effect".into())) {
+    ///     vec![QualifiedTypeName::namespaced("kit".into(), "Presence".into())]
+    /// } else {
+    ///     vec![]
+    /// }
+    /// ```
+    fn referenced_types(&self, _config: &CodeGeneratorConfig) -> Vec<QualifiedTypeName> {
         vec![]
     }
 }
@@ -555,6 +605,37 @@ where
     F: Fn(&dyn EmitterPlugin<L>) -> Vec<String>,
 {
     plugins.iter().flat_map(|p| f(p.as_ref())).collect()
+}
+
+/// Collect the [`referenced_types`](EmitterPlugin::referenced_types) of every
+/// plugin for the module `config` describes, checking that each names a type
+/// in the registry.
+///
+/// # Errors
+///
+/// Returns an [`InvalidInput`](io::ErrorKind::InvalidInput) error for the
+/// first name that is not a registered type.
+pub(crate) fn referenced_types<L>(
+    plugins: &[Arc<dyn EmitterPlugin<L>>],
+    config: &CodeGeneratorConfig,
+) -> io::Result<Vec<QualifiedTypeName>> {
+    let mut names = Vec::new();
+    for plugin in plugins {
+        for name in plugin.referenced_types(config) {
+            if !config.registry_type_names.contains(&name) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "plugin {plugin:?} declares that module `{module}` references \
+                         `{name}`, which is not a type in the registry",
+                        module = config.module_name(),
+                    ),
+                ));
+            }
+            names.push(name);
+        }
+    }
+    Ok(names)
 }
 
 /// Invoke a writer-accepting plugin method across all plugins in order.
