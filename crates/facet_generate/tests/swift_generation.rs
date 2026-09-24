@@ -718,3 +718,25 @@ fn test_that_swift_code_naming_a_plugin_s_referenced_type_compiles() {
         .unwrap();
     assert!(status.success());
 }
+
+/// With every type in a named namespace, the ROOT module has no types, so the
+/// package declares no target of its own, which would have no sources
+/// (#158).
+#[test]
+fn test_that_swift_code_with_no_root_types_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    struct Inner {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "a")]
+    struct Outer {
+        inner: Inner,
+    }
+
+    let registry = reflect!(Outer).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}

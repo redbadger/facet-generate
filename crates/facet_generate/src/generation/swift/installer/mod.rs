@@ -54,6 +54,10 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     targets: BTreeMap<String, BTreeSet<String>>,
+    /// The targets of the modules the installer generated, so the manifest
+    /// declares the package's own target only when the root module was one of
+    /// them.
+    modules: BTreeSet<String>,
     /// Plugin-provided dependency edges, keyed by target name.
     ///
     /// Kept apart from [`targets`](Self::targets) because these are raw
@@ -83,6 +87,7 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             targets: BTreeMap::new(),
+            modules: BTreeSet::new(),
             plugin_target_dependencies: BTreeMap::new(),
             target_references: BTreeMap::new(),
             external_packages: ExternalPackages::new(),
@@ -255,9 +260,18 @@ impl Installer {
     /// The aggregate leaves out the package target itself and every target
     /// that depends on it (a namespaced module that references a ROOT type),
     /// which would otherwise make a cycle.
+    ///
+    /// When the installer generated modules but not the root one (every type
+    /// is in a named namespace), there is no package target: it would have no
+    /// sources, which `SwiftPM` rejects, and the library product lists the
+    /// top-level namespace targets instead.
     fn all_targets_with_package(&self, package_name: &str) -> BTreeMap<String, BTreeSet<String>> {
         let mut all_targets = self.targets.clone();
         let package_target = package_name.to_upper_camel_case();
+
+        if !self.modules.is_empty() && !self.modules.contains(&package_target) {
+            return all_targets;
+        }
 
         let mut package_targets = BTreeSet::new();
         for targets in all_targets.values() {
@@ -499,6 +513,7 @@ impl SourceInstaller for Installer {
         }
 
         let module_name = config.module_name().to_upper_camel_case();
+        self.modules.insert(module_name.clone());
 
         // Update config with external packages from installer
         let mut updated_config = config.clone();

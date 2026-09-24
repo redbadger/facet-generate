@@ -1346,3 +1346,107 @@ fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
         "{error}"
     );
 }
+
+#[derive(Facet)]
+#[facet(fg::namespace = "b")]
+struct Inner {
+    x: u32,
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "a")]
+struct Outer {
+    inner: Inner,
+}
+
+/// With every type in a named namespace the root module has no types, so the
+/// package declares no target of its own, and the library product lists the
+/// top-level namespace target instead (#158).
+#[test]
+fn manifest_with_no_root_types() {
+    let registry = reflect!(Outer).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["A"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "A",
+                dependencies: ["B", "Serde"]
+            ),
+            .target(
+                name: "B",
+                dependencies: ["Serde"]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+    assert!(!install_dir.path().join("Sources/Example").exists());
+}
+
+/// A plugin's target dependencies go to the namespace targets it was asked
+/// about, and none to a root target the package does not declare (#158).
+#[test]
+fn a_plugin_s_target_dependencies_with_no_root_types() {
+    let registry = reflect!(Outer).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["A"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Shared"
+            )
+        ],
+        targets: [
+            .target(
+                name: "A",
+                dependencies: ["B", "Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "B",
+                dependencies: ["Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+}
