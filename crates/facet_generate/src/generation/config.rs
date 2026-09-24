@@ -278,6 +278,34 @@ impl CodeGeneratorConfig {
         }
     }
 
+    /// Whether namespace `namespace` is the one this module generates, for a
+    /// language that nests a namespaced module under the root package
+    /// (Kotlin and C#, whose module names end in the namespace).
+    ///
+    /// The answer is [`generates`](Self::generates) — the module's
+    /// [`namespace`](Self::namespace), never the last segment of its name,
+    /// which for a root package like `com.kv` looks like a namespace `kv`
+    /// that the root module does not generate.
+    ///
+    /// The one exception is a config nested under a parent with
+    /// [`with_parent`](Self::with_parent) but not made by
+    /// [`module::split`](super::module::split): it says it is namespaced
+    /// while its `namespace` still says ROOT. Its namespace is the rest of
+    /// its name after the parent.
+    pub(crate) fn is_own_namespace(&self, namespace: &str) -> bool {
+        if let (Namespace::Root, Some(parent)) = (&self.namespace, &self.parent) {
+            return self
+                .module_name
+                .strip_prefix(parent.as_str())
+                .and_then(|rest| rest.strip_prefix('.'))
+                == Some(namespace);
+        }
+        self.generates(&QualifiedTypeName::namespaced(
+            namespace.to_string(),
+            String::new(),
+        ))
+    }
+
     /// Which indentation style to use when writing generated source code.
     #[must_use]
     pub const fn with_indent(mut self, indent: IndentConfig) -> Self {

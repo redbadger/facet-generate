@@ -91,10 +91,16 @@ kotlin {
 /// Generate `registry` for `encoding` into a throwaway Gradle project and
 /// compile it, asserting that `compileKotlin` ran and succeeded.
 fn assert_generated_code_compiles(registry: &Registry, encoding: Encoding) {
+    assert_generated_code_compiles_in("com.example.testing", registry, encoding);
+}
+
+/// [`assert_generated_code_compiles`] for a registry generated into package
+/// `package`.
+fn assert_generated_code_compiles_in(package: &str, registry: &Registry, encoding: Encoding) {
     let tmp = tempdir().unwrap();
     let dir = tmp.path().join("testing");
 
-    let installer = kotlin::Installer::new("com.example.testing", &dir);
+    let installer = kotlin::Installer::new(package, &dir);
     let installer = match encoding {
         Encoding::Bincode => installer.plugin(BincodePlugin),
         Encoding::Json => installer.plugin(JsonPlugin),
@@ -199,5 +205,17 @@ fn test_that_kotlin_code_with_types_from_other_namespaces_compiles() {
         for encoding in [Encoding::Bincode, Encoding::Json] {
             assert_generated_code_compiles(&registry, encoding);
         }
+    }
+}
+
+/// A root package whose last segment is also a namespace (`com.kv` and `kv`):
+/// the root module's references into `kv` are to `com.kv.kv`, not to the root
+/// module itself, while `kv`'s own references and its references to ROOT
+/// stay where they were (#164).
+#[test]
+fn test_that_kotlin_code_compiles_when_the_package_ends_in_a_namespace() {
+    let registry = common::across_namespaces::to_root::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json] {
+        assert_generated_code_compiles_in("com.kv", &registry, encoding);
     }
 }

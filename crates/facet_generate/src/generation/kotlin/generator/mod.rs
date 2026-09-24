@@ -157,8 +157,12 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///    `auth` → `com.example.main.auth.User` — *not* `…main.orders.auth.User`
     ///
     /// 3. **Same namespace as the current module** — collapsed to just the
-    ///    module name (no double-nesting).
-    ///    Module `com.example.other`, namespace `other` → `com.example.other.LocalType`
+    ///    module name (no double-nesting). Which namespace is the module's own
+    ///    comes from its config (see [`CodeGeneratorConfig::generates`]), not
+    ///    from the last segment of its name.
+    ///    Module `com.example.other` (namespace `other`) → `com.example.other.LocalType`
+    ///    Root module `com.kv`, namespace `kv` → `com.kv.kv.Entry` — another
+    ///    namespace, rooted as in rule 2, although the package ends in `kv`
     ///
     /// 4. **[`Namespace::Root`]** — uses the *root package*, for the same
     ///    reason as rule 2.
@@ -210,32 +214,18 @@ impl<'a> KotlinCodeGenerator<'a> {
                 }
                 // PackageLocation::Url is ignored for Kotlin generation - fall through
 
-                // Check if this type's namespace matches the current module's namespace
-                let current_leaf_namespace = config
-                    .module_name()
-                    .rsplit_once('.')
-                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                if config.external_definitions.contains_key(namespace)
-                    && namespace != current_leaf_namespace
-                {
-                    // A sibling namespace, so the path is rooted at the
-                    // parent package — NOT at `module_name()`, which already
-                    // ends in *this* module's namespace and would yield
-                    // `com.example.main.Directory.Kit.Row`.
-                    QualifiedTypeName::namespaced(
-                        format!("{}.{namespace}", config.root_package()),
-                        name.name.clone(),
-                    )
-                } else if namespace == current_leaf_namespace {
-                    // For same-module types, use current module name only
+                if config.is_own_namespace(namespace) {
+                    // The module's own namespace, which its name already
+                    // ends in
                     QualifiedTypeName::namespaced(
                         config.module_name().to_string(),
                         name.name.clone(),
                     )
                 } else {
-                    // Same reasoning as the external case above: a named
-                    // namespace that is not our own hangs off the parent.
+                    // Any other namespace is a sibling, so the path is rooted
+                    // at the root package — NOT at `module_name()`, which for
+                    // a namespaced module already ends in *its* namespace and
+                    // would yield `com.example.main.Directory.Kit.Row`.
                     QualifiedTypeName::namespaced(
                         format!("{}.{namespace}", config.root_package()),
                         name.name.clone(),

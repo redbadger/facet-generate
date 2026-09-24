@@ -237,6 +237,30 @@ fn test_that_csharp_code_with_types_from_other_namespaces_compiles() {
     }
 }
 
+/// A root package whose last segment is also a namespace, spelled the same
+/// (`Example.kv` and `kv`): the root module's references into `kv` are to
+/// `Example.Kv.Kv`, not bare names in the root module's own namespace, while
+/// `kv`'s own references and its references to ROOT stay where they were
+/// (#164).
+#[test]
+fn test_that_csharp_code_compiles_when_the_package_ends_in_a_namespace() {
+    let registry = common::across_namespaces::to_root::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example.kv", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example.kv", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
 /// Types whose properties share a name with a type the generated code calls a
 /// static member of (redbadger/facet-generate#159).
 ///
