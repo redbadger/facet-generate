@@ -207,6 +207,7 @@ fn test_that_csharp_code_with_types_from_other_namespaces_compiles() {
         common::across_namespaces::get_registry(),
         common::across_namespaces::get_sibling_registry(),
         common::across_namespaces::to_root::get_registry(),
+        common::across_namespaces::inherited::get_registry(),
     ] {
         let dir = tempdir().unwrap();
         csharp::Installer::new("Example", &dir)

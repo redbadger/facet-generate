@@ -186,13 +186,15 @@ fn test_that_kotlin_code_shadowing_builtin_names_compiles() {
 }
 
 /// Types referencing enums and structs in other namespaces, including a type
-/// in one named namespace referencing another, and one referencing ROOT types.
+/// in one named namespace referencing another, one referencing ROOT types
+/// directly and nested in generics, and types that inherit a namespace.
 #[test]
 fn test_that_kotlin_code_with_types_from_other_namespaces_compiles() {
     for registry in [
         common::across_namespaces::get_registry(),
         common::across_namespaces::get_sibling_registry(),
         common::across_namespaces::to_root::get_registry(),
+        common::across_namespaces::inherited::get_registry(),
     ] {
         for encoding in [Encoding::Bincode, Encoding::Json] {
             assert_generated_code_compiles(&registry, encoding);

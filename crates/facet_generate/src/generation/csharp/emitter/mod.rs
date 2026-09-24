@@ -521,8 +521,14 @@ fn write_variant_records<W: IndentWrite>(
 
 /// Render `format` as the C# type expression the emitter would use for a
 /// property of that type — for example `int`, `ObservableCollection<string>`,
-/// `Foo?`, `Dictionary<string, Bar>`, or `Other.Child` for a type in another
-/// namespace.
+/// `Foo?`, `Dictionary<string, Bar>`, or `Example.Other.Child` for a type in
+/// namespace `other` of root package `Example`.
+///
+/// The type names in `format` must be in the emitter's spelling, which roots
+/// every other namespace at the root package: a format from [`EmitContext`]
+/// already is, and a name a plugin knows from elsewhere goes through
+/// [`requalify`] first. A registry-spelled `Named("other")/Child` would
+/// render as a bare `Other.Child`.
 ///
 /// `config` supplies the set of type names the module declares, so a builtin
 /// a declaration shadows (`HashSet`, `Dictionary`, …) is written with its
@@ -530,6 +536,77 @@ fn write_variant_records<W: IndentWrite>(
 #[must_use]
 pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     csharp_type(format, config)
+}
+
+/// The spelling the emitter gives a reference to `name`, a type name in
+/// registry spelling, from the module `config` describes.
+///
+/// Before emitting a module the generator rewrites every type reference in its
+/// registry with this rule, which roots every namespace at the root package
+/// (the parent the installer nested the module under, or the module itself):
+///
+/// - a type of the module's own namespace is written bare
+///   (`Named("kit")/Row` → `Row` inside `Example.Shared.Kit`);
+/// - a type of any other namespace is qualified with the root package
+///   (`Named("kit")/Row` → `Named("Example.Shared.kit")/Row`, rendered
+///   `Example.Shared.Kit.Row`);
+/// - a ROOT type is qualified with the root package from a namespaced module,
+///   and from a root module whose name is dotted (`Root/Event` →
+///   `Named("Example.Shared")/Event`, rendered `Example.Shared.Event`), and
+///   stays bare in an undotted root module (`Example`).
+///
+/// # Registry spelling and emitter spelling
+///
+/// The formats a plugin receives through [`EmitContext`] are already
+/// requalified. A name a plugin knows from elsewhere is in registry spelling —
+/// the key of the [`container`](EmitContext::container) being emitted, a name
+/// the plugin built itself, or a type name inside a format from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of) —
+/// and must go through `requalify` (a whole format through
+/// [`requalify_format`]) before it is passed to [`render_type`],
+/// [`write_serialize_value`](crate::generation::bincode::csharp::write_serialize_value),
+/// [`CodeGeneratorConfig::is_enum`] /
+/// [`is_unit_enum`](CodeGeneratorConfig::is_unit_enum), or any other function
+/// that expects the emitter's spelling. Without it an enum lookup misses: for
+/// a property `Event` of the ROOT all-unit enum `Event` in `Example.Shared`,
+/// `write_serialize_value` writes `Event.Serialize(serializer);`, a method a
+/// C# `enum` does not have, instead of
+/// `Example.Shared.EventBincode.Serialize(Event, serializer);`.
+///
+/// To requalify every type name inside a format, use [`requalify_format`].
+///
+/// Apply it once, to a registry-spelled name: it is not idempotent. A second
+/// pass roots an already-rooted name at the root package again
+/// (`Example.Shared.Example.Shared.Event`).
+#[must_use]
+pub fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    super::generator::CSharpCodeGenerator::requalify(config, name)
+}
+
+/// Requalifies every type name in `format` with [`requalify`], as the
+/// generator does to each container of the module before emitting it.
+///
+/// Apply it exactly once, to a format in registry spelling such as one from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+/// The formats in [`EmitContext`] are already requalified; requalifying one
+/// again nests the root package (`Example.Shared.Example.Shared.Event`).
+///
+/// ```
+/// use facet_generate::{
+///     generation::{CodeGeneratorConfig, csharp},
+///     reflection::format::{Format, QualifiedTypeName},
+/// };
+///
+/// let config = CodeGeneratorConfig::new("Example.Shared".to_string());
+///
+/// let event = QualifiedTypeName::root("Event".to_string());
+/// let mut format = Format::Option(Box::new(Format::TypeName(event)));
+/// csharp::requalify_format(&config, &mut format);
+///
+/// assert_eq!(csharp::render_type(&format, &config), "Example.Shared.Event?");
+/// ```
+pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
+    super::generator::CSharpCodeGenerator::requalify_type_names(config, format);
 }
 
 /// Escapes an identifier when it is a reserved C# keyword.

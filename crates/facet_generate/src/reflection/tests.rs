@@ -3257,8 +3257,7 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
     }
 
     let registry = reflect!(MyEnum).unwrap();
-    // TODO: this output is obviously wrong, the `name: (…)` is because it's an anonymous tuple struct
-    // so what should be name be (if it's a separate type)?
+    // An anonymous tuple is not a container, so the payload is the tuple itself.
     insta::assert_yaml_snapshot!(registry, @"
     ? namespace: ROOT
       name: MyEnum
@@ -3266,9 +3265,9 @@ fn enum_with_a_tuple_variant_that_is_itself_a_tuple() {
         - 0:
             Variant1:
               - NEWTYPE:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: (…)
+                  TUPLE:
+                    - I32
+                    - U8
               - []
         - EXTERNAL
         - []
@@ -3915,16 +3914,16 @@ fn distinct_tuple_types_are_not_duplicates() {
         - 0:
             A:
               - NEWTYPE:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: (…)
+                  TUPLE:
+                    - I32
+                    - U8
               - []
           1:
             B:
               - NEWTYPE:
-                  TYPENAME:
-                    namespace: ROOT
-                    name: (…)
+                  TUPLE:
+                    - STR
+                    - BOOL
               - []
         - EXTERNAL
         - []

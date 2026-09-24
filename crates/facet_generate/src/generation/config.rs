@@ -424,6 +424,11 @@ impl CodeGeneratorConfig {
 
     /// Whether `name` is an enum, in the spelling the emitter sees (see
     /// [`enum_type_names`](Self::enum_type_names)).
+    ///
+    /// A name from a format in [`EmitContext`](super::plugin::EmitContext) is
+    /// already in that spelling; a registry-spelled one goes through the
+    /// language's `requalify` first (for example
+    /// [`csharp::requalify`](super::csharp::requalify)).
     #[must_use]
     pub fn is_enum(&self, name: &QualifiedTypeName) -> bool {
         self.enum_type_names.contains(name)
@@ -432,6 +437,9 @@ impl CodeGeneratorConfig {
     /// Whether `name` is an enum whose variants are all unit variants, in the
     /// spelling the emitter sees (see
     /// [`unit_variant_enums`](Self::unit_variant_enums)).
+    ///
+    /// As with [`is_enum`](Self::is_enum), a registry-spelled name goes
+    /// through the language's `requalify` first.
     #[must_use]
     pub fn is_unit_enum(&self, name: &QualifiedTypeName) -> bool {
         self.unit_variant_enums.contains(name)

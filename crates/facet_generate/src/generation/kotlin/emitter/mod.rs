@@ -419,7 +419,13 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
 
 /// Render `format` as the Kotlin type expression the emitter would use for a
 /// property of that type — for example `Int`, `List<String>`, `Foo?`,
-/// `Map<String, Bar>`, or `other.Child` for a type in another namespace.
+/// `Map<String, Bar>`, or `com.example.other.Child` for a type in namespace
+/// `other` of root package `com.example`.
+///
+/// The type names in `format` must be in the emitter's spelling, a full
+/// package path: a format from [`EmitContext`] already is, and a name a plugin
+/// knows from elsewhere goes through [`requalify`] first. A registry-spelled
+/// `Named("other")/Child` would render as a bare `other.Child`.
 ///
 /// `config` is accepted for symmetry with the other languages and to keep the
 /// helper stable if Kotlin's type rendering becomes configuration-dependent.
@@ -445,6 +451,76 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
             .expect("writing to a Vec cannot fail");
     }
     String::from_utf8(buf).expect("type expression should be valid UTF-8")
+}
+
+/// The spelling the emitter gives a reference to `name`, a type name in
+/// registry spelling, from the module `config` describes.
+///
+/// Before emitting a module the generator rewrites every type reference in its
+/// registry to a full package path with this rule, which roots every
+/// namespace at the root package (the parent the installer nested the module
+/// under, or the module itself):
+///
+/// - a namespace with an external package whose location is a path is
+///   qualified with that path (`Named("other")/Row` with path `com.acme` →
+///   `Named("com.acme.other")/Row`);
+/// - a type of the module's own namespace is qualified with the module
+///   (`Named("kit")/Row` → `Named("com.example.kit")/Row` inside
+///   `com.example.kit`);
+/// - a type of any other namespace is qualified with the root package
+///   (`Named("kit")/Row` → `Named("com.example.kit")/Row` inside
+///   `com.example` or `com.example.kv`);
+/// - a ROOT type is qualified with the root package (`Root/Event` →
+///   `Named("com.example")/Event`, rendered `com.example.Event`).
+///
+/// # Registry spelling and emitter spelling
+///
+/// The formats a plugin receives through [`EmitContext`] are already
+/// requalified. A name a plugin knows from elsewhere is in registry spelling —
+/// the key of the [`container`](EmitContext::container) being emitted, a name
+/// the plugin built itself, or a type name inside a format from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of) —
+/// and must go through `requalify` (a whole format through
+/// [`requalify_format`]) before it is passed to [`render_type`],
+/// [`write_serialize_value`](crate::generation::bincode::kotlin::write_serialize_value),
+/// [`CodeGeneratorConfig::is_enum`] /
+/// [`is_unit_enum`](CodeGeneratorConfig::is_unit_enum), or any other function
+/// that expects the emitter's spelling.
+///
+/// To requalify every type name inside a format, use [`requalify_format`].
+///
+/// Apply it once, to a registry-spelled name: it is not idempotent. A second
+/// pass roots an already-qualified path at the root package again
+/// (`com.example.com.example.Event`).
+#[must_use]
+pub fn requalify(config: &CodeGeneratorConfig, name: &QualifiedTypeName) -> QualifiedTypeName {
+    super::generator::KotlinCodeGenerator::requalify(config, name)
+}
+
+/// Requalifies every type name in `format` with [`requalify`], as the
+/// generator does to each container of the module before emitting it.
+///
+/// Apply it exactly once, to a format in registry spelling such as one from
+/// [`RegistryBuilder::format_of`](crate::reflection::RegistryBuilder::format_of).
+/// The formats in [`EmitContext`] are already requalified; requalifying one
+/// again nests the root package (`com.example.com.example.Event`).
+///
+/// ```
+/// use facet_generate::{
+///     generation::{CodeGeneratorConfig, kotlin},
+///     reflection::format::{Format, QualifiedTypeName},
+/// };
+///
+/// let config = CodeGeneratorConfig::new("kv".to_string()).with_parent("com.example");
+///
+/// let event = QualifiedTypeName::root("Event".to_string());
+/// let mut format = Format::Option(Box::new(Format::TypeName(event)));
+/// kotlin::requalify_format(&config, &mut format);
+///
+/// assert_eq!(kotlin::render_type(&format, &config), "com.example.Event?");
+/// ```
+pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
+    super::generator::KotlinCodeGenerator::requalify_type_names(config, format);
 }
 
 /// The name of the nested `data class` / `data object` the emitter generates

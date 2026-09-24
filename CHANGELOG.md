@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.0] - 2026-09-23
+
+References **across namespaces** now generate code that compiles in every language: from the root namespace into a named one, from a named namespace back to the root, and between two named namespaces. Reflection now names every reference the way its type is registered, whatever wraps it, and rejects a reference to a type that isn't registered. Plugins get each generator's `requalify` and `requalify_format`, so they can name a type the way the emitter does. There's one exception. In Swift, the root target and a namespace that reference each other form a dependency cycle, which SwiftPM can't build, so generation now fails with an error naming the types involved. Output for anything that already compiled is unchanged, apart from a small change to builtin shadowing in C# and Swift, and to the namespace of a type held by a namespaced transparent wrapper (see Bug Fixes). The enum fix below is also available for the 0.19 line as [0.19.1](#0191---2026-09-23). `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged at 0.18.0.
+
+Reported downstream as [redbadger/crux#603](https://github.com/redbadger/crux/issues/603).
+
+### 💥 Breaking Changes
+
+- **`CodeGeneratorConfig::enum_type_names` and `unit_variant_enums` are now `BTreeSet<QualifiedTypeName>`** instead of `BTreeSet<String>`. They're keyed by qualified name, and they cover every enum in the registry, not just the current module's. Query them with the new `CodeGeneratorConfig::is_enum(&QualifiedTypeName)` and `is_unit_enum`, passing the name as the emitter sees it (after the generator rewrites references) [#155](https://github.com/redbadger/facet-generate/pull/155)
+- **`CodeGeneratorConfig` gained a public `registry_type_names: BTreeSet<QualifiedTypeName>` field**: every container in the registry that the module was split from. A struct literal of `CodeGeneratorConfig` needs the new field [#155](https://github.com/redbadger/facet-generate/pull/155)
+- **The Swift installer rejects a cycle between targets.** If the root target and a namespace reference each other, or two namespaces do, SwiftPM can't build the package, whatever the imports. That's the usual shape when a root `ViewModel` holds namespaced types that refer back to root types. Until now, generation succeeded and wrote a `Package.swift` that SwiftPM rejected. It now fails with an `InvalidInput` error naming the types on each edge, and suggests moving the shared types into a namespace of their own. It doesn't write `Package.swift`. **Code generation that calls the Swift installer now fails for such a registry** [#165](https://github.com/redbadger/facet-generate/pull/165)
+- **`Error` gained a `DanglingTypeReference` variant**: `RegistryBuilder::build` now fails if a type reference names no registered container, giving the referring container, the field and the missing name. A dangling reference is always a reflection bug, so please report one. The check turns it into an error at reflection, where it used to become generated code that doesn't compile. It adds a variant to the exhaustive `Error` enum [#169](https://github.com/redbadger/facet-generate/pull/169)
+
+### 🚀 Features
+
+- **`typescript::requalify`, `csharp::requalify`, `kotlin::requalify` and `swift::requalify`**, and a `requalify_format` beside each: the spelling the emitter gives a reference to a registry name from the current module. `requalify` rewrites one name, and `requalify_format` every name in a `Format`, as the generator does to each container before emitting it. A plugin must pass any name it knows in registry spelling, or a format from `RegistryBuilder::format_of`, through one of them exactly once before `render_type`, `write_serialize_value`, `is_enum` or `is_unit_enum`. Neither is idempotent: in C# and Kotlin a second pass nests the root package. Formats that come through `EmitContext` already have it. Without this, the 0.22 enum lookups missed for a name such as an app's `Event` in a dotted C# package, and wrote `Event.Serialize(...)` for an all-unit enum [#168](https://github.com/redbadger/facet-generate/pull/168)
+
+### 🐛 Bug Fixes
+
+- **An enum from another namespace is serialized through its own functions (TypeScript, C#)**: each namespace is generated as its own module, and a module only knew its own enums. So a type holding an enum from a different namespace serialized it as if it were a class: `this.presence.serialize(serializer)` / `Kit.Presence.deserialize(deserializer)` in TypeScript (unit and data enums), and `Presence.Serialize(serializer)` in C# (all-unit enums). None of that compiles. TypeScript now calls `Kit.serializePresence(value, serializer)` / `Kit.deserializePresence(deserializer)` in both the bincode and JSON plugins. C# calls the enum's `…Bincode` helper, qualified the same way as the type [#154](https://github.com/redbadger/facet-generate/issues/154), [#155](https://github.com/redbadger/facet-generate/pull/155)
+- **Builtin shadowing counts types from other modules that are in scope (C#, Swift)**: a C# namespace also sees the root namespace's types, and a Swift module also sees the types of the modules it imports. So a root `Unit` broke `()` fields in a C# namespace, and a `kit` type called `Set` broke `BTreeSet` fields in the Swift root module. The shadowing check now counts both, and writes the builtin fully qualified [#155](https://github.com/redbadger/facet-generate/pull/155)
+- **TypeScript: a namespaced module imports the root types it references**: it wrote a root type's name bare, but only imported named namespaces. It now writes `import * as Example from "./example"` and `Example.Shared`, and enum functions follow as `Example.serializeLevel(...)`. The root module and a namespace now import each other. Generated code evaluates nothing across modules at load time, and a runtime round trip in both import orders confirms that's safe [#150](https://github.com/redbadger/facet-generate/issues/150), [#161](https://github.com/redbadger/facet-generate/pull/161)
+- **C#: references to root and sibling types are qualified from the root package**: they were built from the current module's name, so a root type referenced from `Example.Kv` became `Example.Kv.Shared`, and a type in `b` referenced from `Example.A` became `Example.A.B.Status`. Neither namespace exists. They're now `Example.Shared` and `Example.B.Status`, and the `…Bincode` helpers follow [#149](https://github.com/redbadger/facet-generate/issues/149), [#163](https://github.com/redbadger/facet-generate/pull/163)
+- **Kotlin: a root type referenced from a namespaced module lives in the root package**: it was written `com.example.kv.Level`, and is now `com.example.Level` [#148](https://github.com/redbadger/facet-generate/issues/148), [#165](https://github.com/redbadger/facet-generate/pull/165)
+- **Swift: a namespaced target can reference root types**: it wrote them bare, without depending on or importing the root target. It now writes `import Example` and `Example.Level`, and depends on the root target. A same-named local type can no longer capture the reference. When a namespace references root, the library product lists the top-level target (`["Kv"]`), and consumers can still `import Example` [#151](https://github.com/redbadger/facet-generate/issues/151), [#165](https://github.com/redbadger/facet-generate/pull/165)
+- **A reference records the namespace its type is registered under, whatever wraps it**: references were computed in about ten places, each with its own idea of the namespace context. So an `Option<_>` of a type that inherits its namespace was recorded as a `Root` type that doesn't exist ([#167](https://github.com/redbadger/facet-generate/issues/167)), and a ROOT-pinned type nested in a generic took the container's namespace ([#160](https://github.com/redbadger/facet-generate/issues/160)). Once ROOT references from namespaced modules were qualified, such a phantom reference became a Swift target cycle, or a root type that doesn't exist in the other languages. One walker now names every reference, including `Option`, sequences, sets, maps, tuples, arrays and transparent wrappers, with the function that names a type when it's registered [#169](https://github.com/redbadger/facet-generate/pull/169)
+- **Four more phantom references, found by the new dangling-reference check**: a type reached through a chain of transparent wrappers was never registered; a newtype variant's tuple payload became the type name `(…)`; an anonymous tuple field never registered its elements; and an array in a tuple position was pushed twice. Also, an enum inside a newtype or tuple struct took its last variant's payload (`struct W(E)` came out as `NewTypeStruct(Seq(…))`) [#169](https://github.com/redbadger/facet-generate/pull/169)
+- **A transparent wrapper's `fg::namespace` applies to the type it wraps in every position**: a type is generated as the one its chain of transparent wrappers finally wraps, in the namespace of the innermost wrapper that has one, unless the type pins its own. It used to be registered in the wrapper's namespace but referred to from the root namespace, and a field of the wrapper's type in a `Vec`, an `Option` or a map registered a second copy in the root namespace. So a direct field of the wrapper's type didn't compile, and one that sat beside such a field compiled against the root copy. That case now refers to the wrapper's namespace, and the root copy is gone [#169](https://github.com/redbadger/facet-generate/pull/169)
+- **A renamed type under a field's `fg::namespace` keeps its new name**: a `#[facet(rename = "…")]` type used in a field with its own `fg::namespace` was registered under its Rust name and referred to by its new one [#169](https://github.com/redbadger/facet-generate/pull/169)
+- **`Range`, `PhantomData` and `Infallible` no longer panic in nested positions**: these are user structs that facet describes as scalars, and they're now reflected as containers everywhere. An unsupported type such as `Result`, anywhere in a field's type, now skips the field in every position, as it already did in most. Some positions used to panic, and an `Option` of one failed reflection; a newtype variant whose payload is skipped becomes a unit variant [#169](https://github.com/redbadger/facet-generate/pull/169)
+
+### 🧪 Tests
+
+- **A new `with_enums_across_namespaces` fixture** covers root → namespace, namespace → namespace, namespace → root and cross-module builtin shadowing, for unit and data enums, in all four languages, with bincode and JSON. Every language now compiles the output (deno, dotnet, gradle, swift build; Swift JSON is excluded until [#157](https://github.com/redbadger/facet-generate/issues/157)). New runtime round trips against Rust bincode cover root ↔ namespace in TypeScript, C#, Kotlin and Swift.
+- **Reference positions:** `reflection/reference_tests.rs` checks a type referenced from 21 positions, whether it inherits its namespace, is pinned to ROOT, or is explicitly namespaced. The #167 shape is compiled by all four installers.
+
 ## [0.21.1] - 2026-09-22
 
 ### 🐛 Bug Fixes
@@ -164,6 +200,26 @@ and stays at 0.18.0.
 
 - **fix(kotlin): root a sibling namespace's package at the parent, not the module** — a type in a *different* named namespace was qualified with the current module's full name, so a reference from `feature` to a type in `kit` came out as `com.example.feature.kit.Row` when the type is declared in `com.example.kit`, generating source that does not compile. `CodeGeneratorConfig` now records the `parent` set by `with_parent` and a new `root_package()` accessor returns it (falling back to `module_name`), so a root module and its namespaced children agree on where namespace packages live [#122](https://github.com/redbadger/facet-generate/pull/122)
 - **fix(typescript): use type-only imports for runtime interfaces** — generated projects no longer report TS1484 for `Serializer` and `Deserializer` when `verbatimModuleSyntax` is enabled [#119](https://github.com/redbadger/facet-generate/pull/119)
+
+## [0.19.1] - 2026-09-23
+
+A patch release for crux_core 0.20.x. It carries one fix from the 0.22 line, re-implemented for 0.19: there's no public API change, and output only changes for code that didn't compile before. `facet-generate-attrs` is unchanged at 0.18.0.
+
+### 🐛 Bug Fixes
+
+- **An enum from another namespace is serialized through its own functions (TypeScript, C#)**:
+  the installers generate each namespace as its own module, and a module only knew about its own
+  enums. So a type holding an enum from a different namespace serialized it as if it were a class:
+  `this.presence.serialize(serializer)` and `Kit.Presence.deserialize(deserializer)` in TypeScript
+  (for unit and data enums), and `Presence.Serialize(serializer)` in C# (for all-unit enums). None of
+  that compiles.
+  - TypeScript now calls the enum's free functions through the namespace import:
+    `Kit.serializePresence(value, serializer)` and `Kit.deserializePresence(deserializer)`.
+  - C# now calls the enum's `…Bincode` helper, qualified the same way as the type.
+  - Enums in the same namespace, and everything else, generate exactly as in 0.19.0.
+  - The fix applies to generation through `Installer::generate`. It was reported downstream as
+    [redbadger/crux#603](https://github.com/redbadger/crux/issues/603).
+  [#154](https://github.com/redbadger/facet-generate/issues/154)
 
 ## [0.19.0] - 2026-08-06
 
