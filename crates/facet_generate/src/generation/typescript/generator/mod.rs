@@ -66,6 +66,26 @@ impl<'a> TypeScriptCodeGenerator<'a> {
         self
     }
 
+    /// The config the module for `registry` is written with: this generator's
+    /// config, completed from the registry and from the types the plugins
+    /// reference, including every namespace the module imports
+    /// ([`referenced_namespaces`](CodeGeneratorConfig::referenced_namespaces)).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a plugin declares a reference to a type that is not
+    /// in the registry.
+    pub(crate) fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
+        Self::reference_requalified_namespaces(&mut config, registry_references(registry).iter());
+        let plugin_references = plugin::referenced_types(&self.plugins, &config)?;
+        config.reference_types(&plugin_references);
+        Self::reference_requalified_namespaces(&mut config, plugin_references.iter());
+        Ok(config)
+    }
+
     /// Produce a complete TypeScript source file for the types in `registry`.
     ///
     /// # Errors
@@ -75,13 +95,7 @@ impl<'a> TypeScriptCodeGenerator<'a> {
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
-        Self::reference_requalified_namespaces(&mut config, registry_references(registry).iter());
-        let plugin_references = plugin::referenced_types(&self.plugins, &config)?;
-        config.reference_types(&plugin_references);
-        Self::reference_requalified_namespaces(&mut config, plugin_references.iter());
+        let config = self.module_config(registry)?;
         check_reserved_names(registry, &naming::RULES)?;
 
         let mut lang = TypeScript::new(&config, registry);

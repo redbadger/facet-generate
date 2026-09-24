@@ -33,6 +33,7 @@ use std::{
     sync::Arc,
 };
 
+use heck::ToUpperCamelCase as _;
 use serde_json::{Value, json};
 
 use std::collections::BTreeSet;
@@ -43,8 +44,9 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
+        collision::{self, Origin, TypeName},
         json::JsonPlugin,
-        module,
+        module::{self, Module},
         plugin::EmitterPlugin,
         typescript::{TypeScript, TypeScriptCodeGenerator},
     },
@@ -111,8 +113,15 @@ impl Installer {
     ///
     /// # Errors
     ///
-    /// Returns an error if any file operation or code generation step fails.
+    /// Returns an error if any file operation or code generation step fails,
+    /// and fails before writing anything when two modules would share a file,
+    /// or when a module would import another under a name that it also
+    /// declares or imports. Such output would not type-check, or would lose a
+    /// module; the error names the namespace and what it collides with.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        let modules = module::split(&self.package_name, registry);
+        self.check_namespaces(&modules)?;
+
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files (replacing the old encoding-based install_serde/bincode calls).
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
@@ -140,10 +149,10 @@ impl Installer {
             }
         }
 
-        // Split by namespace and install each module
-        for (m, module_registry) in module::split(&self.package_name, registry) {
+        // Install each namespace's module
+        for (m, module_registry) in &modules {
             let config = m.config().clone();
-            self.install_module(&config, &module_registry)?;
+            self.install_module(&config, module_registry)?;
         }
 
         // Write the package manifest
@@ -151,6 +160,100 @@ impl Installer {
         self.install_manifest(&package_name)?;
 
         Ok(())
+    }
+
+    /// Fails when a namespace's module cannot be generated as it is named.
+    ///
+    /// A module is the file `<namespace>.ts` (`<package>.ts` for the root
+    /// module), and another module imports it as
+    /// `import * as <Namespace> from "./<namespace>"`, with the namespace in
+    /// `UpperCamelCase`. So this fails when:
+    ///
+    /// - two modules' files differ only in case (`kv.ts` and `Kv.ts`, or
+    ///   `app.ts` beside the root package's `App.ts`), which are the same file
+    ///   on a case-insensitive file system, so one module would be lost.
+    ///   These are rejected whatever the file system, so that the output does
+    ///   not depend on where it is generated.
+    /// - a module imports two namespaces under the same name (`my_ns` and
+    ///   `MyNs`), or imports one under the name of a type it declares
+    ///   (TS2440), as a ROOT type named like a namespace would be.
+    ///
+    /// Namespaces provided by external packages are not generated, so only
+    /// the names they are imported under are checked.
+    fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        const LANGUAGE: &str = "TypeScript";
+
+        collision::check_files(
+            LANGUAGE,
+            modules
+                .keys()
+                .map(|m| m.config().module_name())
+                .filter(|name| !self.external_packages.contains_key(*name))
+                .map(|name| {
+                    (
+                        Origin::of_module(name, &self.package_name),
+                        format!("{name}.ts"),
+                    )
+                }),
+        )?;
+
+        for (m, registry) in modules {
+            let config = m.config();
+            if self.external_packages.contains_key(config.module_name()) {
+                continue;
+            }
+            let module_config = TypeScriptCodeGenerator::new(&self.module_config(config))
+                .with_plugins(self.plugins.clone())
+                .module_config(registry)?;
+
+            let mut bindings = BTreeMap::<String, &str>::new();
+            for name in &module_config.referenced_namespaces {
+                let binding = name.to_upper_camel_case();
+                let origin = Origin::of_module(name, &self.package_name);
+                let subject = format!(
+                    "{origin} is imported as `{binding}` in `{}.ts`",
+                    config.module_name()
+                );
+                if let Some(existing) = bindings.insert(binding.clone(), name) {
+                    let existing = Origin::of_module(existing, &self.package_name);
+                    let fix = if matches!(origin, Origin::RootPackage(_)) {
+                        origin.choose_namespace()
+                    } else {
+                        existing.choose_namespace()
+                    };
+                    return Err(collision::error(LANGUAGE, subject, existing, fix).into());
+                }
+                if let Some(declared) = registry
+                    .keys()
+                    .find(|t| t.name.to_upper_camel_case() == binding)
+                {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        TypeName(declared),
+                        origin.rename_type(),
+                    )
+                    .into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The config a module is generated with: `config`, as split from the
+    /// registry, with the installer's external packages, and with the root
+    /// package as its parent when it is a namespaced module, which imports the
+    /// ROOT types it references from the root package's module. Its name stays
+    /// the namespace's, which is also its file name, so this sets the parent
+    /// without `with_parent`.
+    fn module_config(&self, config: &CodeGeneratorConfig) -> CodeGeneratorConfig {
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+        if config.module_name() != self.package_name {
+            updated_config.parent = Some(self.package_name.clone());
+        }
+        updated_config
     }
 
     /// Installs the serde TypeScript runtime sources into the output directory.
@@ -301,17 +404,7 @@ impl SourceInstaller for Installer {
         let file_name = self.install_dir.join(format!("{module_name}.ts"));
         let mut file = File::create(file_name)?;
 
-        // Update config with external packages from installer
-        let mut updated_config = config.clone();
-        updated_config.external_packages = self.external_packages.clone();
-
-        // A namespaced module imports the root types it references from the
-        // root package's module. Its name stays the namespace's, which is also
-        // its file name, so this sets the parent without `with_parent`.
-        if module_name != self.package_name {
-            updated_config.parent = Some(self.package_name.clone());
-        }
-
+        let updated_config = self.module_config(config);
         let generator =
             TypeScriptCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
@@ -334,3 +427,7 @@ impl SourceInstaller for Installer {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "collision_tests.rs"]
+mod collision_tests;

@@ -21,7 +21,7 @@
 //!    external packages.
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
     io::Write as _,
     path::{Path, PathBuf},
@@ -36,11 +36,18 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SourceInstaller,
-        csharp::{CSharp, CSharpCodeGenerator},
-        module,
+        collision::{self, Fix, Origin, TypeName},
+        csharp::{CSharp, CSharpCodeGenerator, naming},
+        module::{self, Module},
+        naming::mentions,
         plugin::EmitterPlugin,
+        registry_references,
     },
+    reflection::format::{Namespace, QualifiedTypeName},
 };
+/// The language name the collision errors begin with.
+const LANGUAGE: &str = "C#";
+
 /// Installer for generated source files in C#.
 pub struct Installer {
     package_name: String,
@@ -94,8 +101,16 @@ impl Installer {
     ///
     /// # Errors
     ///
-    /// Returns an error if any file operation or code generation step fails.
+    /// Returns an error if any file operation or code generation step fails,
+    /// and fails before writing anything when a namespace collides with a
+    /// type, a builtin or another namespace's source file, or when a name in
+    /// scope hides the first segment of a qualified type reference. Such
+    /// output would not build, or would lose a module; the error names the
+    /// namespace or package and what it collides with.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        let modules = module::split(&self.package_name, registry);
+        self.check_namespaces(&modules)?;
+
         // Unit.cs is always required (even with no plugins) because Format::Unit
         // maps to the C# Unit struct in generated type declarations.
         self.install_core_runtime()?;
@@ -130,15 +145,190 @@ impl Installer {
             }
         }
 
-        for (m, module_registry) in module::split(&self.package_name, registry) {
+        for (m, module_registry) in &modules {
             let config = m.config().clone().with_parent(&self.package_name);
-            self.install_module(&config, &module_registry)?;
+            self.install_module(&config, module_registry)?;
         }
 
         let package_name = self.package_name.clone();
         self.install_manifest(&package_name)?;
 
         Ok(())
+    }
+
+    /// Fails when a namespace's module cannot be generated as it is named.
+    ///
+    /// A namespace becomes the C# namespace `<RootPackage>.<Namespace>`, in
+    /// `UpperCamelCase`, written to `<root/package>/<namespace>/<Namespace>.cs`,
+    /// and it is a member of the root package's namespace, which every
+    /// generated module is nested in. So this fails when:
+    ///
+    /// - a namespace becomes the name of a ROOT type (`kv` beside `Kv`), which
+    ///   the root package's namespace cannot hold both of (CS0101).
+    /// - a namespace becomes the name of a builtin that the generated code
+    ///   writes unqualified (`unit` for `Unit`), when the registry has a
+    ///   format that writes it: every module would find the namespace instead.
+    /// - two modules' source files differ only in case (namespaces `kv` and
+    ///   `Kv`), which are the same file on a case-insensitive file system, so
+    ///   one module would be lost. These are rejected whatever the file
+    ///   system, so that the output does not depend on where it is generated.
+    /// - a module writes a qualified type reference whose first segment is
+    ///   the name of a type or namespace in scope there — one the module
+    ///   declares, a ROOT type, or a namespace (a ROOT type `Example` in
+    ///   package `Example`, or namespace `app` in package `App`) — which C#
+    ///   would look the rest of the reference up in.
+    ///
+    /// Namespaces provided by external packages are not generated, so they
+    /// are not checked.
+    fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        let generated: Vec<(CodeGeneratorConfig, &Registry)> = modules
+            .iter()
+            .filter(|(m, _)| match &m.config().namespace {
+                Namespace::Root => true,
+                Namespace::Named(namespace) => !self.external_packages.contains_key(namespace),
+            })
+            .map(|(m, registry)| {
+                let mut config = m.config().clone().with_parent(&self.package_name);
+                config.external_packages = self.external_packages.clone();
+                (config, registry)
+            })
+            .collect();
+        let root_types: Vec<&QualifiedTypeName> = generated
+            .iter()
+            .filter(|(config, _)| config.namespace == Namespace::Root)
+            .flat_map(|(_, registry)| registry.keys())
+            .collect();
+        // Each namespace, with the C# namespace it becomes and its last segment.
+        let namespaces: Vec<(&str, String, String)> = generated
+            .iter()
+            .filter_map(|(config, _)| match &config.namespace {
+                Namespace::Root => None,
+                Namespace::Named(namespace) => Some((
+                    namespace.as_str(),
+                    namespace_name(config.module_name()),
+                    namespace.to_upper_camel_case(),
+                )),
+            })
+            .collect();
+
+        for (namespace, csharp_namespace, name) in &namespaces {
+            let subject = format!("namespace \"{namespace}\" becomes `{csharp_namespace}`");
+            if let Some(declared) = root_types
+                .iter()
+                .find(|t| &t.name.to_upper_camel_case() == name)
+            {
+                return Err(collision::error(
+                    LANGUAGE,
+                    subject,
+                    TypeName(declared),
+                    Origin::Namespace(namespace).rename_type(),
+                )
+                .into());
+            }
+            if let Some((builtin, _)) = naming::QUALIFIED_FORMATS.iter().find(|(bare, uses)| {
+                bare == name
+                    && modules
+                        .values()
+                        .flat_map(Registry::values)
+                        .any(|container| mentions(container, *uses))
+            }) {
+                return Err(collision::error(
+                    LANGUAGE,
+                    subject,
+                    format_args!(
+                        "the builtin `{builtin}`, which the generated code writes unqualified, \
+                         so every module in `{}` would find the namespace instead",
+                        namespace_name(&self.package_name)
+                    ),
+                    Fix::ChooseNamespace,
+                )
+                .into());
+            }
+        }
+
+        collision::check_files(
+            LANGUAGE,
+            generated.iter().map(|(config, _)| {
+                (
+                    Origin::of_namespace(&config.namespace, &self.package_name),
+                    Self::source_path(config),
+                )
+            }),
+        )?;
+
+        for (config, registry) in &generated {
+            Self::check_qualified_references(config, registry, &root_types, &namespaces)?;
+        }
+
+        Ok(())
+    }
+
+    /// Fails when `registry`'s module writes a qualified type reference whose
+    /// first segment is the name of a type or namespace in scope there: a
+    /// type the module declares, a ROOT type (`root_types`), or a namespace
+    /// (`namespaces`, each with the C# namespace it becomes and its last
+    /// segment). C# resolves the first segment through ordinary lookup, so it
+    /// would look the rest of the reference up in that type or namespace.
+    fn check_qualified_references(
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+        root_types: &[&QualifiedTypeName],
+        namespaces: &[(&str, String, String)],
+    ) -> Result<(), Error> {
+        for reference in registry_references(registry) {
+            let qualified = CSharpCodeGenerator::requalify(config, &reference);
+            let Namespace::Named(path) = &qualified.namespace else {
+                continue;
+            };
+            let path = namespace_name(path);
+            let first = path.split('.').next().unwrap_or(&path);
+            let subject = format!(
+                "`{}` refers to {} as `{path}.{}`, whose first segment is `{first}`",
+                namespace_name(config.module_name()),
+                TypeName(&reference),
+                qualified.name.to_upper_camel_case(),
+            );
+            if let Some(hiding) = registry
+                .keys()
+                .chain(root_types.iter().copied())
+                .find(|t| t.name.to_upper_camel_case() == first)
+            {
+                return Err(collision::error(
+                    LANGUAGE,
+                    subject,
+                    TypeName(hiding),
+                    Fix::RenameTypeOrPackage,
+                )
+                .into());
+            }
+            if let Some((namespace, csharp_namespace, _)) =
+                namespaces.iter().find(|(_, _, name)| name == first)
+            {
+                return Err(collision::error(
+                    LANGUAGE,
+                    subject,
+                    format_args!("namespace \"{namespace}\", which becomes `{csharp_namespace}`"),
+                    Fix::ChooseNamespaceOrPackage,
+                )
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Where [`install_module`](SourceInstaller::install_module) writes the
+    /// module for `config`, relative to the install directory, with `/` as
+    /// the separator: the module name's directory, and a file named after its
+    /// last segment.
+    fn source_path(config: &CodeGeneratorConfig) -> String {
+        let file_name = config
+            .module_name()
+            .rsplit('.')
+            .next()
+            .unwrap_or_else(|| config.module_name())
+            .to_upper_camel_case();
+        format!("{}/{file_name}.cs", config.module_name().replace('.', "/"))
     }
 
     /// Produce the contents of a `.csproj` project file.
@@ -307,5 +497,18 @@ impl SourceInstaller for Installer {
     }
 }
 
+/// The C# spelling of the dotted module name `name`, as the emitter declares
+/// and qualifies it: each segment in `UpperCamelCase`.
+fn namespace_name(name: &str) -> String {
+    name.split('.')
+        .map(str::to_upper_camel_case)
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "collision_tests.rs"]
+mod collision_tests;

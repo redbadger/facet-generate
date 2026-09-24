@@ -11,9 +11,9 @@ use heck::ToUpperCamelCase;
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
-        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+        naming::{EscapeStyle, ForbiddenNames, FormatBoundNames, NamingRules, qualify},
     },
-    reflection::format::Namespace,
+    reflection::format::{Format, Namespace},
 };
 
 /// C# keywords, sorted.
@@ -119,6 +119,29 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ),
     ("UInt128", "global::System.UInt128"),
     ("Unit", "global::Facet.Runtime.Serde.Unit"),
+];
+
+/// The formats each entry of [`QUALIFIED`] is written for, so a registry that
+/// has none of them never writes that builtin. Sorted by the bare name.
+///
+/// A namespace named after a builtin cannot be qualified around, as a type
+/// can: it is a member of the root package's namespace, which every generated
+/// module is nested in, so the installer rejects it when the registry has a
+/// format that writes the builtin bare.
+pub(crate) const QUALIFIED_FORMATS: FormatBoundNames = &[
+    ("Dictionary", |format| matches!(format, Format::Map { .. })),
+    ("Guid", |format| matches!(format, Format::Uuid)),
+    ("HashSet", |format| matches!(format, Format::Set(_))),
+    ("Int128", |format| matches!(format, Format::I128)),
+    ("ObservableCollection", |format| {
+        matches!(format, Format::Seq(_))
+    }),
+    ("UInt128", |format| matches!(format, Format::U128)),
+    ("Unit", |format| match format {
+        Format::Unit => true,
+        Format::Tuple(formats) => formats.is_empty(),
+        _ => false,
+    }),
 ];
 
 /// Type names the generated module already uses for something else, with the
@@ -289,6 +312,13 @@ mod tests {
             FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
             "FORBIDDEN_MEMBERS must be sorted by name"
         );
+    }
+
+    #[test]
+    fn every_qualified_builtin_has_its_formats() {
+        let qualified: Vec<&str> = QUALIFIED.iter().map(|(bare, _)| *bare).collect();
+        let with_formats: Vec<&str> = QUALIFIED_FORMATS.iter().map(|(bare, _)| *bare).collect();
+        assert_eq!(qualified, with_formats);
     }
 
     #[test]

@@ -62,6 +62,19 @@ mod config;
 /// language's reserved words.
 pub(crate) mod naming;
 
+/// The error the installers report when a namespace's generated name collides
+/// with a type, the root package or another namespace.
+#[cfg_attr(
+    not(any(
+        feature = "swift",
+        feature = "typescript",
+        feature = "kotlin",
+        feature = "csharp"
+    )),
+    allow(dead_code)
+)]
+pub(crate) mod collision;
+
 use std::io::{Result, Write};
 
 pub use config::*;
