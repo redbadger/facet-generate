@@ -2213,6 +2213,114 @@ fn ambiguous_namespace_inheritance_should_error() {
 }
 
 #[test]
+/// Two *different* types that share an identifier, one explicitly in `a` and one inherited into
+/// `b`, are two types in two namespaces — not one type with an ambiguous namespace (#138).
+fn different_types_with_same_name_in_different_namespaces_are_not_ambiguous() {
+    mod one {
+        use crate as fg;
+        use facet::Facet;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "a")]
+        pub struct Child {
+            pub x: u8,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Child {
+            pub y: u8,
+        }
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    struct Parent {
+        first: one::Child,
+        second: two::Child, // inherits "b"
+    }
+
+    let registry = reflect!(Parent).unwrap();
+
+    insta::assert_yaml_snapshot!(registry, @"
+    ? namespace:
+        NAMED: a
+      name: Child
+    : STRUCT:
+        - - x:
+              - U8
+              - []
+        - []
+    ? namespace:
+        NAMED: b
+      name: Child
+    : STRUCT:
+        - - y:
+              - U8
+              - []
+        - []
+    ? namespace:
+        NAMED: b
+      name: Parent
+    : STRUCT:
+        - - first:
+              - TYPENAME:
+                  namespace:
+                    NAMED: a
+                  name: Child
+              - []
+          - second:
+              - TYPENAME:
+                  namespace:
+                    NAMED: b
+                  name: Child
+              - []
+        - []
+    ");
+}
+
+#[test]
+/// A transparent wrapper is the type it wraps, so reaching a type both directly and through a
+/// wrapper under two inherited namespaces is still ambiguous.
+fn ambiguous_namespace_inheritance_through_transparent_wrapper_should_error() {
+    #[derive(Facet)]
+    struct SharedType {
+        value: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(transparent)]
+    struct Wrapper(SharedType);
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "namespace_a")]
+    struct ParentA {
+        shared: SharedType,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "namespace_b")]
+    struct ParentB {
+        shared: Wrapper,
+    }
+
+    #[derive(Facet)]
+    struct Root {
+        parent_a: ParentA,
+        parent_b: ParentB,
+    }
+
+    let err = reflect!(Root).unwrap_err();
+
+    insta::assert_snapshot!(
+        err.root_cause(),
+        @r#"failed to add type Root: ambiguous namespace inheritance: "SharedType" in both "namespace_a" and "namespace_b""#
+    );
+}
+
+#[test]
 fn duplicate_names_in_same_explicit_namespace_error() {
     mod one {
         use crate as fg;
