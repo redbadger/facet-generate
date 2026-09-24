@@ -740,3 +740,136 @@ fn test_that_swift_code_with_no_root_types_compiles() {
 
     assert_installed_package_compiles(&registry, BincodePlugin);
 }
+
+/// A type holding a type from another module that isn't `Hashable` is not
+/// declared `Hashable` either, and the package builds (#156): `Kit.Holder` has
+/// a native tuple field, so it is only `Equatable`, and `SwHash` holds it.
+#[test]
+fn test_that_swift_code_holding_a_non_hashable_type_from_another_module_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type holding a type from another module that is neither `Equatable` nor
+/// `Hashable` is declared neither, and the package builds (#156): `Kit.Holder`
+/// has a `Void` field.
+#[test]
+fn test_that_swift_code_holding_a_non_equatable_type_from_another_module_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        u: (),
+    }
+
+    #[derive(Facet)]
+    struct SwEq {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwEq).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// Non-conformance propagates across two module boundaries (root → kit →
+/// other), through generic containers (#156).
+#[test]
+fn test_that_swift_code_with_non_conformance_across_modules_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Leaf {
+        pair: (u32, u32),
+        unit: Vec<()>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Middle {
+        leaves: Vec<Leaf>,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        middle: Option<Middle>,
+        by_name: BTreeMap<String, Middle>,
+    }
+
+    let registry = reflect!(Top).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type in a cycle is not `Hashable` when another type in the cycle isn't,
+/// whichever of them is looked at first, and a type in another module holding
+/// it is not declared `Hashable` either (#156). `Ping` is looked at first; it
+/// holds a native tuple and a `Pong`, which holds only a `Ping`.
+#[test]
+fn test_that_swift_code_holding_a_type_in_a_non_hashable_cycle_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Ping {
+        Pong(Box<Pong>),
+        Pair((u32, u32)),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Pong {
+        Done,
+        Ping(Box<Ping>),
+    }
+
+    #[derive(Facet)]
+    struct HoldsPong {
+        pong: Pong,
+    }
+
+    let registry = reflect!(HoldsPong).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type holding a type that can't be compared with `==` (an array of native
+/// tuples, which is not `Equatable`) is not declared `Equatable`, in the same
+/// module or another: a type's conformance is decided with the rules it is
+/// declared with.
+#[test]
+fn test_that_swift_code_holding_an_array_of_tuples_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Pairs {
+        pairs: Vec<(u32, u32)>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct HoldsPairs {
+        pairs: Pairs,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        pairs: Pairs,
+        holds: HoldsPairs,
+    }
+
+    let registry = reflect!(Top).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}

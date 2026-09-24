@@ -27,6 +27,7 @@
 //!    namespace into per-module files, and generates a `Package.swift` manifest
 //!    with SPM targets.
 
+mod conformance;
 pub(crate) mod emitter;
 mod generator;
 mod installer;

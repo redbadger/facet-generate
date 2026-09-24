@@ -44,7 +44,7 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
         SourceInstaller, module,
         plugin::EmitterPlugin,
-        swift::{Swift, generator::SwiftCodeGenerator},
+        swift::{Swift, conformance::Conformance, generator::SwiftCodeGenerator},
     },
 };
 
@@ -73,6 +73,11 @@ pub struct Installer {
     external_packages: ExternalPackages,
     platforms: Vec<String>,
     plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
+    /// Which types conform to `Hashable` and `Equatable`, decided once over
+    /// the whole registry by [`generate`](Self::generate) and handed to every
+    /// module's generator, so that a module holding a type from another one
+    /// agrees with it on its conformance.
+    conformance: Option<Arc<Conformance>>,
 }
 
 impl Installer {
@@ -93,6 +98,7 @@ impl Installer {
             external_packages: ExternalPackages::new(),
             platforms: vec![],
             plugins: vec![],
+            conformance: None,
         }
     }
 
@@ -168,6 +174,10 @@ impl Installer {
                 }
             }
         }
+
+        // Decide conformance over the whole registry, since a module's types
+        // can hold types from other modules.
+        self.conformance = Some(Arc::new(Conformance::of(registry, &self.external_packages)));
 
         // Split by namespace and install each module
         for (m, module_registry) in module::split(&self.package_name, registry) {
@@ -528,7 +538,11 @@ impl SourceInstaller for Installer {
         // The references the registry and the plugins make decide both the
         // module's imports and its target's dependencies, so the generator
         // works out its config once and the installer reads the edges from it.
-        let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let mut generator =
+            SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        if let Some(conformance) = &self.conformance {
+            generator = generator.with_conformance(conformance.clone());
+        }
         let module_config = generator.module_config(registry)?;
 
         let targets = self.targets.entry(module_name.clone()).or_default();

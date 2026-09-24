@@ -1450,3 +1450,246 @@ fn a_plugin_s_target_dependencies_with_no_root_types() {
     )
     "#);
 }
+
+/// A plugin with no output of its own: with it, the generated types declare
+/// their `Hashable` and `Equatable` conformance, and nothing else.
+#[derive(Debug)]
+struct DeclaresConformance;
+
+impl EmitterPlugin<Swift> for DeclaresConformance {}
+
+/// Generates `registry` as the package `Example` with
+/// [`DeclaresConformance`] and the given external packages, returning the
+/// line declaring each type, keyed by module.
+fn declarations(
+    registry: &crate::Registry,
+    external_packages: &[ExternalPackage],
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .external_packages(external_packages)
+        .plugin(DeclaresConformance)
+        .generate(registry)
+        .unwrap();
+
+    let mut declarations = std::collections::BTreeMap::new();
+    for entry in std::fs::read_dir(install_dir.path().join("Sources")).unwrap() {
+        let module = entry.unwrap().file_name().into_string().unwrap();
+        let source = std::fs::read_to_string(
+            install_dir
+                .path()
+                .join("Sources")
+                .join(&module)
+                .join(format!("{module}.swift")),
+        )
+        .unwrap();
+        declarations.insert(
+            module,
+            source
+                .lines()
+                .filter(|line| line.starts_with("public struct") || line.contains("public enum"))
+                .map(str::to_string)
+                .collect(),
+        );
+    }
+    declarations
+}
+
+/// A type holding a type from another module that is `Equatable` but not
+/// `Hashable` (a native tuple field) is declared `Equatable` only (#156).
+#[test]
+fn a_type_holding_a_non_hashable_type_from_another_module_is_not_hashable() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct SwHash: Equatable {",
+        ],
+        "Kit": [
+            "public struct Holder: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type holding a type from another module that is neither `Equatable` nor
+/// `Hashable` (a `Void` field) is declared neither (#156).
+#[test]
+fn a_type_holding_a_non_equatable_type_from_another_module_is_neither() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        u: (),
+    }
+
+    #[derive(Facet)]
+    struct SwEq {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwEq).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct SwEq {",
+        ],
+        "Kit": [
+            "public struct Holder {",
+        ],
+    }
+    "#);
+}
+
+/// Non-conformance propagates across two module boundaries, root → kit →
+/// other, through generic containers (#156).
+#[test]
+fn non_conformance_propagates_across_two_modules() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Pair {
+        pair: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Nothing {
+        id: u32,
+        unit: (),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Pairs {
+        pairs: Vec<Pair>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Nothings {
+        nothings: std::collections::BTreeMap<String, Nothing>,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        pairs: Option<Pairs>,
+        nothings: Box<Nothings>,
+    }
+
+    #[derive(Facet)]
+    struct TopPairs {
+        pairs: Vec<Option<Pairs>>,
+    }
+
+    let registry = reflect!(Top, TopPairs).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct Top {",
+            "public struct TopPairs: Equatable {",
+        ],
+        "Kit": [
+            "public struct Nothings {",
+            "public struct Pairs: Equatable {",
+        ],
+        "Other": [
+            "public struct Nothing {",
+            "public struct Pair: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type in a cycle is not `Hashable` when another type in the cycle isn't,
+/// even when the type looked at first is the one that isn't, and a type in
+/// another module holding it is not either (#156). `Ping` comes first; it
+/// holds a native tuple and a `Pong`, which holds only a `Ping`.
+#[test]
+fn a_type_in_a_non_hashable_cycle_is_not_hashable_in_any_module() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Ping {
+        Pong(Box<Pong>),
+        Pair((u32, u32)),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Pong {
+        Done,
+        Ping(Box<Ping>),
+    }
+
+    #[derive(Facet)]
+    struct HoldsPong {
+        pong: Pong,
+    }
+
+    let registry = reflect!(HoldsPong).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct HoldsPong: Equatable {",
+        ],
+        "Kit": [
+            "indirect public enum Ping: Equatable {",
+            "indirect public enum Pong: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type from an external package is generated elsewhere, so a type holding
+/// it assumes it conforms to both protocols, whatever its fields.
+#[test]
+fn a_type_from_an_external_package_is_assumed_to_conform() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "api")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    insta::assert_debug_snapshot!(
+        declarations(
+            &registry,
+            &[ExternalPackage {
+                for_namespace: "api".to_string(),
+                location: PackageLocation::Path("../Api".to_string()),
+                module_name: None,
+                version: None,
+            }]
+        ),
+        @r#"
+    {
+        "Example": [
+            "public struct SwHash: Hashable, Equatable {",
+        ],
+    }
+    "#
+    );
+}
