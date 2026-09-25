@@ -12,7 +12,9 @@ public abstract record KeywordEnum {
 
     public sealed record Switch(string Value) : KeywordEnum;
 
-    public sealed record Where(int In, string Default) : KeywordEnum;
+    public sealed record Where(int In, string Default) : KeywordEnum {
+        public new string Default { get; init; } = Default;
+    }
 
 }
 

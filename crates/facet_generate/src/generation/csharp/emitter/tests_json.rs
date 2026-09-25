@@ -1151,7 +1151,9 @@ fn keyword_enum() {
 
         public sealed record Switch(string Value) : KeywordEnum;
 
-        public sealed record Where(int In, string Default) : KeywordEnum;
+        public sealed record Where(int In, string Default) : KeywordEnum {
+            public new string Default { get; init; } = Default;
+        }
 
         public string JsonSerialize()
         {
@@ -1191,6 +1193,78 @@ fn property_named_like_the_json_runtime_class_qualifies_calls_on_it() {
         public static Wire JsonDeserialize(string input)
         {
             return global::Facet.Runtime.Json.JsonSerde.Deserialize<Wire>(input);
+        }
+    }
+    "#);
+}
+
+/// A variant named like a type it holds, or like a sibling's property
+/// (#174): the type is written through its `global::` name, and the property
+/// is declared again with `new`.
+#[test]
+fn variants_named_like_a_payload_type_or_a_sibling_property() {
+    #[derive(Facet)]
+    struct Presence {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Event {
+        Presence(Presence),
+        Seen { presence: u32, other: Presence },
+        Value,
+        Wrap(u32),
+    }
+
+    let actual = emit!(Event as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+    [JsonDerivedType(typeof(Presence), "Presence")]
+    [JsonDerivedType(typeof(Seen), "Seen")]
+    [JsonDerivedType(typeof(Value), "Value")]
+    [JsonDerivedType(typeof(Wrap), "Wrap")]
+    public abstract record Event {
+        public sealed record Presence(global::Test.Presence Value) : Event {
+            public new global::Test.Presence Value { get; init; } = Value;
+        }
+
+        public sealed record Seen(uint Presence, global::Test.Presence Other) : Event {
+            public new uint Presence { get; init; } = Presence;
+        }
+
+        public sealed record Value() : Event;
+
+        public sealed record Wrap(uint Value) : Event {
+            public new uint Value { get; init; } = Value;
+        }
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Event JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Event>(input);
+        }
+    }
+
+    public partial class Presence : ObservableObject {
+        [JsonPropertyName("x")]
+        [ObservableProperty]
+        private uint _x;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Presence JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Presence>(input);
         }
     }
     "#);

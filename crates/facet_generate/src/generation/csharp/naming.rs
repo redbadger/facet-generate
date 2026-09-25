@@ -287,6 +287,29 @@ pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
         .any(|declared| declared.to_upper_camel_case() == name)
 }
 
+/// `name`, a type of `namespace` as the emitter writes it, spelled through
+/// `global::` so no member of an enclosing type can hide it. A bare name is a
+/// type of the module's own namespace; any other is already written from the
+/// root package.
+pub(crate) fn global_name(
+    name: &str,
+    namespace: &Namespace,
+    config: &CodeGeneratorConfig,
+) -> String {
+    match namespace {
+        Namespace::Root => {
+            let module = config
+                .module_name
+                .split('.')
+                .map(str::to_upper_camel_case)
+                .collect::<Vec<_>>()
+                .join(".");
+            format!("global::{module}.{name}")
+        }
+        Namespace::Named(_) => format!("global::{name}"),
+    }
+}
+
 /// The C# spelling of the builtin type `name`: fully qualified with
 /// `global::` when a declaration in the generated namespace shadows it, and
 /// bare otherwise.

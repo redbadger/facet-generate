@@ -54,7 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::builtin;
+use super::naming::{builtin, global_name};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -459,6 +459,14 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
 
 /// Write the `sealed record` declaration for each variant of an
 /// `abstract record` hierarchy.
+///
+/// Every variant record is a nested type of the base record, so inside the
+/// hierarchy a variant's name hides a type of the same name
+/// (redbadger/facet-generate#174). A type named like a variant is written
+/// through its `global::` name, and a positional property named like one is
+/// declared again with `new`: otherwise the record would take the inherited
+/// nested type for the property (CS8866). Neither changes a record that
+/// doesn't clash.
 fn write_variant_records<W: IndentWrite>(
     w: &mut W,
     base_name: &str,
@@ -466,48 +474,51 @@ fn write_variant_records<W: IndentWrite>(
     partial: &str,
     lang: &CSharp,
 ) -> Result<()> {
+    let nested: Vec<String> = variants
+        .iter()
+        .map(|variant| variant.name.to_upper_camel_case())
+        .collect();
+    let render = |format: &Format| csharp_type_in(format, &lang.config, &nested);
+
     for variant in variants {
         variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
-        write!(w, "public sealed{partial} record {variant_name}")?;
-        match &variant.value {
-            VariantFormat::Unit => {
-                writeln!(w, "() : {base_name};")?;
-            }
-            VariantFormat::NewType(inner) => {
-                writeln!(
-                    w,
-                    "({} Value) : {};",
-                    csharp_type(inner, &lang.config),
-                    base_name
-                )?;
-            }
-            VariantFormat::Tuple(values) => {
-                write!(w, "(")?;
-                for (index, format) in values.iter().enumerate() {
-                    if index > 0 {
-                        write!(w, ", ")?;
-                    }
-                    write!(w, "{} Field{}", csharp_type(format, &lang.config), index)?;
-                }
-                writeln!(w, ") : {base_name};")?;
-            }
-            VariantFormat::Struct(fields) => {
-                write!(w, "(")?;
-                for (index, field) in fields.iter().enumerate() {
-                    if index > 0 {
-                        write!(w, ", ")?;
-                    }
-                    write!(
-                        w,
-                        "{} {}",
-                        csharp_type(&field.value, &lang.config),
-                        field.name.to_upper_camel_case()
-                    )?;
-                }
-                writeln!(w, ") : {base_name};")?;
-            }
+        let properties: Vec<(String, String)> = match &variant.value {
+            VariantFormat::Unit => vec![],
+            VariantFormat::NewType(inner) => vec![(render(inner), "Value".to_string())],
+            VariantFormat::Tuple(values) => values
+                .iter()
+                .enumerate()
+                .map(|(index, format)| (render(format), format!("Field{index}")))
+                .collect(),
+            VariantFormat::Struct(fields) => fields
+                .iter()
+                .map(|field| (render(&field.value), field.name.to_upper_camel_case()))
+                .collect(),
             VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
+        };
+        let parameters = properties
+            .iter()
+            .map(|(ty, name)| format!("{ty} {name}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(
+            w,
+            "public sealed{partial} record {variant_name}({parameters}) : {base_name}"
+        )?;
+
+        let hiding: Vec<_> = properties
+            .iter()
+            .filter(|(_, name)| nested.contains(name))
+            .collect();
+        if hiding.is_empty() {
+            writeln!(w, ";")?;
+        } else {
+            write!(w, " ")?;
+            let mut w = w.block(Newlines::BOTH)?;
+            for (ty, name) in hiding {
+                writeln!(w, "public new {ty} {name} {{ get; init; }} = {name};")?;
+            }
         }
         writeln!(w)?;
     }
@@ -624,9 +635,25 @@ pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
 }
 
 fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    csharp_type_in(format, config, &[])
+}
+
+/// [`csharp_type`] inside a type whose nested types are named `nested`: a type
+/// whose first name segment is one of them is written through its `global::`
+/// name, which they can't hide.
+fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[String]) -> String {
+    let render = |format: &Format| csharp_type_in(format, config, nested);
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qualified_type_name) => format_qualified_type_name(qualified_type_name),
+        Format::TypeName(qualified_type_name) => {
+            let name = format_qualified_type_name(qualified_type_name);
+            let first = name.split('.').next().unwrap_or(&name);
+            if nested.iter().any(|nested| nested == first) {
+                global_name(&name, &qualified_type_name.namespace, config)
+            } else {
+                name
+            }
+        }
         Format::Unit => builtin("Unit", config).into_owned(),
         Format::Bool => "bool".to_string(),
         Format::I8 => "sbyte".to_string(),
@@ -645,37 +672,29 @@ fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
         Format::Uuid => builtin("Guid", config).into_owned(),
-        Format::Option(inner) => format!("{}?", csharp_type(inner, config)),
+        Format::Option(inner) => format!("{}?", render(inner)),
         Format::Seq(inner) => format!(
             "{}<{}>",
             builtin("ObservableCollection", config),
-            csharp_type(inner, config)
+            render(inner)
         ),
-        Format::Set(inner) => format!(
-            "{}<{}>",
-            builtin("HashSet", config),
-            csharp_type(inner, config)
-        ),
+        Format::Set(inner) => format!("{}<{}>", builtin("HashSet", config), render(inner)),
         Format::Map { key, value } => {
             format!(
                 "{}<{}, {}>",
                 builtin("Dictionary", config),
-                csharp_type(key, config),
-                csharp_type(value, config)
+                render(key),
+                render(value)
             )
         }
         Format::Tuple(formats) => {
             if formats.is_empty() {
                 return builtin("Unit", config).into_owned();
             }
-            let values = formats
-                .iter()
-                .map(|f| csharp_type(f, config))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let values = formats.iter().map(render).collect::<Vec<_>>().join(", ");
             format!("({values})")
         }
-        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content, config)),
+        Format::TupleArray { content, size: _ } => format!("{}[]", render(content)),
     }
 }
 

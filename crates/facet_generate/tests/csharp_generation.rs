@@ -357,3 +357,89 @@ fn test_that_csharp_code_with_properties_named_like_types_compiles() {
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// Enums whose variants share a name with a type a variant holds, or with a
+/// property of a sibling variant (redbadger/facet-generate#174).
+///
+/// Each variant is a record nested in the enum's base record, so inside the
+/// hierarchy a variant's name hides the type of the same name, and a
+/// positional property named like a variant collides with the nested record
+/// it inherits.
+#[allow(dead_code)]
+mod named_like_variants {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Presence {
+        pub x: u32,
+    }
+
+    /// The issue's repro. Before the fix, with either plugin:
+    ///
+    /// ```text
+    /// error CS8910: The primary constructor conflicts with the synthesized copy constructor.
+    /// error CS8866: Record member 'Example.Event.Presence' must be a readable instance property or field of type 'uint' to match positional parameter 'Presence'.
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Event {
+        Presence(Presence),
+        Seen { presence: u32, other: Presence },
+    }
+
+    /// `Presence` in `Seen` meant the variant `Sighting.Presence`. With JSON
+    /// that compiled, to the wrong type; with bincode:
+    ///
+    /// ```text
+    /// error CS1503: Argument 1: cannot convert from 'Example.Presence' to 'Example.Sighting.Presence'
+    /// error CS1503: Argument 2: cannot convert from 'System.Collections.ObjectModel.ObservableCollection<Example.Presence>' to 'System.Collections.ObjectModel.ObservableCollection<Example.Sighting.Presence?>'
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Sighting {
+        Presence {
+            x: u32,
+        },
+        Seen {
+            other: Presence,
+            others: Vec<Option<Presence>>,
+        },
+    }
+
+    /// The properties a newtype and a tuple variant name themselves. Before
+    /// the fix, with either plugin:
+    ///
+    /// ```text
+    /// error CS8866: Record member 'Example.Shape.Value' must be a readable instance property or field of type 'uint' to match positional parameter 'Value'.
+    /// error CS8866: Record member 'Example.Shape.Field0' must be a readable instance property or field of type 'uint' to match positional parameter 'Field0'.
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Shape {
+        Value { x: u32 },
+        Wrap(u32),
+        Pair(u32, u32),
+        Field0,
+    }
+}
+
+#[test]
+fn test_that_csharp_code_with_variants_named_like_types_or_properties_compiles() {
+    use named_like_variants::{Event, Shape, Sighting};
+
+    let registry = reflect!(Event, Sighting, Shape).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

@@ -452,6 +452,87 @@ Console.WriteLine("Root and namespace roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// The repro of redbadger/facet-generate#174 round trips: a variant named like
+/// the type it holds, and a property named like a sibling variant, which the
+/// variant's record declares again to hide the nested record it inherits.
+#[test]
+fn test_csharp_bincode_runtime_on_variants_named_like_types_or_properties() {
+    #[derive(Facet, Serialize)]
+    struct Presence {
+        x: u32,
+    }
+
+    #[derive(Facet, Serialize)]
+    #[repr(C)]
+    enum Event {
+        Presence(Presence),
+        Seen { presence: u32, other: Presence },
+    }
+
+    #[derive(Facet, Serialize)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Shape {
+        Value { x: u32 },
+        Wrap(u32),
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&reflect!(Event, Shape).unwrap())
+        .unwrap();
+
+    let presence = bincode::serialize(&Event::Presence(Presence { x: 5 })).unwrap();
+    let seen = bincode::serialize(&Event::Seen {
+        presence: 3,
+        other: Presence { x: 4 },
+    })
+    .unwrap();
+    let wrap = bincode::serialize(&Shape::Wrap(9)).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] presenceBytes = {presence};
+var presence = Event.BincodeDeserialize(presenceBytes);
+Assert(presence is Event.Presence {{ Value.X: 5 }}, "Presence(Presence {{ x: 5 }})");
+Assert(presenceBytes.SequenceEqual(presence.BincodeSerialize()), "Presence did not roundtrip");
+
+byte[] seenBytes = {seen};
+var seen = Event.BincodeDeserialize(seenBytes);
+Assert(seen is Event.Seen {{ Presence: 3, Other.X: 4 }}, "Seen {{ presence: 3, other: Presence {{ x: 4 }} }}");
+Assert(seenBytes.SequenceEqual(seen.BincodeSerialize()), "Seen did not roundtrip");
+
+byte[] wrapBytes = {wrap};
+var wrap = Shape.BincodeDeserialize(wrapBytes);
+Assert(wrap is Shape.Wrap {{ Value: 9 }}, "Wrap(9)");
+Assert(wrapBytes.SequenceEqual(wrap.BincodeSerialize()), "Wrap did not roundtrip");
+
+Console.WriteLine("Variants named like types or properties roundtrip: PASSED");
+"#,
+            presence = quote_bytes(&presence),
+            seen = quote_bytes(&seen),
+            wrap = quote_bytes(&wrap),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 #[test]
 #[ignore = "too slow for now, let's fix it later"]
 fn test_csharp_bincode_runtime_on_supported_types() {

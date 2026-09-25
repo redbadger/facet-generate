@@ -352,16 +352,10 @@ impl<'a> Scope<'a> {
             format_qualified_type_name(qualified_type_name)
         );
         let type_name = suffix.is_empty().then_some(qualified_type_name);
-        if !self.hides(&name, type_name) {
-            return name;
-        }
-        match qualified_type_name.namespace {
-            // A bare name is a type of the module's own namespace.
-            Namespace::Root => {
-                format!("global::{}.{name}", namespace_name(&self.cfg.module_name))
-            }
-            // Any other namespace is already written from the root package.
-            Namespace::Named(_) => format!("global::{name}"),
+        if self.hides(&name, type_name) {
+            naming::global_name(&name, &qualified_type_name.namespace, self.cfg)
+        } else {
+            name
         }
     }
 
