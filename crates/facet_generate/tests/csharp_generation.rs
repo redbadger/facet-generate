@@ -192,6 +192,81 @@ fn test_that_csharp_code_shadowing_builtin_names_compiles_with_bincode() {
     dotnet_build(&dir);
 }
 
+/// The JSON converters of types shadowing builtins still reach them.
+#[test]
+fn test_that_csharp_code_shadowing_builtin_names_compiles_with_json() {
+    let registry = common::get_shadowing_registry();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
+/// Types named like the `System.Text.Json` and runtime types a JSON converter
+/// names, or like the members it inherits from `JsonConverter<T>`, which the
+/// converter reaches through their qualified names.
+#[test]
+fn test_that_csharp_code_shadowing_json_converter_names_compiles_with_json() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Utf8JsonReader {
+        r#type: Type,
+        options: Option<JsonSerializerOptions>,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Type {
+        A,
+        B,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Utf8JsonWriter(u8);
+
+    #[derive(Facet)]
+    struct JsonSerializerOptions;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Read {
+        Write(Write),
+        Other { writer: Utf8JsonWriter },
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Write {
+        reader: Vec<Utf8JsonReader>,
+        json_enum: Option<JsonEnum>,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct JsonEnum {
+        facet_json: FacetJson,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct FacetJson(u8, Type);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&reflect!(Read).unwrap())
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
 /// A unit-only enum from another namespace goes through its helper class,
 /// qualified like the type (`Example.Kit.PresenceBincode`), and the ROOT
 /// `Unit` struct, which shadows the runtime's `Unit` in the `Kit` namespace

@@ -244,6 +244,12 @@ fn test_generate_json_encoding_installs_serde_but_not_bincode() {
             .join("Facet/Runtime/Json/JsonSerde.cs")
             .exists()
     );
+    assert!(
+        install_dir
+            .path()
+            .join("Facet/Runtime/Json/FacetJson.cs")
+            .exists()
+    );
     assert!(!install_dir.path().join("Facet/Runtime/Bincode").exists());
 }
 

@@ -29,9 +29,9 @@
 //! encoding-specific behaviour is delegated to those plugins — the emitter
 //! itself contains no encoding checks. For example:
 //!
-//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonPropertyName]`,
-//!   `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
-//!   `JsonSerde` static helper methods.
+//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonConverter]`,
+//!   `[JsonPropertyName]`), a `JsonConverter` for each type, and `JsonSerde`
+//!   static helper methods.
 //! - `BincodePlugin` supplies `IFacetSerializable`/`IFacetDeserializable<T>`
 //!   interface implementations with `Serialize`/`Deserialize` methods and
 //!   `BincodeSerialize`/`BincodeDeserialize` wrappers.
@@ -287,6 +287,7 @@ fn write_sealed_record<W: IndentWrite>(
 
     let record_name = name.to_upper_camel_case();
     let ctx = EmitContext::top_level(container, &lang.config);
+    write_type_annotations(w, &ctx, lang)?;
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -311,6 +312,19 @@ fn write_sealed_record<W: IndentWrite>(
     write_after_type(w, &ctx, lang)
 }
 
+/// Write the plugin type annotations (e.g. `[JsonConverter(…)]`) for a
+/// top-level type, each on its own line.
+fn write_type_annotations<W: IndentWrite>(
+    w: &mut W,
+    ctx: &EmitContext<'_>,
+    lang: &CSharp,
+) -> Result<()> {
+    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(ctx)) {
+        writeln!(w, "{annotation}")?;
+    }
+    Ok(())
+}
+
 /// Run the plugin `after_type` hook for a top-level type, at the indentation
 /// level of the type declaration itself.
 fn write_after_type<W: IndentWrite>(w: &mut W, ctx: &EmitContext<'_>, lang: &CSharp) -> Result<()> {
@@ -332,6 +346,7 @@ fn write_class<W: IndentWrite>(
 
     let class_name = name.to_upper_camel_case();
     let ctx = EmitContext::top_level(container, &lang.config);
+    write_type_annotations(w, &ctx, lang)?;
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -383,11 +398,7 @@ fn write_enum<W: IndentWrite>(
     let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
-
-    // Type annotations from plugins (e.g. [JsonConverter(typeof(JsonStringEnumConverter))]).
-    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(&ctx)) {
-        writeln!(w, "{annotation}")?;
-    }
+    write_type_annotations(w, &ctx, lang)?;
 
     write!(w, "public enum {enum_name} ")?;
     {
@@ -420,11 +431,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
-
-    // Type annotations from plugins (e.g. [JsonPolymorphic] + [JsonDerivedType(…)]).
-    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(&ctx)) {
-        writeln!(w, "{annotation}")?;
-    }
+    write_type_annotations(w, &ctx, lang)?;
 
     // Type conformances from plugins (e.g. IFacetSerializable, IFacetDeserializable<T>).
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
@@ -636,6 +643,41 @@ pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
 
 fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     csharp_type_in(format, config, &[])
+}
+
+/// [`render_type`] inside a type whose members named `hidden` would hide a
+/// type of the same name: such a type is written through its `global::` name.
+pub(crate) fn render_type_hiding(
+    format: &Format,
+    config: &CodeGeneratorConfig,
+    hidden: &[String],
+) -> String {
+    csharp_type_in(format, config, hidden)
+}
+
+/// Whether the C# type of `format` is a value type — a primitive, `Guid`, a
+/// tuple, `Unit` or a C-style enum — so that its option is a `Nullable<T>`.
+pub(crate) fn is_value_type(format: &Format, config: &CodeGeneratorConfig) -> bool {
+    matches!(
+        format,
+        Format::Unit
+            | Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::I64
+            | Format::I128
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::U64
+            | Format::U128
+            | Format::F32
+            | Format::F64
+            | Format::Char
+            | Format::Uuid
+            | Format::Tuple(_)
+    ) || matches!(format, Format::TypeName(name) if config.is_unit_enum(name))
 }
 
 /// [`csharp_type`] inside a type whose nested types are named `nested`: a type

@@ -4,7 +4,7 @@
 //!
 //! 1. **Runtime files** — always installs `Unit.cs` (core), then conditionally
 //!    `ISerializer.cs`/`IDeserializer.cs`/error types (serde),
-//!    `JsonSerde.cs` + `ObservableCollectionJsonConverterFactory` (JSON), or
+//!    `JsonSerde.cs` + `FacetJson.cs` (JSON), or
 //!    `BincodeSerializer.cs`/`BincodeDeserializer.cs`/`IFacetSerializable.cs`/
 //!    `IFacetDeserializable.cs` (Bincode). All placed under `Facet/Runtime/`
 //!    subdirectories.

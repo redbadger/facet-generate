@@ -39,5 +39,6 @@ mod installer;
 pub(crate) mod naming;
 
 pub use emitter::{CSharp, escape_identifier, render_type, requalify, requalify_format};
+pub(crate) use emitter::{is_value_type, render_type_hiding};
 pub use generator::CSharpCodeGenerator;
 pub use installer::Installer;

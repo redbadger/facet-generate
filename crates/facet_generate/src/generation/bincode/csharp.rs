@@ -1181,29 +1181,7 @@ fn namespace_name(namespace: &str) -> String {
 /// enums) that use `SerializeOption` / `DeserializeOption` rather than the
 /// `…Ref` variants.
 fn is_csharp_value_type(format: &Format, cfg: &CodeGeneratorConfig) -> bool {
-    matches!(
-        format,
-        Format::Unit
-            | Format::Bool
-            | Format::I8
-            | Format::I16
-            | Format::I32
-            | Format::I64
-            | Format::I128
-            | Format::U8
-            | Format::U16
-            | Format::U32
-            | Format::U64
-            | Format::U128
-            | Format::F32
-            | Format::F64
-            | Format::Char
-            | Format::Uuid
-            | Format::Tuple(_)
-    ) || matches!(
-        format,
-        Format::TypeName(qtn) if cfg.is_unit_enum(qtn)
-    )
+    crate::generation::csharp::is_value_type(format, cfg)
 }
 
 // ---------------------------------------------------------------------------
