@@ -236,3 +236,124 @@ fn test_that_csharp_code_with_types_from_other_namespaces_compiles() {
         dotnet_build(&dir);
     }
 }
+
+/// A root package whose last segment is also a namespace, spelled the same
+/// (`Example.kv` and `kv`): the root module's references into `kv` are to
+/// `Example.Kv.Kv`, not bare names in the root module's own namespace, while
+/// `kv`'s own references and its references to ROOT stay where they were
+/// (#164).
+#[test]
+fn test_that_csharp_code_compiles_when_the_package_ends_in_a_namespace() {
+    let registry = common::across_namespaces::to_root::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example.kv", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example.kv", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
+/// Types whose properties share a name with a type the generated code calls a
+/// static member of (redbadger/facet-generate#159).
+///
+/// A simple name in a C# member binds to a property or nested type of the
+/// enclosing class before it reaches a type of the namespace, so each of these
+/// hid the type (or helper class) a static call was made on, unless the call
+/// is written through a name a property can't hide.
+#[allow(dead_code)]
+mod named_like_types {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Presence {
+        pub x: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Mood {
+        Happy,
+        Sad,
+    }
+
+    /// `Presence.Deserialize(d)` in the static `Deserialize`, beside a
+    /// property `Presence` of another type (CS0120).
+    #[derive(Facet)]
+    pub struct Card {
+        pub presence: Vec<Presence>,
+    }
+
+    /// The same, where the property `Presence` sits beside the field that
+    /// holds a `Presence`.
+    #[derive(Facet)]
+    pub struct Badge {
+        pub presence: u32,
+        pub other: Presence,
+    }
+
+    /// The helper classes: `MoodBincode`, `FacetHelpers` and `UuidSerde`.
+    #[derive(Facet)]
+    pub struct Tally {
+        pub mood_bincode: u32,
+        pub mood: Mood,
+        pub facet_helpers: Vec<u32>,
+        pub uuid_serde: u32,
+        pub id: uuid::Uuid,
+    }
+
+    /// A property of a variant's nested record hides a helper class in the
+    /// variant's `Serialize` override.
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Event {
+        Seen { presence: u32, other: Presence },
+        Moody { mood_bincode: u32, mood: Mood },
+    }
+
+    /// A property of the very type it's named after doesn't hide the type
+    /// (C#'s "Color Color" rule), so these stay bare, as they always were.
+    #[derive(Facet)]
+    pub struct Own {
+        pub presence: Presence,
+    }
+
+    #[derive(Facet)]
+    pub struct MaybeOwn {
+        pub presence: Option<Presence>,
+    }
+
+    /// A property `JsonSerde` hides the JSON runtime class.
+    #[derive(Facet)]
+    pub struct Wire {
+        pub json_serde: u32,
+    }
+}
+
+#[test]
+fn test_that_csharp_code_with_properties_named_like_types_compiles() {
+    use named_like_types::{Badge, Card, Event, MaybeOwn, Own, Tally, Wire};
+
+    let registry = reflect!(Card, Badge, Tally, Event, Own, MaybeOwn, Wire).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

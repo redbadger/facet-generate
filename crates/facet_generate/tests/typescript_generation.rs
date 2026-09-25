@@ -271,3 +271,58 @@ fn test_that_typescript_code_with_enums_from_other_namespaces_type_checks() {
         assert_installed_modules_type_check(&registry, JsonPlugin);
     }
 }
+
+/// A plugin whose output in the root module names `Kit.Presence`, a type
+/// nothing else in that module references.
+#[derive(Debug)]
+struct NamesPresencePlugin;
+
+impl EmitterPlugin<typescript::TypeScript> for NamesPresencePlugin {
+    fn referenced_types(
+        &self,
+        config: &CodeGeneratorConfig,
+    ) -> Vec<facet_generate::reflection::format::QualifiedTypeName> {
+        if config.module_name() == "example" {
+            vec![
+                facet_generate::reflection::format::QualifiedTypeName::namespaced(
+                    "kit".to_string(),
+                    "Presence".to_string(),
+                ),
+            ]
+        } else {
+            vec![]
+        }
+    }
+
+    fn module_helpers(
+        &self,
+        w: &mut dyn facet_generate::generation::indent::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        if config.module_name() == "example" {
+            writeln!(w, "export type CurrentPresence = Kit.Presence;")?;
+        }
+        Ok(())
+    }
+}
+
+/// A type that only a plugin's output names is imported, so the module
+/// type-checks (redbadger/crux#614).
+#[test]
+fn test_that_typescript_code_naming_a_plugin_s_referenced_type_type_checks() {
+    use facet_generate as fg;
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Presence {
+        online: bool,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = facet_generate::reflect!(App, Presence).unwrap();
+    assert_installed_modules_type_check(&registry, NamesPresencePlugin);
+}

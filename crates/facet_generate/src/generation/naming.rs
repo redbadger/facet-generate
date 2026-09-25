@@ -263,7 +263,7 @@ pub(crate) fn check_reserved_names(registry: &Registry, rules: &NamingRules) -> 
 ///
 /// Types the container refers to by name are not followed: their fields are
 /// written in their own scope, not this one.
-fn mentions(container: &ContainerFormat, uses: fn(&Format) -> bool) -> bool {
+pub(crate) fn mentions(container: &ContainerFormat, uses: fn(&Format) -> bool) -> bool {
     let mut found = false;
     // The visitor only fails on an unresolved variable, which a finished
     // registry never contains; a failure would just leave `found` as is.

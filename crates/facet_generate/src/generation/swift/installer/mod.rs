@@ -42,10 +42,13 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
-        SourceInstaller, module,
+        SourceInstaller,
+        collision::{self, Origin, TypeName},
+        module::{self, Module},
         plugin::EmitterPlugin,
-        swift::{Swift, generator::SwiftCodeGenerator},
+        swift::{Swift, conformance::Conformance, generator::SwiftCodeGenerator},
     },
+    reflection::format::QualifiedTypeName,
 };
 
 /// Writes a complete Swift package — runtime sources, per-module generated
@@ -54,6 +57,10 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     targets: BTreeMap<String, BTreeSet<String>>,
+    /// The targets of the modules the installer generated, so the manifest
+    /// declares the package's own target only when the root module was one of
+    /// them.
+    modules: BTreeSet<String>,
     /// Plugin-provided dependency edges, keyed by target name.
     ///
     /// Kept apart from [`targets`](Self::targets) because these are raw
@@ -69,6 +76,11 @@ pub struct Installer {
     external_packages: ExternalPackages,
     platforms: Vec<String>,
     plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
+    /// Which types conform to `Hashable` and `Equatable`, decided once over
+    /// the whole registry by [`generate`](Self::generate) and handed to every
+    /// module's generator, so that a module holding a type from another one
+    /// agrees with it on its conformance.
+    conformance: Option<Arc<Conformance>>,
 }
 
 impl Installer {
@@ -83,11 +95,13 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             targets: BTreeMap::new(),
+            modules: BTreeSet::new(),
             plugin_target_dependencies: BTreeMap::new(),
             target_references: BTreeMap::new(),
             external_packages: ExternalPackages::new(),
             platforms: vec![],
             plugins: vec![],
+            conformance: None,
         }
     }
 
@@ -132,8 +146,16 @@ impl Installer {
     ///
     /// # Errors
     ///
-    /// Returns an error if any file operation or code generation step fails.
+    /// Returns an error if any file operation or code generation step fails,
+    /// and fails before writing anything when two modules would become the
+    /// same target, or when a module would refer to another by a name that
+    /// one of the types in scope there also has. Such output would not build,
+    /// or would lose a module; the error names the namespace and what it
+    /// collides with.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        let modules = module::split(&self.package_name, registry);
+        self.check_namespaces(&modules)?;
+
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
 
@@ -164,10 +186,14 @@ impl Installer {
             }
         }
 
-        // Split by namespace and install each module
-        for (m, module_registry) in module::split(&self.package_name, registry) {
+        // Decide conformance over the whole registry, since a module's types
+        // can hold types from other modules.
+        self.conformance = Some(Arc::new(Conformance::of(registry, &self.external_packages)));
+
+        // Install each namespace's module
+        for (m, module_registry) in &modules {
             let config = m.config().clone();
-            self.install_module(&config, &module_registry)?;
+            self.install_module(&config, module_registry)?;
         }
 
         // Write the package manifest
@@ -175,6 +201,108 @@ impl Installer {
         self.install_manifest(&package_name)?;
 
         Ok(())
+    }
+
+    /// Fails when a namespace's module cannot be generated as it is named.
+    ///
+    /// A module is an SPM target named after its namespace in
+    /// `UpperCamelCase`, and its types are referred to from other modules as
+    /// `Module.Type`. So this fails when:
+    ///
+    /// - two modules become the same target — two namespaces that differ only
+    ///   in case or in word separators (`kv` and `Kv`), or a namespace and the
+    ///   root package (`app` in package `App`) — as both would be written to
+    ///   `Sources/<Target>/`, and one would be lost. Targets that differ only
+    ///   in case are rejected too, whatever the file system, as they would
+    ///   share a directory on a case-insensitive one.
+    /// - a module refers to another by a name that a type in scope there also
+    ///   has: one it declares, or one declared by any module it imports. Swift
+    ///   finds the type before the module, so `Kv.Get` would look for `Get`
+    ///   inside the type `Kv`. This covers a ROOT type named like a namespace,
+    ///   a type named like its own namespace's module, and a type named like
+    ///   the root package's module, which namespaced modules qualify ROOT
+    ///   types with.
+    ///
+    /// Namespaces provided by external packages are not generated, so they
+    /// are not checked for targets.
+    fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        const LANGUAGE: &str = "Swift";
+
+        collision::check_files(
+            LANGUAGE,
+            modules
+                .keys()
+                .map(|m| m.config().module_name())
+                .filter(|name| !self.external_packages.contains_key(*name))
+                .map(|name| {
+                    let target = name.to_upper_camel_case();
+                    (
+                        Origin::of_module(name, &self.package_name),
+                        format!("Sources/{target}/{target}.swift"),
+                    )
+                }),
+        )?;
+
+        let types: BTreeMap<&str, Vec<&QualifiedTypeName>> = modules
+            .iter()
+            .map(|(m, registry)| (m.config().module_name(), registry.keys().collect()))
+            .collect();
+        for (m, registry) in modules {
+            let config = m.config();
+            if self.external_packages.contains_key(config.module_name()) {
+                continue;
+            }
+            let module_config = SwiftCodeGenerator::new(&self.module_config(config))
+                .with_plugins(self.plugins.clone())
+                .module_config(registry)?;
+
+            // Every module this one imports, by the name it qualifies their
+            // types with.
+            let imported: Vec<&str> = module_config
+                .external_definitions
+                .keys()
+                .map(String::as_str)
+                .collect();
+            let in_scope = || {
+                registry.keys().chain(
+                    imported
+                        .iter()
+                        .flat_map(|name| types.get(name).into_iter().flatten().copied()),
+                )
+            };
+            for &name in &imported {
+                let qualifier = name.to_upper_camel_case();
+                if let Some(hiding) = in_scope().find(|t| t.name == qualifier) {
+                    let origin = Origin::of_module(name, &self.package_name);
+                    return Err(collision::error(
+                        LANGUAGE,
+                        format_args!(
+                            "{origin} becomes the module `{qualifier}`, which qualifies its \
+                             types in module `{}`",
+                            config.module_name().to_upper_camel_case()
+                        ),
+                        TypeName(hiding),
+                        origin.rename_type(),
+                    )
+                    .into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The config a module is generated with: `config`, as split from the
+    /// registry, with the installer's external packages, and with the root
+    /// package as its parent when it is a namespaced module, which qualifies
+    /// the ROOT types it references with the root package.
+    fn module_config(&self, config: &CodeGeneratorConfig) -> CodeGeneratorConfig {
+        let mut updated_config = config.clone();
+        updated_config.external_packages = self.external_packages.clone();
+        if config.module_name() != self.package_name {
+            updated_config.parent = Some(self.package_name.clone());
+        }
+        updated_config
     }
 
     /// Installs the Serde Swift runtime sources into the output directory and
@@ -255,9 +383,18 @@ impl Installer {
     /// The aggregate leaves out the package target itself and every target
     /// that depends on it (a namespaced module that references a ROOT type),
     /// which would otherwise make a cycle.
+    ///
+    /// When the installer generated modules but not the root one (every type
+    /// is in a named namespace), there is no package target: it would have no
+    /// sources, which `SwiftPM` rejects, and the library product lists the
+    /// top-level namespace targets instead.
     fn all_targets_with_package(&self, package_name: &str) -> BTreeMap<String, BTreeSet<String>> {
         let mut all_targets = self.targets.clone();
         let package_target = package_name.to_upper_camel_case();
+
+        if !self.modules.is_empty() && !self.modules.contains(&package_target) {
+            return all_targets;
+        }
 
         let mut package_targets = BTreeSet::new();
         for targets in all_targets.values() {
@@ -499,24 +636,28 @@ impl SourceInstaller for Installer {
         }
 
         let module_name = config.module_name().to_upper_camel_case();
-
-        // Update config with external packages from installer
-        let mut updated_config = config.clone();
-        updated_config.external_packages = self.external_packages.clone();
+        self.modules.insert(module_name.clone());
 
         // A namespaced module qualifies the ROOT types it references with the
         // root package, whose target it then depends on.
-        if config.module_name() != self.package_name {
-            updated_config.parent = Some(self.package_name.clone());
+        let updated_config = self.module_config(config);
+
+        // The references the registry and the plugins make decide both the
+        // module's imports and its target's dependencies, so the generator
+        // works out its config once and the installer reads the edges from it.
+        let mut generator =
+            SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        if let Some(conformance) = &self.conformance {
+            generator = generator.with_conformance(conformance.clone());
         }
-        SwiftCodeGenerator::reference_root_types(&mut updated_config, registry);
+        let module_config = generator.module_config(registry)?;
 
         let targets = self.targets.entry(module_name.clone()).or_default();
         let references = self
             .target_references
             .entry(module_name.clone())
             .or_default();
-        for (target, types) in &updated_config.external_definitions {
+        for (target, types) in &module_config.external_definitions {
             targets.insert(target.to_upper_camel_case());
             references
                 .entry(target.to_upper_camel_case())
@@ -550,12 +691,11 @@ impl SourceInstaller for Installer {
 
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator = SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
-        generator.output(&mut file, registry)?;
+        generator.write_module(&mut file, &module_config, registry)?;
 
         // Companion files live beside the module's own source file, whether or
         // not the serde runtime is external.
-        for companion in generator.companion_files(registry)? {
+        for companion in generator.render_companion_files(&module_config, registry)? {
             std::fs::write(dir_path.join(&companion.file_name), companion.contents)?;
         }
 
@@ -584,3 +724,7 @@ impl SourceInstaller for Installer {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "collision_tests.rs"]
+mod collision_tests;

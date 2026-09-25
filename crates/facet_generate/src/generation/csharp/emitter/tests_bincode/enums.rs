@@ -775,3 +775,212 @@ fn keyword_enum() {
     }
     "#);
 }
+
+/// A property of a variant's nested record is in scope in the variant's
+/// `Serialize` override, where one named like a helper class hides it, but
+/// not in the base record's static `Deserialize{Variant}`, where a static call
+/// on a type stays bare (#159).
+#[test]
+fn variant_property_named_like_a_helper_class_qualifies_calls_on_it() {
+    #[derive(Facet)]
+    struct Presence {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Mood {
+        Happy,
+        Sad,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Event {
+        Seen { presence: u32, other: Presence },
+        Moody { mood_bincode: u32, mood: Mood },
+    }
+
+    let actual = emit!(Event as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public abstract record Event : IFacetSerializable, IFacetDeserializable<Event> {
+        public sealed partial record Seen(uint Presence, Presence Other) : Event;
+
+        public sealed partial record Moody(uint MoodBincode, Mood Mood) : Event;
+
+        public abstract void Serialize(ISerializer serializer);
+
+        private static Event DeserializeSeen(IDeserializer deserializer)
+        {
+            var presence = deserializer.DeserializeU32();
+            var other = Presence.Deserialize(deserializer);
+            return new Seen(presence, other);
+        }
+
+        public sealed partial record Seen
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(0);
+                serializer.SerializeU32(Presence);
+                Other.Serialize(serializer);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static Event DeserializeMoody(IDeserializer deserializer)
+        {
+            var moodBincode = deserializer.DeserializeU32();
+            var mood = MoodBincode.Deserialize(deserializer);
+            return new Moody(moodBincode, mood);
+        }
+
+        public sealed partial record Moody
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(1);
+                serializer.SerializeU32(MoodBincode);
+                global::Test.MoodBincode.Serialize(Mood, serializer);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        public static Event Deserialize(IDeserializer deserializer)
+        {
+            var index = deserializer.DeserializeVariantIndex();
+            return index switch
+            {
+                0 => DeserializeSeen(deserializer),
+                1 => DeserializeMoody(deserializer),
+                _ => throw new DeserializationError("Unknown variant index for Event: " + index),
+            }
+            ;
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Event BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public enum Mood {
+        Happy,
+        Sad
+    }
+
+    /// <summary>
+    /// Bincode serialization helpers for <see cref="Mood"/>.
+    /// </summary>
+    public static class MoodBincode {
+        public static void Serialize(Mood value, ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeVariantIndex((uint)value);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Mood Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var index = deserializer.DeserializeVariantIndex();
+            deserializer.DecreaseContainerDepth();
+            return index switch
+            {
+                0 => Mood.Happy,
+                1 => Mood.Sad,
+                _ => throw new DeserializationError("Unknown variant index for Mood: " + index),
+            }
+            ;
+        }
+
+        public static byte[] BincodeSerialize(Mood value)
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(value, serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Mood BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Presence : ObservableObject, IFacetSerializable, IFacetDeserializable<Presence> {
+        [ObservableProperty]
+        private uint _x;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(X);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Presence Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var x = deserializer.DeserializeU32();
+            deserializer.DecreaseContainerDepth();
+            return new Presence {
+                X = x,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Presence BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}

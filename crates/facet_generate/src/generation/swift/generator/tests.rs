@@ -22,11 +22,15 @@ use crate::{
     generation::{CodeGeneratorConfig, bincode::BincodePlugin, plugin::EmitterPlugin},
     reflection::format::{
         ContainerFormat, Doc, EnumTagging, Format, Named, Namespace, QualifiedTypeName,
+        VariantFormat,
     },
 };
 
 use super::*;
-use crate::generation::swift::emitter::Swift;
+use crate::generation::{
+    ExternalPackages,
+    swift::{conformance::Conformance, emitter::Swift},
+};
 
 fn generate(
     config: &CodeGeneratorConfig,
@@ -663,7 +667,7 @@ fn other_namespace_map_registry() -> Registry {
 fn test_compute_hashable_types_covers_named_namespace() {
     let registry = other_namespace_map_registry();
 
-    let hashable = compute_hashable_types(&registry);
+    let hashable = Conformance::of(&registry, &ExternalPackages::new()).hashable;
 
     for name in ["Child", "Key", "Value"] {
         assert!(
@@ -703,7 +707,7 @@ fn test_compute_hashable_types_is_collision_safe() {
         other_child,
     );
 
-    let hashable = compute_hashable_types(&registry);
+    let hashable = Conformance::of(&registry, &ExternalPackages::new()).hashable;
 
     assert!(
         hashable.contains(&QualifiedTypeName::root("Child".to_string())),
@@ -738,7 +742,7 @@ fn test_compute_hashable_types_assumes_external_hashable() {
     let mut registry = Registry::new();
     registry.insert(QualifiedTypeName::root("Parent".to_string()), parent);
 
-    let hashable = compute_hashable_types(&registry);
+    let hashable = Conformance::of(&registry, &ExternalPackages::new()).hashable;
 
     assert!(
         hashable.contains(&QualifiedTypeName::root("Parent".to_string())),
@@ -813,7 +817,7 @@ fn test_self_referential_named_type_is_hashable() {
         node,
     );
 
-    let hashable = compute_hashable_types(&registry);
+    let hashable = Conformance::of(&registry, &ExternalPackages::new()).hashable;
 
     assert!(
         hashable.contains(&QualifiedTypeName::namespaced(

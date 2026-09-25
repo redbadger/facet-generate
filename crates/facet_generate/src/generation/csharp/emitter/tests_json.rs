@@ -1165,3 +1165,33 @@ fn keyword_enum() {
     }
     "#);
 }
+
+/// A property named `JsonSerde` hides the runtime class the JSON helpers call,
+/// so they reach it through its qualified name (#159).
+#[test]
+fn property_named_like_the_json_runtime_class_qualifies_calls_on_it() {
+    #[derive(Facet)]
+    struct Wire {
+        json_serde: u32,
+    }
+
+    let actual = emit!(Wire as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class Wire : ObservableObject {
+        [JsonPropertyName("jsonSerde")]
+        [ObservableProperty]
+        private uint _jsonSerde;
+
+        public string JsonSerialize()
+        {
+            return global::Facet.Runtime.Json.JsonSerde.Serialize(this);
+        }
+
+        public static Wire JsonDeserialize(string input)
+        {
+            return global::Facet.Runtime.Json.JsonSerde.Deserialize<Wire>(input);
+        }
+    }
+    "#);
+}

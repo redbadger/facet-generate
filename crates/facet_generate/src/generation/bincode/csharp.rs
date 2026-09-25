@@ -208,14 +208,20 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
                 return Ok(());
             }
             let variants: Vec<Named<VariantFormat>> = variants_map.values().cloned().collect();
-            write_record_bincode_helpers(w, ctx.name(), &variants, ctx.config)
+            let scope = Scope::new(ctx.config).with_members(
+                variants
+                    .iter()
+                    .map(|v| (v.name.to_upper_camel_case(), None)),
+            );
+            write_record_bincode_helpers(w, ctx.name(), &variants, &scope)
         } else {
-            write_class_bincode_methods(
-                w,
-                &ctx.name().to_upper_camel_case(),
-                &ctx.fields(),
-                ctx.config,
-            )
+            let fields = ctx.fields();
+            let scope = Scope::new(ctx.config).with_members(
+                fields
+                    .iter()
+                    .map(|f| (f.name.to_upper_camel_case(), Some(&f.value))),
+            );
+            write_class_bincode_methods(w, &ctx.name().to_upper_camel_case(), &fields, &scope)
         }
     }
 
@@ -248,6 +254,138 @@ fn is_all_unit_enum(format: &ContainerFormat) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Member scope
+// ---------------------------------------------------------------------------
+
+/// What a simple name means inside the generated member being written.
+///
+/// C# looks a simple name up among the members of the enclosing types before
+/// it looks at the namespace, so a property or nested type of the same name
+/// hides a type: a class with a property `Presence` of any type but `Presence`
+/// turns `Presence.Deserialize(d)` in its static `Deserialize` into a call on
+/// the instance property (CS0120), and a property `FacetHelpers` does the same
+/// to a runtime helper. `members` holds the names of every property and nested
+/// type in scope, and a static call on a type whose first name segment is one
+/// of them is written through its `global::` qualified name instead.
+///
+/// C#'s "Color Color" rule lets a property of the very type it's named after
+/// stand for the type too, so `Card { presence: Presence }` already compiles
+/// and its call stays bare. Only a reference that doesn't compile is
+/// qualified, so the output for everything that already compiled is unchanged.
+struct Scope<'a> {
+    cfg: &'a CodeGeneratorConfig,
+    members: Vec<Member>,
+}
+
+/// A property or nested type in scope.
+#[derive(Clone)]
+struct Member {
+    name: String,
+    /// The type a property holds, when it's a named type (or an optional one:
+    /// every named type but a C-style enum is a C# reference type, for which
+    /// `T?` is `T`). `None` for any other property, and for a nested type.
+    type_name: Option<QualifiedTypeName>,
+}
+
+impl Member {
+    fn new(name: String, format: Option<&Format>) -> Self {
+        let type_name = match format {
+            Some(Format::TypeName(qtn)) => Some(qtn.clone()),
+            Some(Format::Option(inner)) => match inner.as_ref() {
+                Format::TypeName(qtn) => Some(qtn.clone()),
+                _ => None,
+            },
+            _ => None,
+        };
+        Self { name, type_name }
+    }
+}
+
+impl<'a> Scope<'a> {
+    /// A scope with no members that could hide a type — what a plugin calling
+    /// [`write_serialize_value`] gets, since its members are its own.
+    const fn new(cfg: &'a CodeGeneratorConfig) -> Self {
+        Self {
+            cfg,
+            members: Vec::new(),
+        }
+    }
+
+    /// This scope, with `members` added: each a property's name and format,
+    /// or a nested type's name and `None`.
+    fn with_members<'f>(
+        &self,
+        members: impl IntoIterator<Item = (String, Option<&'f Format>)>,
+    ) -> Self {
+        let members = self
+            .members
+            .iter()
+            .cloned()
+            .chain(
+                members
+                    .into_iter()
+                    .map(|(name, format)| Member::new(name, format)),
+            )
+            .collect();
+        Self {
+            cfg: self.cfg,
+            members,
+        }
+    }
+
+    /// Whether a member hides the first segment of `name`, a reference to
+    /// `type_name` if it names a type rather than a helper class.
+    fn hides(&self, name: &str, type_name: Option<&QualifiedTypeName>) -> bool {
+        let first = name.split('.').next().unwrap_or(name);
+        self.members.iter().any(|member| {
+            member.name == first
+                // "Color Color": a property of the very type it names.
+                && !(first == name && type_name.is_some() && member.type_name.as_ref() == type_name)
+        })
+    }
+
+    /// The name to call a static member of `qualified_type_name` (with
+    /// `suffix` appended, as in `{Enum}Bincode`) through.
+    fn type_target(&self, qualified_type_name: &QualifiedTypeName, suffix: &str) -> String {
+        let name = format!(
+            "{}{suffix}",
+            format_qualified_type_name(qualified_type_name)
+        );
+        let type_name = suffix.is_empty().then_some(qualified_type_name);
+        if !self.hides(&name, type_name) {
+            return name;
+        }
+        match qualified_type_name.namespace {
+            // A bare name is a type of the module's own namespace.
+            Namespace::Root => {
+                format!("global::{}.{name}", namespace_name(&self.cfg.module_name))
+            }
+            // Any other namespace is already written from the root package.
+            Namespace::Named(_) => format!("global::{name}"),
+        }
+    }
+
+    /// The name to call the static class `name`, declared in `namespace`,
+    /// through.
+    fn helper_target(&self, name: &'static str, namespace: &str) -> String {
+        if self.hides(name, None) {
+            format!("global::{namespace}.{name}")
+        } else {
+            name.to_string()
+        }
+    }
+
+    fn facet_helpers(&self) -> String {
+        self.helper_target("FacetHelpers", "Facet.Runtime.Bincode")
+    }
+
+    /// `UuidSerde` is emitted into every module's own namespace.
+    fn uuid_serde(&self) -> String {
+        self.helper_target("UuidSerde", &namespace_name(&self.cfg.module_name))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Main code-generation functions
 // ---------------------------------------------------------------------------
 
@@ -257,14 +395,14 @@ fn write_class_bincode_methods(
     w: &mut dyn IndentWrite,
     class_name: &str,
     fields: &[Named<Format>],
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     writeln!(w, "public void Serialize(ISerializer serializer)")?;
     with_block(w, Newlines::BOTH, |w| {
         writeln!(w, "serializer.IncreaseContainerDepth();")?;
         for field in fields {
             let field_name = field.name.to_upper_camel_case();
-            write_serialize_statement(w, &field_name, &field.value, cfg)?;
+            write_serialize_statement(w, &field_name, &field.value, scope)?;
         }
         writeln!(w, "serializer.DecreaseContainerDepth();")?;
         Ok(())
@@ -280,7 +418,7 @@ fn write_class_bincode_methods(
         for field in fields {
             let lower_camel_name = field.name.to_lower_camel_case();
             let local_name = escape_identifier(&lower_camel_name);
-            write_deserialize_binding(w, &local_name, &field.value, cfg)?;
+            write_deserialize_binding(w, &local_name, &field.value, scope)?;
         }
         writeln!(w, "deserializer.DecreaseContainerDepth();")?;
         if fields.is_empty() {
@@ -352,7 +490,7 @@ fn write_record_bincode_helpers(
     w: &mut dyn IndentWrite,
     base_name: &str,
     variants: &[Named<VariantFormat>],
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     writeln!(w, "public abstract void Serialize(ISerializer serializer);")?;
     writeln!(w)?;
@@ -365,7 +503,7 @@ fn write_record_bincode_helpers(
             "private static {base_name} Deserialize{variant_name}(IDeserializer deserializer)"
         )?;
         with_block(w, Newlines::BOTH, |w| {
-            deserializer_variant_body(w, variant, cfg)
+            deserializer_variant_body(w, variant, scope)
         })?;
         writeln!(w)?;
 
@@ -375,7 +513,7 @@ fn write_record_bincode_helpers(
             with_block(w, Newlines::BOTH, |w| {
                 writeln!(w, "serializer.IncreaseContainerDepth();")?;
                 writeln!(w, "serializer.SerializeVariantIndex({index});")?;
-                serializer_variant_body_write(w, variant, cfg)?;
+                serializer_variant_body_write(w, variant, &variant_scope(scope, variant))?;
                 writeln!(w, "serializer.DecreaseContainerDepth();")?;
                 Ok(())
             })?;
@@ -555,26 +693,50 @@ fn write_enum_bincode_helpers(
 // Variant body helpers
 // ---------------------------------------------------------------------------
 
+/// The scope inside a variant's nested record: its own properties, on top of
+/// the base record's members (every variant's name).
+fn variant_scope<'a>(scope: &Scope<'a>, variant: &Named<VariantFormat>) -> Scope<'a> {
+    let properties = match &variant.value {
+        VariantFormat::Unit | VariantFormat::Variable(_) => vec![],
+        VariantFormat::NewType(format) => vec![("Value".to_string(), Some(format.as_ref()))],
+        VariantFormat::Tuple(formats) => formats
+            .iter()
+            .enumerate()
+            .map(|(i, format)| (format!("Field{i}"), Some(format)))
+            .collect(),
+        VariantFormat::Struct(fields) => fields
+            .iter()
+            .map(|field| (field.name.to_upper_camel_case(), Some(&field.value)))
+            .collect(),
+    };
+    scope.with_members(properties)
+}
+
 /// Dispatches on the variant format to write the serialization body statements inside
 /// a variant's `Serialize` override (after `IncreaseContainerDepth` /
 /// `SerializeVariantIndex` have already been written).
 fn serializer_variant_body_write(
     w: &mut dyn IndentWrite,
     variant: &Named<VariantFormat>,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     match &variant.value {
         VariantFormat::Unit => Ok(()),
-        VariantFormat::NewType(format) => write_serialize_statement(w, "Value", format, cfg),
+        VariantFormat::NewType(format) => write_serialize_statement(w, "Value", format, scope),
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_serialize_statement(w, &format!("Field{index}"), format, cfg)?;
+                write_serialize_statement(w, &format!("Field{index}"), format, scope)?;
             }
             Ok(())
         }
         VariantFormat::Struct(fields) => {
             for field in fields {
-                write_serialize_statement(w, &field.name.to_upper_camel_case(), &field.value, cfg)?;
+                write_serialize_statement(
+                    w,
+                    &field.name.to_upper_camel_case(),
+                    &field.value,
+                    scope,
+                )?;
             }
             Ok(())
         }
@@ -587,14 +749,14 @@ fn serializer_variant_body_write(
 fn deserializer_variant_body(
     w: &mut dyn IndentWrite,
     variant: &Named<VariantFormat>,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     match &variant.value {
         VariantFormat::Unit => {
             writeln!(w, "return new {}();", variant.name.to_upper_camel_case())
         }
         VariantFormat::NewType(format) => {
-            write_deserialize_binding(w, "value", format, cfg)?;
+            write_deserialize_binding(w, "value", format, scope)?;
             writeln!(
                 w,
                 "return new {}(value);",
@@ -603,7 +765,7 @@ fn deserializer_variant_body(
         }
         VariantFormat::Tuple(formats) => {
             for (index, format) in formats.iter().enumerate() {
-                write_deserialize_binding(w, &format!("field{index}"), format, cfg)?;
+                write_deserialize_binding(w, &format!("field{index}"), format, scope)?;
             }
             let args = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -620,7 +782,7 @@ fn deserializer_variant_body(
             for field in fields {
                 let lower_camel_name = field.name.to_lower_camel_case();
                 let local_name = escape_identifier(&lower_camel_name);
-                write_deserialize_binding(w, &local_name, &field.value, cfg)?;
+                write_deserialize_binding(w, &local_name, &field.value, scope)?;
             }
             let args = fields
                 .iter()
@@ -656,13 +818,14 @@ fn write_serialize_expr(
     val: &str,
     ser: &str,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) if cfg.is_unit_enum(qtn) => {
-            let type_name = format_qualified_type_name(qtn);
-            write!(w, "{type_name}Bincode.Serialize({val}, {ser})")
+        Format::TypeName(qtn) if scope.cfg.is_unit_enum(qtn) => {
+            let helper = scope.type_target(qtn, "Bincode");
+            write!(w, "{helper}.Serialize({val}, {ser})")
         }
         Format::TypeName(_) => write!(w, "{val}.Serialize({ser})"),
         Format::Unit => write!(w, "{ser}.SerializeUnit({val})"),
@@ -682,29 +845,29 @@ fn write_serialize_expr(
         Format::Char => write!(w, "{ser}.SerializeChar({val})"),
         Format::Str => write!(w, "{ser}.SerializeStr({val})"),
         Format::Bytes => write!(w, "{ser}.SerializeBytes({val})"),
-        Format::Uuid => write!(w, "UuidSerde.Serialize({val}, {ser})"),
+        Format::Uuid => write!(w, "{}.Serialize({val}, {ser})", scope.uuid_serde()),
         Format::Option(inner) => {
-            let helper = option_serialize_helper(inner, cfg);
-            write!(w, "FacetHelpers.{helper}({val}, {ser}, ")?;
-            write_serialize_lambda(w, inner, cfg)?;
+            let helper = option_serialize_helper(inner, scope.cfg);
+            write!(w, "{helpers}.{helper}({val}, {ser}, ")?;
+            write_serialize_lambda(w, inner, scope)?;
             write!(w, ")")
         }
         Format::Seq(inner) | Format::Set(inner) => {
-            write!(w, "FacetHelpers.SerializeCollection({val}, {ser}, ")?;
-            write_serialize_lambda(w, inner, cfg)?;
+            write!(w, "{helpers}.SerializeCollection({val}, {ser}, ")?;
+            write_serialize_lambda(w, inner, scope)?;
             write!(w, ")")
         }
         Format::Map { key, value } => {
-            write!(w, "FacetHelpers.SerializeMap({val}, {ser}, ")?;
-            write_serialize_lambda(w, key, cfg)?;
+            write!(w, "{helpers}.SerializeMap({val}, {ser}, ")?;
+            write_serialize_lambda(w, key, scope)?;
             write!(w, ", ")?;
-            write_serialize_lambda(w, value, cfg)?;
+            write_serialize_lambda(w, value, scope)?;
             write!(w, ")")
         }
         Format::Tuple(_) => unreachable!("tuples are handled by callers"),
         Format::TupleArray { content, .. } => {
-            write!(w, "FacetHelpers.SerializeArray({val}, {ser}, ")?;
-            write_serialize_lambda(w, content, cfg)?;
+            write!(w, "{helpers}.SerializeArray({val}, {ser}, ")?;
+            write_serialize_lambda(w, content, scope)?;
             write!(w, ")")
         }
     }
@@ -723,20 +886,18 @@ fn write_deserialize_expr(
     w: &mut dyn IndentWrite,
     de: &str,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qtn) if cfg.is_unit_enum(qtn) => {
-            let type_name = format_qualified_type_name(qtn);
-            write!(w, "{type_name}Bincode.Deserialize({de})")
+        Format::TypeName(qtn) if scope.cfg.is_unit_enum(qtn) => {
+            let helper = scope.type_target(qtn, "Bincode");
+            write!(w, "{helper}.Deserialize({de})")
         }
-        Format::TypeName(type_name) => {
-            write!(
-                w,
-                "{}.Deserialize({de})",
-                format_qualified_type_name(type_name)
-            )
+        Format::TypeName(qtn) => {
+            let type_name = scope.type_target(qtn, "");
+            write!(w, "{type_name}.Deserialize({de})")
         }
         Format::Unit => write!(w, "{de}.DeserializeUnit()"),
         Format::Bool => write!(w, "{de}.DeserializeBool()"),
@@ -755,34 +916,34 @@ fn write_deserialize_expr(
         Format::Char => write!(w, "{de}.DeserializeChar()"),
         Format::Str => write!(w, "{de}.DeserializeStr()"),
         Format::Bytes => write!(w, "{de}.DeserializeBytes()"),
-        Format::Uuid => write!(w, "UuidSerde.Deserialize({de})"),
+        Format::Uuid => write!(w, "{}.Deserialize({de})", scope.uuid_serde()),
         Format::Option(inner) => {
-            let helper = option_deserialize_helper(inner, cfg);
-            write!(w, "FacetHelpers.{helper}({de}, ")?;
-            write_deserialize_lambda(w, inner, cfg)?;
+            let helper = option_deserialize_helper(inner, scope.cfg);
+            write!(w, "{helpers}.{helper}({de}, ")?;
+            write_deserialize_lambda(w, inner, scope)?;
             write!(w, ")")
         }
         Format::Seq(inner) => {
-            write!(w, "FacetHelpers.DeserializeList({de}, ")?;
-            write_deserialize_lambda(w, inner, cfg)?;
+            write!(w, "{helpers}.DeserializeList({de}, ")?;
+            write_deserialize_lambda(w, inner, scope)?;
             write!(w, ")")
         }
         Format::Set(inner) => {
-            write!(w, "FacetHelpers.DeserializeSet({de}, ")?;
-            write_deserialize_lambda(w, inner, cfg)?;
+            write!(w, "{helpers}.DeserializeSet({de}, ")?;
+            write_deserialize_lambda(w, inner, scope)?;
             write!(w, ")")
         }
         Format::Map { key, value } => {
-            write!(w, "FacetHelpers.DeserializeMap({de}, ")?;
-            write_deserialize_lambda(w, key, cfg)?;
+            write!(w, "{helpers}.DeserializeMap({de}, ")?;
+            write_deserialize_lambda(w, key, scope)?;
             write!(w, ", ")?;
-            write_deserialize_lambda(w, value, cfg)?;
+            write_deserialize_lambda(w, value, scope)?;
             write!(w, ")")
         }
         Format::Tuple(_) => unreachable!("tuples are handled by callers"),
         Format::TupleArray { content, size } => {
-            write!(w, "FacetHelpers.DeserializeArray({de}, {size}, ")?;
-            write_deserialize_lambda(w, content, cfg)?;
+            write!(w, "{helpers}.DeserializeArray({de}, {size}, ")?;
+            write_deserialize_lambda(w, content, scope)?;
             write!(w, ")")
         }
     }
@@ -820,7 +981,7 @@ pub fn write_serialize_value(
     format: &Format,
     config: &CodeGeneratorConfig,
 ) -> io::Result<()> {
-    write_serialize_statement(w, value_expr, format, config)
+    write_serialize_statement(w, value_expr, format, &Scope::new(config))
 }
 
 /// Writes a top-level serialize statement: `expr;\n`.
@@ -831,15 +992,15 @@ fn write_serialize_statement(
     w: &mut dyn IndentWrite,
     value_expr: &str,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_serialize_statement(w, &format!("{value_expr}.Item{}", index + 1), inner, cfg)?;
+            write_serialize_statement(w, &format!("{value_expr}.Item{}", index + 1), inner, scope)?;
         }
         Ok(())
     } else {
-        write_serialize_expr(w, value_expr, "serializer", format, cfg)?;
+        write_serialize_expr(w, value_expr, "serializer", format, scope)?;
         writeln!(w, ";")
     }
 }
@@ -852,17 +1013,17 @@ fn write_deserialize_binding(
     w: &mut dyn IndentWrite,
     var_name: &str,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner, cfg)?;
+            write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner, scope)?;
         }
         if formats.is_empty() {
             writeln!(
                 w,
                 "var {var_name} = new {}();",
-                naming::builtin("Unit", cfg)
+                naming::builtin("Unit", scope.cfg)
             )
         } else {
             let values = (0..formats.len())
@@ -873,7 +1034,7 @@ fn write_deserialize_binding(
         }
     } else {
         write!(w, "var {var_name} = ")?;
-        write_deserialize_expr(w, "deserializer", format, cfg)?;
+        write_deserialize_expr(w, "deserializer", format, scope)?;
         writeln!(w, ";")
     }
 }
@@ -885,7 +1046,7 @@ fn write_deserialize_binding(
 fn write_serialize_lambda(
     w: &mut dyn IndentWrite,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
@@ -899,14 +1060,14 @@ fn write_serialize_lambda(
                     &format!("item.Item{}", index + 1),
                     "s",
                     inner,
-                    cfg,
+                    scope,
                 )?;
             }
             write!(w, "}}")
         }
         _ => {
             write!(w, "(item, s) => ")?;
-            write_serialize_expr(w, "item", "s", format, cfg)
+            write_serialize_expr(w, "item", "s", format, scope)
         }
     }
 }
@@ -918,7 +1079,7 @@ fn write_serialize_lambda(
 fn write_deserialize_lambda(
     w: &mut dyn IndentWrite,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
@@ -928,7 +1089,7 @@ fn write_deserialize_lambda(
             write!(w, "d => {{ ")?;
             for (index, inner) in formats.iter().enumerate() {
                 write!(w, "var item{} = ", index + 1)?;
-                write_deserialize_expr(w, "d", inner, cfg)?;
+                write_deserialize_expr(w, "d", inner, scope)?;
                 write!(w, "; ")?;
             }
             let values = (0..formats.len())
@@ -939,7 +1100,7 @@ fn write_deserialize_lambda(
         }
         _ => {
             write!(w, "d => ")?;
-            write_deserialize_expr(w, "d", format, cfg)
+            write_deserialize_expr(w, "d", format, scope)
         }
     }
 }
@@ -954,15 +1115,15 @@ fn write_serialize_tuple_stmts(
     val: &str,
     ser: &str,
     format: &Format,
-    cfg: &CodeGeneratorConfig,
+    scope: &Scope<'_>,
 ) -> io::Result<()> {
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner, cfg)?;
+            write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner, scope)?;
         }
         Ok(())
     } else {
-        write_serialize_expr(w, val, ser, format, cfg)?;
+        write_serialize_expr(w, val, ser, format, scope)?;
         write!(w, "; ")
     }
 }
@@ -1287,5 +1448,48 @@ mod tests {
         let format = Format::TypeName(name);
         let out = render(|w| write_serialize_value(w, "output", &format, &cfg));
         insta::assert_snapshot!(out, @"Example.Kit.FlagBincode.Serialize(output, serializer);");
+    }
+
+    // -------------------------------------------------------------------------
+    // Scope — a member named like a type (#159)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn a_property_named_like_a_root_type_qualifies_it_with_the_module() {
+        let cfg = CodeGeneratorConfig::new("Example.Shared".to_string());
+        let scope = Scope::new(&cfg).with_members([("Presence".to_string(), Some(&Format::U32))]);
+        let format = Format::TypeName(QualifiedTypeName::root("Presence".to_string()));
+        let out = render(|w| write_deserialize_expr(w, "d", &format, &scope));
+        insta::assert_snapshot!(out, @"global::Example.Shared.Presence.Deserialize(d)");
+    }
+
+    #[test]
+    fn a_property_named_like_a_namespace_qualifies_the_type_from_global() {
+        let cfg = CodeGeneratorConfig::new("Example".to_string());
+        let scope = Scope::new(&cfg).with_members([("Example".to_string(), Some(&Format::U32))]);
+        let format = Format::TypeName(QualifiedTypeName::namespaced(
+            "Example.kit".to_string(),
+            "Presence".to_string(),
+        ));
+        let out = render(|w| write_deserialize_expr(w, "d", &format, &scope));
+        insta::assert_snapshot!(out, @"global::Example.Kit.Presence.Deserialize(d)");
+    }
+
+    #[test]
+    fn a_property_of_the_type_it_is_named_after_leaves_the_type_bare() {
+        let cfg = CodeGeneratorConfig::new("Example".to_string());
+        let format = Format::TypeName(QualifiedTypeName::root("Presence".to_string()));
+        let scope = Scope::new(&cfg).with_members([("Presence".to_string(), Some(&format))]);
+        let out = render(|w| write_deserialize_expr(w, "d", &format, &scope));
+        insta::assert_snapshot!(out, @"Presence.Deserialize(d)");
+    }
+
+    #[test]
+    fn a_nested_type_named_like_a_type_qualifies_it() {
+        let cfg = CodeGeneratorConfig::new("Example".to_string());
+        let format = Format::TypeName(QualifiedTypeName::root("Presence".to_string()));
+        let scope = Scope::new(&cfg).with_members([("Presence".to_string(), None)]);
+        let out = render(|w| write_deserialize_expr(w, "d", &format, &scope));
+        insta::assert_snapshot!(out, @"global::Example.Presence.Deserialize(d)");
     }
 }

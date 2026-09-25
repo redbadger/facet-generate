@@ -139,8 +139,12 @@ impl<'a> CSharpCodeGenerator<'a> {
     /// none), so references are rooted there rather than at `module_name()`,
     /// which for a namespaced module already ends in its own namespace.
     ///
-    /// 1. **Same leaf namespace** — a `Named("Users")` reference inside module
-    ///    `Company.Models.Users` is stripped to `Root` (bare name).
+    /// 1. **Same namespace** — a `Named("Users")` reference inside the module
+    ///    of namespace `Users`, `Company.Models.Users`, is stripped to `Root`
+    ///    (bare name). Which namespace is the module's own comes from its
+    ///    config (see [`CodeGeneratorConfig::generates`]), not from the last
+    ///    segment of its name: inside the root module `Example.Kv`, a
+    ///    `Named("Kv")` reference is another namespace (rule 2).
     /// 2. **Other namespace** — a `Named("Payments")` reference inside module
     ///    `Company.Models`, or inside its child `Company.Models.Users`, becomes
     ///    `Named("Company.Models.Payments")`.
@@ -186,12 +190,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     ) -> QualifiedTypeName {
         match &name.namespace {
             Namespace::Named(namespace) => {
-                let current_leaf_namespace = config
-                    .module_name()
-                    .rsplit_once('.')
-                    .map_or_else(|| config.module_name(), |(_, leaf)| leaf);
-
-                if namespace == current_leaf_namespace {
+                if config.is_own_namespace(namespace) {
                     QualifiedTypeName::root(name.name.clone())
                 } else {
                     QualifiedTypeName::namespaced(

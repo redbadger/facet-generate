@@ -146,7 +146,24 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
     /// Emits `JsonSerialize` and `JsonDeserialize` convenience methods.
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
         let type_name = ctx.name().to_upper_camel_case();
-        write_json_helpers(w, &type_name)
+        // A property (or, in a variant hierarchy, a nested variant record)
+        // named `JsonSerde` would hide the runtime class, so reach it through
+        // its qualified name then.
+        let hides_json_serde = match ctx.container.format {
+            ContainerFormat::Enum(variants, _, _) => variants
+                .values()
+                .any(|v| v.name.to_upper_camel_case() == JSON_SERDE),
+            _ => ctx
+                .fields()
+                .iter()
+                .any(|f| f.name.to_upper_camel_case() == JSON_SERDE),
+        };
+        let json_serde = if hides_json_serde {
+            format!("global::Facet.Runtime.Json.{JSON_SERDE}")
+        } else {
+            JSON_SERDE.to_string()
+        };
+        write_json_helpers(w, &type_name, &json_serde)
     }
 }
 
@@ -154,16 +171,24 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
 // Helper
 // ---------------------------------------------------------------------------
 
-/// Writes `JsonSerialize` / `JsonDeserialize` methods backed by `JsonSerde`.
-fn write_json_helpers(w: &mut dyn IndentWrite, type_name: &str) -> io::Result<()> {
+/// The runtime class the JSON helpers call, in `Facet.Runtime.Json`.
+const JSON_SERDE: &str = "JsonSerde";
+
+/// Writes `JsonSerialize` / `JsonDeserialize` methods backed by `JsonSerde`,
+/// called through `json_serde`.
+fn write_json_helpers(
+    w: &mut dyn IndentWrite,
+    type_name: &str,
+    json_serde: &str,
+) -> io::Result<()> {
     writeln!(w, "public string JsonSerialize()")?;
     with_block(w, Newlines::BOTH, |w| {
-        writeln!(w, "return JsonSerde.Serialize(this);")
+        writeln!(w, "return {json_serde}.Serialize(this);")
     })?;
     writeln!(w)?;
     writeln!(w, "public static {type_name} JsonDeserialize(string input)")?;
     with_block(w, Newlines::BOTH, |w| {
-        writeln!(w, "return JsonSerde.Deserialize<{type_name}>(input);")
+        writeln!(w, "return {json_serde}.Deserialize<{type_name}>(input);")
     })?;
     Ok(())
 }

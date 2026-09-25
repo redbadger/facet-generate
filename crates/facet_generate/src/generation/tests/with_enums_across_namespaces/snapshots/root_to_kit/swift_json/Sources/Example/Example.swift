@@ -1,55 +1,7 @@
 import Kit
 import Serde
 
-func serializeArray<T, S: Serializer>(
-    value: [T],
-    serializer: S,
-    serializeElement: (T, S) throws -> Void
-) throws {
-    try serializer.serialize_len(value: value.count)
-    for item in value {
-        try serializeElement(item, serializer)
-    }
-}
-
-func deserializeArray<T, D: Deserializer>(
-    deserializer: D,
-    deserializeElement: (D) throws -> T
-) throws -> [T] {
-    let length = try deserializer.deserialize_len()
-    var obj: [T] = []
-    for _ in 0..<length {
-        obj.append(try deserializeElement(deserializer))
-    }
-    return obj
-}
-
-func serializeOption<T, S: Serializer>(
-    value: T?,
-    serializer: S,
-    serializeElement: (T, S) throws -> Void
-) throws {
-    if let value = value {
-        try serializer.serialize_option_tag(value: true)
-        try serializeElement(value, serializer)
-    } else {
-        try serializer.serialize_option_tag(value: false)
-    }
-}
-
-func deserializeOption<T, D: Deserializer>(
-    deserializer: D,
-    deserializeElement: (D) throws -> T
-) throws -> T? {
-    let tag = try deserializer.deserialize_option_tag()
-    if tag {
-        return try deserializeElement(deserializer)
-    } else {
-        return nil
-    }
-}
-
-public struct Card: Hashable, Equatable {
+public struct Card: Hashable, Equatable, Codable {
     public var presence: Kit.Presence
     public var shape: Kit.Shape
     public var shapes: [Kit.Shape?]
@@ -62,117 +14,58 @@ public struct Card: Hashable, Equatable {
         self.badge = badge
     }
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        try self.presence.serialize(serializer: serializer)
-        try self.shape.serialize(serializer: serializer)
-        try serializeArray(value: self.shapes, serializer: serializer) { item, serializer in
-            try serializeOption(value: item, serializer: serializer) { value, serializer in
-                try value.serialize(serializer: serializer)
-            }
-        }
-        try self.badge.serialize(serializer: serializer)
-        try serializer.decrease_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case presence
+        case shape
+        case shapes
+        case badge
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Card {
-        try deserializer.increase_container_depth()
-        let presence = try Kit.Presence.deserialize(deserializer: deserializer)
-        let shape = try Kit.Shape.deserialize(deserializer: deserializer)
-        let shapes = try deserializeArray(deserializer: deserializer) { deserializer in
-            try deserializeOption(deserializer: deserializer) { deserializer in
-                try Kit.Shape.deserialize(deserializer: deserializer)
-            }
-        }
-        let badge = try Kit.Badge.deserialize(deserializer: deserializer)
-        try deserializer.decrease_container_depth()
-        return Card(presence: presence, shape: shape, shapes: shapes, badge: badge)
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Card {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Card.self, from: input)
     }
 }
 
-public struct Presence: Hashable, Equatable {
+public struct Presence: Hashable, Equatable, Codable {
     public var since: UInt64
 
     public init(since: UInt64) {
         self.since = since
     }
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        try serializer.serialize_u64(value: self.since)
-        try serializer.decrease_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case since
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Presence {
-        try deserializer.increase_container_depth()
-        let since = try deserializer.deserialize_u64()
-        try deserializer.decrease_container_depth()
-        return Presence(since: since)
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Presence {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Presence.self, from: input)
     }
 }
 
-public struct Sighting: Hashable, Equatable {
+public struct Sighting: Hashable, Equatable, Codable {
     public var lastSeen: Presence
 
     public init(lastSeen: Presence) {
         self.lastSeen = lastSeen
     }
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        try self.lastSeen.serialize(serializer: serializer)
-        try serializer.decrease_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case lastSeen = "last_seen"
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Sighting {
-        try deserializer.increase_container_depth()
-        let lastSeen = try Presence.deserialize(deserializer: deserializer)
-        try deserializer.decrease_container_depth()
-        return Sighting(lastSeen: lastSeen)
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Sighting {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Sighting.self, from: input)
     }
 }

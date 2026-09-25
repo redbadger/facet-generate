@@ -469,7 +469,10 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
 ///   `com.example.kit`);
 /// - a type of any other namespace is qualified with the root package
 ///   (`Named("kit")/Row` → `Named("com.example.kit")/Row` inside
-///   `com.example` or `com.example.kv`);
+///   `com.example` or `com.example.kv`), even when the root package ends in
+///   that namespace's name (`Named("kv")/Entry` → `Named("com.kv.kv")/Entry`
+///   inside the root module `com.kv`) — which namespace is the module's own
+///   comes from its config, not from its name;
 /// - a ROOT type is qualified with the root package (`Root/Event` →
 ///   `Named("com.example")/Event`, rendered `com.example.Event`).
 ///

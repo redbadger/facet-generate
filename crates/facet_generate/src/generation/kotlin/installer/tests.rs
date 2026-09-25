@@ -129,3 +129,59 @@ fn companion_file_is_written_in_the_package_directory() {
     class FfiBridge(private val ffi: CoreFfi = CoreFfi())
     ");
 }
+
+/// The root package `com.kv` ends in the name of namespace `kv`, which is
+/// still its own package, `com.kv.kv`: the root module refers to it there, and
+/// the `kv` module refers to its own types and to ROOT ones as before (#164).
+#[test]
+fn root_module_refers_to_a_namespace_named_like_the_package_leaf() {
+    use crate as fg;
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    struct Entry {
+        id: u32,
+        tag: Tag,
+        shared: Shared,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    struct Tag {
+        name: String,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace)]
+    struct Shared {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        entry: Entry,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+
+    Installer::new("com.kv", install_dir.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let root = std::fs::read_to_string(install_dir.path().join("com/kv/Kv.kt")).unwrap();
+    assert!(root.starts_with("package com.kv\n"), "{root}");
+    assert!(root.contains("val entry: com.kv.kv.Entry,"), "{root}");
+    assert!(
+        root.contains("val entry = com.kv.kv.Entry.deserialize(deserializer)"),
+        "{root}"
+    );
+    assert!(!root.contains("com.kv.Entry"), "{root}");
+
+    let kv = std::fs::read_to_string(install_dir.path().join("com/kv/kv/Kv.kt")).unwrap();
+    assert!(kv.starts_with("package com.kv.kv\n"), "{kv}");
+    assert!(kv.contains("val tag: com.kv.kv.Tag,"), "{kv}");
+    assert!(kv.contains("val shared: com.kv.Shared,"), "{kv}");
+    assert!(!kv.contains("com.kv.kv.kv"), "{kv}");
+}

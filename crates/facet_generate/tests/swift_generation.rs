@@ -14,6 +14,7 @@ use facet_generate::{
     generation::{
         CodeGeneratorConfig, SourceInstaller,
         bincode::BincodePlugin,
+        json::JsonPlugin,
         plugin::EmitterPlugin,
         swift::{
             Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator, normalize_path,
@@ -368,6 +369,35 @@ fn test_that_swift_code_compiles_with_bincode() {
     );
 }
 
+/// JSON output builds for the broad fixture, and for the keyword and
+/// shadowing ones, with the generated manifest and the runtime the installer
+/// writes (#157).
+#[test]
+fn test_that_swift_code_compiles_with_json() {
+    for registry in [
+        get_swift_registry(),
+        common::get_keyword_registry(),
+        common::get_shadowing_registry(),
+        common::get_uuid_registry(),
+    ] {
+        assert_installed_package_compiles(&registry, JsonPlugin);
+    }
+
+    // Both encodings at once share the runtime target.
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&get_swift_registry())
+        .unwrap();
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
 // ---------------------------------------------------------------------------
 // Conformance compile-and-run tests
 //
@@ -644,9 +674,376 @@ fn test_that_swift_code_with_types_from_other_namespaces_compiles() {
         common::across_namespaces::to_root::get_namespace_registry(),
         common::across_namespaces::inherited::get_registry(),
     ] {
-        // Not with the JSON plugin: the Swift runtime has no `JsonSerializer`
-        // or `JsonDeserializer`, so its output never builds, namespaces or
-        // not (#157).
         assert_installed_package_compiles(&registry, BincodePlugin);
+        assert_installed_package_compiles(&registry, JsonPlugin);
     }
+}
+
+/// A plugin whose output in the root module names `Kit.Presence`, a type
+/// nothing else in that module references.
+#[derive(Debug)]
+struct NamesPresencePlugin;
+
+impl EmitterPlugin<SwiftLang> for NamesPresencePlugin {
+    fn referenced_types(
+        &self,
+        config: &CodeGeneratorConfig,
+    ) -> Vec<facet_generate::reflection::format::QualifiedTypeName> {
+        if config.module_name() == "Example" {
+            vec![
+                facet_generate::reflection::format::QualifiedTypeName::namespaced(
+                    "kit".to_string(),
+                    "Presence".to_string(),
+                ),
+            ]
+        } else {
+            vec![]
+        }
+    }
+
+    fn module_helpers(
+        &self,
+        w: &mut dyn facet_generate::generation::indent::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        if config.module_name() == "Example" {
+            writeln!(w, "public typealias CurrentPresence = Kit.Presence")?;
+        }
+        Ok(())
+    }
+}
+
+/// A type that only a plugin's output names is imported, and its target is a
+/// dependency, so the package builds (redbadger/crux#614).
+#[test]
+fn test_that_swift_code_naming_a_plugin_s_referenced_type_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Presence {
+        online: bool,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+
+    // With `BincodePlugin` too: the installer makes every target depend on
+    // `Serde` once it has a plugin, and only a runtime plugin writes `Serde`.
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .plugin(NamesPresencePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// With every type in a named namespace, the ROOT module has no types, so the
+/// package declares no target of its own, which would have no sources
+/// (#158).
+#[test]
+fn test_that_swift_code_with_no_root_types_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    struct Inner {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "a")]
+    struct Outer {
+        inner: Inner,
+    }
+
+    let registry = reflect!(Outer).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type holding a type from another module that isn't `Hashable` is not
+/// declared `Hashable` either, and the package builds (#156): `Kit.Holder` has
+/// a native tuple field, so it is only `Equatable`, and `SwHash` holds it.
+#[test]
+fn test_that_swift_code_holding_a_non_hashable_type_from_another_module_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type holding a type from another module that is neither `Equatable` nor
+/// `Hashable` is declared neither, and the package builds (#156): `Kit.Holder`
+/// has a `Void` field.
+#[test]
+fn test_that_swift_code_holding_a_non_equatable_type_from_another_module_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        u: (),
+    }
+
+    #[derive(Facet)]
+    struct SwEq {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwEq).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// Non-conformance propagates across two module boundaries (root → kit →
+/// other), through generic containers (#156).
+#[test]
+fn test_that_swift_code_with_non_conformance_across_modules_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Leaf {
+        pair: (u32, u32),
+        unit: Vec<()>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Middle {
+        leaves: Vec<Leaf>,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        middle: Option<Middle>,
+        by_name: BTreeMap<String, Middle>,
+    }
+
+    let registry = reflect!(Top).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type in a cycle is not `Hashable` when another type in the cycle isn't,
+/// whichever of them is looked at first, and a type in another module holding
+/// it is not declared `Hashable` either (#156). `Ping` is looked at first; it
+/// holds a native tuple and a `Pong`, which holds only a `Ping`.
+#[test]
+fn test_that_swift_code_holding_a_type_in_a_non_hashable_cycle_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Ping {
+        Pong(Box<Pong>),
+        Pair((u32, u32)),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Pong {
+        Done,
+        Ping(Box<Ping>),
+    }
+
+    #[derive(Facet)]
+    struct HoldsPong {
+        pong: Pong,
+    }
+
+    let registry = reflect!(HoldsPong).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// A type holding a type that can't be compared with `==` (an array of native
+/// tuples, which is not `Equatable`) is not declared `Equatable`, in the same
+/// module or another: a type's conformance is decided with the rules it is
+/// declared with.
+#[test]
+fn test_that_swift_code_holding_an_array_of_tuples_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Pairs {
+        pairs: Vec<(u32, u32)>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct HoldsPairs {
+        pairs: Pairs,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        pairs: Pairs,
+        holds: HoldsPairs,
+    }
+
+    let registry = reflect!(Top).unwrap();
+
+    assert_installed_package_compiles(&registry, BincodePlugin);
+}
+
+/// Generate `registry` as a Swift package with the installer, with no plugin
+/// and with each serialization plugin, add `extra_sources` to the root
+/// (`Example`) target, and build it.
+///
+/// Returns the generated root module source from each build.
+fn assert_installed_package_compiles_with_sources(
+    registry: &Registry,
+    extra_sources: &[(&str, &str)],
+) -> Vec<String> {
+    let configurations: [fn(SwiftInstaller) -> SwiftInstaller; 3] = [
+        |installer| installer,
+        |installer| installer.plugin(BincodePlugin),
+        |installer| installer.plugin(JsonPlugin),
+    ];
+    configurations
+        .into_iter()
+        .map(|configure| {
+            let dir = tempdir().unwrap();
+            configure(SwiftInstaller::new("Example", dir.path()))
+                .generate(registry)
+                .unwrap();
+
+            let root = dir.path().join("Sources/Example");
+            for (name, source) in extra_sources {
+                std::fs::write(root.join(name), source).unwrap();
+            }
+
+            let status = Command::new("swift")
+                .current_dir(dir.path())
+                .args(["build", "--disable-index-store"])
+                .status()
+                .unwrap();
+            assert!(status.success());
+
+            std::fs::read_to_string(root.join("Example.swift")).unwrap()
+        })
+        .collect()
+}
+
+/// A namespaced type named `Set` doesn't shadow `Swift.Set` in the root
+/// module that imports its namespace: the root's own `Set<T>` is qualified
+/// (#152).
+#[test]
+fn test_that_swift_code_importing_a_type_named_set_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kv")]
+    pub struct Set {
+        pub key: String,
+    }
+
+    #[derive(Facet)]
+    pub struct App {
+        pub op: Set,
+        pub tags: std::collections::HashSet<i32>,
+    }
+
+    let registry = reflect!(App).unwrap();
+
+    let check = "func check(a: App) -> Swift.Set<Int32> { a.tags }\n";
+    for root in assert_installed_package_compiles_with_sources(&registry, &[("Check.swift", check)])
+    {
+        assert!(
+            root.contains("public var tags: Swift.Set<Int32>"),
+            "`tags` is not qualified as `Swift.Set`:\n{root}"
+        );
+    }
+}
+
+/// A namespaced type named `String` doesn't shadow `Swift.String` in the
+/// root module that imports its namespace (#152). The extra source proves
+/// `name` really is a `Swift.String`, not `Kv.String`.
+#[test]
+fn test_that_swift_code_importing_a_type_named_string_compiles() {
+    mod kv {
+        use facet::Facet;
+        use facet_generate as fg;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kv")]
+        pub struct String {
+            pub bytes: Vec<u8>,
+        }
+    }
+
+    #[derive(Facet)]
+    pub struct App {
+        pub op: kv::String,
+        pub name: std::string::String,
+    }
+
+    let registry = reflect!(App).unwrap();
+
+    let check = "func check(a: App) -> Swift.String { a.name }\n";
+    for root in assert_installed_package_compiles_with_sources(&registry, &[("Check.swift", check)])
+    {
+        assert!(
+            root.contains("public var name: Swift.String"),
+            "`name` is not qualified as `Swift.String`:\n{root}"
+        );
+    }
+}
+
+/// Two different types named `Child`, one explicitly in namespace `a` and one
+/// inherited into namespace `b`, are each generated in their own module, and
+/// the package builds (#138).
+#[test]
+fn test_that_swift_code_with_same_named_types_in_two_namespaces_compiles() {
+    mod one {
+        use facet::Facet;
+        use facet_generate as fg;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "a")]
+        pub struct Child {
+            pub x: u8,
+        }
+    }
+    mod two {
+        use facet::Facet;
+
+        #[derive(Facet)]
+        pub struct Child {
+            pub y: u8,
+        }
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "b")]
+    pub struct Parent {
+        pub first: one::Child,
+        pub second: two::Child,
+    }
+
+    #[derive(Facet)]
+    pub struct App {
+        pub parent: Parent,
+    }
+
+    let registry = reflect!(App).unwrap();
+
+    let check = "import A\nimport B\n\
+        func first(p: B.Parent) -> A.Child { p.first }\n\
+        func second(p: B.Parent) -> B.Child { p.second }\n";
+    assert_installed_package_compiles_with_sources(&registry, &[("Check.swift", check)]);
 }

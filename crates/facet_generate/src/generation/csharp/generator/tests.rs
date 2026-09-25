@@ -6,7 +6,8 @@
 //!
 //! # Coverage
 //!
-//! - Same-leaf-namespace stripping (`Users` inside `Company.Models.Users` → bare name)
+//! - Same-namespace stripping (`Users` inside the `Users` module,
+//!   `Company.Models.Users` → bare name)
 //! - External namespace rooting under module (`Payments` → `Company.Models.Payments`)
 //! - Root-to-dotted promotion (`Root` inside `Company.Models` → `Named("Company.Models")`)
 //! - References from a namespaced module rooted at the root package, not the
@@ -61,8 +62,12 @@ fn render_output(
 }
 
 #[test]
-fn update_qualified_names_strips_same_leaf_namespace() {
-    let config = CodeGeneratorConfig::new("Company.Models.Users".to_string());
+fn update_qualified_names_strips_same_namespace() {
+    // The module of namespace `Users`, as `module::split` and the installer
+    // make it: its namespace, not the last segment of its name, says which
+    // references are its own.
+    let mut config = CodeGeneratorConfig::new("Users".to_string()).with_parent("Company.Models");
+    config.namespace = Namespace::Named("Users".to_string());
     let registry = registry_with_struct_field(Format::TypeName(QualifiedTypeName::namespaced(
         "Users".to_string(),
         "UserSummary".to_string(),

@@ -136,7 +136,11 @@ fn test_update_qualified_names_same_namespace_type() {
     let mut external_definitions = BTreeMap::new();
     external_definitions.insert("other".to_string(), vec!["SomeExternalType".to_string()]);
 
-    let config = create_test_config("com.example.other", external_definitions);
+    // The module of namespace `other`, as `module::split` and the installer
+    // make it: its namespace, not the last segment of its name, says which
+    // references are its own (#164).
+    let mut config = create_test_config("other", external_definitions).with_parent("com.example");
+    config.namespace = Namespace::Named("other".to_string());
     let original_registry = create_test_registry_with_struct_field(
         Namespace::Named("other".to_string()),
         "LocalTypeInOtherModule",
@@ -995,6 +999,50 @@ fn own_namespace_reference_is_unchanged_when_the_package_ends_in_it() {
     assert_eq!(
         KotlinCodeGenerator::requalify(&config, &entry),
         QualifiedTypeName::namespaced("com.kv.kv".to_string(), "Entry".to_string()),
+    );
+}
+
+#[test]
+fn namespace_reference_from_the_root_module_is_to_the_namespace_when_the_package_ends_in_it() {
+    // The root module `com.kv` ends in `kv` without being the module of
+    // namespace `kv`, which is `com.kv.kv` (#164).
+    let entry = QualifiedTypeName::namespaced("kv".to_string(), "Entry".to_string());
+    let registry = Registry::from([
+        (
+            QualifiedTypeName::root("App".to_string()),
+            ContainerFormat::Struct(
+                vec![Named {
+                    name: "entry".to_string(),
+                    doc: Doc::new(),
+                    value: Format::TypeName(entry.clone()),
+                }],
+                Doc::new(),
+            ),
+        ),
+        (entry.clone(), ContainerFormat::UnitStruct(Doc::new())),
+    ]);
+
+    for (module, _) in crate::generation::module::split("com.kv", &registry) {
+        let config = module.config().clone().with_parent("com.kv");
+        assert_eq!(
+            KotlinCodeGenerator::requalify(&config, &entry),
+            QualifiedTypeName::namespaced("com.kv.kv".to_string(), "Entry".to_string()),
+            "from {}",
+            config.module_name(),
+        );
+    }
+}
+
+#[test]
+fn namespace_named_after_an_undotted_package_shares_the_root_module() {
+    // `module::split` puts namespace `shared` in the root module `shared`.
+    let config = CodeGeneratorConfig::new("shared".to_string()).with_parent("shared");
+    assert_eq!(
+        KotlinCodeGenerator::requalify(
+            &config,
+            &QualifiedTypeName::namespaced("shared".to_string(), "Entry".to_string())
+        ),
+        QualifiedTypeName::namespaced("shared".to_string(), "Entry".to_string()),
     );
 }
 

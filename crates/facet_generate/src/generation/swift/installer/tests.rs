@@ -14,6 +14,8 @@
 //! - Plugin-provided package and target dependencies, and deployment
 //!   platforms.
 //! - Plugin companion files written beside the generated module.
+//! - Plugin-declared type references, which import and depend on their
+//!   module's target like the registry's own, cycle check included.
 
 use facet::Facet;
 use indoc::indoc;
@@ -28,6 +30,7 @@ use crate::{
         swift::{Swift, installer::Installer},
     },
     reflect,
+    reflection::format::QualifiedTypeName,
 };
 
 /// A plugin standing in for one that bridges to an FFI package: it adds a
@@ -1145,5 +1148,548 @@ fn namespaces_referencing_each_other_are_rejected() {
     assert!(
         error.contains("`A` references `Down` in `B`; `B` references `Up` in `A`."),
         "{error}"
+    );
+}
+
+/// A plugin whose output, in the module `module`, names `types`.
+#[derive(Debug)]
+struct ReferencesPlugin {
+    module: &'static str,
+    types: Vec<QualifiedTypeName>,
+}
+
+impl EmitterPlugin<Swift> for ReferencesPlugin {
+    fn referenced_types(&self, config: &CodeGeneratorConfig) -> Vec<QualifiedTypeName> {
+        if config.module_name() == self.module {
+            self.types.clone()
+        } else {
+            vec![]
+        }
+    }
+}
+
+fn kit_presence() -> QualifiedTypeName {
+    QualifiedTypeName::namespaced("kit".to_string(), "Presence".to_string())
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "kit")]
+struct Presence {
+    online: bool,
+}
+
+/// A namespace that only a plugin's output names is imported, and its target
+/// is a dependency of the module's.
+#[test]
+fn a_plugin_s_reference_imports_and_depends_on_its_namespace() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["Example"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "Example",
+                dependencies: ["Kit", "Serde"]
+            ),
+            .target(
+                name: "Kit",
+                dependencies: ["Serde"]
+            ),
+        ]
+    )
+    "#);
+
+    let root =
+        std::fs::read_to_string(install_dir.path().join("Sources/Example/Example.swift")).unwrap();
+    assert_eq!(root.matches("import Kit\n").count(), 1, "{root}");
+}
+
+/// A namespace that both the registry and a plugin reference is imported, and
+/// depended on, once.
+#[test]
+fn a_plugin_s_reference_to_a_namespace_the_registry_references_is_not_repeated() {
+    #[derive(Facet)]
+    struct App {
+        presence: Presence,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence(), kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    assert!(
+        manifest.contains(concat!(
+            r#"name: "Example","#,
+            "\n",
+            "            ",
+            r#"dependencies: ["Kit", "Serde"]"#
+        )),
+        "{manifest}"
+    );
+
+    let root =
+        std::fs::read_to_string(install_dir.path().join("Sources/Example/Example.swift")).unwrap();
+    assert_eq!(root.matches("import Kit\n").count(), 1, "{root}");
+}
+
+/// A plugin's reference takes part in the cycle check: `kit` references a
+/// ROOT type, so the root module naming a `kit` type would close a cycle.
+#[test]
+fn a_plugin_s_reference_that_closes_a_cycle_is_rejected() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Row {
+        shared: Shared,
+    }
+
+    let registry = reflect!(Row).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![QualifiedTypeName::namespaced(
+                "kit".to_string(),
+                "Row".to_string(),
+            )],
+        })
+        .generate(&registry)
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Swift targets cannot depend on each other in a cycle, and these would: \
+         `Example` references `Row` in `Kit`; `Kit` references `Shared` in `Example`. \
+         Move the types that one of these targets references into a namespace of their \
+         own (`#[facet(fg::namespace = \"…\")]`), which the targets can both depend on"
+    );
+    assert!(!install_dir.path().join("Package.swift").exists());
+}
+
+/// A ROOT type a plugin names in a namespaced module makes it import, and
+/// depend on, the root package's target.
+#[test]
+fn a_plugin_s_reference_to_a_root_type_depends_on_the_root_target() {
+    let registry = reflect!(Shared, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "kit",
+            types: vec![QualifiedTypeName::root("Shared".to_string())],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    assert!(
+        manifest.contains(concat!(
+            r#"name: "Kit","#,
+            "\n",
+            "            ",
+            r#"dependencies: ["Example", "Serde"]"#
+        )),
+        "{manifest}"
+    );
+
+    let kit = std::fs::read_to_string(install_dir.path().join("Sources/Kit/Kit.swift")).unwrap();
+    assert!(kit.starts_with("import Example\n"), "{kit}");
+}
+
+/// A plugin naming a type the registry does not have is a bug in the plugin.
+#[test]
+fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
+    let registry = reflect!(Shared).unwrap();
+    let error = Installer::new("Example", tempfile::tempdir().unwrap().path())
+        .plugin(ReferencesPlugin {
+            module: "Example",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap_err()
+        .to_string();
+
+    assert!(
+        error.ends_with(
+            "declares that module `Example` references `kit::Presence`, which is not a \
+             type in the registry"
+        ),
+        "{error}"
+    );
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "b")]
+struct Inner {
+    x: u32,
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "a")]
+struct Outer {
+    inner: Inner,
+}
+
+/// With every type in a named namespace the root module has no types, so the
+/// package declares no target of its own, and the library product lists the
+/// top-level namespace target instead (#158).
+#[test]
+fn manifest_with_no_root_types() {
+    let registry = reflect!(Outer).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["A"]
+            )
+        ],
+        targets: [
+            .target(
+                name: "A",
+                dependencies: ["B", "Serde"]
+            ),
+            .target(
+                name: "B",
+                dependencies: ["Serde"]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+    assert!(!install_dir.path().join("Sources/Example").exists());
+}
+
+/// A plugin's target dependencies go to the namespace targets it was asked
+/// about, and none to a root target the package does not declare (#158).
+#[test]
+fn a_plugin_s_target_dependencies_with_no_root_types() {
+    let registry = reflect!(Outer).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(FfiPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("Package.swift")).unwrap();
+    insta::assert_snapshot!(manifest, @r#"
+    // swift-tools-version: 5.8
+    import PackageDescription
+
+    let package = Package(
+        name: "Example",
+        products: [
+            .library(
+                name: "Example",
+                targets: ["A"]
+            )
+        ],
+        dependencies: [
+            .package(
+                path: "../Shared"
+            )
+        ],
+        targets: [
+            .target(
+                name: "A",
+                dependencies: ["B", "Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "B",
+                dependencies: ["Serde", .product(name: "Shared", package: "Shared")]
+            ),
+            .target(
+                name: "Serde",
+                dependencies: []
+            ),
+        ]
+    )
+    "#);
+}
+
+/// A plugin with no output of its own: with it, the generated types declare
+/// their `Hashable` and `Equatable` conformance, and nothing else.
+#[derive(Debug)]
+struct DeclaresConformance;
+
+impl EmitterPlugin<Swift> for DeclaresConformance {}
+
+/// Generates `registry` as the package `Example` with
+/// [`DeclaresConformance`] and the given external packages, returning the
+/// line declaring each type, keyed by module.
+fn declarations(
+    registry: &crate::Registry,
+    external_packages: &[ExternalPackage],
+) -> std::collections::BTreeMap<String, Vec<String>> {
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", install_dir.path())
+        .external_packages(external_packages)
+        .plugin(DeclaresConformance)
+        .generate(registry)
+        .unwrap();
+
+    let mut declarations = std::collections::BTreeMap::new();
+    for entry in std::fs::read_dir(install_dir.path().join("Sources")).unwrap() {
+        let module = entry.unwrap().file_name().into_string().unwrap();
+        let source = std::fs::read_to_string(
+            install_dir
+                .path()
+                .join("Sources")
+                .join(&module)
+                .join(format!("{module}.swift")),
+        )
+        .unwrap();
+        declarations.insert(
+            module,
+            source
+                .lines()
+                .filter(|line| line.starts_with("public struct") || line.contains("public enum"))
+                .map(str::to_string)
+                .collect(),
+        );
+    }
+    declarations
+}
+
+/// A type holding a type from another module that is `Equatable` but not
+/// `Hashable` (a native tuple field) is declared `Equatable` only (#156).
+#[test]
+fn a_type_holding_a_non_hashable_type_from_another_module_is_not_hashable() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct SwHash: Equatable {",
+        ],
+        "Kit": [
+            "public struct Holder: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type holding a type from another module that is neither `Equatable` nor
+/// `Hashable` (a `Void` field) is declared neither (#156).
+#[test]
+fn a_type_holding_a_non_equatable_type_from_another_module_is_neither() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Holder {
+        u: (),
+    }
+
+    #[derive(Facet)]
+    struct SwEq {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwEq).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct SwEq {",
+        ],
+        "Kit": [
+            "public struct Holder {",
+        ],
+    }
+    "#);
+}
+
+/// Non-conformance propagates across two module boundaries, root → kit →
+/// other, through generic containers (#156).
+#[test]
+fn non_conformance_propagates_across_two_modules() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Pair {
+        pair: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "other")]
+    struct Nothing {
+        id: u32,
+        unit: (),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Pairs {
+        pairs: Vec<Pair>,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Nothings {
+        nothings: std::collections::BTreeMap<String, Nothing>,
+    }
+
+    #[derive(Facet)]
+    struct Top {
+        pairs: Option<Pairs>,
+        nothings: Box<Nothings>,
+    }
+
+    #[derive(Facet)]
+    struct TopPairs {
+        pairs: Vec<Option<Pairs>>,
+    }
+
+    let registry = reflect!(Top, TopPairs).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct Top {",
+            "public struct TopPairs: Equatable {",
+        ],
+        "Kit": [
+            "public struct Nothings {",
+            "public struct Pairs: Equatable {",
+        ],
+        "Other": [
+            "public struct Nothing {",
+            "public struct Pair: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type in a cycle is not `Hashable` when another type in the cycle isn't,
+/// even when the type looked at first is the one that isn't, and a type in
+/// another module holding it is not either (#156). `Ping` comes first; it
+/// holds a native tuple and a `Pong`, which holds only a `Ping`.
+#[test]
+fn a_type_in_a_non_hashable_cycle_is_not_hashable_in_any_module() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Ping {
+        Pong(Box<Pong>),
+        Pair((u32, u32)),
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Pong {
+        Done,
+        Ping(Box<Ping>),
+    }
+
+    #[derive(Facet)]
+    struct HoldsPong {
+        pong: Pong,
+    }
+
+    let registry = reflect!(HoldsPong).unwrap();
+
+    insta::assert_debug_snapshot!(declarations(&registry, &[]), @r#"
+    {
+        "Example": [
+            "public struct HoldsPong: Equatable {",
+        ],
+        "Kit": [
+            "indirect public enum Ping: Equatable {",
+            "indirect public enum Pong: Equatable {",
+        ],
+    }
+    "#);
+}
+
+/// A type from an external package is generated elsewhere, so a type holding
+/// it assumes it conforms to both protocols, whatever its fields.
+#[test]
+fn a_type_from_an_external_package_is_assumed_to_conform() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "api")]
+    struct Holder {
+        t: (u32, u32),
+    }
+
+    #[derive(Facet)]
+    struct SwHash {
+        h: Holder,
+    }
+
+    let registry = reflect!(SwHash).unwrap();
+
+    insta::assert_debug_snapshot!(
+        declarations(
+            &registry,
+            &[ExternalPackage {
+                for_namespace: "api".to_string(),
+                location: PackageLocation::Path("../Api".to_string()),
+                module_name: None,
+                version: None,
+            }]
+        ),
+        @r#"
+    {
+        "Example": [
+            "public struct SwHash: Hashable, Equatable {",
+        ],
+    }
+    "#
     );
 }

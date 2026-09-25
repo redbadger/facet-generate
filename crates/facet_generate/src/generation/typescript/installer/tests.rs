@@ -12,16 +12,18 @@
 //! - Multi-module (namespace) scenarios where each namespace becomes a
 //!   separate `.ts` file.
 //! - Plugin-provided dependency pairs, merged with the external ones.
+//! - Plugin-declared type references, imported like the registry's own.
 
 use facet::Facet;
 
 use crate as fg;
 use crate::{
     generation::{
-        ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
+        CodeGeneratorConfig, ExternalPackage, PackageLocation, SourceInstaller as _, module::split,
         plugin::EmitterPlugin, typescript::TypeScript,
     },
     reflect,
+    reflection::format::QualifiedTypeName,
 };
 
 use super::Installer;
@@ -414,4 +416,138 @@ fn namespaced_module_imports_the_root_package_for_root_types() {
     // The root module's own references are unchanged.
     let root = std::fs::read_to_string(install_dir.path().join("my-package.ts")).unwrap();
     assert!(root.contains("constructor (public entry: Kv.Entry, public shared: Shared)"));
+}
+
+/// A plugin whose output, in the module `module`, names `types`.
+#[derive(Debug)]
+struct ReferencesPlugin {
+    module: &'static str,
+    types: Vec<QualifiedTypeName>,
+}
+
+impl EmitterPlugin<TypeScript> for ReferencesPlugin {
+    fn referenced_types(&self, config: &CodeGeneratorConfig) -> Vec<QualifiedTypeName> {
+        if config.module_name() == self.module {
+            self.types.clone()
+        } else {
+            vec![]
+        }
+    }
+}
+
+fn kit_presence() -> QualifiedTypeName {
+    QualifiedTypeName::namespaced("kit".to_string(), "Presence".to_string())
+}
+
+#[derive(Facet)]
+#[facet(fg::namespace = "kit")]
+struct Presence {
+    online: bool,
+}
+
+/// A namespace that only a plugin's output names is imported all the same.
+#[test]
+fn a_plugin_s_reference_imports_its_namespace() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("my-package", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "my-package",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let root = std::fs::read_to_string(install_dir.path().join("my-package.ts")).unwrap();
+    insta::assert_snapshot!(root, @r#"
+    import * as Kit from "./kit";
+    type uint32 = number;
+
+    export class App {
+        constructor (public id: uint32) {
+        }
+    }
+    "#);
+}
+
+/// A namespace that both the registry and a plugin reference is imported once.
+#[test]
+fn a_plugin_s_reference_to_a_namespace_the_registry_references_is_imported_once() {
+    #[derive(Facet)]
+    struct App {
+        presence: Presence,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("my-package", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "my-package",
+            types: vec![kit_presence(), kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let root = std::fs::read_to_string(install_dir.path().join("my-package.ts")).unwrap();
+    assert_eq!(
+        root.matches(r#"import * as Kit from "./kit";"#).count(),
+        1,
+        "{root}"
+    );
+}
+
+/// A ROOT type a plugin names in a namespaced module is reached through the
+/// root package's module, like one the registry references.
+#[test]
+fn a_plugin_s_reference_to_a_root_type_imports_the_root_package() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App, Presence).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("my-package", install_dir.path())
+        .plugin(ReferencesPlugin {
+            module: "kit",
+            types: vec![QualifiedTypeName::root("App".to_string())],
+        })
+        .generate(&registry)
+        .unwrap();
+
+    let kit = std::fs::read_to_string(install_dir.path().join("kit.ts")).unwrap();
+    assert!(
+        kit.starts_with("import * as MyPackage from \"./my-package\";\n"),
+        "{kit}"
+    );
+}
+
+/// A plugin naming a type the registry does not have is a bug in the plugin.
+#[test]
+fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let error = Installer::new("my-package", tempfile::tempdir().unwrap().path())
+        .plugin(ReferencesPlugin {
+            module: "my-package",
+            types: vec![kit_presence()],
+        })
+        .generate(&registry)
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "plugin ReferencesPlugin { module: \"my-package\", types: [QualifiedTypeName { \
+         namespace: Named(\"kit\"), name: \"Presence\" }] } declares that module \
+         `my-package` references `kit::Presence`, which is not a type in the registry"
+    );
 }

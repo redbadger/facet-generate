@@ -30,6 +30,7 @@ mod with_bytes;
 mod with_enums_across_namespaces;
 mod with_namespaces_as_external;
 mod with_namespaces_as_internal;
+mod with_same_name_in_two_namespaces;
 mod with_serialization;
 mod with_serialization_and_namespaces_as_external;
 mod with_serialization_and_serde_external;

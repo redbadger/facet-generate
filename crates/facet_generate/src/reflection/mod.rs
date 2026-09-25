@@ -187,7 +187,16 @@ pub struct RegistryBuilder {
     name_mappings: BTreeMap<QualifiedTypeName, Mapping>,
     generic_type_params: BTreeMap<DeclId, String>,
     namespace_context_stack: Vec<NamespaceContext>,
-    type_namespace_sources: HashMap<QualifiedTypeName, bool>, // true = explicit, false = inherited
+    type_namespace_sources: HashMap<QualifiedTypeName, NamespaceSource>,
+}
+
+/// How a type came to be in the namespace it was registered under, and which Rust type it is.
+#[derive(Debug, Clone, Copy)]
+struct NamespaceSource {
+    /// The Rust type, as generated (see [`generated_shape`]).
+    id: ConstTypeId,
+    /// `true` if the namespace was set explicitly, `false` if inherited.
+    explicit: bool,
 }
 
 impl RegistryBuilder {
@@ -321,7 +330,7 @@ impl RegistryBuilder {
         let is_explicit = extract_namespace_from_shape(shape)?.is_explicit();
 
         // Check for conflicts: type name in multiple namespaces with mixed explicit/inherited sources
-        self.check_namespace_ambiguity(&name, is_explicit)?;
+        self.check_namespace_ambiguity(&name, is_explicit, shape)?;
 
         self.registry.insert(name.clone(), container);
         self.current.push(name);
@@ -954,7 +963,7 @@ impl RegistryBuilder {
 
         if has_explicit_namespace {
             // Type-level explicit namespace annotation overrides everything (including field-level explicit)
-            self.check_namespace_ambiguity(&original_name, true)?;
+            self.check_namespace_ambiguity(&original_name, true, shape)?;
             return Ok(original_name);
         }
 
@@ -964,7 +973,11 @@ impl RegistryBuilder {
                 Namespace::Root => {
                     // Context is explicitly root, use root namespace
                     let root_name = QualifiedTypeName::root(original_name.name.clone());
-                    self.check_namespace_ambiguity(&root_name, namespace_context.is_explicit())?;
+                    self.check_namespace_ambiguity(
+                        &root_name,
+                        namespace_context.is_explicit(),
+                        shape,
+                    )?;
                     return Ok(root_name);
                 }
                 Namespace::Named(context_ns) => {
@@ -977,6 +990,7 @@ impl RegistryBuilder {
                     self.check_namespace_ambiguity(
                         &namespaced_name,
                         namespace_context.is_explicit(),
+                        shape,
                     )?;
 
                     return Ok(namespaced_name);
@@ -988,19 +1002,28 @@ impl RegistryBuilder {
         Ok(original_name)
     }
 
+    /// Checks that one Rust type is not placed in two named namespaces where at least one of them
+    /// is inherited, which would leave it unclear which namespace the type belongs in.
+    ///
+    /// Only the same Rust type (compared as generated, so a transparent wrapper counts as the type
+    /// it wraps) can be ambiguous: two different types that share an identifier are simply two
+    /// types, in their own namespaces.
     fn check_namespace_ambiguity(
         &mut self,
         new_name: &QualifiedTypeName,
         new_has_explicit_namespace: bool,
+        shape: &Shape,
     ) -> Result<(), Error> {
-        for (existing_name, existing_has_explicit_namespace) in &self.type_namespace_sources {
-            if existing_name.name == new_name.name
+        let new_id = generated_shape(shape).id;
+        for (existing_name, existing) in &self.type_namespace_sources {
+            if existing.id == new_id
+                && existing_name.name == new_name.name
                 && existing_name.namespace != new_name.namespace
                 && (!matches!(existing_name.namespace, Namespace::Root)
                     && !matches!(new_name.namespace, Namespace::Root))
             {
                 let at_least_one_namespace_inherited =
-                    !new_has_explicit_namespace || !*existing_has_explicit_namespace;
+                    !new_has_explicit_namespace || !existing.explicit;
                 if at_least_one_namespace_inherited {
                     return Err(Error::AmbiguousNamespaceInheritance {
                         type_name: new_name.name.clone(),
@@ -1011,8 +1034,13 @@ impl RegistryBuilder {
             }
         }
 
-        self.type_namespace_sources
-            .insert(new_name.clone(), new_has_explicit_namespace);
+        self.type_namespace_sources.insert(
+            new_name.clone(),
+            NamespaceSource {
+                id: new_id,
+                explicit: new_has_explicit_namespace,
+            },
+        );
 
         Ok(())
     }

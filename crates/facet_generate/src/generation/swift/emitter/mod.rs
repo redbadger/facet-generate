@@ -29,15 +29,16 @@
 //!
 //! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
 //!   `bincodeSerialize` / `bincodeDeserialize` wrappers.
-//! - `JsonPlugin` supplies the same `serialize` / `deserialize` methods and
-//!   `jsonSerialize` / `jsonDeserialize` wrappers.
+//! - `JsonPlugin` adds a `Codable` conformance (through
+//!   [`EmitterPlugin::type_conformances`], which the emitter appends after
+//!   `Hashable` / `Equatable`), the coding members `serde_json`'s format
+//!   needs, and `jsonSerialize` / `jsonDeserialize` wrappers.
 //! - With no plugins, only plain type declarations are emitted.
 //!
 //! # Feature helpers
 //!
-//! The encoding-specific feature helpers (`serializeArray`, `serializeOption`,
-//! etc.) are inlined in `BincodePlugin` and `JsonPlugin`
-//! (`generation/bincode/swift.rs` and `generation/json/swift.rs`).
+//! The bincode feature helpers (`serializeArray`, `serializeOption`, etc.) are
+//! inlined in `BincodePlugin` (`generation/bincode/swift.rs`).
 //! They are emitted via the [`EmitterPlugin::module_helpers`] hook when the
 //! corresponding [`Feature`] flag is set by
 //! [`CodeGeneratorConfig::update_from`].
@@ -72,7 +73,10 @@ use crate::{
         indent::{IndentWrite, Newlines},
         module::Module,
         plugin::{EmitContext, EmitterPlugin},
-        swift::generator::{compute_equatable_types, compute_hashable_types},
+        swift::{
+            conformance::{self, Conformance},
+            generator::SwiftCodeGenerator,
+        },
     },
     reflection::format::{
         ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
@@ -81,11 +85,11 @@ use crate::{
 
 /// Language tag for Swift code generation.
 ///
-/// Carries the active `Encoding` and the sets of type names (within the
-/// current module) that are known to be able to synthesize `Hashable` and
-/// `Equatable` conformance respectively. Both sets are computed by a
-/// preprocessing pass — see
-/// [`SwiftCodeGenerator`](crate::generation::swift::generator::SwiftCodeGenerator).
+/// Carries the active `Encoding` and the sets of type names that conform to
+/// `Hashable` and `Equatable` respectively, in the spelling the emitter sees.
+/// Both sets are decided by a preprocessing pass over the whole registry when
+/// the [`Installer`](crate::generation::swift::Installer) generates the
+/// module, and over the module's own registry otherwise.
 ///
 /// The plugin list is built in [`new`](Self::new) from the config encoding.
 /// Eventually, plugins will be supplied externally and `encoding` will be
@@ -94,11 +98,13 @@ use crate::{
 pub struct Swift {
     /// The code-generator configuration for the current module.
     pub(crate) config: CodeGeneratorConfig,
-    /// Qualified names of every type defined in this module's registry.
-    pub(crate) local_types: BTreeSet<QualifiedTypeName>,
-    /// Local types that can synthesize `Hashable` conformance.
+    /// Qualified names of every type whose conformance was decided; any
+    /// other type (one from an external package, or absent from the
+    /// registry) is assumed to conform to both protocols.
+    pub(crate) decided_types: BTreeSet<QualifiedTypeName>,
+    /// Decided types that conform to `Hashable`.
     pub(crate) hashable_types: BTreeSet<QualifiedTypeName>,
-    /// Local types that can synthesize or manually implement `Equatable`
+    /// Decided types that synthesize or manually implement `Equatable`
     /// conformance.
     pub(crate) equatable_types: BTreeSet<QualifiedTypeName>,
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<Self>>>,
@@ -109,17 +115,47 @@ impl Swift {
     /// list. Plugins are added by the code generator (which holds the encoding)
     /// or explicitly via [`with_plugin`](Self::with_plugin).
     ///
-    /// The `hashable_types` and `equatable_types` sets are computed from the
-    /// registry via fixed-point analysis and are unrelated to plugin selection.
+    /// The `hashable_types` and `equatable_types` sets are computed from
+    /// `registry` via fixed-point analysis and are unrelated to plugin
+    /// selection. A type absent from `registry`, or in the namespace of one of
+    /// the config's external packages, is assumed to conform to both.
     #[must_use]
     pub fn new(config: &CodeGeneratorConfig, registry: &Registry) -> Self {
+        Self::decided_by(
+            config,
+            &Conformance::of(registry, &config.external_packages),
+        )
+    }
+
+    /// Create a Swift language tag whose type sets come from `conformance`,
+    /// decided over a registry that may be wider than this module's (the
+    /// whole one, when the installer generates the module), respelled the way
+    /// the generator rewrites this module's type references.
+    pub(crate) fn decided_by(config: &CodeGeneratorConfig, conformance: &Conformance) -> Self {
+        let respell = |set: &BTreeSet<QualifiedTypeName>| -> BTreeSet<QualifiedTypeName> {
+            set.iter()
+                .map(|name| SwiftCodeGenerator::requalify(config, name))
+                .collect()
+        };
         Self {
             config: config.clone(),
-            local_types: registry.keys().cloned().collect(),
-            hashable_types: compute_hashable_types(registry),
-            equatable_types: compute_equatable_types(registry),
+            decided_types: respell(&conformance.decided),
+            hashable_types: respell(&conformance.hashable),
+            equatable_types: respell(&conformance.equatable),
             plugins: vec![],
         }
+    }
+
+    /// Whether the type `name` (in the emitter's spelling) conforms to
+    /// `Hashable`.
+    fn is_hashable_type(&self, name: &QualifiedTypeName) -> bool {
+        !self.decided_types.contains(name) || self.hashable_types.contains(name)
+    }
+
+    /// Whether the type `name` (in the emitter's spelling) conforms to
+    /// `Equatable`.
+    fn is_equatable_type(&self, name: &QualifiedTypeName) -> bool {
+        !self.decided_types.contains(name) || self.equatable_types.contains(name)
     }
 
     /// Access the code-generator configuration.
@@ -149,59 +185,7 @@ impl Swift {
 /// Returns `true` if the Swift type produced by `format` can conform to
 /// `Hashable`.
 pub fn is_hashable(format: &Format, lang: &Swift) -> bool {
-    match format {
-        Format::Variable(_)
-        | Format::Unit  // Void does not conform to Hashable in Swift
-         => false,
-        Format::Map { key, value } => {
-            // [K: V] is Hashable iff K is hashable and V is hashable
-            is_hashable(key, lang) && is_hashable(value, lang)
-        },
-
-        // External types (absent from this module's registry) are assumed
-        // hashable; local types must have been computed as hashable.
-        Format::TypeName(qtn) => {
-            !lang.local_types.contains(qtn) || lang.hashable_types.contains(qtn)
-        }
-
-        Format::Bool
-        | Format::I8
-        | Format::I16
-        | Format::I32
-        | Format::I64
-        | Format::I128
-        | Format::U8
-        | Format::U16
-        | Format::U32
-        | Format::U64
-        | Format::U128
-        | Format::F32
-        | Format::F64
-        | Format::Char
-        | Format::Str
-        | Format::Bytes
-        | Format::Uuid => true,
-
-        Format::Option(inner)
-        | Format::Set(inner)
-        | Format::Seq(inner)
-        | Format::TupleArray { content: inner, .. } => is_hashable(inner, lang),
-
-        // A 1-element tuple is transparent; multi-element native tuples are not Hashable.
-        Format::Tuple(formats) => {
-            formats.len() == 1 && is_hashable(&formats[0], lang)
-        }
-    }
-}
-
-fn variant_is_hashable(format: &VariantFormat, lang: &Swift) -> bool {
-    match format {
-        VariantFormat::Variable(_) => false,
-        VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => is_hashable(fmt, lang),
-        VariantFormat::Tuple(fmts) => fmts.iter().all(|f| is_hashable(f, lang)),
-        VariantFormat::Struct(nameds) => nameds.iter().all(|n| is_hashable(&n.value, lang)),
-    }
+    conformance::is_hashable(format, &|name| lang.is_hashable_type(name))
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +208,7 @@ enum Usage {
 /// Returns `true` if a struct field of this format would create an
 /// infinite-size value-type cycle back to the containing struct named
 /// `struct_name`.
-fn needs_indirect(format: &Format, struct_name: &str) -> bool {
+pub(crate) fn needs_indirect(format: &Format, struct_name: &str) -> bool {
     match format {
         Format::TypeName(qtn) => qtn.name == struct_name,
         Format::Option(inner) => needs_indirect(inner, struct_name),
@@ -238,68 +222,7 @@ fn needs_indirect(format: &Format, struct_name: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 fn is_equatable_auto(format: &Format, lang: &Swift) -> bool {
-    match format {
-        // External types (absent from this module's registry) are assumed
-        // equatable; local types must have been computed as equatable.
-        Format::TypeName(qtn) => {
-            !lang.local_types.contains(qtn) || lang.equatable_types.contains(qtn)
-        }
-        Format::Variable(_) | Format::Unit => false,
-        Format::Bool
-        | Format::I8
-        | Format::I16
-        | Format::I32
-        | Format::I64
-        | Format::I128
-        | Format::U8
-        | Format::U16
-        | Format::U32
-        | Format::U64
-        | Format::U128
-        | Format::F32
-        | Format::F64
-        | Format::Char
-        | Format::Str
-        | Format::Bytes
-        | Format::Uuid => true,
-        Format::Option(inner) | Format::Set(inner) => is_equatable_auto(inner, lang),
-        Format::Seq(inner) | Format::TupleArray { content: inner, .. } => {
-            is_equatable_auto(inner, lang)
-        }
-        Format::Map { key, value } => {
-            is_equatable_auto(key, lang) && is_equatable_auto(value, lang)
-        }
-        Format::Tuple(formats) => formats.len() == 1 && is_equatable_auto(&formats[0], lang),
-    }
-}
-
-fn can_use_eq_operator(format: &Format, lang: &Swift) -> bool {
-    match format {
-        Format::Tuple(formats) if formats.len() > 1 => {
-            formats.iter().all(|f| is_equatable_auto(f, lang))
-        }
-        _ => is_equatable_auto(format, lang),
-    }
-}
-
-fn variant_is_equatable_auto(format: &VariantFormat, lang: &Swift) -> bool {
-    match format {
-        VariantFormat::Variable(_) => false,
-        VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => is_equatable_auto(fmt, lang),
-        VariantFormat::Tuple(formats) => formats.iter().all(|f| is_equatable_auto(f, lang)),
-        VariantFormat::Struct(nameds) => nameds.iter().all(|n| is_equatable_auto(&n.value, lang)),
-    }
-}
-
-fn variant_can_use_eq_operator(format: &VariantFormat, lang: &Swift) -> bool {
-    match format {
-        VariantFormat::Variable(_) => false,
-        VariantFormat::Unit => true,
-        VariantFormat::NewType(fmt) => can_use_eq_operator(fmt, lang),
-        VariantFormat::Tuple(formats) => formats.iter().all(|f| can_use_eq_operator(f, lang)),
-        VariantFormat::Struct(nameds) => nameds.iter().all(|n| can_use_eq_operator(&n.value, lang)),
-    }
+    conformance::is_equatable_auto(format, &|name| lang.is_equatable_type(name))
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +343,7 @@ impl Emitter<Swift> for Container<'_> {
 pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
     let lang = Swift {
         config: config.clone(),
-        local_types: BTreeSet::new(),
+        decided_types: BTreeSet::new(),
         hashable_types: BTreeSet::new(),
         equatable_types: BTreeSet::new(),
         plugins: vec![],
@@ -765,9 +688,13 @@ fn struct_<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let has_plugins = !lang.plugins().is_empty();
-    let all_hashable = fields.iter().all(|f| is_hashable(&f.value, lang));
+    let all_hashable = conformance::fields_are_hashable(fields.iter().map(|f| &f.value), &|name| {
+        lang.is_hashable_type(name)
+    });
     let all_equatable_auto = fields.iter().all(|f| is_equatable_auto(&f.value, lang));
-    let all_can_eq = fields.iter().all(|f| can_use_eq_operator(&f.value, lang));
+    let all_can_eq = conformance::fields_are_equatable(fields.iter().map(|f| &f.value), &|name| {
+        lang.is_equatable_type(name)
+    });
 
     let mut implements = vec![];
 
@@ -777,6 +704,8 @@ fn struct_<W: IndentWrite>(
     if all_equatable_auto || all_can_eq {
         implements.push(builtin("Equatable", &lang.config));
     }
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let implements = with_plugin_conformances(implements, &ctx, lang);
 
     if has_plugins && !implements.is_empty() {
         write!(w, "public struct {name}: {} ", implements.join(", "))?;
@@ -815,7 +744,6 @@ fn struct_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -873,15 +801,15 @@ fn enum_<W: IndentWrite>(
     doc.write(w, lang)?;
 
     let has_plugins = !lang.plugins().is_empty();
-    let all_hashable = variants
-        .values()
-        .all(|v| variant_is_hashable(&v.value, lang));
+    let hashable = |name: &QualifiedTypeName| lang.is_hashable_type(name);
+    let equatable = |name: &QualifiedTypeName| lang.is_equatable_type(name);
+    let all_hashable =
+        conformance::variants_are_hashable(variants.values().map(|v| &v.value), &hashable);
     let all_equatable_auto = variants
         .values()
-        .all(|v| variant_is_equatable_auto(&v.value, lang));
-    let all_can_eq = variants
-        .values()
-        .all(|v| variant_can_use_eq_operator(&v.value, lang));
+        .all(|v| conformance::variant_is_equatable_auto(&v.value, &equatable));
+    let all_can_eq =
+        conformance::variants_are_equatable(variants.values().map(|v| &v.value), &equatable);
 
     let mut implements = vec![];
 
@@ -891,6 +819,8 @@ fn enum_<W: IndentWrite>(
     if all_equatable_auto || all_can_eq {
         implements.push(builtin("Equatable", &lang.config));
     }
+    let ctx = EmitContext::top_level(container, &lang.config);
+    let implements = with_plugin_conformances(implements, &ctx, lang);
 
     if has_plugins && !implements.is_empty() {
         write!(w, "indirect public enum {name}: {} ", implements.join(", "))?;
@@ -905,7 +835,6 @@ fn enum_<W: IndentWrite>(
     }
 
     // Plugin type bodies (serialize / deserialize methods).
-    let ctx = EmitContext::top_level(container, &lang.config);
     for plugin in lang.plugins() {
         plugin.type_body(&mut w as &mut dyn IndentWrite, &ctx)?;
     }
@@ -1009,6 +938,24 @@ fn write_enum_eq<W: IndentWrite>(
 // ---------------------------------------------------------------------------
 // Utility
 // ---------------------------------------------------------------------------
+
+/// `implements` followed by every plugin's
+/// [`type_conformances`](EmitterPlugin::type_conformances), without repeats.
+fn with_plugin_conformances<'a>(
+    implements: Vec<Cow<'a, str>>,
+    ctx: &EmitContext,
+    lang: &Swift,
+) -> Vec<Cow<'a, str>> {
+    let mut implements = implements;
+    for plugin in lang.plugins() {
+        for conformance in plugin.type_conformances(ctx) {
+            if !implements.iter().any(|c| *c == conformance) {
+                implements.push(Cow::Owned(conformance));
+            }
+        }
+    }
+    implements
+}
 
 fn named<Format: Clone>(formats: &[Format], prefix: &str) -> Vec<Named<Format>> {
     formats

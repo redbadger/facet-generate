@@ -34,11 +34,14 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
+        collision::{self, Fix, Origin, TypeName},
         json::JsonPlugin,
         kotlin::{Kotlin, KotlinCodeGenerator},
-        module,
+        module::{self, Module},
         plugin::EmitterPlugin,
+        registry_references,
     },
+    reflection::format::{Namespace, QualifiedTypeName},
 };
 
 /// Writes a complete Kotlin project (source files, runtime, build script)
@@ -97,8 +100,16 @@ impl Installer {
     ///
     /// # Errors
     ///
-    /// Returns an error if any file operation or code generation step fails.
+    /// Returns an error if any file operation or code generation step fails,
+    /// and fails before writing anything when a namespace's package collides
+    /// with a class or with another namespace's source file, or when a type
+    /// hides the package that a module's type references begin with. Such
+    /// output would not compile, or would lose a module; the error names the
+    /// namespace or package and what it collides with.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        let modules = module::split(&self.package_name, registry);
+        self.check_namespaces(&modules)?;
+
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files.
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
@@ -127,10 +138,10 @@ impl Installer {
             }
         }
 
-        // Split by namespace and install each module
-        for (m, module_registry) in module::split(&self.package_name, registry) {
+        // Install each namespace's module
+        for (m, module_registry) in &modules {
             let config = m.config().clone().with_parent(&self.package_name);
-            self.install_module(&config, &module_registry)?;
+            self.install_module(&config, module_registry)?;
         }
 
         // Write the package manifest
@@ -138,6 +149,123 @@ impl Installer {
         self.install_manifest(&package_name)?;
 
         Ok(())
+    }
+
+    /// Fails when a namespace's module cannot be generated as it is named.
+    ///
+    /// A namespace becomes the package `<root package>.<namespace>`, keeping
+    /// the namespace's spelling, written to
+    /// `<root/package/path>/<namespace>/<Namespace>.kt`, and every type
+    /// reference is written fully qualified. So this fails when:
+    ///
+    /// - a namespace is spelled like a ROOT type (`Kit` beside `data class
+    ///   Kit`), whose class would have the same fully qualified name as the
+    ///   namespace's package ("package conflicts with classifier").
+    /// - two modules' source files differ only in case (namespaces `kv` and
+    ///   `Kv`), which are the same file on a case-insensitive file system, so
+    ///   one module would be lost. These are rejected whatever the file
+    ///   system, so that the output does not depend on where it is generated.
+    /// - a module declares a type named like the first segment of a qualified
+    ///   type reference it writes (a ROOT type `Example` in root package
+    ///   `Example`), which Kotlin would resolve to the type instead of the
+    ///   package.
+    ///
+    /// A namespace spelled like a ROOT type only in another case (`kv` beside
+    /// `Kv`) is fine: Kotlin names are case-sensitive. Namespaces provided by
+    /// external packages are not generated, so they are not checked.
+    fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        const LANGUAGE: &str = "Kotlin";
+
+        let generated: Vec<(CodeGeneratorConfig, &Registry)> = modules
+            .iter()
+            .filter(|(m, _)| match &m.config().namespace {
+                Namespace::Root => true,
+                Namespace::Named(namespace) => !self.external_packages.contains_key(namespace),
+            })
+            .map(|(m, registry)| {
+                let mut config = m.config().clone().with_parent(&self.package_name);
+                config.external_packages = self.external_packages.clone();
+                (config, registry)
+            })
+            .collect();
+        let root_types: Vec<&QualifiedTypeName> = generated
+            .iter()
+            .filter(|(config, _)| config.namespace == Namespace::Root)
+            .flat_map(|(_, registry)| registry.keys())
+            .collect();
+
+        for (config, _) in &generated {
+            if let Namespace::Named(namespace) = &config.namespace
+                && let Some(class) = root_types.iter().find(|t| &t.name == namespace)
+            {
+                return Err(collision::error(
+                    LANGUAGE,
+                    format_args!(
+                        "namespace \"{namespace}\" becomes the package `{}`",
+                        config.module_name()
+                    ),
+                    format_args!(
+                        "{}, the class `{}.{}`",
+                        TypeName(class),
+                        self.package_name,
+                        class.name
+                    ),
+                    Origin::Namespace(namespace).rename_type(),
+                )
+                .into());
+            }
+        }
+
+        collision::check_files(
+            LANGUAGE,
+            generated.iter().map(|(config, _)| {
+                (
+                    Origin::of_namespace(&config.namespace, &self.package_name),
+                    Self::source_path(config),
+                )
+            }),
+        )?;
+
+        for (config, registry) in &generated {
+            for reference in registry_references(registry) {
+                let qualified = KotlinCodeGenerator::requalify(config, &reference);
+                let Namespace::Named(package) = &qualified.namespace else {
+                    continue;
+                };
+                let first = package.split('.').next().unwrap_or(package);
+                if let Some(hiding) = registry.keys().find(|t| t.name == first) {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        format_args!(
+                            "package `{}` refers to {} as `{package}.{}`, whose first segment \
+                             is `{first}`",
+                            config.module_name(),
+                            TypeName(&reference),
+                            qualified.name,
+                        ),
+                        TypeName(hiding),
+                        Fix::RenameTypeOrPackage,
+                    )
+                    .into());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Where [`install_module`](SourceInstaller::install_module) writes the
+    /// module for `config`, relative to the install directory, with `/` as
+    /// the separator: the package's directory, and a file named after the
+    /// package's last segment.
+    fn source_path(config: &CodeGeneratorConfig) -> String {
+        let file_name = config
+            .module_name()
+            .split('.')
+            .next_back()
+            .unwrap_or_else(|| config.module_name())
+            .to_pascal_case();
+        format!("{}/{file_name}.kt", config.module_name().replace('.', "/"))
     }
 
     /// Installs the serde Kotlin runtime sources into the output directory.
@@ -352,3 +480,7 @@ impl SourceInstaller for Installer {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "collision_tests.rs"]
+mod collision_tests;

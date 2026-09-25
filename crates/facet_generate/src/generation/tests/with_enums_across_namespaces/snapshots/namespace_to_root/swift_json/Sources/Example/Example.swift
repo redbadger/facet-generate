@@ -1,93 +1,107 @@
 import Serde
 
-indirect public enum Level: Hashable, Equatable {
+indirect public enum Level: Hashable, Equatable, Codable {
     case low
     case high
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
+    enum CodingKeys: String, CodingKey {
+        case low = "Low"
+        case high = "High"
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+            switch name {
+            case "Low":
+                self = .low
+            case "High":
+                self = .high
+            default:
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for Level")
+            }
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.allKeys.count == 1, let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of Level"))
+        }
+        switch key {
+        case .low:
+            self = .low
+        case .high:
+            self = .high
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
         switch self {
         case .low:
-            try serializer.serialize_variant_index(value: 0)
+            var container = encoder.singleValueContainer()
+            try container.encode("Low")
         case .high:
-            try serializer.serialize_variant_index(value: 1)
+            var container = encoder.singleValueContainer()
+            try container.encode("High")
         }
-        try serializer.decrease_container_depth()
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Level {
-        let index = try deserializer.deserialize_variant_index()
-        try deserializer.increase_container_depth()
-        switch index {
-        case 0:
-            try deserializer.decrease_container_depth()
-            return .low
-        case 1:
-            try deserializer.decrease_container_depth()
-            return .high
-        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Level: \(index)")
-        }
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Level {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Level.self, from: input)
     }
 }
 
-indirect public enum Outcome: Hashable, Equatable {
+indirect public enum Outcome: Hashable, Equatable, Codable {
     case score(UInt32)
     case missing
 
-    public func serialize<S: Serializer>(serializer: S) throws {
-        try serializer.increase_container_depth()
-        switch self {
-        case .score(let x):
-            try serializer.serialize_variant_index(value: 0)
-            try serializer.serialize_u32(value: x)
-        case .missing:
-            try serializer.serialize_variant_index(value: 1)
+    enum CodingKeys: String, CodingKey {
+        case score = "Score"
+        case missing = "Missing"
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+            switch name {
+            case "Missing":
+                self = .missing
+            default:
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for Outcome")
+            }
+            return
         }
-        try serializer.decrease_container_depth()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        guard container.allKeys.count == 1, let key = container.allKeys.first else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of Outcome"))
+        }
+        switch key {
+        case .score:
+            self = .score(
+                try container.decode(UInt32.self, forKey: .score)
+            )
+        case .missing:
+            self = .missing
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        switch self {
+        case .score(let payload0):
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(payload0, forKey: .score)
+        case .missing:
+            var container = encoder.singleValueContainer()
+            try container.encode("Missing")
+        }
     }
 
     public func jsonSerialize() throws -> [UInt8] {
-        let serializer = JsonSerializer.init();
-        try self.serialize(serializer: serializer)
-        return serializer.get_bytes()
-    }
-
-    public static func deserialize<D: Deserializer>(deserializer: D) throws -> Outcome {
-        let index = try deserializer.deserialize_variant_index()
-        try deserializer.increase_container_depth()
-        switch index {
-        case 0:
-            let x = try deserializer.deserialize_u32()
-            try deserializer.decrease_container_depth()
-            return .score(x)
-        case 1:
-            try deserializer.decrease_container_depth()
-            return .missing
-        default: throw DeserializationError.invalidInput(issue: "Unknown variant index for Outcome: \(index)")
-        }
+        return try Serde.jsonSerialize(self)
     }
 
     public static func jsonDeserialize(input: [UInt8]) throws -> Outcome {
-        let deserializer = JsonDeserializer.init(input: input);
-        let obj = try deserialize(deserializer: deserializer)
-        if deserializer.get_buffer_offset() < input.count {
-            throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-        }
-        return obj
+        return try Serde.jsonDeserialize(Outcome.self, from: input)
     }
 }

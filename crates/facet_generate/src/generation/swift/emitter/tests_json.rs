@@ -1,14 +1,10 @@
 //! Snapshot tests for the Swift emitter — **JSON encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses `JsonPlugin`
-//! so that every generated type includes `Hashable` conformance and
-//! `Serializer`/`Deserializer` protocol-based serialization methods plus
-//! `jsonSerialize`/`jsonDeserialize` convenience wrappers.
-//!
-//! Unlike Kotlin's JSON (which uses `kotlinx.serialization` annotations),
-//! Swift JSON uses hand-written `serialize`/`deserialize` methods that call
-//! into the Serde runtime protocols — the same pattern as Bincode, but
-//! targeting the `JsonSerializer`/`JsonDeserializer` implementations.
+//! Mirrors the structure of [`tests`](super::tests) but uses `JsonPlugin`, so
+//! every generated type conforms to `Codable`, with explicit `CodingKeys` and,
+//! where Swift's synthesized coding would not match `serde_json`, hand-written
+//! `init(from:)` / `encode(to:)`, plus `jsonSerialize` / `jsonDeserialize`
+//! convenience wrappers.
 
 #![allow(clippy::too_many_lines)]
 
@@ -31,40 +27,35 @@ fn unit_struct_1() {
     struct UnitStruct;
 
     let actual = emit!(UnitStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
+
     /// line 1
     /// line 2
-    public struct UnitStruct: Hashable, Equatable {
+    public struct UnitStruct: Hashable, Equatable, Codable {
         public init() {
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            if try decoder.singleValueContainer().decodeNil() {
+                return
+            }
+            _ = try decoder.container(keyedBy: Serde.JsonKey.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.decrease_container_depth()
-            return UnitStruct()
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> UnitStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(UnitStruct.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -75,40 +66,35 @@ fn unit_struct_2() {
     struct UnitStruct {}
 
     let actual = emit!(UnitStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
+
     /// line 1
     /// line 2
-    public struct UnitStruct: Hashable, Equatable {
+    public struct UnitStruct: Hashable, Equatable, Codable {
         public init() {
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            if try decoder.singleValueContainer().decodeNil() {
+                return
+            }
+            _ = try decoder.container(keyedBy: Serde.JsonKey.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encodeNil()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> UnitStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.decrease_container_depth()
-            return UnitStruct()
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> UnitStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(UnitStruct.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -119,45 +105,35 @@ fn newtype_struct() {
     struct NewType(String);
 
     let actual = emit!(NewType as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
+
     /// line 1
     /// line 2
-    public struct NewType: Hashable, Equatable {
+    public struct NewType: Hashable, Equatable, Codable {
         public var value: String
 
         public init(value: String) {
             self.value = value
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.value)
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            self.value = try decoder.singleValueContainer().decode(String.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var single0 = encoder.singleValueContainer()
+            try single0.encode(self.value)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> NewType {
-            try deserializer.increase_container_depth()
-            let value = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return NewType(value: value)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> NewType {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(NewType.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -168,10 +144,11 @@ fn tuple_struct() {
     struct TupleStruct(String, i32);
 
     let actual = emit!(TupleStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
+
     /// line 1
     /// line 2
-    public struct TupleStruct: Hashable, Equatable {
+    public struct TupleStruct: Hashable, Equatable, Codable {
         public var field0: String
         public var field1: Int32
 
@@ -180,37 +157,27 @@ fn tuple_struct() {
             self.field1 = field1
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field0)
-            try serializer.serialize_i32(value: self.field1)
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            var container = try decoder.unkeyedContainer()
+            self.field0 = try container.decode(String.self)
+            self.field1 = try container.decode(Int32.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.unkeyedContainer()
+            try container.encode(self.field0)
+            try container.encode(self.field1)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> TupleStruct {
-            try deserializer.increase_container_depth()
-            let field0 = try deserializer.deserialize_str()
-            let field1 = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return TupleStruct(field0: field0, field1: field1)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> TupleStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(TupleStruct.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -240,11 +207,11 @@ fn struct_with_fields_of_primitive_types() {
     }
 
     let actual = emit!(StructWithFields as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
 
     /// line 1
     /// line 2
-    public struct StructWithFields {
+    public struct StructWithFields: Codable {
         /// unit type
         public var unit: Void
         /// boolean
@@ -283,65 +250,74 @@ fn struct_with_fields_of_primitive_types() {
             self.string = string
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_unit(value: self.unit)
-            try serializer.serialize_bool(value: self.bool)
-            try serializer.serialize_i8(value: self.i8)
-            try serializer.serialize_i16(value: self.i16)
-            try serializer.serialize_i32(value: self.i32)
-            try serializer.serialize_i64(value: self.i64)
-            try serializer.serialize_i128(value: self.i128)
-            try serializer.serialize_u8(value: self.u8)
-            try serializer.serialize_u16(value: self.u16)
-            try serializer.serialize_u32(value: self.u32)
-            try serializer.serialize_u64(value: self.u64)
-            try serializer.serialize_u128(value: self.u128)
-            try serializer.serialize_f32(value: self.f32)
-            try serializer.serialize_f64(value: self.f64)
-            try serializer.serialize_char(value: self.char)
-            try serializer.serialize_str(value: self.string)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case unit
+            case bool
+            case i8
+            case i16
+            case i32
+            case i64
+            case i128
+            case u8
+            case u16
+            case u32
+            case u64
+            case u128
+            case f32
+            case f64
+            case char
+            case string
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.unit = try container.decode(Serde.JsonUnit.self, forKey: .unit).value
+            self.bool = try container.decode(Bool.self, forKey: .bool)
+            self.i8 = try container.decode(Int8.self, forKey: .i8)
+            self.i16 = try container.decode(Int16.self, forKey: .i16)
+            self.i32 = try container.decode(Int32.self, forKey: .i32)
+            self.i64 = try container.decode(Int64.self, forKey: .i64)
+            self.i128 = try container.decode(Int128.self, forKey: .i128)
+            self.u8 = try container.decode(UInt8.self, forKey: .u8)
+            self.u16 = try container.decode(UInt16.self, forKey: .u16)
+            self.u32 = try container.decode(UInt32.self, forKey: .u32)
+            self.u64 = try container.decode(UInt64.self, forKey: .u64)
+            self.u128 = try container.decode(UInt128.self, forKey: .u128)
+            self.f32 = try container.decode(Float.self, forKey: .f32)
+            self.f64 = try container.decode(Double.self, forKey: .f64)
+            self.char = try container.decode(Serde.JsonChar.self, forKey: .char).value
+            self.string = try container.decode(String.self, forKey: .string)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(Serde.JsonUnit(), forKey: .unit)
+            try container.encode(self.bool, forKey: .bool)
+            try container.encode(self.i8, forKey: .i8)
+            try container.encode(self.i16, forKey: .i16)
+            try container.encode(self.i32, forKey: .i32)
+            try container.encode(self.i64, forKey: .i64)
+            try container.encode(self.i128, forKey: .i128)
+            try container.encode(self.u8, forKey: .u8)
+            try container.encode(self.u16, forKey: .u16)
+            try container.encode(self.u32, forKey: .u32)
+            try container.encode(self.u64, forKey: .u64)
+            try container.encode(self.u128, forKey: .u128)
+            try container.encode(self.f32, forKey: .f32)
+            try container.encode(self.f64, forKey: .f64)
+            try container.encode(Serde.JsonChar(self.char), forKey: .char)
+            try container.encode(self.string, forKey: .string)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> StructWithFields {
-            try deserializer.increase_container_depth()
-            let unit = try deserializer.deserialize_unit()
-            let bool = try deserializer.deserialize_bool()
-            let i8 = try deserializer.deserialize_i8()
-            let i16 = try deserializer.deserialize_i16()
-            let i32 = try deserializer.deserialize_i32()
-            let i64 = try deserializer.deserialize_i64()
-            let i128 = try deserializer.deserialize_i128()
-            let u8 = try deserializer.deserialize_u8()
-            let u16 = try deserializer.deserialize_u16()
-            let u32 = try deserializer.deserialize_u32()
-            let u64 = try deserializer.deserialize_u64()
-            let u128 = try deserializer.deserialize_u128()
-            let f32 = try deserializer.deserialize_f32()
-            let f64 = try deserializer.deserialize_f64()
-            let char = try deserializer.deserialize_char()
-            let string = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return StructWithFields(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> StructWithFields {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(StructWithFields.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -365,80 +341,54 @@ fn struct_with_fields_of_user_types() {
     }
 
     let actual = emit!(Outer as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct Inner1: Hashable, Equatable {
+    insta::assert_snapshot!(actual, @"
+
+    public struct Inner1: Hashable, Equatable, Codable {
         public var field1: String
 
         public init(field1: String) {
             self.field1 = field1
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field1)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case field1
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner1 {
-            try deserializer.increase_container_depth()
-            let field1 = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return Inner1(field1: field1)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Inner1 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Inner1.self, from: input)
         }
     }
 
-    public struct Inner2: Hashable, Equatable {
+    public struct Inner2: Hashable, Equatable, Codable {
         public var value: String
 
         public init(value: String) {
             self.value = value
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.value)
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            self.value = try decoder.singleValueContainer().decode(String.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var single0 = encoder.singleValueContainer()
+            try single0.encode(self.value)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner2 {
-            try deserializer.increase_container_depth()
-            let value = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return Inner2(value: value)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Inner2 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Inner2.self, from: input)
         }
     }
 
-    public struct Inner3: Hashable, Equatable {
+    public struct Inner3: Hashable, Equatable, Codable {
         public var field0: String
         public var field1: Int32
 
@@ -447,38 +397,28 @@ fn struct_with_fields_of_user_types() {
             self.field1 = field1
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.field0)
-            try serializer.serialize_i32(value: self.field1)
-            try serializer.decrease_container_depth()
+        public init(from decoder: Decoder) throws {
+            var container = try decoder.unkeyedContainer()
+            self.field0 = try container.decode(String.self)
+            self.field1 = try container.decode(Int32.self)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.unkeyedContainer()
+            try container.encode(self.field0)
+            try container.encode(self.field1)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Inner3 {
-            try deserializer.increase_container_depth()
-            let field0 = try deserializer.deserialize_str()
-            let field1 = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return Inner3(field0: field0, field1: field1)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Inner3 {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Inner3.self, from: input)
         }
     }
 
-    public struct Outer: Hashable, Equatable {
+    public struct Outer: Hashable, Equatable, Codable {
         public var one: Inner1
         public var two: Inner2
         public var three: Inner3
@@ -489,39 +429,21 @@ fn struct_with_fields_of_user_types() {
             self.three = three
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try self.one.serialize(serializer: serializer)
-            try self.two.serialize(serializer: serializer)
-            try self.three.serialize(serializer: serializer)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case one
+            case two
+            case three
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Outer {
-            try deserializer.increase_container_depth()
-            let one = try Inner1.deserialize(deserializer: deserializer)
-            let two = try Inner2.deserialize(deserializer: deserializer)
-            let three = try Inner3.deserialize(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return Outer(one: one, two: two, three: three)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Outer {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Outer.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -532,55 +454,52 @@ fn struct_with_field_that_is_a_2_tuple() {
     }
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
 
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Equatable, Codable {
         public var one: (String, Int32)
 
         public init(one: (String, Int32)) {
             self.one = one
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: one.0)
-            try serializer.serialize_i32(value: one.1)
-            try serializer.decrease_container_depth()
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case one
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.one = try { () throws -> (String, Int32) in
+                var nested0 = try container.nestedUnkeyedContainer(forKey: .one)
+                return (
+                    try nested0.decode(String.self),
+                    try nested0.decode(Int32.self)
+                )
+            }()
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            do {
+                var nested0 = container.nestedUnkeyedContainer(forKey: .one)
+                try nested0.encode(self.one.0)
+                try nested0.encode(self.one.1)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.increase_container_depth()
-            let one0 = try deserializer.deserialize_str()
-            let one1 = try deserializer.deserialize_i32()
-            let one = (one0, one1)
-            try deserializer.decrease_container_depth()
-            try deserializer.decrease_container_depth()
-            return MyStruct(one: one)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
 
         public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
             return lhs.one == rhs.one
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -591,57 +510,54 @@ fn struct_with_field_that_is_a_3_tuple() {
     }
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
 
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Equatable, Codable {
         public var one: (String, Int32, UInt16)
 
         public init(one: (String, Int32, UInt16)) {
             self.one = one
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: one.0)
-            try serializer.serialize_i32(value: one.1)
-            try serializer.serialize_u16(value: one.2)
-            try serializer.decrease_container_depth()
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case one
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.one = try { () throws -> (String, Int32, UInt16) in
+                var nested0 = try container.nestedUnkeyedContainer(forKey: .one)
+                return (
+                    try nested0.decode(String.self),
+                    try nested0.decode(Int32.self),
+                    try nested0.decode(UInt16.self)
+                )
+            }()
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            do {
+                var nested0 = container.nestedUnkeyedContainer(forKey: .one)
+                try nested0.encode(self.one.0)
+                try nested0.encode(self.one.1)
+                try nested0.encode(self.one.2)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.increase_container_depth()
-            let one0 = try deserializer.deserialize_str()
-            let one1 = try deserializer.deserialize_i32()
-            let one2 = try deserializer.deserialize_u16()
-            let one = (one0, one1, one2)
-            try deserializer.decrease_container_depth()
-            try deserializer.decrease_container_depth()
-            return MyStruct(one: one)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
 
         public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
             return lhs.one == rhs.one
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -655,59 +571,56 @@ fn struct_with_field_that_is_a_4_tuple() {
     // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
 
-    public struct MyStruct: Equatable {
+    public struct MyStruct: Equatable, Codable {
         public var one: (String, Int32, UInt16, Float)
 
         public init(one: (String, Int32, UInt16, Float)) {
             self.one = one
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: one.0)
-            try serializer.serialize_i32(value: one.1)
-            try serializer.serialize_u16(value: one.2)
-            try serializer.serialize_f32(value: one.3)
-            try serializer.decrease_container_depth()
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case one
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.one = try { () throws -> (String, Int32, UInt16, Float) in
+                var nested0 = try container.nestedUnkeyedContainer(forKey: .one)
+                return (
+                    try nested0.decode(String.self),
+                    try nested0.decode(Int32.self),
+                    try nested0.decode(UInt16.self),
+                    try nested0.decode(Float.self)
+                )
+            }()
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            do {
+                var nested0 = container.nestedUnkeyedContainer(forKey: .one)
+                try nested0.encode(self.one.0)
+                try nested0.encode(self.one.1)
+                try nested0.encode(self.one.2)
+                try nested0.encode(self.one.3)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            try deserializer.increase_container_depth()
-            let one0 = try deserializer.deserialize_str()
-            let one1 = try deserializer.deserialize_i32()
-            let one2 = try deserializer.deserialize_u16()
-            let one3 = try deserializer.deserialize_f32()
-            let one = (one0, one1, one2, one3)
-            try deserializer.decrease_container_depth()
-            try deserializer.decrease_container_depth()
-            return MyStruct(one: one)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
 
         public static func == (lhs: MyStruct, rhs: MyStruct) -> Bool {
             return lhs.one == rhs.one
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -728,9 +641,10 @@ fn enum_with_unit_variants() {
 
     let actual = emit!(EnumWithUnitVariants as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
+
     /// line one
     /// line two
-    indirect public enum EnumWithUnitVariants: Hashable, Equatable {
+    indirect public enum EnumWithUnitVariants: Hashable, Equatable, Codable {
         /// variant one
         case variant1
         /// variant two
@@ -738,49 +652,60 @@ fn enum_with_unit_variants() {
         /// variant three
         case variant3
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+            case variant2 = "Variant2"
+            case variant3 = "Variant3"
+        }
+
+        public init(from decoder: Decoder) throws {
+            if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+                switch name {
+                case "Variant1":
+                    self = .variant1
+                case "Variant2":
+                    self = .variant2
+                case "Variant3":
+                    self = .variant3
+                default:
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for EnumWithUnitVariants")
+                }
+                return
+            }
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of EnumWithUnitVariants"))
+            }
+            switch key {
+            case .variant1:
+                self = .variant1
+            case .variant2:
+                self = .variant2
+            case .variant3:
+                self = .variant3
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
             switch self {
             case .variant1:
-                try serializer.serialize_variant_index(value: 0)
+                var container = encoder.singleValueContainer()
+                try container.encode("Variant1")
             case .variant2:
-                try serializer.serialize_variant_index(value: 1)
+                var container = encoder.singleValueContainer()
+                try container.encode("Variant2")
             case .variant3:
-                try serializer.serialize_variant_index(value: 2)
+                var container = encoder.singleValueContainer()
+                try container.encode("Variant3")
             }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> EnumWithUnitVariants {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                try deserializer.decrease_container_depth()
-                return .variant1
-            case 1:
-                try deserializer.decrease_container_depth()
-                return .variant2
-            case 2:
-                try deserializer.decrease_container_depth()
-                return .variant3
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for EnumWithUnitVariants: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> EnumWithUnitVariants {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(EnumWithUnitVariants.self, from: input)
         }
     }
     "#);
@@ -797,42 +722,48 @@ fn enum_with_unit_struct_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case variant1
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+        }
+
+        public init(from decoder: Decoder) throws {
+            if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+                switch name {
+                case "Variant1":
+                    self = .variant1
+                default:
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for MyEnum")
+                }
+                return
+            }
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
+            }
+            switch key {
+            case .variant1:
+                self = .variant1
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
             switch self {
             case .variant1:
-                try serializer.serialize_variant_index(value: 0)
+                var container = encoder.singleValueContainer()
+                try container.encode("Variant1")
             }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                try deserializer.decrease_container_depth()
-                return .variant1
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -849,44 +780,41 @@ fn enum_with_1_tuple_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case variant1(String)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            switch self {
-            case .variant1(let x):
-                try serializer.serialize_variant_index(value: 0)
-                try serializer.serialize_str(value: x)
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
             }
-            try serializer.decrease_container_depth()
+            switch key {
+            case .variant1:
+                self = .variant1(
+                    try container.decode(String.self, forKey: .variant1)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .variant1(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(payload0, forKey: .variant1)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                let x = try deserializer.deserialize_str()
-                try deserializer.decrease_container_depth()
-                return .variant1(x)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -904,52 +832,50 @@ fn enum_with_newtype_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case variant1(String)
         case variant2(Int32)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            switch self {
-            case .variant1(let x):
-                try serializer.serialize_variant_index(value: 0)
-                try serializer.serialize_str(value: x)
-            case .variant2(let x):
-                try serializer.serialize_variant_index(value: 1)
-                try serializer.serialize_i32(value: x)
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+            case variant2 = "Variant2"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
             }
-            try serializer.decrease_container_depth()
+            switch key {
+            case .variant1:
+                self = .variant1(
+                    try container.decode(String.self, forKey: .variant1)
+                )
+            case .variant2:
+                self = .variant2(
+                    try container.decode(Int32.self, forKey: .variant2)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .variant1(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(payload0, forKey: .variant1)
+            case .variant2(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(payload0, forKey: .variant2)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                let x = try deserializer.deserialize_str()
-                try deserializer.decrease_container_depth()
-                return .variant1(x)
-            case 1:
-                let x = try deserializer.deserialize_i32()
-                try deserializer.decrease_container_depth()
-                return .variant2(x)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -967,58 +893,60 @@ fn enum_with_tuple_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case variant1(String, Int32)
         case variant2(Bool, Double, UInt8)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            switch self {
-            case .variant1(let x0, let x1):
-                try serializer.serialize_variant_index(value: 0)
-                try serializer.serialize_str(value: x0)
-                try serializer.serialize_i32(value: x1)
-            case .variant2(let x0, let x1, let x2):
-                try serializer.serialize_variant_index(value: 1)
-                try serializer.serialize_bool(value: x0)
-                try serializer.serialize_f64(value: x1)
-                try serializer.serialize_u8(value: x2)
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+            case variant2 = "Variant2"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
             }
-            try serializer.decrease_container_depth()
+            switch key {
+            case .variant1:
+                var nested = try container.nestedUnkeyedContainer(forKey: .variant1)
+                self = .variant1(
+                    try nested.decode(String.self),
+                    try nested.decode(Int32.self)
+                )
+            case .variant2:
+                var nested = try container.nestedUnkeyedContainer(forKey: .variant2)
+                self = .variant2(
+                    try nested.decode(Bool.self),
+                    try nested.decode(Double.self),
+                    try nested.decode(UInt8.self)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .variant1(let payload0, let payload1):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedUnkeyedContainer(forKey: .variant1)
+                try nested.encode(payload0)
+                try nested.encode(payload1)
+            case .variant2(let payload0, let payload1, let payload2):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedUnkeyedContainer(forKey: .variant2)
+                try nested.encode(payload0)
+                try nested.encode(payload1)
+                try nested.encode(payload2)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                let x0 = try deserializer.deserialize_str()
-                let x1 = try deserializer.deserialize_i32()
-                try deserializer.decrease_container_depth()
-                return .variant1(x0, x1)
-            case 1:
-                let x0 = try deserializer.deserialize_bool()
-                let x1 = try deserializer.deserialize_f64()
-                let x2 = try deserializer.deserialize_u8()
-                try deserializer.decrease_container_depth()
-                return .variant2(x0, x1, x2)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -1035,46 +963,50 @@ fn enum_with_struct_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case variant1(field1: String, field2: Int32)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            switch self {
-            case .variant1(let field1, let field2):
-                try serializer.serialize_variant_index(value: 0)
-                try serializer.serialize_str(value: field1)
-                try serializer.serialize_i32(value: field2)
+        enum CodingKeys: String, CodingKey {
+            case variant1 = "Variant1"
+        }
+
+        enum Variant1CodingKeys: String, CodingKey {
+            case field1
+            case field2
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
             }
-            try serializer.decrease_container_depth()
+            switch key {
+            case .variant1:
+                let nested = try container.nestedContainer(keyedBy: Variant1CodingKeys.self, forKey: .variant1)
+                self = .variant1(
+                    field1: try nested.decode(String.self, forKey: .field1),
+                    field2: try nested.decode(Int32.self, forKey: .field2)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .variant1(let payload0, let payload1):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedContainer(keyedBy: Variant1CodingKeys.self, forKey: .variant1)
+                try nested.encode(payload0, forKey: .field1)
+                try nested.encode(payload1, forKey: .field2)
+            }
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                let field1 = try deserializer.deserialize_str()
-                let field2 = try deserializer.deserialize_i32()
-                try deserializer.decrease_container_depth()
-                return .variant1(field1: field1, field2: field2)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -1094,68 +1026,85 @@ fn enum_with_mixed_variants() {
 
     let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    indirect public enum MyEnum: Hashable, Equatable {
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
         case unit
         case newType(String)
         case tuple(String, Int32)
         case `struct`(field: Bool)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case unit = "Unit"
+            case newType = "NewType"
+            case tuple = "Tuple"
+            case `struct` = "Struct"
+        }
+
+        enum StructCodingKeys: String, CodingKey {
+            case field
+        }
+
+        public init(from decoder: Decoder) throws {
+            if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+                switch name {
+                case "Unit":
+                    self = .unit
+                default:
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for MyEnum")
+                }
+                return
+            }
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of MyEnum"))
+            }
+            switch key {
+            case .unit:
+                self = .unit
+            case .newType:
+                self = .newType(
+                    try container.decode(String.self, forKey: .newType)
+                )
+            case .tuple:
+                var nested = try container.nestedUnkeyedContainer(forKey: .tuple)
+                self = .tuple(
+                    try nested.decode(String.self),
+                    try nested.decode(Int32.self)
+                )
+            case .`struct`:
+                let nested = try container.nestedContainer(keyedBy: StructCodingKeys.self, forKey: .`struct`)
+                self = .`struct`(
+                    field: try nested.decode(Bool.self, forKey: .field)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
             switch self {
             case .unit:
-                try serializer.serialize_variant_index(value: 0)
-            case .newType(let x):
-                try serializer.serialize_variant_index(value: 1)
-                try serializer.serialize_str(value: x)
-            case .tuple(let x0, let x1):
-                try serializer.serialize_variant_index(value: 2)
-                try serializer.serialize_str(value: x0)
-                try serializer.serialize_i32(value: x1)
-            case .`struct`(let field):
-                try serializer.serialize_variant_index(value: 3)
-                try serializer.serialize_bool(value: field)
+                var container = encoder.singleValueContainer()
+                try container.encode("Unit")
+            case .newType(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(payload0, forKey: .newType)
+            case .tuple(let payload0, let payload1):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedUnkeyedContainer(forKey: .tuple)
+                try nested.encode(payload0)
+                try nested.encode(payload1)
+            case .`struct`(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedContainer(keyedBy: StructCodingKeys.self, forKey: .`struct`)
+                try nested.encode(payload0, forKey: .field)
             }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                try deserializer.decrease_container_depth()
-                return .unit
-            case 1:
-                let x = try deserializer.deserialize_str()
-                try deserializer.decrease_container_depth()
-                return .newType(x)
-            case 2:
-                let x0 = try deserializer.deserialize_str()
-                let x1 = try deserializer.deserialize_i32()
-                try deserializer.decrease_container_depth()
-                return .tuple(x0, x1)
-            case 3:
-                let field = try deserializer.deserialize_bool()
-                try deserializer.decrease_container_depth()
-                return .`struct`(field: field)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for MyEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
         }
     }
     "#);
@@ -1172,7 +1121,8 @@ fn struct_with_vec_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var items: [String]
         public var numbers: [Int32]
         public var nestedItems: [[String]]
@@ -1183,52 +1133,18 @@ fn struct_with_vec_field() {
             self.nestedItems = nestedItems
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeArray(value: self.items, serializer: serializer) { item, serializer in
-                try serializer.serialize_str(value: item)
-            }
-            try serializeArray(value: self.numbers, serializer: serializer) { item, serializer in
-                try serializer.serialize_i32(value: item)
-            }
-            try serializeArray(value: self.nestedItems, serializer: serializer) { item, serializer in
-                try serializeArray(value: item, serializer: serializer) { item, serializer in
-                    try serializer.serialize_str(value: item)
-                }
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case items
+            case numbers
+            case nestedItems = "nested_items"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let items = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let numbers = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            let nestedItems = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializeArray(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_str()
-                }
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(items: items, numbers: numbers, nestedItems: nestedItems)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1246,7 +1162,8 @@ fn struct_with_option_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var optionalString: String?
         public var optionalNumber: Int32?
         public var optionalBool: Bool?
@@ -1257,48 +1174,32 @@ fn struct_with_option_field() {
             self.optionalBool = optionalBool
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeOption(value: self.optionalString, serializer: serializer) { value, serializer in
-                try serializer.serialize_str(value: value)
-            }
-            try serializeOption(value: self.optionalNumber, serializer: serializer) { value, serializer in
-                try serializer.serialize_i32(value: value)
-            }
-            try serializeOption(value: self.optionalBool, serializer: serializer) { value, serializer in
-                try serializer.serialize_bool(value: value)
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case optionalString = "optional_string"
+            case optionalNumber = "optional_number"
+            case optionalBool = "optional_bool"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.optionalString = try container.decodeIfPresent(String.self, forKey: .optionalString)
+            self.optionalNumber = try container.decodeIfPresent(Int32.self, forKey: .optionalNumber)
+            self.optionalBool = try container.decodeIfPresent(Bool.self, forKey: .optionalBool)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.optionalString, forKey: .optionalString)
+            try container.encode(self.optionalNumber, forKey: .optionalNumber)
+            try container.encode(self.optionalBool, forKey: .optionalBool)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let optionalString = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let optionalNumber = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            let optionalBool = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_bool()
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(optionalString: optionalString, optionalNumber: optionalNumber, optionalBool: optionalBool)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1314,7 +1215,8 @@ fn struct_with_hashmap_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1323,48 +1225,43 @@ fn struct_with_hashmap_field() {
             self.intToBool = intToBool
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeMap(value: self.stringToInt, serializer: serializer) { key, value, serializer in
-                try serializer.serialize_str(value: key)
-                try serializer.serialize_i32(value: value)
+        enum CodingKeys: String, CodingKey {
+            case stringToInt = "string_to_int"
+            case intToBool = "int_to_bool"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.stringToInt = try container.decode([String: Int32].self, forKey: .stringToInt)
+            self.intToBool = try { () throws -> [Int32: Bool] in
+                let nested0 = try container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .intToBool)
+                var result0: [Int32: Bool] = [:]
+                for key0 in nested0.allKeys {
+                    let mapKey0 = try Serde.jsonMapKey(key0.stringValue, as: Int32.self)
+                    result0.updateValue(try nested0.decode(Bool.self, forKey: key0), forKey: mapKey0)
+                }
+                return result0
+            }()
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.stringToInt, forKey: .stringToInt)
+            do {
+                var nested0 = container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .intToBool)
+                for (key0, value0) in self.intToBool {
+                    let objectKey0 = Serde.JsonKey(try Serde.jsonMapKey(key0))
+                    try nested0.encode(value0, forKey: objectKey0)
+                }
             }
-            try serializeMap(value: self.intToBool, serializer: serializer) { key, value, serializer in
-                try serializer.serialize_i32(value: key)
-                try serializer.serialize_bool(value: value)
-            }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let stringToInt = try deserializeMap(deserializer: deserializer) { deserializer in
-                let key = try deserializer.deserialize_str()
-                let value = try deserializer.deserialize_i32()
-                return (key, value)
-            }
-            let intToBool = try deserializeMap(deserializer: deserializer) { deserializer in
-                let key = try deserializer.deserialize_i32()
-                let value = try deserializer.deserialize_bool()
-                return (key, value)
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1383,7 +1280,8 @@ fn struct_with_nested_generics() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var optionalList: [String]?
         public var listOfOptionals: [Int32?]
         public var mapToList: [String: [Bool]]
@@ -1398,97 +1296,38 @@ fn struct_with_nested_generics() {
             self.complex = complex
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeOption(value: self.optionalList, serializer: serializer) { value, serializer in
-                try serializeArray(value: value, serializer: serializer) { item, serializer in
-                    try serializer.serialize_str(value: item)
-                }
-            }
-            try serializeArray(value: self.listOfOptionals, serializer: serializer) { item, serializer in
-                try serializeOption(value: item, serializer: serializer) { value, serializer in
-                    try serializer.serialize_i32(value: value)
-                }
-            }
-            try serializeMap(value: self.mapToList, serializer: serializer) { key, value, serializer in
-                try serializer.serialize_str(value: key)
-                try serializeArray(value: value, serializer: serializer) { item, serializer in
-                    try serializer.serialize_bool(value: item)
-                }
-            }
-            try serializeOption(value: self.optionalMap, serializer: serializer) { value, serializer in
-                try serializeMap(value: value, serializer: serializer) { key, value, serializer in
-                    try serializer.serialize_str(value: key)
-                    try serializer.serialize_i32(value: value)
-                }
-            }
-            try serializeArray(value: self.complex, serializer: serializer) { item, serializer in
-                try serializeOption(value: item, serializer: serializer) { value, serializer in
-                    try serializeMap(value: value, serializer: serializer) { key, value, serializer in
-                        try serializer.serialize_str(value: key)
-                        try serializeArray(value: value, serializer: serializer) { item, serializer in
-                            try serializer.serialize_bool(value: item)
-                        }
-                    }
-                }
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case optionalList = "optional_list"
+            case listOfOptionals = "list_of_optionals"
+            case mapToList = "map_to_list"
+            case optionalMap = "optional_map"
+            case complex
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.optionalList = try container.decodeIfPresent([String].self, forKey: .optionalList)
+            self.listOfOptionals = try container.decode([Int32?].self, forKey: .listOfOptionals)
+            self.mapToList = try container.decode([String: [Bool]].self, forKey: .mapToList)
+            self.optionalMap = try container.decodeIfPresent([String: Int32].self, forKey: .optionalMap)
+            self.complex = try container.decode([[String: [Bool]]?].self, forKey: .complex)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.optionalList, forKey: .optionalList)
+            try container.encode(self.listOfOptionals, forKey: .listOfOptionals)
+            try container.encode(self.mapToList, forKey: .mapToList)
+            try container.encode(self.optionalMap, forKey: .optionalMap)
+            try container.encode(self.complex, forKey: .complex)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let optionalList = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializeArray(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_str()
-                }
-            }
-            let listOfOptionals = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializeOption(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_i32()
-                }
-            }
-            let mapToList = try deserializeMap(deserializer: deserializer) { deserializer in
-                let key = try deserializer.deserialize_str()
-                let value = try deserializeArray(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_bool()
-                }
-                return (key, value)
-            }
-            let optionalMap = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializeMap(deserializer: deserializer) { deserializer in
-                    let key = try deserializer.deserialize_str()
-                    let value = try deserializer.deserialize_i32()
-                    return (key, value)
-                }
-            }
-            let complex = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializeOption(deserializer: deserializer) { deserializer in
-                    try deserializeMap(deserializer: deserializer) { deserializer in
-                        let key = try deserializer.deserialize_str()
-                        let value = try deserializeArray(deserializer: deserializer) { deserializer in
-                            try deserializer.deserialize_bool()
-                        }
-                        return (key, value)
-                    }
-                }
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(optionalList: optionalList, listOfOptionals: listOfOptionals, mapToList: mapToList, optionalMap: optionalMap, complex: complex)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1506,7 +1345,8 @@ fn struct_with_array_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var fixedArray: [Int32]
         public var byteArray: [UInt8]
         public var stringArray: [String]
@@ -1517,48 +1357,18 @@ fn struct_with_array_field() {
             self.stringArray = stringArray
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeTupleArray(value: self.fixedArray, serializer: serializer) { item, serializer in
-                try serializer.serialize_i32(value: item)
-            }
-            try serializeTupleArray(value: self.byteArray, serializer: serializer) { item, serializer in
-                try serializer.serialize_u8(value: item)
-            }
-            try serializeTupleArray(value: self.stringArray, serializer: serializer) { item, serializer in
-                try serializer.serialize_str(value: item)
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case fixedArray = "fixed_array"
+            case byteArray = "byte_array"
+            case stringArray = "string_array"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let fixedArray = try deserializeTupleArray(deserializer: deserializer, size: 5) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            let byteArray = try deserializeTupleArray(deserializer: deserializer, size: 32) { deserializer in
-                try deserializer.deserialize_u8()
-            }
-            let stringArray = try deserializeTupleArray(deserializer: deserializer, size: 3) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(fixedArray: fixedArray, byteArray: byteArray, stringArray: stringArray)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1574,7 +1384,8 @@ fn struct_with_btreemap_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var stringToInt: [String: Int32]
         public var intToBool: [Int32: Bool]
 
@@ -1583,48 +1394,43 @@ fn struct_with_btreemap_field() {
             self.intToBool = intToBool
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeMap(value: self.stringToInt, serializer: serializer) { key, value, serializer in
-                try serializer.serialize_str(value: key)
-                try serializer.serialize_i32(value: value)
+        enum CodingKeys: String, CodingKey {
+            case stringToInt = "string_to_int"
+            case intToBool = "int_to_bool"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.stringToInt = try container.decode([String: Int32].self, forKey: .stringToInt)
+            self.intToBool = try { () throws -> [Int32: Bool] in
+                let nested0 = try container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .intToBool)
+                var result0: [Int32: Bool] = [:]
+                for key0 in nested0.allKeys {
+                    let mapKey0 = try Serde.jsonMapKey(key0.stringValue, as: Int32.self)
+                    result0.updateValue(try nested0.decode(Bool.self, forKey: key0), forKey: mapKey0)
+                }
+                return result0
+            }()
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.stringToInt, forKey: .stringToInt)
+            do {
+                var nested0 = container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .intToBool)
+                for (key0, value0) in self.intToBool {
+                    let objectKey0 = Serde.JsonKey(try Serde.jsonMapKey(key0))
+                    try nested0.encode(value0, forKey: objectKey0)
+                }
             }
-            try serializeMap(value: self.intToBool, serializer: serializer) { key, value, serializer in
-                try serializer.serialize_i32(value: key)
-                try serializer.serialize_bool(value: value)
-            }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let stringToInt = try deserializeMap(deserializer: deserializer) { deserializer in
-                let key = try deserializer.deserialize_str()
-                let value = try deserializer.deserialize_i32()
-                return (key, value)
-            }
-            let intToBool = try deserializeMap(deserializer: deserializer) { deserializer in
-                let key = try deserializer.deserialize_i32()
-                let value = try deserializer.deserialize_bool()
-                return (key, value)
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(stringToInt: stringToInt, intToBool: intToBool)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1642,7 +1448,8 @@ fn struct_with_hashset_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var stringSet: Set<String>
         public var intSet: Set<Int32>
 
@@ -1651,42 +1458,17 @@ fn struct_with_hashset_field() {
             self.intSet = intSet
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeSet(value: self.stringSet, serializer: serializer) { item, serializer in
-                try serializer.serialize_str(value: item)
-            }
-            try serializeSet(value: self.intSet, serializer: serializer) { item, serializer in
-                try serializer.serialize_i32(value: item)
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case stringSet = "string_set"
+            case intSet = "int_set"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let stringSet = try deserializeSet(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let intSet = try deserializeSet(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(stringSet: stringSet, intSet: intSet)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1704,7 +1486,8 @@ fn struct_with_btreeset_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var stringSet: Set<String>
         public var intSet: Set<Int32>
 
@@ -1713,42 +1496,17 @@ fn struct_with_btreeset_field() {
             self.intSet = intSet
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeSet(value: self.stringSet, serializer: serializer) { item, serializer in
-                try serializer.serialize_str(value: item)
-            }
-            try serializeSet(value: self.intSet, serializer: serializer) { item, serializer in
-                try serializer.serialize_i32(value: item)
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case stringSet = "string_set"
+            case intSet = "int_set"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let stringSet = try deserializeSet(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let intSet = try deserializeSet(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(stringSet: stringSet, intSet: intSet)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1765,7 +1523,8 @@ fn struct_with_box_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var boxedString: String
         public var boxedInt: Int32
 
@@ -1774,34 +1533,17 @@ fn struct_with_box_field() {
             self.boxedInt = boxedInt
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.boxedString)
-            try serializer.serialize_i32(value: self.boxedInt)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case boxedString = "boxed_string"
+            case boxedInt = "boxed_int"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let boxedString = try deserializer.deserialize_str()
-            let boxedInt = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return MyStruct(boxedString: boxedString, boxedInt: boxedInt)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1817,7 +1559,8 @@ fn struct_with_rc_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var rcString: String
         public var rcInt: Int32
 
@@ -1826,34 +1569,17 @@ fn struct_with_rc_field() {
             self.rcInt = rcInt
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.rcString)
-            try serializer.serialize_i32(value: self.rcInt)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case rcString = "rc_string"
+            case rcInt = "rc_int"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let rcString = try deserializer.deserialize_str()
-            let rcInt = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return MyStruct(rcString: rcString, rcInt: rcInt)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1869,7 +1595,8 @@ fn struct_with_arc_field() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var arcString: String
         public var arcInt: Int32
 
@@ -1878,34 +1605,17 @@ fn struct_with_arc_field() {
             self.arcInt = arcInt
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.arcString)
-            try serializer.serialize_i32(value: self.arcInt)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case arcString = "arc_string"
+            case arcInt = "arc_int"
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let arcString = try deserializer.deserialize_str()
-            let arcInt = try deserializer.deserialize_i32()
-            try deserializer.decrease_container_depth()
-            return MyStruct(arcString: arcString, arcInt: arcInt)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -1925,7 +1635,8 @@ fn struct_with_mixed_collections_and_pointers() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var vecOfSets: [Set<String>]
         public var optionalBtree: [String: Int32]?
         public var boxedVec: [String]
@@ -1940,71 +1651,38 @@ fn struct_with_mixed_collections_and_pointers() {
             self.arrayOfBoxes = arrayOfBoxes
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializeArray(value: self.vecOfSets, serializer: serializer) { item, serializer in
-                try serializeSet(value: item, serializer: serializer) { item, serializer in
-                    try serializer.serialize_str(value: item)
-                }
-            }
-            try serializeOption(value: self.optionalBtree, serializer: serializer) { value, serializer in
-                try serializeMap(value: value, serializer: serializer) { key, value, serializer in
-                    try serializer.serialize_str(value: key)
-                    try serializer.serialize_i32(value: value)
-                }
-            }
-            try serializeArray(value: self.boxedVec, serializer: serializer) { item, serializer in
-                try serializer.serialize_str(value: item)
-            }
-            try serializeOption(value: self.arcOption, serializer: serializer) { value, serializer in
-                try serializer.serialize_str(value: value)
-            }
-            try serializeTupleArray(value: self.arrayOfBoxes, serializer: serializer) { item, serializer in
-                try serializer.serialize_i32(value: item)
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case vecOfSets = "vec_of_sets"
+            case optionalBtree = "optional_btree"
+            case boxedVec = "boxed_vec"
+            case arcOption = "arc_option"
+            case arrayOfBoxes = "array_of_boxes"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.vecOfSets = try container.decode([Set<String>].self, forKey: .vecOfSets)
+            self.optionalBtree = try container.decodeIfPresent([String: Int32].self, forKey: .optionalBtree)
+            self.boxedVec = try container.decode([String].self, forKey: .boxedVec)
+            self.arcOption = try container.decodeIfPresent(String.self, forKey: .arcOption)
+            self.arrayOfBoxes = try container.decode([Int32].self, forKey: .arrayOfBoxes)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.vecOfSets, forKey: .vecOfSets)
+            try container.encode(self.optionalBtree, forKey: .optionalBtree)
+            try container.encode(self.boxedVec, forKey: .boxedVec)
+            try container.encode(self.arcOption, forKey: .arcOption)
+            try container.encode(self.arrayOfBoxes, forKey: .arrayOfBoxes)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let vecOfSets = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializeSet(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_str()
-                }
-            }
-            let optionalBtree = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializeMap(deserializer: deserializer) { deserializer in
-                    let key = try deserializer.deserialize_str()
-                    let value = try deserializer.deserialize_i32()
-                    return (key, value)
-                }
-            }
-            let boxedVec = try deserializeArray(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let arcOption = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializer.deserialize_str()
-            }
-            let arrayOfBoxes = try deserializeTupleArray(deserializer: deserializer, size: 3) { deserializer in
-                try deserializer.deserialize_i32()
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(vecOfSets: vecOfSets, optionalBtree: optionalBtree, boxedVec: boxedVec, arcOption: arcOption, arrayOfBoxes: arrayOfBoxes)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -2022,8 +1700,9 @@ fn struct_with_bytes_field() {
     }
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+    insta::assert_snapshot!(actual, @"
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var data: [UInt8]
         public var name: String
         public var header: [UInt8]
@@ -2034,39 +1713,21 @@ fn struct_with_bytes_field() {
             self.header = header
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_bytes(value: self.data)
-            try serializer.serialize_str(value: self.name)
-            try serializer.serialize_bytes(value: self.header)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case data
+            case name
+            case header
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let data = try deserializer.deserialize_bytes()
-            let name = try deserializer.deserialize_str()
-            let header = try deserializer.deserialize_bytes()
-            try deserializer.decrease_container_depth()
-            return MyStruct(data: data, name: name, header: header)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -2083,7 +1744,8 @@ fn struct_with_bytes_field_and_slice() {
 
     let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
-    public struct MyStruct: Hashable, Equatable {
+
+    public struct MyStruct: Hashable, Equatable, Codable {
         public var data: [UInt8]
         public var name: String
         public var header: [UInt8]
@@ -2096,46 +1758,35 @@ fn struct_with_bytes_field_and_slice() {
             self.optionalBytes = optionalBytes
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_bytes(value: self.data)
-            try serializer.serialize_str(value: self.name)
-            try serializer.serialize_bytes(value: self.header)
-            try serializeOption(value: self.optionalBytes, serializer: serializer) { value, serializer in
-                try serializeArray(value: value, serializer: serializer) { item, serializer in
-                    try serializer.serialize_u8(value: item)
-                }
-            }
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case data
+            case name
+            case header
+            case optionalBytes = "optional_bytes"
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.data = try container.decode([UInt8].self, forKey: .data)
+            self.name = try container.decode(String.self, forKey: .name)
+            self.header = try container.decode([UInt8].self, forKey: .header)
+            self.optionalBytes = try container.decodeIfPresent([UInt8].self, forKey: .optionalBytes)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.data, forKey: .data)
+            try container.encode(self.name, forKey: .name)
+            try container.encode(self.header, forKey: .header)
+            try container.encode(self.optionalBytes, forKey: .optionalBytes)
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> MyStruct {
-            try deserializer.increase_container_depth()
-            let data = try deserializer.deserialize_bytes()
-            let name = try deserializer.deserialize_str()
-            let header = try deserializer.deserialize_bytes()
-            let optionalBytes = try deserializeOption(deserializer: deserializer) { deserializer in
-                try deserializeArray(deserializer: deserializer) { deserializer in
-                    try deserializer.deserialize_u8()
-                }
-            }
-            try deserializer.decrease_container_depth()
-            return MyStruct(data: data, name: name, header: header, optionalBytes: optionalBytes)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
         }
     }
     "#);
@@ -2155,79 +1806,48 @@ fn namespaced_child() {
     }
 
     let actual = emit!(Parent as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
-    public struct Parent: Hashable, Equatable {
+    insta::assert_snapshot!(actual, @"
+
+    public struct Parent: Hashable, Equatable, Codable {
         public var child: Test.Child
 
         public init(child: Test.Child) {
             self.child = child
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try self.child.serialize(serializer: serializer)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case child
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Parent {
-            try deserializer.increase_container_depth()
-            let child = try Test.Child.deserialize(deserializer: deserializer)
-            try deserializer.decrease_container_depth()
-            return Parent(child: child)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Parent {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Parent.self, from: input)
         }
     }
 
-    public struct Child: Hashable, Equatable {
+    public struct Child: Hashable, Equatable, Codable {
         public var test: String
 
         public init(test: String) {
             self.test = test
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.test)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case test
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Child {
-            try deserializer.increase_container_depth()
-            let test = try deserializer.deserialize_str()
-            try deserializer.decrease_container_depth()
-            return Child(test: test)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> Child {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(Child.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -2242,9 +1862,9 @@ fn keyword_fields_struct() {
     }
 
     let actual = emit!(KeywordFields as Swift with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @r#"
+    insta::assert_snapshot!(actual, @"
 
-    public struct KeywordFields: Hashable, Equatable {
+    public struct KeywordFields: Hashable, Equatable, Codable {
         public var `default`: String
         public var `in`: Int32
         public var object: Bool
@@ -2257,41 +1877,22 @@ fn keyword_fields_struct() {
             self.`import` = `import`
         }
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
-            try serializer.serialize_str(value: self.`default`)
-            try serializer.serialize_i32(value: self.`in`)
-            try serializer.serialize_bool(value: self.object)
-            try serializer.serialize_bool(value: self.`import`)
-            try serializer.decrease_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case `default`
+            case `in`
+            case object
+            case `import`
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> KeywordFields {
-            try deserializer.increase_container_depth()
-            let `default` = try deserializer.deserialize_str()
-            let `in` = try deserializer.deserialize_i32()
-            let object = try deserializer.deserialize_bool()
-            let `import` = try deserializer.deserialize_bool()
-            try deserializer.decrease_container_depth()
-            return KeywordFields(default: `default`, in: `in`, object: object, import: `import`)
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> KeywordFields {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(KeywordFields.self, from: input)
         }
     }
-    "#);
+    ");
 }
 
 #[test]
@@ -2308,61 +1909,435 @@ fn keyword_enum() {
     let actual = emit!(KeywordEnum as Swift with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    indirect public enum KeywordEnum: Hashable, Equatable {
+    indirect public enum KeywordEnum: Hashable, Equatable, Codable {
         case `default`
         case `switch`(String)
         case `where`(`in`: Int32, `default`: String)
 
-        public func serialize<S: Serializer>(serializer: S) throws {
-            try serializer.increase_container_depth()
+        enum CodingKeys: String, CodingKey {
+            case `default` = "Default"
+            case `switch` = "Switch"
+            case `where` = "Where"
+        }
+
+        enum WhereCodingKeys: String, CodingKey {
+            case `in`
+            case `default`
+        }
+
+        public init(from decoder: Decoder) throws {
+            if let container = try? decoder.singleValueContainer(), let name = try? container.decode(String.self) {
+                switch name {
+                case "Default":
+                    self = .`default`
+                default:
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown variant \(name) for KeywordEnum")
+                }
+                return
+            }
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            guard container.allKeys.count == 1, let key = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected exactly one variant of KeywordEnum"))
+            }
+            switch key {
+            case .`default`:
+                self = .`default`
+            case .`switch`:
+                self = .`switch`(
+                    try container.decode(String.self, forKey: .`switch`)
+                )
+            case .`where`:
+                let nested = try container.nestedContainer(keyedBy: WhereCodingKeys.self, forKey: .`where`)
+                self = .`where`(
+                    in: try nested.decode(Int32.self, forKey: .`in`),
+                    default: try nested.decode(String.self, forKey: .`default`)
+                )
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
             switch self {
             case .`default`:
-                try serializer.serialize_variant_index(value: 0)
-            case .`switch`(let x):
-                try serializer.serialize_variant_index(value: 1)
-                try serializer.serialize_str(value: x)
-            case .`where`(let `in`, let `default`):
-                try serializer.serialize_variant_index(value: 2)
-                try serializer.serialize_i32(value: `in`)
-                try serializer.serialize_str(value: `default`)
+                var container = encoder.singleValueContainer()
+                try container.encode("Default")
+            case .`switch`(let payload0):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                try container.encode(payload0, forKey: .`switch`)
+            case .`where`(let payload0, let payload1):
+                var container = encoder.container(keyedBy: CodingKeys.self)
+                var nested = container.nestedContainer(keyedBy: WhereCodingKeys.self, forKey: .`where`)
+                try nested.encode(payload0, forKey: .`in`)
+                try nested.encode(payload1, forKey: .`default`)
             }
-            try serializer.decrease_container_depth()
         }
 
         public func jsonSerialize() throws -> [UInt8] {
-            let serializer = JsonSerializer.init();
-            try self.serialize(serializer: serializer)
-            return serializer.get_bytes()
-        }
-
-        public static func deserialize<D: Deserializer>(deserializer: D) throws -> KeywordEnum {
-            let index = try deserializer.deserialize_variant_index()
-            try deserializer.increase_container_depth()
-            switch index {
-            case 0:
-                try deserializer.decrease_container_depth()
-                return .`default`
-            case 1:
-                let x = try deserializer.deserialize_str()
-                try deserializer.decrease_container_depth()
-                return .`switch`(x)
-            case 2:
-                let `in` = try deserializer.deserialize_i32()
-                let `default` = try deserializer.deserialize_str()
-                try deserializer.decrease_container_depth()
-                return .`where`(in: `in`, default: `default`)
-            default: throw DeserializationError.invalidInput(issue: "Unknown variant index for KeywordEnum: \(index)")
-            }
+            return try Serde.jsonSerialize(self)
         }
 
         public static func jsonDeserialize(input: [UInt8]) throws -> KeywordEnum {
-            let deserializer = JsonDeserializer.init(input: input);
-            let obj = try deserialize(deserializer: deserializer)
-            if deserializer.get_buffer_offset() < input.count {
-                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
-            }
-            return obj
+            return try Serde.jsonDeserialize(KeywordEnum.self, from: input)
         }
     }
     "#);
+}
+
+#[test]
+fn internally_tagged_enum() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    #[facet(tag = "type")]
+    enum MyEnum {
+        Unit,
+        Wrapped(Point),
+        Scalar(u8),
+        Struct { field: bool },
+    }
+
+    let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
+        case unit
+        case wrapped(Point)
+        case scalar(UInt8)
+        case `struct`(field: Bool)
+
+        enum StructCodingKeys: String, CodingKey {
+            case field
+        }
+
+        public init(from decoder: Decoder) throws {
+            let tagContainer = try decoder.container(keyedBy: Serde.JsonKey.self)
+            let tag = try tagContainer.decode(String.self, forKey: Serde.JsonKey("type"))
+            switch tag {
+            case "Unit":
+                self = .unit
+            case "Wrapped":
+                self = .wrapped(
+                    try decoder.singleValueContainer().decode(Point.self)
+                )
+            case "Scalar":
+                throw DecodingError.dataCorruptedError(forKey: Serde.JsonKey("type"), in: tagContainer, debugDescription: "MyEnum.Scalar cannot be internally tagged: its payload is not written as an object")
+            case "Struct":
+                let nested = try decoder.container(keyedBy: StructCodingKeys.self)
+                self = .`struct`(
+                    field: try nested.decode(Bool.self, forKey: .field)
+                )
+            default:
+                throw DecodingError.dataCorruptedError(forKey: Serde.JsonKey("type"), in: tagContainer, debugDescription: "Unknown variant \(tag) for MyEnum")
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .unit:
+                var tagContainer = encoder.container(keyedBy: Serde.JsonKey.self)
+                try tagContainer.encode("Unit", forKey: Serde.JsonKey("type"))
+            case .wrapped(let payload0):
+                var tagContainer = encoder.container(keyedBy: Serde.JsonKey.self)
+                try tagContainer.encode("Wrapped", forKey: Serde.JsonKey("type"))
+                try payload0.encode(to: encoder)
+            case .scalar:
+                throw EncodingError.invalidValue(self, .init(codingPath: encoder.codingPath, debugDescription: "MyEnum.Scalar cannot be internally tagged: its payload is not written as an object"))
+            case .`struct`(let payload0):
+                var tagContainer = encoder.container(keyedBy: Serde.JsonKey.self)
+                try tagContainer.encode("Struct", forKey: Serde.JsonKey("type"))
+                var nested = encoder.container(keyedBy: StructCodingKeys.self)
+                try nested.encode(payload0, forKey: .field)
+            }
+        }
+
+        public func jsonSerialize() throws -> [UInt8] {
+            return try Serde.jsonSerialize(self)
+        }
+
+        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
+        }
+    }
+
+    public struct Point: Hashable, Equatable, Codable {
+        public var x: Int32
+
+        public init(x: Int32) {
+            self.x = x
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case x
+        }
+
+        public func jsonSerialize() throws -> [UInt8] {
+            return try Serde.jsonSerialize(self)
+        }
+
+        public static func jsonDeserialize(input: [UInt8]) throws -> Point {
+            return try Serde.jsonDeserialize(Point.self, from: input)
+        }
+    }
+    "#);
+}
+
+#[test]
+fn adjacently_tagged_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    #[facet(tag = "t", content = "c")]
+    enum MyEnum {
+        Unit,
+        NewType(Option<char>),
+        Tuple(u8, String),
+        Struct { field: bool },
+    }
+
+    let actual = emit!(MyEnum as Swift with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    indirect public enum MyEnum: Hashable, Equatable, Codable {
+        case unit
+        case newType(Character?)
+        case tuple(UInt8, String)
+        case `struct`(field: Bool)
+
+        enum StructCodingKeys: String, CodingKey {
+            case field
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: Serde.JsonKey.self)
+            let tag = try container.decode(String.self, forKey: Serde.JsonKey("t"))
+            switch tag {
+            case "Unit":
+                self = .unit
+            case "NewType":
+                self = .newType(
+                    try { () throws -> Character? in
+                        guard container.contains(Serde.JsonKey("c")), try !container.decodeNil(forKey: Serde.JsonKey("c")) else { return nil }
+                        return try container.decode(Serde.JsonChar.self, forKey: Serde.JsonKey("c")).value
+                    }()
+                )
+            case "Tuple":
+                var nested = try container.nestedUnkeyedContainer(forKey: Serde.JsonKey("c"))
+                self = .tuple(
+                    try nested.decode(UInt8.self),
+                    try nested.decode(String.self)
+                )
+            case "Struct":
+                let nested = try container.nestedContainer(keyedBy: StructCodingKeys.self, forKey: Serde.JsonKey("c"))
+                self = .`struct`(
+                    field: try nested.decode(Bool.self, forKey: .field)
+                )
+            default:
+                throw DecodingError.dataCorruptedError(forKey: Serde.JsonKey("t"), in: container, debugDescription: "Unknown variant \(tag) for MyEnum")
+            }
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            switch self {
+            case .unit:
+                var container = encoder.container(keyedBy: Serde.JsonKey.self)
+                try container.encode("Unit", forKey: Serde.JsonKey("t"))
+            case .newType(let payload0):
+                var container = encoder.container(keyedBy: Serde.JsonKey.self)
+                try container.encode("NewType", forKey: Serde.JsonKey("t"))
+                if let value0 = payload0 {
+                    try container.encode(Serde.JsonChar(value0), forKey: Serde.JsonKey("c"))
+                } else {
+                    try container.encodeNil(forKey: Serde.JsonKey("c"))
+                }
+            case .tuple(let payload0, let payload1):
+                var container = encoder.container(keyedBy: Serde.JsonKey.self)
+                try container.encode("Tuple", forKey: Serde.JsonKey("t"))
+                var nested = container.nestedUnkeyedContainer(forKey: Serde.JsonKey("c"))
+                try nested.encode(payload0)
+                try nested.encode(payload1)
+            case .`struct`(let payload0):
+                var container = encoder.container(keyedBy: Serde.JsonKey.self)
+                try container.encode("Struct", forKey: Serde.JsonKey("t"))
+                var nested = container.nestedContainer(keyedBy: StructCodingKeys.self, forKey: Serde.JsonKey("c"))
+                try nested.encode(payload0, forKey: .field)
+            }
+        }
+
+        public func jsonSerialize() throws -> [UInt8] {
+            return try Serde.jsonSerialize(self)
+        }
+
+        public static func jsonDeserialize(input: [UInt8]) throws -> MyEnum {
+            return try Serde.jsonDeserialize(MyEnum.self, from: input)
+        }
+    }
+    "#);
+}
+
+#[test]
+fn struct_with_values_swift_codes_differently() {
+    #[derive(Facet)]
+    #[allow(clippy::option_option)]
+    struct MyStruct {
+        unit: (),
+        letter: char,
+        pair: (u8, Option<char>),
+        by_int: BTreeMap<u32, Vec<()>>,
+        big: u128,
+        maybe: Option<Option<u8>>,
+    }
+
+    let actual = emit!(MyStruct as Swift with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public struct MyStruct: Codable {
+        public var unit: Void
+        public var letter: Character
+        public var pair: (UInt8, Character?)
+        public var byInt: [UInt32: [Void]]
+        public var big: UInt128
+        public var maybe: UInt8??
+
+        public init(unit: Void, letter: Character, pair: (UInt8, Character?), byInt: [UInt32: [Void]], big: UInt128, maybe: UInt8??) {
+            self.unit = unit
+            self.letter = letter
+            self.pair = pair
+            self.byInt = byInt
+            self.big = big
+            self.maybe = maybe
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case unit
+            case letter
+            case pair
+            case byInt = "by_int"
+            case big
+            case maybe
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.unit = try container.decode(Serde.JsonUnit.self, forKey: .unit).value
+            self.letter = try container.decode(Serde.JsonChar.self, forKey: .letter).value
+            self.pair = try { () throws -> (UInt8, Character?) in
+                var nested0 = try container.nestedUnkeyedContainer(forKey: .pair)
+                return (
+                    try nested0.decode(UInt8.self),
+                    try { () throws -> Character? in
+                        guard try !nested0.decodeNil() else { return nil }
+                        return try nested0.decode(Serde.JsonChar.self).value
+                    }()
+                )
+            }()
+            self.byInt = try { () throws -> [UInt32: [Void]] in
+                let nested0 = try container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .byInt)
+                var result0: [UInt32: [Void]] = [:]
+                for key0 in nested0.allKeys {
+                    let mapKey0 = try Serde.jsonMapKey(key0.stringValue, as: UInt32.self)
+                    result0.updateValue(try { () throws -> [Void] in
+                        var nested1 = try nested0.nestedUnkeyedContainer(forKey: key0)
+                        var result1: [Void] = []
+                        while !nested1.isAtEnd {
+                            result1.append(try nested1.decode(Serde.JsonUnit.self).value)
+                        }
+                        return result1
+                    }(), forKey: mapKey0)
+                }
+                return result0
+            }()
+            self.big = try container.decode(UInt128.self, forKey: .big)
+            self.maybe = try container.decodeIfPresent(UInt8?.self, forKey: .maybe)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(Serde.JsonUnit(), forKey: .unit)
+            try container.encode(Serde.JsonChar(self.letter), forKey: .letter)
+            do {
+                var nested0 = container.nestedUnkeyedContainer(forKey: .pair)
+                try nested0.encode(self.pair.0)
+                if let value1 = self.pair.1 {
+                    try nested0.encode(Serde.JsonChar(value1))
+                } else {
+                    try nested0.encodeNil()
+                }
+            }
+            do {
+                var nested0 = container.nestedContainer(keyedBy: Serde.JsonKey.self, forKey: .byInt)
+                for (key0, value0) in self.byInt {
+                    let objectKey0 = Serde.JsonKey(try Serde.jsonMapKey(key0))
+                    do {
+                        var nested1 = nested0.nestedUnkeyedContainer(forKey: objectKey0)
+                        for _ in value0 {
+                            try nested1.encode(Serde.JsonUnit())
+                        }
+                    }
+                }
+            }
+            try container.encode(self.big, forKey: .big)
+            try container.encode(self.maybe, forKey: .maybe)
+        }
+
+        public func jsonSerialize() throws -> [UInt8] {
+            return try Serde.jsonSerialize(self)
+        }
+
+        public static func jsonDeserialize(input: [UInt8]) throws -> MyStruct {
+            return try Serde.jsonDeserialize(MyStruct.self, from: input)
+        }
+    }
+    "#);
+}
+
+#[test]
+fn recursive_struct() {
+    #[derive(Facet)]
+    struct Node {
+        value: u32,
+        next: Option<Box<Node>>,
+    }
+
+    let actual = emit!(Node as Swift with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    public struct Node: Hashable, Equatable, Codable {
+        public var value: UInt32
+        @Indirect public var next: Node?
+
+        public init(value: UInt32, next: Node?) {
+            self.value = value
+            self.next = next
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case value
+            case next
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.value = try container.decode(UInt32.self, forKey: .value)
+            self.next = try container.decodeIfPresent(Node.self, forKey: .next)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(self.value, forKey: .value)
+            try container.encode(self.next, forKey: .next)
+        }
+
+        public func jsonSerialize() throws -> [UInt8] {
+            return try Serde.jsonSerialize(self)
+        }
+
+        public static func jsonDeserialize(input: [UInt8]) throws -> Node {
+            return try Serde.jsonDeserialize(Node.self, from: input)
+        }
+    }
+    ");
 }

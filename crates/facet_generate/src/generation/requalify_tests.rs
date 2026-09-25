@@ -16,9 +16,9 @@
 //!
 //! | Language | Root module | Namespaced module | Idempotent |
 //! |---|---|---|---|
-//! | C# | dotted (`Example.Shared`) and undotted (`Example`) package; ROOT and sibling references | ROOT and same-namespace references | no |
+//! | C# | dotted (`Example.Shared`) and undotted (`Example`) package, and one ending in a namespace (`Example.kit`); ROOT and sibling references | ROOT and same-namespace references | no |
 //! | TypeScript | ROOT and sibling references | ROOT (through the root package import) and same-namespace references | no |
-//! | Kotlin | ROOT and sibling references | ROOT and same-namespace references | no |
+//! | Kotlin | ROOT and sibling references, also with a package ending in a namespace (`com.kit`) | ROOT and same-namespace references | no |
 //! | Swift | ROOT and sibling references | ROOT (qualified with the root package) and same-namespace references | yes |
 
 use std::{
@@ -390,10 +390,37 @@ mod csharp {
         }
     }
 
+    /// `Example.kit` ends in the name of namespace `kit`, spelled the same,
+    /// whose module is still `Example.kit.kit` (#164).
+    #[test]
+    fn requalify_agrees_with_a_root_module_whose_package_ends_in_a_namespace() {
+        let modules = generate("Example.kit");
+        let module = &modules["Example.kit"];
+
+        assert_eq!(
+            HELPERS.agree(module, "row", &kit("Row")).0,
+            "Example.Kit.Kit.Row"
+        );
+        assert_eq!(
+            HELPERS.agree(module, "status", &kit("Status")),
+            (
+                "Example.Kit.Kit.Status".to_string(),
+                "Example.Kit.Kit.StatusBincode.Serialize(Status, serializer);".to_string()
+            )
+        );
+
+        HELPERS.assert_enum_lookups(module, &kit("Status"), true);
+        HELPERS.assert_enum_lookups(module, &kit("Row"), false);
+
+        let module = &modules["kit"];
+        assert_eq!(HELPERS.agree(module, "status", &kit("Status")).0, "Status");
+        HELPERS.assert_enum_lookups(module, &kit("Status"), true);
+    }
+
     #[test]
     fn requalify_is_not_idempotent() {
         let modules = generate("Example.Shared");
-        let config = &modules["Example.Shared"].config;
+        let config = &modules["kit"].config;
 
         let once = requalify(config, &root("Event"));
         assert_eq!(
@@ -572,9 +599,14 @@ mod kotlin {
 
     /// The modules the Kotlin installer generates for package `com.example`.
     fn generate() -> BTreeMap<String, Generated> {
+        generate_in("com.example")
+    }
+
+    /// The modules the Kotlin installer generates for package `package`.
+    fn generate_in(package: &str) -> BTreeMap<String, Generated> {
         generate_modules(
-            "com.example",
-            |config| config.clone().with_parent("com.example"),
+            package,
+            |config| config.clone().with_parent(package),
             |config, registry, capture| {
                 let generator = KotlinCodeGenerator::new(config)
                     .with_plugins(vec![Arc::new(BincodePlugin), capture]);
@@ -613,6 +645,45 @@ mod kotlin {
         HELPERS.assert_enum_lookups(module, &root("Event"), true);
         HELPERS.assert_enum_lookups(module, &kit("Status"), true);
         HELPERS.assert_enum_lookups(module, &kit("Row"), false);
+    }
+
+    /// `com.kit` ends in the name of namespace `kit`, whose module is still
+    /// `com.kit.kit` (#164).
+    #[test]
+    fn requalify_agrees_with_a_root_module_whose_package_ends_in_a_namespace() {
+        let modules = generate_in("com.kit");
+        let module = &modules["com.kit"];
+
+        assert_eq!(
+            HELPERS.agree(module, "event", &root("Event")).0,
+            "com.kit.Event"
+        );
+        assert_eq!(
+            HELPERS.agree(module, "row", &kit("Row")),
+            (
+                "com.kit.kit.Row".to_string(),
+                "row.serialize(serializer)".to_string()
+            )
+        );
+        assert_eq!(
+            HELPERS.agree(module, "status", &kit("Status")).0,
+            "com.kit.kit.Status"
+        );
+
+        HELPERS.assert_enum_lookups(module, &root("Event"), true);
+        HELPERS.assert_enum_lookups(module, &kit("Status"), true);
+        HELPERS.assert_enum_lookups(module, &kit("Row"), false);
+
+        let module = &modules["kit"];
+        assert_eq!(
+            HELPERS.agree(module, "event", &root("Event")).0,
+            "com.kit.Event"
+        );
+        assert_eq!(
+            HELPERS.agree(module, "status", &kit("Status")).0,
+            "com.kit.kit.Status"
+        );
+        HELPERS.assert_enum_lookups(module, &kit("Status"), true);
     }
 
     #[test]

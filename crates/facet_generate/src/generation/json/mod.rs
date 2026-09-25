@@ -9,9 +9,10 @@
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | `kotlinx.serialization.*` imports (Kotlin), `import Serde` (Swift) |
-//! | `module_helpers` | BigInt JSON helper (Kotlin); feature snippets (Swift) |
+//! | `module_helpers` | BigInt JSON helper (Kotlin) |
 //! | `type_annotations` | `@Serializable`, `@SerialName("…")` above each type (Kotlin) |
-//! | `type_body` | `val serialName` accessor for enum classes (Kotlin); `serialize` / `deserialize` + `jsonSerialize` / `jsonDeserialize` wrappers (Swift) |
+//! | `type_conformances` | `Codable` (Swift) |
+//! | `type_body` | `val serialName` accessor for enum classes (Kotlin); `CodingKeys`, `init(from:)` / `encode(to:)` where needed, and `jsonSerialize` / `jsonDeserialize` wrappers (Swift) |
 //! | `has_type_body` | Always `true` (Swift) |
 //!
 
