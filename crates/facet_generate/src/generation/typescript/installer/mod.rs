@@ -48,7 +48,7 @@ use crate::{
         json::JsonPlugin,
         module::{self, Module},
         plugin::EmitterPlugin,
-        typescript::{TypeScript, TypeScriptCodeGenerator},
+        typescript::{TypeScript, TypeScriptCodeGenerator, naming},
     },
 };
 
@@ -177,6 +177,12 @@ impl Installer {
     /// - a module imports two namespaces under the same name (`my_ns` and
     ///   `MyNs`), or imports one under the name of a type it declares
     ///   (TS2440), as a ROOT type named like a namespace would be.
+    /// - a module imports a namespace under the name of a global that the
+    ///   plugins' code for it constructs (`map` as `Map`, beside a map
+    ///   field), which the namespace would shadow (TS2351).
+    /// - a module is written to `serde.ts`, which the generated code's
+    ///   `./serde` imports would find instead of the runtime installed in
+    ///   `serde/`.
     ///
     /// Namespaces provided by external packages are not generated, so only
     /// the names they are imported under are checked.
@@ -196,6 +202,31 @@ impl Installer {
                     )
                 }),
         )?;
+
+        let installs_serde = !self.external_packages.contains_key(SERDE_NAMESPACE)
+            && self.plugins.iter().any(|plugin| {
+                plugin
+                    .runtime_files()
+                    .iter()
+                    .any(|file| file.relative_path.starts_with("serde/"))
+            });
+        if installs_serde
+            && let Some(name) = modules
+                .keys()
+                .map(|m| m.config().module_name())
+                .filter(|name| !self.external_packages.contains_key(*name))
+                .find(|name| name.eq_ignore_ascii_case(SERDE_NAMESPACE))
+        {
+            let origin = Origin::of_module(name, &self.package_name);
+            return Err(collision::error(
+                LANGUAGE,
+                format_args!("{origin} is written to `{name}.ts`"),
+                "the runtime module `./serde`, which the generated code imports `Serializer` \
+                 and `Deserializer` from",
+                origin.choose_namespace(),
+            )
+            .into());
+        }
 
         for (m, registry) in modules {
             let config = m.config();
@@ -232,6 +263,27 @@ impl Installer {
                         subject,
                         TypeName(declared),
                         origin.rename_type(),
+                    )
+                    .into());
+                }
+                if let Some((global, _)) =
+                    naming::CONSTRUCTED_GLOBALS
+                        .iter()
+                        .find(|(global, constructs)| {
+                            *global == binding
+                                && !self.plugins.is_empty()
+                                && registry.values().any(constructs)
+                        })
+                {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        format_args!(
+                            "the global `{global}`, which `{}.ts` constructs, so \
+                             `new {global}(...)` would find the namespace instead",
+                            config.module_name()
+                        ),
+                        origin.choose_namespace(),
                     )
                     .into());
                 }

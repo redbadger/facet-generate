@@ -15,9 +15,9 @@ use heck::ToUpperCamelCase;
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
-        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+        naming::{EscapeStyle, ForbiddenNames, NamingRules, mentions, qualify},
     },
-    reflection::format::QualifiedTypeName,
+    reflection::format::{ContainerFormat, Format, QualifiedTypeName},
 };
 
 /// TypeScript reserved words, sorted.
@@ -83,6 +83,35 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ("Map", "globalThis.Map"),
     ("Uint8Array", "globalThis.Uint8Array"),
 ];
+
+/// Globals the plugins' code constructs bare (`new Map`, `new Error`), each
+/// with the test for whether a container's code does. Sorted by name.
+///
+/// A namespace imported as one of these (`import * as Map`) shadows the
+/// global's value, so `new Map()` fails (TS2351), but not its type, so a
+/// global written only in type positions (`Map<K, V>`, `Uint8Array`) is
+/// still found. The installer rejects such a namespace in a module whose
+/// containers construct the global.
+pub(crate) const CONSTRUCTED_GLOBALS: &[(&str, ConstructsGlobal)] = &[
+    // The plugins' enum functions throw on an unknown variant, and their
+    // `Uuid` helpers on a malformed UUID.
+    ("Error", |container| {
+        matches!(container, ContainerFormat::Enum(..)) || mentions(container, is_uuid)
+    }),
+    // The plugins' `deserializeMap` helper.
+    ("Map", |container| {
+        mentions(container, |format| matches!(format, Format::Map { .. }))
+    }),
+    // The Bincode plugin's `Uuid` helper.
+    ("Uint8Array", |container| mentions(container, is_uuid)),
+];
+
+/// Whether a container's code constructs a global.
+type ConstructsGlobal = fn(&ContainerFormat) -> bool;
+
+fn is_uuid(format: &Format) -> bool {
+    matches!(format, Format::Uuid)
+}
 
 /// Type names the generated module already uses for something else, with the
 /// clause that names what each collides with. Sorted by name.
@@ -205,6 +234,10 @@ mod tests {
         assert!(
             QUALIFIED.windows(2).all(|w| w[0].0 < w[1].0),
             "QUALIFIED must be sorted by the bare name"
+        );
+        assert!(
+            CONSTRUCTED_GLOBALS.windows(2).all(|w| w[0].0 < w[1].0),
+            "CONSTRUCTED_GLOBALS must be sorted by name"
         );
         assert!(
             FORBIDDEN_TYPES.windows(2).all(|w| w[0].0 < w[1].0),

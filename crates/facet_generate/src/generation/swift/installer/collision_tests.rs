@@ -209,6 +209,215 @@ fn rejects_namespaces_that_become_the_same_module() {
     );
 }
 
+/// Every module imports `Swift`, so a standard-library type hides the module
+/// even where nothing is a `String`: "'Thing' is not a member type of struct
+/// 'Swift.String'".
+#[test]
+fn rejects_a_namespace_named_like_a_standard_library_type() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "string")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"string\" becomes the module `String`, which qualifies its types in \
+         module `Example`, the same as the standard-library type `String`, which Swift finds \
+         instead of the module. Choose a different namespace"
+    );
+}
+
+/// A standard-library type that the generated code never writes hides the
+/// module too: "'Thing' is not a member type of protocol 'Swift.Error'".
+#[test]
+fn rejects_a_namespace_named_like_swift_error() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "error")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"error\" becomes the module `Error`, which qualifies its types in \
+         module `Example`, the same as the standard-library type `Error`, which Swift finds \
+         instead of the module. Choose a different namespace"
+    );
+}
+
+/// `Result` too: "'Thing' is not a member type of generic enum
+/// 'Swift.Result'".
+#[test]
+fn rejects_a_namespace_named_like_swift_result() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "result")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"result\" becomes the module `Result`, which qualifies its types in \
+         module `Example`, the same as the standard-library type `Result`, which Swift finds \
+         instead of the module. Choose a different namespace"
+    );
+}
+
+/// The Serde runtime imports `Foundation`, which imports `System`: "module
+/// dependency cycle: 'System (Source Target) -> Serde.swiftmodule ->
+/// Foundation.swiftmodule -> System.swiftmodule'".
+#[test]
+fn rejects_a_namespace_named_like_a_module_foundation_imports() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "system")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"system\" becomes the module `System`, the same as the SDK module \
+         `System`, which `Foundation` imports, so the target would depend on itself. Choose a \
+         different namespace"
+    );
+}
+
+/// "module dependency cycle: 'Foundation (Source Target) -> Serde.swiftmodule
+/// -> Foundation.swiftmodule'".
+#[test]
+fn rejects_a_namespace_named_like_foundation() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "foundation")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"foundation\" becomes the module `Foundation`, the same as the SDK \
+         module `Foundation`, which the generated code imports, so the target would depend on itself. \
+         Choose a different namespace"
+    );
+}
+
+/// The compiler refuses the target: "module name "Swift" is reserved for the
+/// standard library".
+#[test]
+fn rejects_a_namespace_named_like_the_standard_library_module() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "swift")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"swift\" becomes the module `Swift`, the same as the standard \
+         library's module `Swift`. Choose a different namespace"
+    );
+}
+
+/// Both would be the `Serde` target, so the installer found a cycle from
+/// `Serde` to itself instead.
+#[test]
+fn rejects_a_namespace_named_like_the_serde_runtime() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serde")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"serde\" becomes the module `Serde`, the same as the runtime module \
+         `Serde`, which the generated code imports. Choose a different namespace"
+    );
+}
+
+/// A module named like an SDK module is fine when nothing imports
+/// `Foundation`, as without a plugin.
+#[test]
+fn allows_a_namespace_named_like_an_sdk_module_without_foundation() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "system")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .generate(&reflect!(App).unwrap())
+        .unwrap();
+}
+
+/// A module named like a Foundation type that the generated code spells
+/// otherwise (`Uuid`, not `UUID`) is fine, and so is one named like a
+/// runtime target that the generated code never imports (`Bincode`).
+#[test]
+fn allows_namespaces_near_builtin_names() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "uuid")]
+    struct Id {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "bincode")]
+    struct Codec {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct Store {
+        id: Id,
+        codec: Codec,
+        uuid: uuid::Uuid,
+    }
+
+    generates("Example", &reflect!(Store).unwrap());
+}
+
 /// `module::split` puts a namespace spelled exactly like the root package in
 /// the root module, so it is not a module of its own.
 #[test]

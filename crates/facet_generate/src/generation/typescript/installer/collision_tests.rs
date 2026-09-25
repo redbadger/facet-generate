@@ -201,6 +201,156 @@ fn rejects_namespaces_whose_files_differ_only_in_case() {
     );
 }
 
+/// `deserializeMap` constructs the global, which the import shadows:
+/// "TS2351: This expression is not constructable".
+#[test]
+fn rejects_a_namespace_named_like_a_global_the_module_constructs() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "map")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        m: std::collections::HashMap<String, u32>,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"map\" is imported as `Map` in `Example.ts`, the same as the \
+         global `Map`, which `Example.ts` constructs, so `new Map(...)` would find the namespace \
+         instead. Choose a different namespace"
+    );
+}
+
+/// An enum's `deserialize` function throws `new Error(...)` (TS2351).
+#[test]
+fn rejects_a_namespace_named_like_a_global_an_enum_constructs() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "error")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Choice {
+        A,
+        B(u32),
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        choice: Choice,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"error\" is imported as `Error` in `Example.ts`, the same as the \
+         global `Error`, which `Example.ts` constructs, so `new Error(...)` would find the namespace \
+         instead. Choose a different namespace"
+    );
+}
+
+/// The Bincode `Uuid` helper constructs a `Uint8Array` (TS2351).
+#[test]
+fn rejects_a_namespace_named_like_a_global_the_uuid_helper_constructs() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "uint8_array")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"uint8_array\" is imported as `Uint8Array` in `Example.ts`, the \
+         same as the global `Uint8Array`, which `Example.ts` constructs, so `new Uint8Array(...)` \
+         would find the namespace instead. Choose a different namespace"
+    );
+}
+
+/// `./serde` resolves to `serde.ts` before `serde/index.ts`: "TS2459:
+/// Module '"./serde"' declares 'Serializer' locally, but it is not exported".
+#[test]
+fn rejects_a_namespace_written_over_the_serde_runtime() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serde")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"serde\" is written to `serde.ts`, the same as the runtime module \
+         `./serde`, which the generated code imports `Serializer` and `Deserializer` from. Choose \
+         a different namespace"
+    );
+}
+
+/// A global written only as a type (`Map<K, V>`, `type bytes = Uint8Array`)
+/// is still found through a namespace import of the same name, and one that
+/// nothing constructs is not written at all.
+#[test]
+fn allows_a_namespace_named_like_a_global_the_module_does_not_construct() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "map")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "uint8_array")]
+    struct Other {
+        y: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        other: Other,
+        #[facet(fg::bytes)]
+        bytes: Vec<u8>,
+    }
+
+    generates("Example", &reflect!(App).unwrap());
+}
+
+/// Without a plugin nothing constructs a global.
+#[test]
+fn allows_a_namespace_named_like_a_global_without_plugins() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "map")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        m: std::collections::HashMap<String, u32>,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .generate(&reflect!(App).unwrap())
+        .unwrap();
+}
+
 /// The import is only written where the namespace is referenced, and the
 /// root module, which imports `kv`, declares no `Kv`.
 #[test]
