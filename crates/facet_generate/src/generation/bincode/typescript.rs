@@ -168,9 +168,7 @@ function deserializeTupleArray<T>(
 }
 ";
 
-const FEATURE_UUID: &str = r"export type Uuid = string & { readonly __uuid: unique symbol };
-
-const HEX = '0123456789abcdef';
+const FEATURE_UUID: &str = r"const HEX = '0123456789abcdef';
 
 function uuidStringToBytes(value: Uuid): Uint8Array {
     const hex = (value as string).replace(/-/g, '');

@@ -464,3 +464,34 @@ fn test_that_typescript_code_with_fixed_size_arrays_type_checks() {
         assert!(status.success(), "deno check failed");
     }
 }
+
+/// A `Uuid` field type-checks with no plugin, with each plugin, and with both
+/// on one module (#191). Only the plugins declared the `Uuid` alias, so with
+/// none it was missing (`TS2304 [ERROR]: Cannot find name 'Uuid'.`), and with
+/// both it was declared twice (`TS2300 [ERROR]: Duplicate identifier
+/// 'Uuid'.`).
+#[test]
+fn test_that_typescript_code_with_a_uuid_type_checks() {
+    let registry = common::get_uuid_registry();
+    for install in [
+        (|i| i) as fn(typescript::Installer) -> typescript::Installer,
+        |i| i.plugin(BincodePlugin),
+        |i| i.plugin(JsonPlugin),
+        |i| i.plugin(BincodePlugin).plugin(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        install(typescript::Installer::new("example", dir.path()))
+            .generate(&registry)
+            .unwrap();
+        let module = dir.path().join("example.ts");
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&module)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}

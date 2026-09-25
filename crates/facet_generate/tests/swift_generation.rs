@@ -1047,3 +1047,39 @@ fn test_that_swift_code_with_same_named_types_in_two_namespaces_compiles() {
         func second(p: B.Parent) -> B.Child { p.second }\n";
     assert_installed_package_compiles_with_sources(&registry, &[("Check.swift", check)]);
 }
+
+/// A `Uuid` field builds with no plugin, as with each plugin (#191). Only the
+/// plugins imported `Foundation`, so with none `UUID` was missing: "error:
+/// cannot find type 'UUID' in scope".
+#[test]
+fn test_that_swift_code_with_a_uuid_compiles() {
+    assert_installed_package_compiles_with_sources(&common::get_uuid_registry(), &[]);
+}
+
+/// With no plugin, a module named like an SDK module builds beside one that
+/// imports `Foundation` for a `UUID`, as long as it doesn't import that one.
+#[test]
+fn test_that_swift_code_with_a_uuid_beside_a_module_named_like_an_sdk_module_compiles() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "system")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .generate(&reflect!(App).unwrap())
+        .unwrap();
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}

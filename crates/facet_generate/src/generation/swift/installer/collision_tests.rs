@@ -20,6 +20,18 @@ fn rejection(package: &str, registry: &Registry) -> String {
     rejection_with(package, registry, &[])
 }
 
+/// [`rejection`], with no plugin.
+fn plain_rejection(package: &str, registry: &Registry) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let error = Installer::new(package, dir.path())
+        .generate(registry)
+        .unwrap_err();
+    let Error::Io(error) = error else {
+        panic!("expected an I/O error, got {error:?}");
+    };
+    error.to_string()
+}
+
 /// [`rejection`], with `external_packages` provided by external packages.
 fn rejection_with(
     package: &str,
@@ -402,6 +414,92 @@ fn allows_a_namespace_named_like_an_sdk_module_without_foundation() {
     Installer::new("Example", dir.path())
         .generate(&reflect!(App).unwrap())
         .unwrap();
+}
+
+/// With no plugin, a module that imports `Foundation` for a `UUID` breaks the
+/// same way (#191): "module dependency cycle: 'System (Source Target) ->
+/// Foundation.swiftmodule -> System.swiftmodule'". So does one importing a
+/// module that imports it: "'System (Source Target) -> Kit.swiftmodule ->
+/// Foundation.swiftmodule -> System.swiftmodule'".
+#[test]
+fn rejects_a_namespace_named_like_an_sdk_module_importing_foundation_without_a_plugin() {
+    mod direct {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "system")]
+        pub struct Thing {
+            id: uuid::Uuid,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    mod through_a_module {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Id {
+            id: uuid::Uuid,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "system")]
+        pub struct Thing {
+            id: Id,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    for registry in [
+        {
+            use direct::App;
+            reflect!(App).unwrap()
+        },
+        {
+            use through_a_module::App;
+            reflect!(App).unwrap()
+        },
+    ] {
+        assert_eq!(
+            plain_rejection("Example", &registry),
+            "Swift: namespace \"system\" becomes the module `System`, the same as the SDK module \
+             `System`, which `Foundation` imports, so the target would depend on itself. Choose a \
+             different namespace"
+        );
+    }
+}
+
+/// With no plugin, a module that imports `Foundation` for a `UUID` finds the
+/// target instead: "cannot find type 'UUID' in scope".
+#[test]
+fn rejects_a_namespace_named_like_foundation_without_a_plugin() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "foundation")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    assert_eq!(
+        plain_rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"foundation\" becomes the module `Foundation`, the same as the SDK \
+         module `Foundation`, which the generated code imports, so the target would depend on itself. \
+         Choose a different namespace"
+    );
 }
 
 /// A module named like a Foundation type that the generated code spells

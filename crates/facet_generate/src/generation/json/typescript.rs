@@ -10,7 +10,6 @@
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | `import * as $json from "./serde/json";` |
-//! | `module_helpers` | the `Uuid` alias |
 //! | `type_body` | static `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` on a class |
 //! | `after_type` | `toJson{Enum}` / `fromJson{Enum}` and `jsonSerialize{Enum}` / `jsonDeserialize{Enum}` beside an enum |
 //! | `runtime_files` | `serde/json.ts` |
@@ -43,7 +42,7 @@ use std::io;
 use heck::ToUpperCamelCase;
 
 use crate::generation::{
-    CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
+    CodeGeneratorConfig, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
     typescript::{TypeScript, naming, render_type},
@@ -56,8 +55,6 @@ use super::JsonPlugin;
 
 /// The binding the generated code imports the runtime under.
 const JSON: &str = "$json";
-
-const FEATURE_UUID: &str = "export type Uuid = string & { readonly __uuid: unique symbol };\n";
 
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
@@ -85,18 +82,6 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
             relative_path: "serde/json.ts".to_string(),
             contents: include_bytes!("../../../runtime/typescript-json/serde/json.ts").to_vec(),
         }]
-    }
-
-    fn module_helpers(
-        &self,
-        w: &mut dyn IndentWrite,
-        config: &CodeGeneratorConfig,
-    ) -> io::Result<()> {
-        if config.features.contains(&Feature::Uuid) {
-            writeln!(w)?;
-            write!(w, "{FEATURE_UUID}")?;
-        }
-        Ok(())
     }
 
     fn has_type_body(&self, _ctx: &EmitContext) -> bool {
@@ -822,7 +807,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::generation::indent::IndentConfig;
+    use crate::generation::{Feature, indent::IndentConfig};
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
         let mut cfg = CodeGeneratorConfig::new("test".to_string());
@@ -857,8 +842,10 @@ mod tests {
         assert_eq!(paths, ["serde/json.ts"]);
     }
 
+    /// The emitter declares the `Uuid` alias (#191), so the plugin has no
+    /// module helpers.
     #[test]
-    fn module_helpers_emit_only_the_uuid_alias() {
+    fn module_helpers_emit_nothing() {
         let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
         let all = make_config(&[
             Feature::ListOfT,
@@ -868,13 +855,9 @@ mod tests {
             Feature::TupleArray,
             Feature::BigInt,
             Feature::Bytes,
+            Feature::Uuid,
         ]);
         assert_eq!(render(|w| plugin.module_helpers(w, &all)), "");
-        let uuid = make_config(&[Feature::Uuid]);
-        assert_eq!(
-            render(|w| plugin.module_helpers(w, &uuid)),
-            format!("\n{FEATURE_UUID}")
-        );
     }
 
     #[test]

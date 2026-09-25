@@ -9,7 +9,7 @@
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | `kotlinx.serialization.*` and runtime serializer imports (Kotlin), `import Serde` (Swift), `System.Text.Json` usings (C#), `import * as $json` (TypeScript) |
-//! | `module_helpers` | `Bytes`, `UUID` and `BigInteger` JSON serializers (Kotlin); the `Uuid` alias (TypeScript) |
+//! | `module_helpers` | `Bytes`, `UUID` and `BigInteger` JSON serializers (Kotlin) |
 //! | `type_annotations` | `@Serializable`, naming the type's own serializer where it has one (Kotlin); `[JsonConverter]` naming the type's converter (C#) |
 //! | `field_annotations` | `@SerialName("…")` (Kotlin), `[property: JsonPropertyName("…")]` (C#), with the wire name |
 //! | `type_conformances` | `Codable` (Swift) |

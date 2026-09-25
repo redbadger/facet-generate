@@ -773,7 +773,7 @@ fn output_enum_container<W: IndentWrite>(
     Ok(())
 }
 
-const TYPE_ALIASES: [(&str, &str); 21] = [
+const TYPE_ALIASES: [(&str, &str); 22] = [
     ("unit", "type unit = null;"),
     ("bool", "type bool = boolean;"),
     ("int8", "type int8 = number;"),
@@ -797,6 +797,12 @@ const TYPE_ALIASES: [(&str, &str); 21] = [
     // Spelled out rather than through `Tuple`, which a module without a tuple
     // does not declare (#190).
     ("list_tuple", "type ListTuple<T extends any[]> = T[];"),
+    // Declared here rather than by each plugin, so that it is declared with
+    // no plugin, and once with several (#191).
+    (
+        "uuid",
+        "export type Uuid = string & { readonly __uuid: unique symbol };",
+    ),
 ];
 
 #[cfg(test)]

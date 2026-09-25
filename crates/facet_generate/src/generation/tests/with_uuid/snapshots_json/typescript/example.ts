@@ -1,7 +1,6 @@
 import * as $json from "./serde/json";
 type Optional<T> = T | null;
 type str = string;
-
 export type Uuid = string & { readonly __uuid: unique symbol };
 
 export class StructWithUuid {

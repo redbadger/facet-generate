@@ -175,6 +175,13 @@ pub(crate) fn write_module_header<W: IndentWrite>(
         imports.push("import java.math.BigInteger".to_string());
     }
 
+    // With no plugin nothing else brings `UUID` in scope (#191). Not with
+    // one: Bincode imports it, and JSON declares its own `UUID` alias, which
+    // an explicit import would hide.
+    if features.contains(&Feature::Uuid) && lang.plugins().is_empty() {
+        imports.push("import java.util.UUID".to_string());
+    }
+
     // --- Plugin imports ---
     for plugin in lang.plugins() {
         imports.extend(plugin.imports(config));

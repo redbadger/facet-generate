@@ -39,11 +39,12 @@ fn gradle_command() -> Command {
 
 /// Which encoding plugin the generated Gradle project is installed with.
 ///
-/// There is no plugin-less variant: without a plugin the installer ships no
-/// runtime sources, so anything the emitter renders as a runtime type (such as
-/// `Bytes`) cannot resolve.
+/// Without a plugin the installer ships no runtime sources, so `Plain` suits
+/// only a fixture with nothing the emitter renders as a runtime type (such as
+/// `Bytes`, #130).
 #[derive(Clone, Copy, Debug)]
 enum Encoding {
+    Plain,
     Bincode,
     Json,
 }
@@ -103,6 +104,7 @@ fn assert_generated_code_compiles_in(package: &str, registry: &Registry, encodin
     let installer = match encoding {
         Encoding::Bincode => installer.plugin(BincodePlugin),
         Encoding::Json => installer.plugin(JsonPlugin),
+        Encoding::Plain => installer,
     };
     installer.generate(registry).unwrap();
 
@@ -198,5 +200,16 @@ fn test_that_kotlin_code_compiles_when_the_package_ends_in_a_namespace() {
     let registry = common::across_namespaces::to_root::get_registry();
     for encoding in [Encoding::Bincode, Encoding::Json] {
         assert_generated_code_compiles_in("com.kv", &registry, encoding);
+    }
+}
+
+/// A `Uuid` field compiles with no plugin, as with each plugin (#191). Only
+/// the Bincode plugin imported `java.util.UUID`, so with none it was missing:
+/// "Unresolved reference 'UUID'."
+#[test]
+fn test_that_kotlin_code_with_a_uuid_compiles() {
+    let registry = common::get_uuid_registry();
+    for encoding in [Encoding::Plain, Encoding::Bincode, Encoding::Json] {
+        assert_generated_code_compiles(&registry, encoding);
     }
 }

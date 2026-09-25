@@ -46,7 +46,10 @@ use crate::{
         collision::{self, Origin, TypeName},
         module::{self, Module},
         plugin::EmitterPlugin,
-        swift::{Swift, conformance::Conformance, generator::SwiftCodeGenerator, naming},
+        swift::{
+            Swift, conformance::Conformance, emitter::base_imports, generator::SwiftCodeGenerator,
+            naming,
+        },
     },
     reflection::format::QualifiedTypeName,
 };
@@ -225,9 +228,10 @@ impl Installer {
     ///   (`string` for `String`, `error` for `Error`) is always in scope, so
     ///   it hides the module the same way.
     /// - a module is named like one the package imports: `Swift`, the
-    ///   `Serde` runtime, or, when the package imports `Foundation`, one of
-    ///   the SDK modules `Foundation` loads (`system` for `System`), which
-    ///   would then depend on the target.
+    ///   `Serde` runtime, `Foundation` when any module imports it, or one of
+    ///   the SDK modules `Foundation` loads (`system` for `System`) when that
+    ///   module imports `Foundation`, directly, through the runtime or through
+    ///   another module, as it would then depend on itself.
     ///
     /// Namespaces provided by external packages are not generated, so they
     /// are not checked for targets.
@@ -335,21 +339,28 @@ impl Installer {
     ) -> Result<(), Error> {
         const LANGUAGE: &str = "Swift";
 
-        // The Serde runtime imports `Foundation` too.
-        let imports: BTreeSet<String> = generated
-            .iter()
-            .flat_map(|(_, _, config)| self.plugins.iter().flat_map(|p| p.imports(config)))
-            .collect();
-        let imports_serde = imports.contains("Serde");
-        let imports_foundation = imports_serde || imports.contains("Foundation");
+        let imports_serde = generated.iter().any(|(_, _, config)| {
+            self.plugins
+                .iter()
+                .any(|p| p.imports(config).iter().any(|i| i == "Serde"))
+        });
+        let imports_foundation = self.modules_importing_foundation(generated);
         for (config, _, _) in generated {
             let name = config.module_name();
             let target = name.to_upper_camel_case();
+            // Every module finds a target named `Foundation` in its place, but
+            // another SDK module's name only breaks a module that imports
+            // `Foundation`, which then imports it back.
+            let sdk_module_breaks = if target == "Foundation" {
+                !imports_foundation.is_empty()
+            } else {
+                imports_foundation.contains(name)
+            };
             let collider = if target == "Swift" {
                 Some("the standard library's module `Swift`".to_string())
             } else if target == "Serde" && imports_serde {
                 Some("the runtime module `Serde`, which the generated code imports".to_string())
-            } else if imports_foundation {
+            } else if sdk_module_breaks {
                 naming::FOUNDATION_MODULES
                     .binary_search_by_key(&target.as_str(), |(module, _)| module)
                     .ok()
@@ -375,6 +386,39 @@ impl Installer {
         }
 
         Ok(())
+    }
+
+    /// The generated modules that import `Foundation`, directly, through the
+    /// Serde runtime, or through a module they import.
+    fn modules_importing_foundation<'a>(
+        &self,
+        generated: &[(&'a CodeGeneratorConfig, &Registry, CodeGeneratorConfig)],
+    ) -> BTreeSet<&'a str> {
+        let mut importing: BTreeSet<&str> = generated
+            .iter()
+            .filter(|(_, _, config)| {
+                base_imports(config)
+                    .into_iter()
+                    .chain(self.plugins.iter().flat_map(|p| p.imports(config)))
+                    .any(|i| i == "Foundation" || i == "Serde")
+            })
+            .map(|(config, _, _)| config.module_name())
+            .collect();
+        loop {
+            let before = importing.len();
+            for (config, _, module_config) in generated {
+                if module_config
+                    .external_definitions
+                    .keys()
+                    .any(|name| importing.contains(name.as_str()))
+                {
+                    importing.insert(config.module_name());
+                }
+            }
+            if importing.len() == before {
+                return importing;
+            }
+        }
     }
 
     /// The config a module is generated with: `config`, as split from the

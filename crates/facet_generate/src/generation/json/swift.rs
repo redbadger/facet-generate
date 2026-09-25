@@ -8,7 +8,7 @@
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `imports` | `import Serde` (plus `Foundation` for `UUID`) |
+//! | `imports` | `import Serde` |
 //! | `type_conformances` | `Codable` |
 //! | `has_type_body` | Always `true` |
 //! | `type_body` | `CodingKeys`, hand-written `init(from:)` / `encode(to:)` where synthesis would not match, and `jsonSerialize` / `jsonDeserialize` wrappers |
@@ -51,7 +51,7 @@ use heck::{ToLowerCamelCase as _, ToUpperCamelCase as _};
 use indoc::writedoc;
 
 use crate::generation::{
-    CodeGeneratorConfig, Feature,
+    CodeGeneratorConfig,
     indent::{IndentWrite, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
     swift::{Swift, case_name, emitter::needs_indirect, field_name, naming, render_type},
@@ -94,12 +94,8 @@ impl EmitterPlugin<Swift> for JsonPlugin {
         .collect()
     }
 
-    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
-        let mut imports = vec!["Serde".to_string()];
-        if config.features.contains(&Feature::Uuid) {
-            imports.push("Foundation".to_string());
-        }
-        imports
+    fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
+        vec!["Serde".to_string()]
     }
 
     fn type_conformances(&self, ctx: &EmitContext) -> Vec<String> {
@@ -1480,8 +1476,8 @@ fn write_wrappers(w: &mut dyn IndentWrite, name: &str, names: &Names) -> io::Res
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generation::CodeGeneratorConfig;
     use crate::generation::indent::IndentedWriter;
+    use crate::generation::{CodeGeneratorConfig, Feature};
     use std::collections::BTreeSet;
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
@@ -1516,9 +1512,10 @@ mod tests {
     fn imports_serde() {
         let plugin = &JsonPlugin as &dyn EmitterPlugin<Swift>;
         assert_eq!(plugin.imports(&make_config(&[])), vec!["Serde"]);
+        // The emitter imports `Foundation` for `UUID` (#191).
         assert_eq!(
             plugin.imports(&make_config(&[Feature::Uuid])),
-            vec!["Serde", "Foundation"]
+            vec!["Serde"]
         );
     }
 

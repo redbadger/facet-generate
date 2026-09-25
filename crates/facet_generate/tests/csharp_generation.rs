@@ -518,3 +518,13 @@ fn test_that_csharp_code_with_variants_named_like_types_or_properties_compiles()
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// A `Uuid` field builds with no plugin, as a `System.Guid` (#191).
+#[test]
+fn test_that_csharp_code_with_a_uuid_compiles_without_serialization() {
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .generate(&common::get_uuid_registry())
+        .unwrap();
+    dotnet_build(&dir);
+}
