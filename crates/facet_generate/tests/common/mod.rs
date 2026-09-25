@@ -773,6 +773,71 @@ pub fn get_shadowing_registry() -> Registry {
     .unwrap()
 }
 
+/// Fixed-size arrays (`[T; N]`) in every position a format nests, and no
+/// tuple, so a TypeScript module for them declares no `Tuple` alias (#190).
+pub mod fixed_arrays {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Grid {
+        pub cells: [u8; 4],
+        pub maybe: Option<[u16; 2]>,
+        pub rows: Vec<[i32; 3]>,
+        pub by_name: BTreeMap<String, [bool; 2]>,
+        pub nested: [[u8; 2]; 3],
+        pub cells_of: Vec<Cell>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Cell {
+        Empty,
+        Filled([u8; 2]),
+        Named { values: [String; 2] },
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Grid).unwrap()
+    }
+
+    /// A value holding every field. The map's keys are the same length, so
+    /// bincode's order for them (by encoding) is Rust's.
+    pub fn sample() -> Grid {
+        Grid {
+            cells: [1, 2, 3, 255],
+            maybe: Some([7, 65535]),
+            rows: vec![[-1, 0, 1], [i32::MIN, i32::MAX, 5]],
+            by_name: BTreeMap::from([
+                ("ab".to_string(), [true, false]),
+                ("cd".to_string(), [false, true]),
+            ]),
+            nested: [[1, 2], [3, 4], [5, 6]],
+            cells_of: vec![
+                Cell::Empty,
+                Cell::Filled([9, 8]),
+                Cell::Named {
+                    values: ["x".to_string(), "yz".to_string()],
+                },
+            ],
+        }
+    }
+
+    /// [`sample`] as the generated TypeScript spells it: each `[T; N]` is an
+    /// array of one-element tuples, `[T][]`.
+    pub const TYPESCRIPT_SAMPLE: &str = r#"const sample = new Grid(
+    [[1], [2], [3], [255]],
+    [[7], [65535]],
+    [[[-1], [0], [1]], [[-2147483648], [2147483647], [5]]],
+    new Map([["ab", [[true], [false]]], ["cd", [[false], [true]]]]),
+    [[[[1], [2]]], [[[3], [4]]], [[[5], [6]]]],
+    [cellEmpty(), cellFilled([[9], [8]]), cellNamed([["x"], ["yz"]])],
+);"#;
+}
+
 // ---------------------------------------------------------------------------
 // Cross-namespace fixtures — shared by the per-language compilation tests.
 //

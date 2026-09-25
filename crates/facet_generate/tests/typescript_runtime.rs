@@ -274,6 +274,34 @@ Deno.test("non-identifier field names round-trip through bincode", () => {{
     project.run();
 }
 
+/// `[T; N]`, in every position a format nests, round-trips through bincode
+/// (#190).
+#[test]
+fn test_typescript_runtime_bincode_fixed_size_arrays_roundtrip() {
+    use common::fixed_arrays::{TYPESCRIPT_SAMPLE, get_registry, sample};
+
+    let mut project = TsProject::new(&get_registry());
+    let bytes = to_byte_list(&bincode::serialize(&sample()).unwrap());
+
+    project.write_test(&format!(
+        r#"
+Deno.test("fixed-size arrays round-trip through bincode", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  {TYPESCRIPT_SAMPLE}
+
+  const actual = Grid.deserialize(new BincodeDeserializer(expectedBytes));
+  assertEquals(actual, sample);
+
+  const serializer = new BincodeSerializer();
+  sample.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes);
+}});
+"#
+    ));
+
+    project.run();
+}
+
 #[test]
 fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
     const LARGE_I64: i64 = 1_785_688_513_662;
@@ -1130,6 +1158,45 @@ assert.throws(() => M.jsonDeserializeChoice('{{"Big": 34028236692093846346337460
             .unwrap_or_else(|e| panic!("Rust could not read TypeScript's JSON: {e}\n{output}"));
         assert_eq!(value, sample(), "{output}");
         // Rust ignores keys it does not know, so compare the JSON itself too.
+        let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+        assert_eq!(actual, expected, "{output}");
+    }
+}
+
+/// `[T; N]`, in every position a format nests, round-trips through JSON
+/// between `serde_json` and the generated TypeScript (#190).
+#[test]
+fn test_typescript_json_runtime_fixed_size_arrays_round_trip() {
+    use common::fixed_arrays::{Grid, TYPESCRIPT_SAMPLE, get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+
+    let outputs = run_typescript_json_main(
+        dir.path(),
+        &format!(
+            r#"import {{ Grid, cellEmpty, cellFilled, cellNamed }} from "./example";
+{PRELUDE}{TYPESCRIPT_SAMPLE}
+const value = Grid.jsonDeserialize(input);
+assert.deepStrictEqual(value, sample, "decoded mismatch");
+console.log("JSON:" + Grid.jsonSerialize(value));
+console.log("JSON:" + Grid.jsonSerialize(sample));
+"#
+        ),
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    for output in &outputs {
+        let value: Grid = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read TypeScript's JSON: {e}\n{output}"));
+        assert_eq!(value, sample(), "{output}");
         let actual: serde_json::Value = serde_json::from_str(output).unwrap();
         assert_eq!(actual, expected, "{output}");
     }

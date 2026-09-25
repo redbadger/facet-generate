@@ -901,9 +901,12 @@ fn write_deserialize(
                     "return deserializeTupleArray(deserializer, {size}, (deserializer) => "
                 )?;
             }
+            // Typed as a one-element tuple, which `[item]` alone is not
+            // inferred as.
+            let item_type = render_type(content, config);
             with_block(w, Newlines::OPEN, |w| {
                 write_deserialize(w, Some("item"), content, config)?;
-                writeln!(w, "return [item];")
+                writeln!(w, "return [item] as [{item_type}];")
             })?;
             writeln!(w, ");")
         }

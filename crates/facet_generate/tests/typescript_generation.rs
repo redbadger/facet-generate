@@ -433,3 +433,34 @@ fn test_that_typescript_bincode_code_with_non_identifier_field_names_type_checks
     let registry = facet_generate::reflect!(Renamed, Choice, Adjacent).unwrap();
     assert_installed_modules_type_check(&registry, BincodePlugin);
 }
+
+/// `[T; N]`, in every position a format nests, type-checks with no plugin,
+/// with Bincode and with JSON (#190). Its `ListTuple` alias was written
+/// through `Tuple`, which a module without a tuple does not declare
+/// (`TS2304 [ERROR]: Cannot find name 'Tuple'.`), and Bincode read an element
+/// as `[item]`, a `number[]` rather than a `[number]` (`TS2322 [ERROR]: Type
+/// 'number[][]' is not assignable to type 'ListTuple<[number]>'.`).
+#[test]
+fn test_that_typescript_code_with_fixed_size_arrays_type_checks() {
+    let registry = common::fixed_arrays::get_registry();
+    for install in [
+        (|i| i) as fn(typescript::Installer) -> typescript::Installer,
+        |i| i.plugin(BincodePlugin),
+        |i| i.plugin(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        install(typescript::Installer::new("example", dir.path()))
+            .generate(&registry)
+            .unwrap();
+        let module = dir.path().join("example.ts");
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&module)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}

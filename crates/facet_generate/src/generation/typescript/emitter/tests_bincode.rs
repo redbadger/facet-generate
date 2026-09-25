@@ -1158,15 +1158,15 @@ fn struct_with_array_field() {
         static deserialize(deserializer: Deserializer): MyStruct {
             const fixed_array = deserializeTupleArray(deserializer, 5, (deserializer) => {
                 const item = deserializer.deserializeI32();
-                return [item];
+                return [item] as [int32];
             });
             const byte_array = deserializeTupleArray(deserializer, 32, (deserializer) => {
                 const item = deserializer.deserializeU8();
-                return [item];
+                return [item] as [uint8];
             });
             const string_array = deserializeTupleArray(deserializer, 3, (deserializer) => {
                 const item = deserializer.deserializeStr();
-                return [item];
+                return [item] as [str];
             });
             return new MyStruct(fixed_array,byte_array,string_array);
         }
@@ -1543,7 +1543,7 @@ fn struct_with_mixed_collections_and_pointers() {
             });
             const array_of_boxes = deserializeTupleArray(deserializer, 3, (deserializer) => {
                 const item = deserializer.deserializeI32();
-                return [item];
+                return [item] as [int32];
             });
             return new MyStruct(vec_of_sets,optional_btree,boxed_vec,arc_option,array_of_boxes);
         }
@@ -1885,6 +1885,255 @@ fn non_identifier_field_names() {
             const with_dash = deserializer.deserializeU8();
             const default_ = deserializer.deserializeBool();
             return new Renamed(plain,with_dash,default_);
+        }
+    }
+    "#);
+}
+
+/// The module for `[T; N]` in every nested position, with Bincode (#190).
+#[test]
+fn fixed_size_arrays_module() {
+    insta::assert_snapshot!(super::tests::grid_module(vec![Arc::new(BincodePlugin)]), @r#"
+    import type { Serializer, Deserializer } from "./serde";
+    type bool = boolean;
+    type int32 = number;
+    type ListTuple<T extends any[]> = T[];
+    type Optional<T> = T | null;
+    type Seq<T> = T[];
+    type str = string;
+    type uint16 = number;
+    type uint8 = number;
+
+    function serializeArray<T>(
+        value: T[],
+        serializer: Serializer,
+        serializeElement: (item: T, serializer: Serializer) => void,
+    ): void {
+        serializer.serializeLen(value.length);
+        value.forEach((item) => {
+            serializeElement(item, serializer);
+        });
+    }
+
+    function deserializeArray<T>(
+        deserializer: Deserializer,
+        deserializeElement: (deserializer: Deserializer) => T,
+    ): T[] {
+        const length = deserializer.deserializeLen();
+        const list: T[] = [];
+        for (let i = 0; i < length; i++) {
+            list.push(deserializeElement(deserializer));
+        }
+        return list;
+    }
+
+    function serializeMap<K, V>(
+        value: Map<K, V>,
+        serializer: Serializer,
+        serializeEntry: (key: K, value: V, serializer: Serializer) => void,
+    ): void {
+        serializer.serializeLen(value.size);
+        const offsets: number[] = [];
+        for (const [k, v] of value.entries()) {
+            offsets.push(serializer.getBufferOffset());
+            serializeEntry(k, v, serializer);
+        }
+        serializer.sortMapEntries(offsets);
+    }
+
+    function deserializeMap<K, V>(
+        deserializer: Deserializer,
+        deserializeEntry: (deserializer: Deserializer) => [K, V],
+    ): Map<K, V> {
+        const length = deserializer.deserializeLen();
+        const obj = new Map<K, V>();
+        for (let i = 0; i < length; i++) {
+            const [key, value] = deserializeEntry(deserializer);
+            obj.set(key, value);
+        }
+        return obj;
+    }
+
+    function serializeOption<T>(
+        value: T | null,
+        serializer: Serializer,
+        serializeElement: (value: T, serializer: Serializer) => void,
+    ): void {
+        if (value !== null) {
+            serializer.serializeOptionTag(true);
+            serializeElement(value, serializer);
+        } else {
+            serializer.serializeOptionTag(false);
+        }
+    }
+
+    function deserializeOption<T>(
+        deserializer: Deserializer,
+        deserializeElement: (deserializer: Deserializer) => T,
+    ): T | null {
+        const tag = deserializer.deserializeOptionTag();
+        if (!tag) {
+            return null;
+        } else {
+            return deserializeElement(deserializer);
+        }
+    }
+
+    function serializeTupleArray<T>(
+        value: T[],
+        serializer: Serializer,
+        serializeElement: (item: T, serializer: Serializer) => void,
+    ): void {
+        value.forEach((item) => {
+            serializeElement(item, serializer);
+        });
+    }
+
+    function deserializeTupleArray<T>(
+        deserializer: Deserializer,
+        size: number,
+        deserializeElement: (deserializer: Deserializer) => T,
+    ): T[] {
+        const list: T[] = [];
+        for (let i = 0; i < size; i++) {
+            list.push(deserializeElement(deserializer));
+        }
+        return list;
+    }
+
+    export type Cell =
+        | { kind: "Empty" }
+        | { kind: "Filled"; value: ListTuple<[uint8]> }
+        | { kind: "Named"; values: ListTuple<[str]> };
+
+    export const cellEmpty = (): Cell => ({ kind: "Empty" });
+
+    export const cellFilled = (value: ListTuple<[uint8]>): Cell => ({ kind: "Filled", value });
+
+    export const cellNamed = (values: ListTuple<[str]>): Cell => ({ kind: "Named", values });
+
+    export function matchCell<R>(value: Cell, cases: {
+        Empty: (v: Extract<Cell, { kind: "Empty" }>) => R;
+        Filled: (v: Extract<Cell, { kind: "Filled" }>) => R;
+        Named: (v: Extract<Cell, { kind: "Named" }>) => R;
+    }): R {
+        return cases[value.kind as Cell["kind"]](value as never);
+    }
+
+    export function serializeCell(value: Cell, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Empty": {
+                serializer.serializeVariantIndex(0);
+                break;
+            }
+            case "Filled": {
+                serializer.serializeVariantIndex(1);
+                serializeTupleArray(value.value, serializer, (item, serializer) => {
+                    serializer.serializeU8(item[0]);
+                });
+                break;
+            }
+            case "Named": {
+                serializer.serializeVariantIndex(2);
+                serializeTupleArray(value.values, serializer, (item, serializer) => {
+                    serializer.serializeStr(item[0]);
+                });
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeCell(deserializer: Deserializer): Cell {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                return { kind: "Empty" };
+            }
+            case 1: {
+                const value = deserializeTupleArray(deserializer, 2, (deserializer) => {
+                    const item = deserializer.deserializeU8();
+                    return [item] as [uint8];
+                });
+                return { kind: "Filled", value };
+            }
+            case 2: {
+                const values = deserializeTupleArray(deserializer, 2, (deserializer) => {
+                    const item = deserializer.deserializeStr();
+                    return [item] as [str];
+                });
+                return { kind: "Named", values };
+            }
+            default: throw new Error("Unknown variant index for Cell: " + index);
+        }
+    }
+
+    export class Grid {
+        constructor (public cells: ListTuple<[uint8]>, public maybe: Optional<ListTuple<[uint16]>>, public rows: Seq<ListTuple<[int32]>>, public by_name: Map<str,ListTuple<[bool]>>, public nested: ListTuple<[ListTuple<[uint8]>]>, public cell: Cell) {
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializeTupleArray(this.cells, serializer, (item, serializer) => {
+                serializer.serializeU8(item[0]);
+            });
+            serializeOption(this.maybe, serializer, (value, serializer) => {
+                serializeTupleArray(value, serializer, (item, serializer) => {
+                    serializer.serializeU16(item[0]);
+                });
+            });
+            serializeArray(this.rows, serializer, (item, serializer) => {
+                serializeTupleArray(item, serializer, (item, serializer) => {
+                    serializer.serializeI32(item[0]);
+                });
+            });
+            serializeMap(this.by_name, serializer, (key, value, serializer) => {
+                serializer.serializeStr(key);
+                serializeTupleArray(value, serializer, (item, serializer) => {
+                    serializer.serializeBool(item[0]);
+                });
+            });
+            serializeTupleArray(this.nested, serializer, (item, serializer) => {
+                serializeTupleArray(item[0], serializer, (item, serializer) => {
+                    serializer.serializeU8(item[0]);
+                });
+            });
+            serializeCell(this.cell, serializer);
+        }
+
+        static deserialize(deserializer: Deserializer): Grid {
+            const cells = deserializeTupleArray(deserializer, 4, (deserializer) => {
+                const item = deserializer.deserializeU8();
+                return [item] as [uint8];
+            });
+            const maybe = deserializeOption(deserializer, (deserializer) => {
+                return deserializeTupleArray(deserializer, 2, (deserializer) => {
+                    const item = deserializer.deserializeU16();
+                    return [item] as [uint16];
+                });
+            });
+            const rows = deserializeArray(deserializer, (deserializer) => {
+                return deserializeTupleArray(deserializer, 3, (deserializer) => {
+                    const item = deserializer.deserializeI32();
+                    return [item] as [int32];
+                });
+            });
+            const by_name = deserializeMap(deserializer, (deserializer) => {
+                const key = deserializer.deserializeStr();
+                const value = deserializeTupleArray(deserializer, 2, (deserializer) => {
+                    const item = deserializer.deserializeBool();
+                    return [item] as [bool];
+                });
+                return [key, value];
+            });
+            const nested = deserializeTupleArray(deserializer, 3, (deserializer) => {
+                const item = deserializeTupleArray(deserializer, 2, (deserializer) => {
+                    const item = deserializer.deserializeU8();
+                    return [item] as [uint8];
+                });
+                return [item] as [ListTuple<[uint8]>];
+            });
+            const cell = deserializeCell(deserializer);
+            return new Grid(cells,maybe,rows,by_name,nested,cell);
         }
     }
     "#);

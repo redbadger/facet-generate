@@ -21,7 +21,8 @@
 //! via type aliases — for example `I32` → `number` (via `type int32 = number`),
 //! `Str` → `string`, `Seq(T)` → `T[]` (via `type Seq<T> = T[]`),
 //! `Option(T)` → `Optional<T>` (i.e. `T | null`), `Map(K,V)` → `Map<K, V>`,
-//! tuples → `[A, B]` (via `Tuple<[…]>`), fixed-size arrays → `ListTuple<[T]>`.
+//! tuples → `[A, B]` (via `Tuple<[…]>`), and a fixed-size array `[T; N]` →
+//! `[T][]`, an array of one-element tuples (via `ListTuple<[T]>`).
 //!
 //! # Plugin-dependent output
 //!
@@ -793,10 +794,9 @@ const TYPE_ALIASES: [(&str, &str); 21] = [
     ("option", "type Optional<T> = T | null;"),
     ("seq", "type Seq<T> = T[];"),
     ("tuple", "type Tuple<T extends any[]> = T;"),
-    (
-        "list_tuple",
-        "type ListTuple<T extends any[]> = Tuple<T>[];",
-    ),
+    // Spelled out rather than through `Tuple`, which a module without a tuple
+    // does not declare (#190).
+    ("list_tuple", "type ListTuple<T extends any[]> = T[];"),
 ];
 
 #[cfg(test)]

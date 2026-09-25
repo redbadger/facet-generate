@@ -2161,3 +2161,111 @@ fn struct_with_map_keys_rust_writes_as_strings() {
     }
     "#);
 }
+
+/// The module for `[T; N]` in every nested position, with JSON (#190).
+#[test]
+fn fixed_size_arrays_module() {
+    insta::assert_snapshot!(super::tests::grid_module(vec![Arc::new(JsonPlugin)]), @r#"
+    import * as $json from "./serde/json";
+    type bool = boolean;
+    type int32 = number;
+    type ListTuple<T extends any[]> = T[];
+    type Optional<T> = T | null;
+    type Seq<T> = T[];
+    type str = string;
+    type uint16 = number;
+    type uint8 = number;
+
+    export type Cell =
+        | { kind: "Empty" }
+        | { kind: "Filled"; value: ListTuple<[uint8]> }
+        | { kind: "Named"; values: ListTuple<[str]> };
+
+    export const cellEmpty = (): Cell => ({ kind: "Empty" });
+
+    export const cellFilled = (value: ListTuple<[uint8]>): Cell => ({ kind: "Filled", value });
+
+    export const cellNamed = (values: ListTuple<[str]>): Cell => ({ kind: "Named", values });
+
+    export function matchCell<R>(value: Cell, cases: {
+        Empty: (v: Extract<Cell, { kind: "Empty" }>) => R;
+        Filled: (v: Extract<Cell, { kind: "Filled" }>) => R;
+        Named: (v: Extract<Cell, { kind: "Named" }>) => R;
+    }): R {
+        return cases[value.kind as Cell["kind"]](value as never);
+    }
+
+    export function toJsonCell(value: Cell): $json.JsonValue {
+        switch (value.kind) {
+            case "Empty": return "Empty";
+            case "Filled": return { "Filled": value.value.map((v0) => v0[0]) };
+            case "Named": return {
+                "Named": {
+                    "values": value.values.map((v0) => v0[0]),
+                },
+            };
+            default: throw $json.unknownVariant("Cell", value);
+        }
+    }
+
+    export function fromJsonCell(json: unknown): Cell {
+        const [variant, content] = $json.readExternal(json, "Cell", ["Empty"]);
+        switch (variant) {
+            case "Empty": return { kind: "Empty" };
+            case "Filled": return { kind: "Filled", value: $json.readSeq(content, (j0): [uint8] => [$json.readU8(j0)], 2) };
+            case "Named": {
+                const obj = $json.readObject(content, "Cell::Named");
+                return {
+                    kind: "Named",
+                    values: $json.readSeq($json.field(obj, "values"), (j0): [str] => [$json.readStr(j0)], 2),
+                };
+            }
+            default: throw $json.unknownVariant("Cell", variant);
+        }
+    }
+
+    export function jsonSerializeCell(value: Cell): string {
+        return $json.stringify(toJsonCell(value));
+    }
+
+    export function jsonDeserializeCell(text: string): Cell {
+        return fromJsonCell($json.parse(text));
+    }
+
+    export class Grid {
+        constructor (public cells: ListTuple<[uint8]>, public maybe: Optional<ListTuple<[uint16]>>, public rows: Seq<ListTuple<[int32]>>, public by_name: Map<str,ListTuple<[bool]>>, public nested: ListTuple<[ListTuple<[uint8]>]>, public cell: Cell) {
+        }
+
+        static toJson(value: Grid): $json.JsonValue {
+            return {
+                "cells": value.cells.map((v0) => v0[0]),
+                "maybe": (value.maybe === null ? null : value.maybe.map((v0) => v0[0])),
+                "rows": value.rows.map((v0) => v0.map((v1) => v1[0])),
+                "by_name": $json.writeMap(value.by_name, (k0) => k0, (v0) => v0.map((v1) => v1[0])),
+                "nested": value.nested.map((v0) => v0[0].map((v1) => v1[0])),
+                "cell": toJsonCell(value.cell),
+            };
+        }
+
+        static fromJson(json: unknown): Grid {
+            const obj = $json.readObject(json, "Grid");
+            return new Grid(
+                $json.readSeq($json.field(obj, "cells"), (j0): [uint8] => [$json.readU8(j0)], 4),
+                $json.readOption($json.field(obj, "maybe"), (j0) => $json.readSeq(j0, (j1): [uint16] => [$json.readU16(j1)], 2)),
+                $json.readSeq($json.field(obj, "rows"), (j0) => $json.readSeq(j0, (j1): [int32] => [$json.readI32(j1)], 3)),
+                $json.readMap($json.field(obj, "by_name"), (k0) => k0, (j0) => $json.readSeq(j0, (j1): [bool] => [$json.readBool(j1)], 2)),
+                $json.readSeq($json.field(obj, "nested"), (j0): [ListTuple<[uint8]>] => [$json.readSeq(j0, (j1): [uint8] => [$json.readU8(j1)], 2)], 3),
+                fromJsonCell($json.field(obj, "cell")),
+            );
+        }
+
+        static jsonSerialize(value: Grid): string {
+            return $json.stringify(Grid.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Grid {
+            return Grid.fromJson($json.parse(text));
+        }
+    }
+    "#);
+}
