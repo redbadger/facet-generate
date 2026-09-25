@@ -54,7 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::{builtin, global_name};
+use super::naming::{builtin, global_name, variant_properties};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -472,8 +472,9 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
 /// (redbadger/facet-generate#174). A type named like a variant is written
 /// through its `global::` name, and a positional property named like one is
 /// declared again with `new`: otherwise the record would take the inherited
-/// nested type for the property (CS8866). Neither changes a record that
-/// doesn't clash.
+/// nested type for the property (CS8866). A property named like its own
+/// variant is renamed instead, by [`variant_properties`]. None of these
+/// changes a record that doesn't clash.
 fn write_variant_records<W: IndentWrite>(
     w: &mut W,
     base_name: &str,
@@ -490,20 +491,10 @@ fn write_variant_records<W: IndentWrite>(
     for variant in variants {
         variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
-        let properties: Vec<(String, String)> = match &variant.value {
-            VariantFormat::Unit => vec![],
-            VariantFormat::NewType(inner) => vec![(render(inner), "Value".to_string())],
-            VariantFormat::Tuple(values) => values
-                .iter()
-                .enumerate()
-                .map(|(index, format)| (render(format), format!("Field{index}")))
-                .collect(),
-            VariantFormat::Struct(fields) => fields
-                .iter()
-                .map(|field| (render(&field.value), field.name.to_upper_camel_case()))
-                .collect(),
-            VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
-        };
+        let properties: Vec<(String, String)> = variant_properties(variant)
+            .into_iter()
+            .map(|(name, format)| (render(format), name))
+            .collect();
         let parameters = properties
             .iter()
             .map(|(ty, name)| format!("{ty} {name}"))

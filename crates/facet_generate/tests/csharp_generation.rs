@@ -528,3 +528,52 @@ fn test_that_csharp_code_with_a_uuid_compiles_without_serialization() {
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// Variants with a property named like the variant itself
+/// (redbadger/facet-generate#193).
+///
+/// C# forbids a member named like its enclosing type (CS0542), so each such
+/// property is renamed with a trailing underscore.
+#[allow(dead_code)]
+mod named_like_their_own_properties {
+    use facet::Facet;
+
+    /// The issue's repro, with a field named like a sibling beside it.
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Event {
+        Presence { presence: u32, status: u8 },
+        Status { status: u8 },
+    }
+
+    /// The properties a newtype and a tuple variant name themselves, where
+    /// `Field1`'s `Field0` is also named like a sibling.
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Shape {
+        Value(u32),
+        Field0(u32, u32),
+        Field1(u32, u32),
+    }
+}
+
+#[test]
+fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles() {
+    use named_like_their_own_properties::{Event, Shape};
+
+    let registry = reflect!(Event, Shape).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

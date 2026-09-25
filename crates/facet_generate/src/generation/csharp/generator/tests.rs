@@ -357,3 +357,22 @@ fn field_named_after_its_enclosing_type_is_rejected() {
         "C#: field `keys` of `Keys` would become property `Keys`, the same name as its enclosing type (CS0542); rename it with #[facet(rename = \"...\")]"
     );
 }
+
+/// A variant's record renames a property named like it instead (#193).
+#[test]
+fn field_named_after_its_variant_is_accepted() {
+    #[derive(facet::Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        Presence { presence: u32 },
+        Value(u32),
+        Field0(u32),
+    }
+
+    let registry = crate::reflect!(Event).unwrap();
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap();
+}

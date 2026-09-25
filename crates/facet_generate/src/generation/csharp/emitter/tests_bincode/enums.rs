@@ -1545,3 +1545,147 @@ fn newtype_and_tuple_variant_properties_named_like_a_sibling_variant_are_redecla
     }
     "#);
 }
+
+/// A property named like its own variant would be a member named like its
+/// enclosing type (CS0542), so it takes a trailing underscore (#193). Here
+/// `Presence`'s `presence`, the newtype `Value`'s `Value` and the tuple
+/// `Field0`'s `Field0`; `Presence`'s `Status` is only named like a sibling,
+/// so it is declared again with `new`, as before.
+#[test]
+fn variants_with_a_property_named_like_the_variant_rename_it() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Event {
+        Presence { presence: u32, status: u8 },
+        Status { status: u8 },
+        Value(u32),
+        Field0(u32, u32),
+    }
+
+    let actual = emit!(Event as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public abstract record Event : IFacetSerializable, IFacetDeserializable<Event> {
+        public sealed partial record Presence(uint Presence_, byte Status) : Event {
+            public new byte Status { get; init; } = Status;
+        }
+
+        public sealed partial record Status(byte Status_) : Event;
+
+        public sealed partial record Value(uint Value_) : Event;
+
+        public sealed partial record Field0(uint Field0_, uint Field1) : Event;
+
+        public abstract void Serialize(ISerializer serializer);
+
+        private static Event DeserializePresence(IDeserializer deserializer)
+        {
+            var presence = deserializer.DeserializeU32();
+            var status = deserializer.DeserializeU8();
+            return new Presence(presence, status);
+        }
+
+        public sealed partial record Presence
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(0);
+                serializer.SerializeU32(Presence_);
+                serializer.SerializeU8(Status);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static Event DeserializeStatus(IDeserializer deserializer)
+        {
+            var status = deserializer.DeserializeU8();
+            return new Status(status);
+        }
+
+        public sealed partial record Status
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(1);
+                serializer.SerializeU8(Status_);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static Event DeserializeValue(IDeserializer deserializer)
+        {
+            var value = deserializer.DeserializeU32();
+            return new Value(value);
+        }
+
+        public sealed partial record Value
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(2);
+                serializer.SerializeU32(Value_);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        private static Event DeserializeField0(IDeserializer deserializer)
+        {
+            var field0 = deserializer.DeserializeU32();
+            var field1 = deserializer.DeserializeU32();
+            return new Field0(field0, field1);
+        }
+
+        public sealed partial record Field0
+        {
+            public override void Serialize(ISerializer serializer)
+            {
+                serializer.IncreaseContainerDepth();
+                serializer.SerializeVariantIndex(3);
+                serializer.SerializeU32(Field0_);
+                serializer.SerializeU32(Field1);
+                serializer.DecreaseContainerDepth();
+            }
+
+        }
+        public static Event Deserialize(IDeserializer deserializer)
+        {
+            var index = deserializer.DeserializeVariantIndex();
+            return index switch
+            {
+                0 => DeserializePresence(deserializer),
+                1 => DeserializeStatus(deserializer),
+                2 => DeserializeValue(deserializer),
+                3 => DeserializeField0(deserializer),
+                _ => throw new DeserializationError("Unknown variant index for Event: " + index),
+            }
+            ;
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Event BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}

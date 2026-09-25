@@ -13,7 +13,7 @@ use crate::{
         config::CodeGeneratorConfig,
         naming::{EscapeStyle, ForbiddenNames, FormatBoundNames, NamingRules, qualify},
     },
-    reflection::format::{Format, Namespace},
+    reflection::format::{Format, Named, Namespace, VariantFormat},
 };
 
 /// C# keywords, sorted.
@@ -310,6 +310,42 @@ pub(crate) fn global_name(
     }
 }
 
+/// The positional properties of the record for `variant`, each with its C#
+/// name: `Value` for a newtype, `Field0`, `Field1`, … for a tuple, and the
+/// fields for a struct.
+///
+/// C# forbids a member named like its enclosing type (CS0542), so a property
+/// named like the variant takes a trailing underscore: `Presence { presence }`
+/// becomes `Presence(uint Presence_)` (redbadger/facet-generate#193). No
+/// `UpperCamelCase` name ends in one, so it can't clash with another property.
+pub(crate) fn variant_properties(variant: &Named<VariantFormat>) -> Vec<(String, &Format)> {
+    let properties: Vec<(String, &Format)> = match &variant.value {
+        VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
+        VariantFormat::Unit => vec![],
+        VariantFormat::NewType(format) => vec![("Value".to_string(), format.as_ref())],
+        VariantFormat::Tuple(formats) => formats
+            .iter()
+            .enumerate()
+            .map(|(index, format)| (format!("Field{index}"), format))
+            .collect(),
+        VariantFormat::Struct(fields) => fields
+            .iter()
+            .map(|field| (member_case(&field.name), &field.value))
+            .collect(),
+    };
+    let record = type_case(&variant.name);
+    properties
+        .into_iter()
+        .map(|(name, format)| {
+            if name == record {
+                (format!("{name}_"), format)
+            } else {
+                (name, format)
+            }
+        })
+        .collect()
+}
+
 /// The C# spelling of the builtin type `name`: fully qualified with
 /// `global::` when a declaration in the generated namespace shadows it, and
 /// bare otherwise.
@@ -370,5 +406,26 @@ mod tests {
     #[test]
     fn escaping_is_idempotent() {
         assert_eq!(RULES.escape("@class"), "@class");
+    }
+
+    #[test]
+    fn renames_only_a_variant_property_named_like_the_variant() {
+        let names = |name: &str, value: VariantFormat| -> Vec<String> {
+            variant_properties(&Named::new(&value, name.to_string()))
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect()
+        };
+        let fields = VariantFormat::Struct(vec![
+            Named::new(&Format::U32, "presence".to_string()),
+            Named::new(&Format::U8, "status".to_string()),
+        ]);
+        assert_eq!(names("Presence", fields.clone()), ["Presence_", "Status"]);
+        assert_eq!(names("Seen", fields), ["Presence", "Status"]);
+        let value = VariantFormat::NewType(Box::new(Format::U32));
+        assert_eq!(names("Value", value.clone()), ["Value_"]);
+        assert_eq!(names("Wrap", value), ["Value"]);
+        let tuple = VariantFormat::Tuple(vec![Format::U32, Format::U32]);
+        assert_eq!(names("Field1", tuple), ["Field0", "Field1_"]);
     }
 }

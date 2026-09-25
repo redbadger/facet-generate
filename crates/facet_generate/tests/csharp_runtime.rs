@@ -536,6 +536,83 @@ Console.WriteLine("Variants named like types or properties roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// Variants with a property named like the variant round trip (#193): the
+/// record renames the property with a trailing underscore.
+#[test]
+fn test_csharp_bincode_runtime_on_variants_named_like_their_own_properties() {
+    #[derive(Facet, Serialize)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        Presence { presence: u32, status: u8 },
+        Status { status: u8 },
+        Value(u32),
+        Field0(u32, u32),
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&reflect!(Event).unwrap())
+        .unwrap();
+
+    let presence = bincode::serialize(&Event::Presence {
+        presence: 3,
+        status: 4,
+    })
+    .unwrap();
+    let status = bincode::serialize(&Event::Status { status: 5 }).unwrap();
+    let value = bincode::serialize(&Event::Value(6)).unwrap();
+    let field0 = bincode::serialize(&Event::Field0(7, 8)).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] presenceBytes = {presence};
+var presence = Event.BincodeDeserialize(presenceBytes);
+Assert(presence is Event.Presence {{ Presence_: 3, Status: 4 }}, "Presence {{ presence: 3, status: 4 }}");
+Assert(presenceBytes.SequenceEqual(presence.BincodeSerialize()), "Presence did not roundtrip");
+
+byte[] statusBytes = {status};
+var status = Event.BincodeDeserialize(statusBytes);
+Assert(status is Event.Status {{ Status_: 5 }}, "Status {{ status: 5 }}");
+Assert(statusBytes.SequenceEqual(status.BincodeSerialize()), "Status did not roundtrip");
+
+byte[] valueBytes = {value};
+var value = Event.BincodeDeserialize(valueBytes);
+Assert(value is Event.Value {{ Value_: 6 }}, "Value(6)");
+Assert(valueBytes.SequenceEqual(value.BincodeSerialize()), "Value did not roundtrip");
+
+byte[] field0Bytes = {field0};
+var field0 = Event.BincodeDeserialize(field0Bytes);
+Assert(field0 is Event.Field0 {{ Field0_: 7, Field1: 8 }}, "Field0(7, 8)");
+Assert(field0Bytes.SequenceEqual(field0.BincodeSerialize()), "Field0 did not roundtrip");
+
+Console.WriteLine("Variants named like their own properties roundtrip: PASSED");
+"#,
+            presence = quote_bytes(&presence),
+            status = quote_bytes(&status),
+            value = quote_bytes(&value),
+            field0 = quote_bytes(&field0),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 #[test]
 #[ignore = "too slow for now, let's fix it later"]
 fn test_csharp_bincode_runtime_on_supported_types() {
@@ -638,7 +715,8 @@ Console.WriteLine($"Supported types roundtrip + mutation: {{passed}}/{{positiveI
 ///
 /// The Kotlin runtime test's fixture, but for what C# cannot hold: a `char`
 /// outside the Basic Multilingual Plane (a C# `char` is one UTF-16 unit), and
-/// `Option<Option<T>>` (C# has no `T??`). It adds the variants of #174.
+/// `Option<Option<T>>` (C# has no `T??`). It adds the variants of #174 and
+/// #193.
 #[allow(
     clippy::unsafe_derive_deserialize,
     clippy::struct_field_names,
@@ -667,6 +745,7 @@ mod json_fixture {
         pub internal: Vec<Internal>,
         pub adjacent: Vec<Adjacent>,
         pub events: Vec<Event>,
+        pub signals: Vec<Signal>,
         pub tree: Tree,
         pub list: HashSet,
         pub renamed: Renamed,
@@ -816,6 +895,16 @@ mod json_fixture {
         pub x: u32,
     }
 
+    /// Variants with a property named like the variant, which C# renames
+    /// `Presence_`, `Value_` and `Field0_`, keeping the wire names (#193).
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Signal {
+        Presence { presence: u32 },
+        Value(u32),
+        Field0(u8, u8),
+    }
+
     #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
     pub struct Tree {
         pub value: u32,
@@ -955,6 +1044,11 @@ mod json_fixture {
                 Event::Value,
                 Event::Wrap(9),
             ],
+            signals: vec![
+                Signal::Presence { presence: 7 },
+                Signal::Value(8),
+                Signal::Field0(1, 2),
+            ],
             tree: tree(
                 1,
                 Some(tree(2, None, None)),
@@ -1066,6 +1160,12 @@ static JsonData Sample()
             new Event.Value(),
             new Event.Wrap(9),
         },
+        Signals = new ObservableCollection<Signal>
+        {
+            new Signal.Presence(7),
+            new Signal.Value(8),
+            new Signal.Field0(1, 2),
+        },
         Tree = MakeTree(1, MakeTree(2, null, null), MakeTree(3, MakeTree(4, null, null), null)),
         List = new Example.HashSet.Cons(1, new Example.HashSet.Cons(2, new Example.HashSet.Nil())),
         Renamed = new Renamed { SnakeCaseField = 1, Explicit = 2, WithDash = 3, Default = true },
@@ -1172,6 +1272,8 @@ Assert(value.Text.Escaped == sample.Text.Escaped, "escaped text");
 Assert(value.Bytes.AsSpan().SequenceEqual(sample.Bytes), "bytes");
 Assert(value.Choices[4] is Choice.Struct {{ A: 1, Bee: "b" }}, "struct variant");
 Assert(value.Events[1] is Event.Seen {{ Presence: 3, Other.X: 4 }}, "variant named like a type");
+Assert(value.Signals[0] is Signal.Presence {{ Presence_: 7 }}, "property named like its variant");
+Assert(value.Signals[2] is Signal.Field0 {{ Field0_: 1, Field1: 2 }}, "element named like its variant");
 Assert(value.Maps.ByNewtype.Keys.Single().Value == "key", "newtype key");
 Assert(value.JsonSerialize() == sample.JsonSerialize(), $"decoded mismatch:\n  {{value.JsonSerialize()}}\n  {{sample.JsonSerialize()}}");
 

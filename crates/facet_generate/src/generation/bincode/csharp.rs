@@ -690,19 +690,9 @@ fn write_enum_bincode_helpers(
 /// The scope inside a variant's nested record: its own properties, on top of
 /// the base record's members (every variant's name).
 fn variant_scope<'a>(scope: &Scope<'a>, variant: &Named<VariantFormat>) -> Scope<'a> {
-    let properties = match &variant.value {
-        VariantFormat::Unit | VariantFormat::Variable(_) => vec![],
-        VariantFormat::NewType(format) => vec![("Value".to_string(), Some(format.as_ref()))],
-        VariantFormat::Tuple(formats) => formats
-            .iter()
-            .enumerate()
-            .map(|(i, format)| (format!("Field{i}"), Some(format)))
-            .collect(),
-        VariantFormat::Struct(fields) => fields
-            .iter()
-            .map(|field| (field.name.to_upper_camel_case(), Some(&field.value)))
-            .collect(),
-    };
+    let properties = naming::variant_properties(variant)
+        .into_iter()
+        .map(|(name, format)| (name, Some(format)));
     scope.with_members(properties)
 }
 
@@ -714,28 +704,10 @@ fn serializer_variant_body_write(
     variant: &Named<VariantFormat>,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
-    match &variant.value {
-        VariantFormat::Unit => Ok(()),
-        VariantFormat::NewType(format) => write_serialize_statement(w, "Value", format, scope),
-        VariantFormat::Tuple(formats) => {
-            for (index, format) in formats.iter().enumerate() {
-                write_serialize_statement(w, &format!("Field{index}"), format, scope)?;
-            }
-            Ok(())
-        }
-        VariantFormat::Struct(fields) => {
-            for field in fields {
-                write_serialize_statement(
-                    w,
-                    &field.name.to_upper_camel_case(),
-                    &field.value,
-                    scope,
-                )?;
-            }
-            Ok(())
-        }
-        VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
+    for (name, format) in naming::variant_properties(variant) {
+        write_serialize_statement(w, &name, format, scope)?;
     }
+    Ok(())
 }
 
 /// Dispatches on the variant format to write the full body of a

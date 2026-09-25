@@ -533,7 +533,10 @@ impl<'a> Converter<'a> {
         })?;
         writeln!(w)?;
         Self::method(w, &self.write_signature("Write"), |w| {
-            write_elements(w, "writer", 0, formats.len(), "value")
+            let properties = (0..formats.len())
+                .map(|i| format!("Field{i}"))
+                .collect::<Vec<_>>();
+            write_elements(w, "writer", 0, &properties, "value")
         })
     }
 
@@ -562,7 +565,11 @@ impl<'a> Converter<'a> {
         writeln!(w)?;
         Self::method(w, &self.write_signature("Write"), |w| {
             writeln!(w, "writer.WriteStartObject();")?;
-            self.write_fields(w, "writer", 0, fields, "value")?;
+            let properties = fields
+                .iter()
+                .map(|field| field.name.to_upper_camel_case())
+                .collect::<Vec<_>>();
+            self.write_fields(w, "writer", 0, fields, &properties, "value")?;
             writeln!(w, "writer.WriteEndObject();")
         })
     }
@@ -655,24 +662,24 @@ impl<'a> Converter<'a> {
             .collect())
     }
 
-    /// Writes `fields` of `value` as the fields of an object, with the
-    /// converters from `_{first}`.
+    /// Writes `fields` of `value`, its C# `properties`, as the fields of an
+    /// object keyed by their wire names, with the converters from `_{first}`.
     fn write_fields(
         &self,
         w: &mut dyn IndentWrite,
         writer: &str,
         first: usize,
         fields: &[Named<Format>],
+        properties: &[String],
         value: &str,
     ) -> io::Result<()> {
         let json = self.facet_json();
-        for (i, field) in fields.iter().enumerate() {
+        for (i, (field, property)) in fields.iter().zip(properties).enumerate() {
             writeln!(
                 w,
-                "{json}.WriteField({writer}, {}, _{}, {value}.{}, options);",
+                "{json}.WriteField({writer}, {}, _{}, {value}.{property}, options);",
                 literal(&field.name),
                 first + i,
-                field.name.to_upper_camel_case()
             )?;
         }
         Ok(())
@@ -794,6 +801,10 @@ impl<'a> Converter<'a> {
         let ty = &self.type_name;
         let csharp = variant.name.to_upper_camel_case();
         let wire = literal(&variant.name);
+        let properties = naming::variant_properties(variant)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
         match &variant.value {
             VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
             VariantFormat::Unit => {
@@ -806,16 +817,17 @@ impl<'a> Converter<'a> {
                 w.indent();
                 writeln!(
                     w,
-                    "_enum.WriteVariant(writer, {wire}, w => _{first}.Write(w, v.Value, options));"
+                    "_enum.WriteVariant(writer, {wire}, w => _{first}.Write(w, v.{}, options));",
+                    properties[0]
                 )?;
             }
-            VariantFormat::Tuple(formats) => {
+            VariantFormat::Tuple(_) => {
                 writeln!(w, "case {ty}.{csharp} v:")?;
                 w.indent();
                 write!(w, "_enum.WriteVariant(writer, {wire}, w =>")?;
                 writeln!(w)?;
                 with_block(w, Newlines::OPEN, |w| {
-                    write_elements(w, "w", first, formats.len(), "v")
+                    write_elements(w, "w", first, &properties, "v")
                 })?;
                 writeln!(w, ");")?;
             }
@@ -824,7 +836,7 @@ impl<'a> Converter<'a> {
                 w.indent();
                 writeln!(w, "_enum.WriteStructVariant(writer, {wire}, w =>")?;
                 with_block(w, Newlines::OPEN, |w| {
-                    self.write_fields(w, "w", first, fields, "v")
+                    self.write_fields(w, "w", first, fields, &properties, "v")
                 })?;
                 writeln!(w, ");")?;
             }
@@ -903,20 +915,20 @@ impl<'a> Converter<'a> {
     }
 }
 
-/// Writes `count` elements of `value`, its `Field0`, `Field1`, … (`Value`
-/// when it holds one), as an array, with the converters from `_{first}`.
+/// Writes the C# `properties` of `value`, its `Field0`, `Field1`, …, as an
+/// array, with the converters from `_{first}`.
 fn write_elements(
     w: &mut dyn IndentWrite,
     writer: &str,
     first: usize,
-    count: usize,
+    properties: &[String],
     value: &str,
 ) -> io::Result<()> {
     writeln!(w, "{writer}.WriteStartArray();")?;
-    for i in 0..count {
+    for (i, property) in properties.iter().enumerate() {
         writeln!(
             w,
-            "_{}.Write({writer}, {value}.Field{i}, options);",
+            "_{}.Write({writer}, {value}.{property}, options);",
             first + i
         )?;
     }

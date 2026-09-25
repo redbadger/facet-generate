@@ -4004,3 +4004,168 @@ fn struct_with_tuples_bytes_and_big_integers() {
     }
     "#);
 }
+
+/// A property named like its own variant takes a trailing underscore
+/// (CS0542, #193), and its JSON key stays the field's wire name.
+#[test]
+fn variants_with_a_property_named_like_the_variant_rename_it() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Event {
+        Presence { presence: u32, status: u8 },
+        Status { status: u8 },
+        Value(u32),
+        Field0(u32, u32),
+    }
+
+    let actual = emit!(Event as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    [JsonConverter(typeof(EventJsonConverter))]
+    public abstract record Event {
+        public sealed record Presence(uint Presence_, byte Status) : Event {
+            public new byte Status { get; init; } = Status;
+        }
+
+        public sealed record Status(byte Status_) : Event;
+
+        public sealed record Value(uint Value_) : Event;
+
+        public sealed record Field0(uint Field0_, uint Field1) : Event;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Event JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Event>(input);
+        }
+    }
+
+    public sealed class EventJsonConverter : JsonConverter<Event> {
+        private static readonly JsonConverter<uint> _0 = FacetJson.U32;
+        private static readonly JsonConverter<byte> _1 = FacetJson.U8;
+        private static readonly JsonConverter<byte> _2 = FacetJson.U8;
+        private static readonly JsonConverter<uint> _3 = FacetJson.U32;
+        private static readonly JsonConverter<uint> _4 = FacetJson.U32;
+        private static readonly JsonConverter<uint> _5 = FacetJson.U32;
+        private static readonly JsonEnum _enum = new("Event");
+
+        public override bool HandleNull => true;
+
+        public override Event Read(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            return _enum.Read(ref reader, options, _readVariant);
+        }
+
+        public override void Write(Utf8JsonWriter writer, Event value, JsonSerializerOptions options)
+        {
+            switch (value)
+            {
+                case Event.Presence v:
+                    _enum.WriteStructVariant(writer, "Presence", w =>
+                    {
+                        FacetJson.WriteField(w, "presence", _0, v.Presence_, options);
+                        FacetJson.WriteField(w, "status", _1, v.Status, options);
+                    });
+                    break;
+                case Event.Status v:
+                    _enum.WriteStructVariant(writer, "Status", w =>
+                    {
+                        FacetJson.WriteField(w, "status", _2, v.Status_, options);
+                    });
+                    break;
+                case Event.Value v:
+                    _enum.WriteVariant(writer, "Value", w => _3.Write(w, v.Value_, options));
+                    break;
+                case Event.Field0 v:
+                    _enum.WriteVariant(writer, "Field0", w =>
+                    {
+                        w.WriteStartArray();
+                        _4.Write(w, v.Field0_, options);
+                        _5.Write(w, v.Field1, options);
+                        w.WriteEndArray();
+                    });
+                    break;
+                default:
+                    throw new global::System.ArgumentOutOfRangeException(nameof(value));
+            }
+        }
+
+        private static Event _readVariant(string variant, bool hasPayload, ref Utf8JsonReader reader, JsonSerializerOptions options)
+        {
+            switch (variant)
+            {
+                case "Presence":
+                {
+                    _enum.Payload(hasPayload, "Presence");
+                    FacetJson.StartObject(ref reader, "Event.Presence");
+                    uint f0 = default!;
+                    var has0 = false;
+                    byte f1 = default!;
+                    var has1 = false;
+                    while (FacetJson.NextField(ref reader, out var key))
+                    {
+                        switch (key)
+                        {
+                            case "presence":
+                                f0 = FacetJson.Read(_0, ref reader, options);
+                                has0 = true;
+                                break;
+                            case "status":
+                                f1 = FacetJson.Read(_1, ref reader, options);
+                                has1 = true;
+                                break;
+                            default:
+                                reader.Skip();
+                                break;
+                        }
+                    }
+                    return new Event.Presence(
+                        FacetJson.Required(has0, f0, "presence", "Event.Presence"),
+                        FacetJson.Required(has1, f1, "status", "Event.Presence"));
+                }
+                case "Status":
+                {
+                    _enum.Payload(hasPayload, "Status");
+                    FacetJson.StartObject(ref reader, "Event.Status");
+                    byte f0 = default!;
+                    var has0 = false;
+                    while (FacetJson.NextField(ref reader, out var key))
+                    {
+                        switch (key)
+                        {
+                            case "status":
+                                f0 = FacetJson.Read(_2, ref reader, options);
+                                has0 = true;
+                                break;
+                            default:
+                                reader.Skip();
+                                break;
+                        }
+                    }
+                    return new Event.Status(
+                        FacetJson.Required(has0, f0, "status", "Event.Status"));
+                }
+                case "Value":
+                    _enum.Payload(hasPayload, "Value");
+                    return new Event.Value(FacetJson.Read(_3, ref reader, options));
+                case "Field0":
+                {
+                    _enum.Payload(hasPayload, "Field0");
+                    FacetJson.StartArray(ref reader, "Event.Field0");
+                    var e0 = FacetJson.Element(_4, ref reader, options, "Event.Field0");
+                    var e1 = FacetJson.Element(_5, ref reader, options, "Event.Field0");
+                    FacetJson.EndArray(ref reader, "Event.Field0");
+                    return new Event.Field0(e0, e1);
+                }
+                default:
+                    throw _enum.Unknown(variant);
+            }
+        }
+    }
+    "#);
+}
