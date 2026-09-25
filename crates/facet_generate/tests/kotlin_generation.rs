@@ -28,7 +28,6 @@ use std::{path::Path, process::Command};
 use facet_generate::{
     Registry,
     generation::{bincode::BincodePlugin, json::JsonPlugin, kotlin},
-    reflection::format::{ContainerFormat, Format},
 };
 use tempfile::tempdir;
 
@@ -135,22 +134,6 @@ fn assert_generated_code_compiles_in(package: &str, registry: &Registry, encodin
     );
 }
 
-/// Drop every `u128` / `i128` struct field from `registry`.
-///
-/// Known bug, not fixed here: the Kotlin JSON plugin binds its
-/// `BigIntegerSerializer` with a same-file `typealias BigInteger`, but the
-/// emitter also writes `import java.math.BigInteger` for any module with
-/// 128-bit integers, and an explicit import outranks a same-package
-/// declaration. The alias therefore never applies and kotlinx.serialization
-/// fails with "Serializer has not been found for type '`BigInteger`'".
-fn remove_128_bit_fields(registry: &mut Registry) {
-    for container in registry.values_mut() {
-        if let ContainerFormat::Struct(fields, _) = container {
-            fields.retain(|field| !matches!(field.value, Format::I128 | Format::U128));
-        }
-    }
-}
-
 /// The main fixture — the full [`SerdeData`](common::SerdeData) tree of
 /// primitives, containers, tuples, maps and recursive enums.
 ///
@@ -161,9 +144,7 @@ fn remove_128_bit_fields(registry: &mut Registry) {
 /// without their `serializeElement` argument). All pre-existing bugs.
 #[test]
 fn test_that_kotlin_code_compiles() {
-    let mut registry = common::get_registry();
-    remove_128_bit_fields(&mut registry);
-    assert_generated_code_compiles(&registry, Encoding::Json);
+    assert_generated_code_compiles(&common::get_registry(), Encoding::Json);
 }
 
 /// Field and variant names that collide with Kotlin hard keywords must be

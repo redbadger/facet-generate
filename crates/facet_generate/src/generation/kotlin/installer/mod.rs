@@ -35,7 +35,6 @@ use crate::{
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
         collision::{self, Fix, Origin, TypeName},
-        json::JsonPlugin,
         kotlin::{Kotlin, KotlinCodeGenerator},
         module::{self, Module},
         plugin::EmitterPlugin,
@@ -275,18 +274,25 @@ impl Installer {
 
     /// Installs the serde Kotlin runtime sources into the output directory.
     ///
-    /// Delegates to `JsonPlugin::runtime_files` which embeds the serde
-    /// sources via `include_dir!`.  This method is provided for callers that
-    /// need fine-grained control; most callers should prefer [`generate`](Self::generate).
+    /// Delegates to `BincodePlugin::runtime_files`, writing only the
+    /// `com/novi/serde/` files, which embed the serde sources via
+    /// `include_dir!`. The JSON plugin's `JsonCoding.kt`, which needs
+    /// kotlinx.serialization, is not among them. This method is provided for
+    /// callers that need fine-grained control; most callers should prefer
+    /// [`generate`](Self::generate).
     ///
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
-        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(JsonPlugin));
+        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));
         for plugin in lang.plugins() {
-            for file in plugin.runtime_files() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("com/novi/serde/"))
+            {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;
