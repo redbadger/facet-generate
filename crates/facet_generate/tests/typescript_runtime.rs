@@ -210,6 +210,70 @@ Deno.test("bincode serialization matches deserialization", () => {{
     project.run();
 }
 
+/// A field whose wire name isn't an identifier round-trips through bincode,
+/// on a struct and on a struct variant (#197).
+#[test]
+fn test_typescript_runtime_bincode_non_identifier_field_names_roundtrip() {
+    use facet::Facet;
+    use serde::Serialize;
+
+    #[derive(Facet, Serialize)]
+    struct Renamed {
+        plain: u8,
+        #[facet(rename = "with-dash")]
+        #[serde(rename = "with-dash")]
+        dashed: u16,
+        r#default: bool,
+        choice: Choice,
+    }
+
+    #[derive(Facet, Serialize)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Choice {
+        Unit,
+        Other {
+            #[facet(rename = "with-dash")]
+            #[serde(rename = "with-dash")]
+            dashed: u32,
+            r#default: bool,
+        },
+    }
+
+    let mut project = TsProject::new(&facet_generate::reflect!(Renamed).unwrap());
+    let bytes = to_byte_list(
+        &bincode::serialize(&Renamed {
+            plain: 1,
+            dashed: 515,
+            r#default: true,
+            choice: Choice::Other {
+                dashed: 70000,
+                r#default: false,
+            },
+        })
+        .unwrap(),
+    );
+
+    project.write_test(&format!(
+        r#"
+Deno.test("non-identifier field names round-trip through bincode", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  const expected = new Renamed(1, 515, true, choiceOther(70000, false));
+
+  const actual = Renamed.deserialize(new BincodeDeserializer(expectedBytes));
+  assertEquals(actual, expected);
+  assertEquals(actual["with-dash"], 515);
+
+  const serializer = new BincodeSerializer();
+  actual.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes);
+}});
+"#
+    ));
+
+    project.run();
+}
+
 #[test]
 fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
     const LARGE_I64: i64 = 1_785_688_513_662;

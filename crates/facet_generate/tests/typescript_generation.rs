@@ -394,3 +394,42 @@ fn serde_namespace_registry() -> facet_generate::Registry {
 
     facet_generate::reflect!(App).unwrap()
 }
+
+/// A field whose wire name isn't an identifier type-checks under the Bincode
+/// plugin, on a struct and on a struct variant (#197). Written bare,
+/// `this.with-dash` reads as `this.with - dash` (`TS2339 [ERROR]: Property
+/// 'with' does not exist on type 'Renamed'.`, `TS2304 [ERROR]: Cannot find
+/// name 'dash'.`), and the variant's `return { kind: "Other", with-dash }`
+/// doesn't parse (`SyntaxError: Expression expected`).
+#[test]
+fn test_that_typescript_bincode_code_with_non_identifier_field_names_type_checks() {
+    #[derive(Facet)]
+    struct Renamed {
+        #[facet(rename = "with-dash")]
+        dashed: u8,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Choice {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    #[derive(Facet)]
+    #[facet(tag = "type", content = "content")]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Adjacent {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    let registry = facet_generate::reflect!(Renamed, Choice, Adjacent).unwrap();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+}

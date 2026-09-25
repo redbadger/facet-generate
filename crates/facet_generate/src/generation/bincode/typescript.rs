@@ -27,7 +27,7 @@ use crate::generation::{
     indent::{IndentWrite, Newlines, with_block},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    typescript::{TypeScript, is_reserved_word, naming, param_name, render_type},
+    typescript::{TypeScript, naming, param_name, render_type},
 };
 use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
 
@@ -332,7 +332,8 @@ fn write_struct_type_body(
     write!(w, "public serialize(serializer: Serializer): void ")?;
     with_block(w, Newlines::BOTH, |w| {
         for field in fields {
-            write_serialize(w, &format!("this.{}", field.name), &field.value, config)?;
+            let expr = naming::member("this", &field.name);
+            write_serialize(w, &expr, &field.value, config)?;
         }
         Ok(())
     })?;
@@ -452,9 +453,10 @@ fn write_serialize_variant_fields(
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
             for field in fields {
+                let owner = naming::member("value", content);
                 write_serialize(
                     w,
-                    &format!("value.{content}.{}", field.name),
+                    &naming::member(&owner, &field.name),
                     &field.value,
                     config,
                 )?;
@@ -463,7 +465,8 @@ fn write_serialize_variant_fields(
         }
         (_, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_serialize(w, &format!("value.{}", field.name), &field.value, config)?;
+                let expr = naming::member("value", &field.name);
+                write_serialize(w, &expr, &field.value, config)?;
             }
             Ok(())
         }
@@ -472,13 +475,14 @@ fn write_serialize_variant_fields(
 }
 
 /// The object-literal entry for a struct-variant field: shorthand normally,
-/// but `name: name_` when the field name is a reserved word and the local
-/// binding had to be renamed.
+/// but written out in full when the local binding had to be renamed
+/// (`default: default_`, `"with-dash": with_dash`).
 fn object_entry(field: &Named<Format>) -> String {
-    if is_reserved_word(&field.name) {
-        format!("{}: {}", field.name, param_name(&field.name))
-    } else {
+    let binding = param_name(&field.name);
+    if binding == field.name {
         field.name.clone()
+    } else {
+        format!("{}: {binding}", naming::property_key(&field.name))
     }
 }
 

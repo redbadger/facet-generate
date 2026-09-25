@@ -1753,3 +1753,139 @@ fn keyword_enum() {
     }
     "#);
 }
+
+/// A field whose wire name isn't an identifier is read and written as
+/// `this["with-dash"]`, on a struct and on a struct variant, externally or
+/// adjacently tagged (#197).
+#[test]
+fn non_identifier_field_names() {
+    #[derive(Facet)]
+    struct Renamed {
+        plain: u8,
+        #[facet(rename = "with-dash")]
+        dashed: u8,
+        r#default: bool,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Choice {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+            r#default: bool,
+        },
+    }
+
+    #[derive(Facet)]
+    #[facet(tag = "type", content = "content")]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Adjacent {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    let actual = emit!(Renamed, Choice, Adjacent as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Adjacent =
+        | { type: "Other"; content: { "with-dash": uint8; } };
+
+    export const adjacentOther = (with_dash: uint8): Adjacent => ({ type: "Other", content: { "with-dash": with_dash } });
+
+    export function matchAdjacent<R>(value: Adjacent, cases: {
+        Other: (v: Extract<Adjacent, { type: "Other" }>) => R;
+    }): R {
+        return cases[value.type as Adjacent["type"]](value as never);
+    }
+
+    export function serializeAdjacent(value: Adjacent, serializer: Serializer): void {
+        switch (value.type) {
+            case "Other": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeU8(value.content["with-dash"]);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).type);
+        }
+    }
+
+    export function deserializeAdjacent(deserializer: Deserializer): Adjacent {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const with_dash = deserializer.deserializeU8();
+                return { type: "Other", content: { "with-dash": with_dash } };
+            }
+            default: throw new Error("Unknown variant index for Adjacent: " + index);
+        }
+    }
+
+
+    export type Choice =
+        | { kind: "Other"; "with-dash": uint8; default: bool };
+
+    export const choiceOther = (with_dash: uint8, default_: bool): Choice => ({ kind: "Other", "with-dash": with_dash, default: default_ });
+
+    export function matchChoice<R>(value: Choice, cases: {
+        Other: (v: Extract<Choice, { kind: "Other" }>) => R;
+    }): R {
+        return cases[value.kind as Choice["kind"]](value as never);
+    }
+
+    export function serializeChoice(value: Choice, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Other": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeU8(value["with-dash"]);
+                serializer.serializeBool(value.default);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeChoice(deserializer: Deserializer): Choice {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const with_dash = deserializer.deserializeU8();
+                const default_ = deserializer.deserializeBool();
+                return { kind: "Other", "with-dash": with_dash, default: default_ };
+            }
+            default: throw new Error("Unknown variant index for Choice: " + index);
+        }
+    }
+
+
+    export class Renamed {
+        public plain: uint8;
+        public "with-dash": uint8;
+        public default: bool;
+
+        constructor (plain: uint8, with_dash: uint8, default_: bool) {
+            this.plain = plain;
+            this["with-dash"] = with_dash;
+            this.default = default_;
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializer.serializeU8(this.plain);
+            serializer.serializeU8(this["with-dash"]);
+            serializer.serializeBool(this.default);
+        }
+
+        static deserialize(deserializer: Deserializer): Renamed {
+            const plain = deserializer.deserializeU8();
+            const with_dash = deserializer.deserializeU8();
+            const default_ = deserializer.deserializeBool();
+            return new Renamed(plain,with_dash,default_);
+        }
+    }
+    "#);
+}
