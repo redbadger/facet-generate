@@ -8,14 +8,16 @@
 //! contextual keywords (`get`, `set`, `Type`, `Protocol`, …) are legal
 //! identifiers, so neither group is listed.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet, sync::LazyLock};
 
 use heck::ToLowerCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
         naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+        plugin::RuntimeFile,
     },
     reflection::format::Namespace,
 };
@@ -116,23 +118,27 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ("Void", "Swift.Void"),
 ];
 
-/// The public top-level types of the `Swift` and `_Concurrency` modules
-/// (structs, enums, classes, protocols, actors and typealiases), less those
-/// that start with `_` and those no namespace becomes (`SIMD2`, `UTF8`).
-/// Sorted.
+/// The public top-level types of the modules every Swift file imports,
+/// `Swift`, `_Concurrency` and `_StringProcessing` (structs, enums, classes,
+/// protocols, actors and typealiases), less those that start with `_` and
+/// those no namespace becomes (`SIMD2`, `UTF8`). Sorted.
 ///
 /// Swift looks a qualifier up as a type before it looks for a module, and
-/// every module imports both, so a module named like one of these cannot be
+/// every module imports these, so a module named like one of them cannot be
 /// qualified, whether or not the generated code writes the type:
 /// `String.Foo` looks for `Foo` in `Swift.String`.
 //
 // Generated from Apple Swift 6.4 (swiftlang-6.4.0.34.1), macOS 27.0 SDK:
-// every line of `$(xcrun --show-sdk-path)/usr/lib/swift/{Swift,_Concurrency}
-// .swiftmodule/arm64e-apple-macos.swiftinterface` that starts in column 0
-// and matches `\b(public|open)\b( [a-z]+)*? (struct|enum|class|protocol|
-// actor|typealias) (\w+)`, keeping each name that does not start with `_`
-// and for which `name.to_snake_case().to_upper_camel_case() == name` (heck
-// 0.5), sorted bytewise.
+// every line of `$(xcrun --show-sdk-path)/usr/lib/swift/{Swift,_Concurrency,
+// _StringProcessing}.swiftmodule/arm64e-apple-macos.swiftinterface` that
+// starts in column 0 and matches `\b(public|open)\b( [a-z]+)*? (struct|enum|
+// class|protocol|actor|typealias) (\w+)`, keeping each name that does not
+// start with `_` and for which `name.to_snake_case().to_upper_camel_case() ==
+// name` (heck 0.5), sorted bytewise. Those three are the modules the
+// `-emit-loaded-module-trace` of a file with no imports lists
+// (`Synchronization`, `RegexBuilder` and `_Backtracing` are not among them),
+// and `swiftc -typecheck` of `public typealias P = Name.Missing`, with no
+// imports, fails for each name with "'Missing' is not a member type of ...".
 pub(crate) const STDLIB_TYPES: &[&str] = &[
     "Actor",
     "AdditiveArithmetic",
@@ -146,6 +152,7 @@ pub(crate) const STDLIB_TYPES: &[&str] = &[
     "AnyKeyPath",
     "AnyObject",
     "AnyRandomAccessCollection",
+    "AnyRegexOutput",
     "AnySequence",
     "Array",
     "ArrayLiteralConvertible",
@@ -229,6 +236,7 @@ pub(crate) const STDLIB_TYPES: &[&str] = &[
     "CountableClosedRange",
     "CountablePartialRangeFrom",
     "CountableRange",
+    "CustomConsumingRegexComponent",
     "CustomDebugStringConvertible",
     "CustomLeafReflectable",
     "CustomPlaygroundDisplayConvertible",
@@ -404,6 +412,11 @@ pub(crate) const STDLIB_TYPES: &[&str] = &[
     "RawSpan",
     "Ref",
     "ReferenceWritableKeyPath",
+    "Regex",
+    "RegexComponent",
+    "RegexRepetitionBehavior",
+    "RegexSemanticLevel",
+    "RegexWordBoundaryKind",
     "Repeated",
     "Result",
     "ReversedCollection",
@@ -509,6 +522,37 @@ pub(crate) const FOUNDATION_MODULES: &[(&str, &str)] = &[
     ("Observation", "which `Foundation` imports"),
     ("System", "which `Foundation` imports"),
 ];
+
+/// The public top-level types that the Swift sources of the `Serde` runtime in
+/// `files` declare, less those that start with `_`: every other file is
+/// skipped. Sorted.
+///
+/// A module that imports `Serde` finds these before a module of the same
+/// name, as it does the standard library's.
+pub(crate) fn runtime_types(files: &[RuntimeFile]) -> BTreeSet<String> {
+    static DECLARATION: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?m)^(?:@\w+\s+)*(?:public|open)(?:\s+(?:final|indirect))*\s+(?:struct|enum|class|protocol|actor|typealias)\s+(\w+)",
+        )
+        .expect("a valid regex")
+    });
+    files
+        .iter()
+        .filter(|file| {
+            file.relative_path.starts_with("Sources/Serde/")
+                && std::path::Path::new(&file.relative_path)
+                    .extension()
+                    .is_some_and(|extension| extension == "swift")
+        })
+        .flat_map(|file| {
+            DECLARATION
+                .captures_iter(&String::from_utf8_lossy(&file.contents))
+                .map(|captures| captures[1].to_string())
+                .collect::<Vec<_>>()
+        })
+        .filter(|name| !name.starts_with('_'))
+        .collect()
+}
 
 /// Type names the generated module already uses for something else, with the
 /// clause that names what each collides with. Sorted by name.
@@ -649,6 +693,42 @@ mod tests {
         assert!(
             FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
             "FORBIDDEN_MEMBERS must be sorted by name"
+        );
+    }
+
+    /// Pins what the runtime check reads from the sources each plugin ships.
+    #[test]
+    fn finds_the_types_of_the_serde_runtime() {
+        use crate::generation::{
+            bincode::BincodePlugin, json::JsonPlugin, plugin::EmitterPlugin, swift::Swift,
+        };
+
+        let types = |plugin: &dyn EmitterPlugin<Swift>| {
+            runtime_types(&plugin.runtime_files())
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            types(&BincodePlugin),
+            [
+                "BinaryDeserializer",
+                "BinarySerializer",
+                "BincodeDeserializer",
+                "BincodeSerializer",
+                "DeserializationError",
+                "Deserializer",
+                "Indirect",
+                "Int128",
+                "SerializationError",
+                "Serializer",
+                "UInt128",
+            ]
+        );
+        assert_eq!(
+            types(&JsonPlugin),
+            [
+                "Indirect", "Int128", "JsonChar", "JsonKey", "JsonUnit", "JsonUuid", "UInt128"
+            ]
         );
     }
 

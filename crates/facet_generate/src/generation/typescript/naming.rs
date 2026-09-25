@@ -8,9 +8,10 @@
 //! declarations). They are perfectly legal as property names, so the emitter
 //! keeps property and wire names untouched and renames bindings instead.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
 use heck::ToUpperCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
@@ -113,6 +114,56 @@ type ConstructsGlobal = fn(&ContainerFormat) -> bool;
 
 fn is_uuid(format: &Format) -> bool {
     matches!(format, Format::Uuid)
+}
+
+/// The names that the top-level statements of `source`, a part of the file
+/// `file`, bind and that a namespace import of the same name collides with,
+/// each with the clause that says where it is from: every import (TS2300), an
+/// exported declaration (TS2395) and a value (TS2440). A type that is not
+/// exported merges with a namespace import, so it is left out.
+pub(crate) fn scope_names<'a>(
+    source: &'a str,
+    file: &'a str,
+) -> impl Iterator<Item = (String, String)> + 'a {
+    static IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"^import\s+(?:type\s+)?(.*?)\s+from\s+"([^"]*)""#).expect("a valid regex")
+    });
+    static DECLARATION: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"^(export\s+)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(function\*?|const|let|var|class|enum|namespace|type|interface)\s+([\w$]+)",
+        )
+        .expect("a valid regex")
+    });
+    source.lines().flat_map(move |line| {
+        if let Some(import) = IMPORT.captures(line) {
+            let from = import[2].to_string();
+            let clause = |name: &str| format!("`{name}`, which `{file}` imports from `{from}`");
+            // `* as X`, `X`, `{ A, B as C, type D }`, or a default and braces.
+            import[1]
+                .split([',', '{', '}'])
+                .filter_map(|binding| binding.split_whitespace().last())
+                .filter(|name| *name != "*" && *name != "type")
+                .map(|name| (name.to_string(), clause(name)))
+                .collect::<Vec<_>>()
+        } else if let Some(declaration) = DECLARATION.captures(line) {
+            let name = &declaration[3];
+            let exported = declaration.get(1).is_some();
+            let is_type = matches!(&declaration[2], "type" | "interface");
+            match (exported, is_type) {
+                (true, true) => vec![(
+                    name.to_string(),
+                    format!("the type `{name}`, which `{file}` exports"),
+                )],
+                (_, false) => vec![(
+                    name.to_string(),
+                    format!("`{name}`, which `{file}` declares"),
+                )],
+                (false, true) => vec![],
+            }
+        } else {
+            vec![]
+        }
+    })
 }
 
 /// Type names the generated module already uses for something else, with the

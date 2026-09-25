@@ -29,6 +29,7 @@
 
 mod conformance;
 pub(crate) mod emitter;
+mod foundation_types;
 mod generator;
 mod installer;
 pub(crate) mod naming;

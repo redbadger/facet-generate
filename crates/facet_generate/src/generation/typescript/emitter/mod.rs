@@ -131,7 +131,6 @@ impl Emitter<TypeScript> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         let CodeGeneratorConfig {
             referenced_namespaces,
-            used_format_types,
             ..
         } = self.config();
 
@@ -152,18 +151,7 @@ impl Emitter<TypeScript> for Module {
         }
 
         // Write type aliases (e.g. `type bool = boolean;`)
-        let alias_map = BTreeMap::from(TYPE_ALIASES);
-        let aliases: Vec<String> = used_format_types
-            .iter()
-            .filter_map(|k| {
-                alias_map.get(k.as_str()).map(|s| {
-                    qualify_helper(s, naming::QUALIFIED, |name| {
-                        naming::shadows(name, self.config())
-                    })
-                    .into_owned()
-                })
-            })
-            .collect();
+        let aliases = type_aliases(self.config());
         if !aliases.is_empty() {
             writeln!(w, "{}", aliases.join("\n"))?;
         }
@@ -175,6 +163,53 @@ impl Emitter<TypeScript> for Module {
 
         Ok(())
     }
+}
+
+/// The type aliases a module declares, one for each format its types use
+/// that has one (e.g. `type bool = boolean;`).
+fn type_aliases(config: &CodeGeneratorConfig) -> Vec<String> {
+    let alias_map = BTreeMap::from(TYPE_ALIASES);
+    config
+        .used_format_types
+        .iter()
+        .filter_map(|k| {
+            alias_map.get(k.as_str()).map(|s| {
+                qualify_helper(s, naming::QUALIFIED, |name| naming::shadows(name, config))
+                    .into_owned()
+            })
+        })
+        .collect()
+}
+
+/// The names that a module's header adds to its scope besides its namespace
+/// imports: what its plugins import, its type aliases, and its plugins'
+/// module helpers. Each comes with the clause that says where it is from, for
+/// the file `file`.
+///
+/// Only a name a namespace import collides with is listed: an import of any
+/// kind (TS2300), an exported declaration (TS2395), or a value (TS2440). A
+/// local type (`type Seq<T>`) merges with a namespace import.
+///
+/// # Errors
+///
+/// Returns an error if a plugin fails to write its module helpers.
+pub(crate) fn module_scope(
+    config: &CodeGeneratorConfig,
+    plugins: &[Arc<dyn EmitterPlugin<TypeScript>>],
+    file: &str,
+) -> Result<Vec<(String, String)>> {
+    let mut helpers = Vec::new();
+    {
+        let mut w = IndentedWriter::new(&mut helpers, config.indent);
+        for plugin in plugins {
+            plugin.module_helpers(&mut w, config)?;
+        }
+    }
+    let imports = collect_from_plugins(plugins, |p| p.imports(config));
+    let declarations = type_aliases(config).join("\n") + "\n" + &String::from_utf8_lossy(&helpers);
+    Ok(naming::scope_names(&imports.join("\n"), file)
+        .chain(naming::scope_names(&declarations, file))
+        .collect())
 }
 
 impl Emitter<TypeScript> for Doc {

@@ -47,8 +47,8 @@ use crate::{
         module::{self, Module},
         plugin::EmitterPlugin,
         swift::{
-            Swift, conformance::Conformance, emitter::base_imports, generator::SwiftCodeGenerator,
-            naming,
+            Swift, conformance::Conformance, emitter::base_imports,
+            foundation_types::FOUNDATION_TYPES, generator::SwiftCodeGenerator, naming,
         },
     },
     reflection::format::QualifiedTypeName,
@@ -226,7 +226,10 @@ impl Installer {
     ///   the root package's module, which namespaced modules qualify ROOT
     ///   types with. A type of the `Swift` or `_Concurrency` module
     ///   (`string` for `String`, `error` for `Error`) is always in scope, so
-    ///   it hides the module the same way.
+    ///   it hides the module the same way. So does a type of the `Serde`
+    ///   runtime (`serializer`) in a module that imports it, and a type that
+    ///   `Foundation` brings into scope (`data` for `Data`) in a module that
+    ///   imports `Foundation` itself.
     /// - a module is named like one the package imports: `Swift`, the
     ///   `Serde` runtime, `Foundation` when any module imports it, or one of
     ///   the SDK modules `Foundation` loads (`system` for `System`) when that
@@ -278,7 +281,20 @@ impl Installer {
             .iter()
             .map(|(m, registry)| (m.config().module_name(), registry.keys().collect()))
             .collect();
+        let runtime_types = naming::runtime_types(
+            &self
+                .plugins
+                .iter()
+                .flat_map(|p| p.runtime_files())
+                .collect::<Vec<_>>(),
+        );
         for (config, registry, module_config) in &generated {
+            // What the module imports itself: a module's names are not in
+            // scope in the modules that import it.
+            let imports: Vec<String> = base_imports(module_config)
+                .into_iter()
+                .chain(self.plugins.iter().flat_map(|p| p.imports(module_config)))
+                .collect();
             // Every module this one imports, by the name it qualifies their
             // types with.
             let imported: Vec<&str> = module_config
@@ -310,16 +326,11 @@ impl Installer {
                     )
                     .into());
                 }
-                if naming::STDLIB_TYPES
-                    .binary_search(&qualifier.as_str())
-                    .is_ok()
-                {
+                if let Some(collider) = builtin_type(&qualifier, &imports, &runtime_types) {
                     return Err(collision::error(
                         LANGUAGE,
                         subject,
-                        format_args!(
-                            "the standard-library type `{qualifier}`, which Swift finds instead of the module"
-                        ),
+                        collider,
                         origin.choose_namespace(),
                     )
                     .into());
@@ -744,6 +755,41 @@ impl Installer {
         } else {
             format!("\n    platforms: [{}],", self.platforms.join(", "))
         }
+    }
+}
+
+/// The clause naming the type that hides a module qualified as `qualifier`
+/// in a module that imports `imports`, if a builtin one does: a type of the
+/// standard library, of the `Serde` runtime (whose types are `runtime_types`),
+/// or one that `Foundation` brings into scope.
+fn builtin_type(
+    qualifier: &str,
+    imports: &[String],
+    runtime_types: &BTreeSet<String>,
+) -> Option<String> {
+    if naming::STDLIB_TYPES.binary_search(&qualifier).is_ok() {
+        Some(format!(
+            "the standard-library type `{qualifier}`, which Swift finds instead of the module"
+        ))
+    } else if imports.iter().any(|i| i == "Serde") && runtime_types.contains(qualifier) {
+        Some(format!(
+            "the runtime type `Serde.{qualifier}`, which Swift finds instead of the module"
+        ))
+    } else if imports.iter().any(|i| i == "Foundation") {
+        FOUNDATION_TYPES
+            .binary_search_by_key(&qualifier, |(name, _)| name)
+            .ok()
+            .map(|i| match FOUNDATION_TYPES[i].1 {
+                "Foundation" => format!(
+                    "the Foundation type `{qualifier}`, which Swift finds instead of the module"
+                ),
+                module => format!(
+                    "the {module} type `{qualifier}`, which `Foundation` imports and Swift finds \
+                     instead of the module"
+                ),
+            })
+    } else {
+        None
     }
 }
 

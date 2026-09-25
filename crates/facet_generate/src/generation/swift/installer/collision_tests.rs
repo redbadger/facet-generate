@@ -8,7 +8,7 @@ use crate as fg;
 use crate::{
     Registry,
     generation::{
-        Error, ExternalPackage, PackageLocation, bincode::BincodePlugin,
+        Error, ExternalPackage, PackageLocation, bincode::BincodePlugin, json::JsonPlugin,
         swift::installer::Installer,
     },
     reflect,
@@ -24,6 +24,19 @@ fn rejection(package: &str, registry: &Registry) -> String {
 fn plain_rejection(package: &str, registry: &Registry) -> String {
     let dir = tempfile::tempdir().unwrap();
     let error = Installer::new(package, dir.path())
+        .generate(registry)
+        .unwrap_err();
+    let Error::Io(error) = error else {
+        panic!("expected an I/O error, got {error:?}");
+    };
+    error.to_string()
+}
+
+/// [`rejection`], with the JSON plugin.
+fn json_rejection(package: &str, registry: &Registry) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let error = Installer::new(package, dir.path())
+        .plugin(JsonPlugin)
         .generate(registry)
         .unwrap_err();
     let Error::Io(error) = error else {
@@ -302,6 +315,310 @@ fn rejects_a_namespace_named_like_swift_result() {
          module `Example`, the same as the standard-library type `Result`, which Swift finds \
          instead of the module. Choose a different namespace"
     );
+}
+
+/// Every module imports `_StringProcessing` too: "'Thing' is not a member
+/// type of generic struct '_StringProcessing.Regex'".
+#[test]
+fn rejects_a_namespace_named_like_swift_regex() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "regex")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"regex\" becomes the module `Regex`, which qualifies its types in \
+         module `Example`, the same as the standard-library type `Regex`, which Swift finds \
+         instead of the module. Choose a different namespace"
+    );
+}
+
+/// A module that imports `Foundation` for a `UUID` finds its types before a
+/// module: "'Thing' is not a member type of struct 'Foundation.Data'", and
+/// with a plugin, "... of struct 'Foundation.Date'".
+#[test]
+fn rejects_a_namespace_named_like_a_foundation_type() {
+    mod data {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "data")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+            id: uuid::Uuid,
+        }
+    }
+
+    mod date {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "date")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+            id: uuid::Uuid,
+        }
+    }
+
+    assert_eq!(
+        plain_rejection("Example", &{
+            use data::App;
+            reflect!(App).unwrap()
+        }),
+        "Swift: namespace \"data\" becomes the module `Data`, which qualifies its types in \
+         module `Example`, the same as the Foundation type `Data`, which Swift finds instead of \
+         the module. Choose a different namespace"
+    );
+    assert_eq!(
+        rejection("Example", &{
+            use date::App;
+            reflect!(App).unwrap()
+        }),
+        "Swift: namespace \"date\" becomes the module `Date`, which qualifies its types in \
+         module `Example`, the same as the Foundation type `Date`, which Swift finds instead of \
+         the module. Choose a different namespace"
+    );
+}
+
+/// `Foundation` also brings in the types of the modules it imports:
+/// "'Thing' is not a member type of class 'Dispatch.DispatchQueue'".
+#[test]
+fn rejects_a_namespace_named_like_a_type_foundation_imports() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "dispatch_queue")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    assert_eq!(
+        plain_rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"dispatch_queue\" becomes the module `DispatchQueue`, which qualifies \
+         its types in module `Example`, the same as the Dispatch type `DispatchQueue`, which \
+         `Foundation` imports and Swift finds instead of the module. Choose a different namespace"
+    );
+}
+
+/// The module that breaks is the one that imports `Foundation` and qualifies
+/// the namespace, here `Kit`: "'Thing' is not a member type of struct
+/// 'Foundation.Data'".
+#[test]
+fn rejects_a_namespace_named_like_a_foundation_type_in_a_namespaced_module() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "data")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "kit")]
+    struct Id {
+        id: uuid::Uuid,
+        thing: Thing,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        id: Id,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "Swift: namespace \"data\" becomes the module `Data`, which qualifies its types in \
+         module `Kit`, the same as the Foundation type `Data`, which Swift finds instead of the \
+         module. Choose a different namespace"
+    );
+}
+
+/// `Foundation`'s names are in scope only in a module that imports it
+/// itself. Without a `Uuid` field no module does, even with a plugin, whose
+/// `Serde` runtime imports it; and `App` below imports `Kit`, which imports
+/// `Foundation`. Each of these builds.
+#[test]
+fn allows_a_namespace_named_like_a_foundation_type_where_foundation_is_not_imported() {
+    mod no_uuid {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "data")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    mod through_a_module {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "data")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "kit")]
+        pub struct Id {
+            id: uuid::Uuid,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            id: Id,
+            thing: Thing,
+        }
+    }
+
+    let no_uuid = {
+        use no_uuid::App;
+        reflect!(App).unwrap()
+    };
+    let through_a_module = {
+        use through_a_module::App;
+        reflect!(App).unwrap()
+    };
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .generate(&no_uuid)
+        .unwrap();
+    generates("Example", &no_uuid);
+    generates("Example", &through_a_module);
+}
+
+/// A module that imports `Serde` finds the runtime's types before a module:
+/// "'Thing' is not a member type of protocol 'Serde.Serializer'", and with
+/// the JSON plugin, "... of struct 'Serde.JsonKey'".
+#[test]
+fn rejects_a_namespace_named_like_a_runtime_type() {
+    mod serializer {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "serializer")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    mod json_key {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "json_key")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    assert_eq!(
+        rejection("Example", &{
+            use serializer::App;
+            reflect!(App).unwrap()
+        }),
+        "Swift: namespace \"serializer\" becomes the module `Serializer`, which qualifies its \
+         types in module `Example`, the same as the runtime type `Serde.Serializer`, which Swift \
+         finds instead of the module. Choose a different namespace"
+    );
+    assert_eq!(
+        json_rejection("Example", &{
+            use json_key::App;
+            reflect!(App).unwrap()
+        }),
+        "Swift: namespace \"json_key\" becomes the module `JsonKey`, which qualifies its types \
+         in module `Example`, the same as the runtime type `Serde.JsonKey`, which Swift finds \
+         instead of the module. Choose a different namespace"
+    );
+}
+
+/// The runtime's types are in scope only where the plugins install them:
+/// `serializer` builds with no plugin, and with the JSON plugin, whose part
+/// of the runtime has no `Serializer`; `json_key` builds with the Bincode
+/// plugin.
+#[test]
+fn allows_a_namespace_named_like_a_runtime_type_that_is_not_installed() {
+    mod serializer {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "serializer")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    mod json_key {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "json_key")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+        }
+    }
+
+    let serializer = {
+        use serializer::App;
+        reflect!(App).unwrap()
+    };
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .generate(&serializer)
+        .unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(&serializer)
+        .unwrap();
+    generates("Example", &{
+        use json_key::App;
+        reflect!(App).unwrap()
+    });
 }
 
 /// The Serde runtime imports `Foundation`, which imports `System`: "module

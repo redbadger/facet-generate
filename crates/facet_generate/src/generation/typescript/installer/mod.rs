@@ -48,7 +48,7 @@ use crate::{
         json::JsonPlugin,
         module::{self, Module},
         plugin::EmitterPlugin,
-        typescript::{TypeScript, TypeScriptCodeGenerator, naming},
+        typescript::{TypeScript, TypeScriptCodeGenerator, emitter, naming},
     },
 };
 
@@ -177,6 +177,10 @@ impl Installer {
     /// - a module imports two namespaces under the same name (`my_ns` and
     ///   `MyNs`), or imports one under the name of a type it declares
     ///   (TS2440), as a ROOT type named like a namespace would be.
+    /// - a module imports a namespace under a name that its header already
+    ///   binds: one its plugins import (`serializer` as `Serializer`, TS2300),
+    ///   an alias it exports (`uuid` as `Uuid`, beside a `Uuid` field,
+    ///   TS2395), or a value its plugins' helpers declare (TS2440).
     /// - a module imports a namespace under the name of a global that the
     ///   plugins' code for it constructs (`map` as `Map`, beside a map
     ///   field), which the namespace would shadow (TS2351).
@@ -208,32 +212,7 @@ impl Installer {
                 }),
         )?;
 
-        // `./serde` resolves to `serde.ts` before `serde/index.ts`; the JSON
-        // plugin's `./serde/json` is found either way.
-        let installs_serde = !self.external_packages.contains_key(SERDE_NAMESPACE)
-            && self.plugins.iter().any(|plugin| {
-                plugin
-                    .runtime_files()
-                    .iter()
-                    .any(|file| file.relative_path == "serde/index.ts")
-            });
-        if installs_serde
-            && let Some(name) = modules
-                .keys()
-                .map(|m| m.config().module_name())
-                .filter(|name| !self.external_packages.contains_key(*name))
-                .find(|name| name.eq_ignore_ascii_case(SERDE_NAMESPACE))
-        {
-            let origin = Origin::of_module(name, &self.package_name);
-            return Err(collision::error(
-                LANGUAGE,
-                format_args!("{origin} is written to `{name}.ts`"),
-                "the runtime module `./serde`, which the generated code imports `Serializer` \
-                 and `Deserializer` from",
-                origin.choose_namespace(),
-            )
-            .into());
-        }
+        self.check_serde_file(modules)?;
 
         for (m, registry) in modules {
             let config = m.config();
@@ -244,6 +223,8 @@ impl Installer {
                 .with_plugins(self.plugins.clone())
                 .module_config(registry)?;
 
+            let file = format!("{}.ts", config.module_name());
+            let scope = emitter::module_scope(&module_config, &self.plugins, &file)?;
             let mut bindings = BTreeMap::<String, &str>::new();
             for name in &module_config.referenced_namespaces {
                 let binding = name.to_upper_camel_case();
@@ -273,6 +254,15 @@ impl Installer {
                     )
                     .into());
                 }
+                if let Some((_, clause)) = scope.iter().find(|(name, _)| *name == binding) {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        clause,
+                        origin.choose_namespace(),
+                    )
+                    .into());
+                }
                 if let Some((global, _)) =
                     naming::CONSTRUCTED_GLOBALS
                         .iter()
@@ -297,6 +287,39 @@ impl Installer {
             }
         }
 
+        Ok(())
+    }
+
+    /// Fails when a module is written to `serde.ts` beside the runtime (see
+    /// [`check_namespaces`](Self::check_namespaces)).
+    fn check_serde_file(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        const LANGUAGE: &str = "TypeScript";
+        // `./serde` resolves to `serde.ts` before `serde/index.ts`; the JSON
+        // plugin's `./serde/json` is found either way.
+        let installs_serde = !self.external_packages.contains_key(SERDE_NAMESPACE)
+            && self.plugins.iter().any(|plugin| {
+                plugin
+                    .runtime_files()
+                    .iter()
+                    .any(|file| file.relative_path == "serde/index.ts")
+            });
+        if installs_serde
+            && let Some(name) = modules
+                .keys()
+                .map(|m| m.config().module_name())
+                .filter(|name| !self.external_packages.contains_key(*name))
+                .find(|name| name.eq_ignore_ascii_case(SERDE_NAMESPACE))
+        {
+            let origin = Origin::of_module(name, &self.package_name);
+            return Err(collision::error(
+                LANGUAGE,
+                format_args!("{origin} is written to `{name}.ts`"),
+                "the runtime module `./serde`, which the generated code imports `Serializer` \
+                 and `Deserializer` from",
+                origin.choose_namespace(),
+            )
+            .into());
+        }
         Ok(())
     }
 

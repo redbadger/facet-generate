@@ -339,6 +339,178 @@ fn allows_a_namespace_named_serde_beside_the_json_runtime() {
     assert!(dir.path().join("serde/json.ts").exists());
 }
 
+/// The Bincode plugin imports `Serializer` and `Deserializer`: "TS2300:
+/// Duplicate identifier 'Serializer'".
+#[test]
+fn rejects_a_namespace_named_like_a_plugin_import() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serializer")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"serializer\" is imported as `Serializer` in `Example.ts`, the \
+         same as `Serializer`, which `Example.ts` imports from `./serde`. Choose a different \
+         namespace"
+    );
+}
+
+/// A module with a `Uuid` field exports the `Uuid` alias: "TS2395:
+/// Individual declarations in merged declaration 'Uuid' must be all exported
+/// or all local".
+#[test]
+fn rejects_a_namespace_named_like_an_exported_alias() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "uuid")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("Example", dir.path())
+        .generate(&reflect!(App).unwrap())
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "TypeScript: namespace \"uuid\" is imported as `Uuid` in `Example.ts`, the same as the \
+         type `Uuid`, which `Example.ts` exports. Choose a different namespace"
+    );
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        error.to_string()
+    );
+}
+
+/// The Bincode plugin's `Uuid` helpers declare `const HEX`: "TS2440: Import
+/// declaration conflicts with local declaration of 'HEX'".
+#[test]
+fn rejects_a_namespace_named_like_a_plugin_helper() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "h_e_x")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+        id: uuid::Uuid,
+    }
+
+    assert_eq!(
+        rejection("Example", &reflect!(App).unwrap()),
+        "TypeScript: namespace \"h_e_x\" is imported as `HEX` in `Example.ts`, the same as `HEX`, \
+         which `Example.ts` declares. Choose a different namespace"
+    );
+}
+
+/// Each name is only in scope where the module binds it, so each of these
+/// type-checks: `serializer` with no plugin, or with the JSON plugin, which
+/// imports its runtime as `$json`; `uuid` with no `Uuid` field; and, with
+/// the Bincode plugin, `h_e_x` with no `Uuid` helpers, and `seq`, `optional`, `tuple` and `list_tuple` beside
+/// their aliases, which are local types that merge with a namespace import.
+#[test]
+fn allows_namespaces_named_like_names_the_module_does_not_bind() {
+    mod serializer {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "serializer")]
+        pub struct Thing {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "uuid")]
+        pub struct Id {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            thing: Thing,
+            id: Id,
+        }
+    }
+
+    mod aliases {
+        use super::*;
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "seq")]
+        pub struct A {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "optional")]
+        pub struct B {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "tuple")]
+        pub struct C {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "list_tuple")]
+        pub struct D {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        #[facet(fg::namespace = "h_e_x")]
+        pub struct E {
+            x: u32,
+        }
+
+        #[derive(Facet)]
+        pub struct App {
+            a: A,
+            b: B,
+            c: C,
+            d: D,
+            e: E,
+            seq: Vec<u32>,
+            optional: Option<u32>,
+            tuple: (u32, u32),
+            list_tuple: [u32; 3],
+        }
+    }
+
+    let serializer = {
+        use serializer::App;
+        reflect!(App).unwrap()
+    };
+    for plugins in 0..2 {
+        let dir = tempfile::tempdir().unwrap();
+        let mut installer = Installer::new("Example", dir.path());
+        if plugins == 1 {
+            installer = installer.plugin(JsonPlugin);
+        }
+        installer.generate(&serializer).unwrap();
+    }
+    generates("Example", &{
+        use aliases::App;
+        reflect!(App).unwrap()
+    });
+}
+
 /// A global written only as a type (`Map<K, V>`, `type bytes = Uint8Array`)
 /// is still found through a namespace import of the same name, and one that
 /// nothing constructs is not written at all.
