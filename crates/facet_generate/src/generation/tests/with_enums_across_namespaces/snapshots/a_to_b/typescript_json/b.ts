@@ -1,4 +1,4 @@
-import type { Serializer, Deserializer } from "./serde";
+import * as $json from "./serde/json";
 type uint8 = number;
 
 export type Signal =
@@ -16,33 +16,29 @@ export function matchSignal<R>(value: Signal, cases: {
     return cases[value.kind as Signal["kind"]](value as never);
 }
 
-export function serializeSignal(value: Signal, serializer: Serializer): void {
+export function toJsonSignal(value: Signal): $json.JsonValue {
     switch (value.kind) {
-        case "Level": {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeU8(value.value);
-            break;
-        }
-        case "Silent": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Level": return { "Level": value.value };
+        case "Silent": return "Silent";
+        default: throw $json.unknownVariant("Signal", value);
     }
 }
 
-export function deserializeSignal(deserializer: Deserializer): Signal {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            const value = deserializer.deserializeU8();
-            return { kind: "Level", value };
-        }
-        case 1: {
-            return { kind: "Silent" };
-        }
-        default: throw new Error("Unknown variant index for Signal: " + index);
+export function fromJsonSignal(json: unknown): Signal {
+    const [variant, content] = $json.readExternal(json, "Signal", ["Silent"]);
+    switch (variant) {
+        case "Level": return { kind: "Level", value: $json.readU8(content) };
+        case "Silent": return { kind: "Silent" };
+        default: throw $json.unknownVariant("Signal", variant);
     }
+}
+
+export function jsonSerializeSignal(value: Signal): string {
+    return $json.stringify(toJsonSignal(value));
+}
+
+export function jsonDeserializeSignal(text: string): Signal {
+    return fromJsonSignal($json.parse(text));
 }
 
 export type Status =
@@ -60,29 +56,27 @@ export function matchStatus<R>(value: Status, cases: {
     return cases[value.kind as Status["kind"]](value as never);
 }
 
-export function serializeStatus(value: Status, serializer: Serializer): void {
+export function toJsonStatus(value: Status): $json.JsonValue {
     switch (value.kind) {
-        case "Up": {
-            serializer.serializeVariantIndex(0);
-            break;
-        }
-        case "Down": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Up": return "Up";
+        case "Down": return "Down";
+        default: throw $json.unknownVariant("Status", value);
     }
 }
 
-export function deserializeStatus(deserializer: Deserializer): Status {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            return { kind: "Up" };
-        }
-        case 1: {
-            return { kind: "Down" };
-        }
-        default: throw new Error("Unknown variant index for Status: " + index);
+export function fromJsonStatus(json: unknown): Status {
+    const [variant] = $json.readExternal(json, "Status", ["Up", "Down"]);
+    switch (variant) {
+        case "Up": return { kind: "Up" };
+        case "Down": return { kind: "Down" };
+        default: throw $json.unknownVariant("Status", variant);
     }
+}
+
+export function jsonSerializeStatus(value: Status): string {
+    return $json.stringify(toJsonStatus(value));
+}
+
+export function jsonDeserializeStatus(text: string): Status {
+    return fromJsonStatus($json.parse(text));
 }

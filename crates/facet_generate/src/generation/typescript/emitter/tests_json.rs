@@ -1,14 +1,9 @@
 //! Snapshot tests for the TypeScript emitter — **JSON encoding**.
 //!
-//! Mirrors the structure of [`tests`](super::tests) but uses [`JsonPlugin`]
-//! so that every generated type includes `Serializer`/`Deserializer`
-//! interface-based serialization methods.
-//!
-//! Both JSON and Bincode use the same hand-written `serialize`/`deserialize`
-//! method pattern in TypeScript (unlike Kotlin, where JSON uses
-//! annotation-based `kotlinx.serialization`). The only difference is which
-//! runtime implementation (`JsonSerializer`/`BincodeSerializer`) is provided
-//! at call time.
+//! Mirrors the structure of [`tests`](super::tests) but uses [`JsonPlugin`],
+//! so that every class has static `toJson` / `fromJson` and `jsonSerialize` /
+//! `jsonDeserialize` methods, and every enum the same functions beside it,
+//! writing and reading the JSON `serde_json` does.
 
 #![allow(clippy::too_many_lines)]
 use std::{
@@ -29,21 +24,31 @@ fn unit_struct_1() {
     struct UnitStruct;
 
     let actual = emit!(UnitStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class UnitStruct {
         constructor () {
         }
 
-        public serialize(serializer: Serializer): void {
+        static toJson(value: UnitStruct): $json.JsonValue {
+            return null;
         }
 
-        static deserialize(deserializer: Deserializer): UnitStruct {
+        static fromJson(json: unknown): UnitStruct {
+            $json.readUnitStruct(json, "UnitStruct");
             return new UnitStruct();
         }
+
+        static jsonSerialize(value: UnitStruct): string {
+            return $json.stringify(UnitStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): UnitStruct {
+            return UnitStruct.fromJson($json.parse(text));
+        }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -52,21 +57,31 @@ fn unit_struct_2() {
     struct UnitStruct {}
 
     let actual = emit!(UnitStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class UnitStruct {
         constructor () {
         }
 
-        public serialize(serializer: Serializer): void {
+        static toJson(value: UnitStruct): $json.JsonValue {
+            return null;
         }
 
-        static deserialize(deserializer: Deserializer): UnitStruct {
+        static fromJson(json: unknown): UnitStruct {
+            $json.readUnitStruct(json, "UnitStruct");
             return new UnitStruct();
         }
+
+        static jsonSerialize(value: UnitStruct): string {
+            return $json.stringify(UnitStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): UnitStruct {
+            return UnitStruct.fromJson($json.parse(text));
+        }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -82,13 +97,20 @@ fn newtype_struct() {
         constructor (public value: str) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.value);
+        static toJson(value: NewType): $json.JsonValue {
+            return value.value;
         }
 
-        static deserialize(deserializer: Deserializer): NewType {
-            const value = deserializer.deserializeStr();
-            return new NewType(value);
+        static fromJson(json: unknown): NewType {
+            return new NewType($json.readStr(json));
+        }
+
+        static jsonSerialize(value: NewType): string {
+            return $json.stringify(NewType.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): NewType {
+            return NewType.fromJson($json.parse(text));
         }
     }
     ");
@@ -107,15 +129,20 @@ fn tuple_struct() {
         constructor (public field0: str, public field1: int32) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.field0);
-            serializer.serializeI32(this.field1);
+        static toJson(value: TupleStruct): $json.JsonValue {
+            return [value.field0, value.field1];
         }
 
-        static deserialize(deserializer: Deserializer): TupleStruct {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            return new TupleStruct(field0,field1);
+        static fromJson(json: unknown): TupleStruct {
+            return new TupleStruct(...$json.readTuple<[str, int32]>(json, [$json.readStr, $json.readI32]));
+        }
+
+        static jsonSerialize(value: TupleStruct): string {
+            return $json.stringify(TupleStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): TupleStruct {
+            return TupleStruct.fromJson($json.parse(text));
         }
     }
     ");
@@ -144,53 +171,65 @@ fn struct_with_fields_of_primitive_types() {
     }
 
     let actual = emit!(StructWithFields as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class StructWithFields {
         constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeUnit(this.unit);
-            serializer.serializeBool(this.bool);
-            serializer.serializeI8(this.i8);
-            serializer.serializeI16(this.i16);
-            serializer.serializeI32(this.i32);
-            serializer.serializeI64(this.i64);
-            serializer.serializeI128(this.i128);
-            serializer.serializeU8(this.u8);
-            serializer.serializeU16(this.u16);
-            serializer.serializeU32(this.u32);
-            serializer.serializeU64(this.u64);
-            serializer.serializeU128(this.u128);
-            serializer.serializeF32(this.f32);
-            serializer.serializeF64(this.f64);
-            serializer.serializeChar(this.char);
-            serializer.serializeStr(this.string);
+        static toJson(value: StructWithFields): $json.JsonValue {
+            return {
+                "unit": null,
+                "bool": value.bool,
+                "i8": value.i8,
+                "i16": value.i16,
+                "i32": value.i32,
+                "i64": $json.writeBigInt(value.i64),
+                "i128": $json.writeBigInt(value.i128),
+                "u8": value.u8,
+                "u16": value.u16,
+                "u32": value.u32,
+                "u64": $json.writeBigInt(value.u64),
+                "u128": $json.writeBigInt(value.u128),
+                "f32": $json.writeFloat(value.f32),
+                "f64": $json.writeFloat(value.f64),
+                "char": value.char,
+                "string": value.string,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): StructWithFields {
-            const unit = deserializer.deserializeUnit();
-            const bool = deserializer.deserializeBool();
-            const i8 = deserializer.deserializeI8();
-            const i16 = deserializer.deserializeI16();
-            const i32 = deserializer.deserializeI32();
-            const i64 = deserializer.deserializeI64();
-            const i128 = deserializer.deserializeI128();
-            const u8 = deserializer.deserializeU8();
-            const u16 = deserializer.deserializeU16();
-            const u32 = deserializer.deserializeU32();
-            const u64 = deserializer.deserializeU64();
-            const u128 = deserializer.deserializeU128();
-            const f32 = deserializer.deserializeF32();
-            const f64 = deserializer.deserializeF64();
-            const char = deserializer.deserializeChar();
-            const string = deserializer.deserializeStr();
-            return new StructWithFields(unit,bool,i8,i16,i32,i64,i128,u8,u16,u32,u64,u128,f32,f64,char,string);
+        static fromJson(json: unknown): StructWithFields {
+            const obj = $json.readObject(json, "StructWithFields");
+            return new StructWithFields(
+                $json.readUnit($json.field(obj, "unit")),
+                $json.readBool($json.field(obj, "bool")),
+                $json.readI8($json.field(obj, "i8")),
+                $json.readI16($json.field(obj, "i16")),
+                $json.readI32($json.field(obj, "i32")),
+                $json.readI64($json.field(obj, "i64")),
+                $json.readI128($json.field(obj, "i128")),
+                $json.readU8($json.field(obj, "u8")),
+                $json.readU16($json.field(obj, "u16")),
+                $json.readU32($json.field(obj, "u32")),
+                $json.readU64($json.field(obj, "u64")),
+                $json.readU128($json.field(obj, "u128")),
+                $json.readF32($json.field(obj, "f32")),
+                $json.readF64($json.field(obj, "f64")),
+                $json.readChar($json.field(obj, "char")),
+                $json.readStr($json.field(obj, "string")),
+            );
+        }
+
+        static jsonSerialize(value: StructWithFields): string {
+            return $json.stringify(StructWithFields.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): StructWithFields {
+            return StructWithFields.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -214,20 +253,32 @@ fn struct_with_fields_of_user_types() {
     }
 
     let actual = emit!(Outer as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class Inner1 {
         constructor (public field1: str) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.field1);
+        static toJson(value: Inner1): $json.JsonValue {
+            return {
+                "field1": value.field1,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): Inner1 {
-            const field1 = deserializer.deserializeStr();
-            return new Inner1(field1);
+        static fromJson(json: unknown): Inner1 {
+            const obj = $json.readObject(json, "Inner1");
+            return new Inner1(
+                $json.readStr($json.field(obj, "field1")),
+            );
+        }
+
+        static jsonSerialize(value: Inner1): string {
+            return $json.stringify(Inner1.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Inner1 {
+            return Inner1.fromJson($json.parse(text));
         }
     }
 
@@ -236,13 +287,20 @@ fn struct_with_fields_of_user_types() {
         constructor (public value: str) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.value);
+        static toJson(value: Inner2): $json.JsonValue {
+            return value.value;
         }
 
-        static deserialize(deserializer: Deserializer): Inner2 {
-            const value = deserializer.deserializeStr();
-            return new Inner2(value);
+        static fromJson(json: unknown): Inner2 {
+            return new Inner2($json.readStr(json));
+        }
+
+        static jsonSerialize(value: Inner2): string {
+            return $json.stringify(Inner2.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Inner2 {
+            return Inner2.fromJson($json.parse(text));
         }
     }
 
@@ -251,15 +309,20 @@ fn struct_with_fields_of_user_types() {
         constructor (public field0: str, public field1: int32) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.field0);
-            serializer.serializeI32(this.field1);
+        static toJson(value: Inner3): $json.JsonValue {
+            return [value.field0, value.field1];
         }
 
-        static deserialize(deserializer: Deserializer): Inner3 {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            return new Inner3(field0,field1);
+        static fromJson(json: unknown): Inner3 {
+            return new Inner3(...$json.readTuple<[str, int32]>(json, [$json.readStr, $json.readI32]));
+        }
+
+        static jsonSerialize(value: Inner3): string {
+            return $json.stringify(Inner3.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Inner3 {
+            return Inner3.fromJson($json.parse(text));
         }
     }
 
@@ -268,20 +331,32 @@ fn struct_with_fields_of_user_types() {
         constructor (public one: Inner1, public two: Inner2, public three: Inner3) {
         }
 
-        public serialize(serializer: Serializer): void {
-            this.one.serialize(serializer);
-            this.two.serialize(serializer);
-            this.three.serialize(serializer);
+        static toJson(value: Outer): $json.JsonValue {
+            return {
+                "one": Inner1.toJson(value.one),
+                "two": Inner2.toJson(value.two),
+                "three": Inner3.toJson(value.three),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): Outer {
-            const one = Inner1.deserialize(deserializer);
-            const two = Inner2.deserialize(deserializer);
-            const three = Inner3.deserialize(deserializer);
-            return new Outer(one,two,three);
+        static fromJson(json: unknown): Outer {
+            const obj = $json.readObject(json, "Outer");
+            return new Outer(
+                Inner1.fromJson($json.field(obj, "one")),
+                Inner2.fromJson($json.field(obj, "two")),
+                Inner3.fromJson($json.field(obj, "three")),
+            );
+        }
+
+        static jsonSerialize(value: Outer): string {
+            return $json.stringify(Outer.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Outer {
+            return Outer.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -292,26 +367,35 @@ fn struct_with_field_that_is_a_2_tuple() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32]>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.one[0]);
-            serializer.serializeI32(this.one[1]);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "one": [value.one[0], value.one[1]],
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            const one = [field0, field1] as [str, int32];
-            return new MyStruct(one);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readTuple<[str, int32]>($json.field(obj, "one"), [$json.readStr, $json.readI32]),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -322,28 +406,35 @@ fn struct_with_field_that_is_a_3_tuple() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16]>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.one[0]);
-            serializer.serializeI32(this.one[1]);
-            serializer.serializeU16(this.one[2]);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "one": [value.one[0], value.one[1], value.one[2]],
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            const field2 = deserializer.deserializeU16();
-            const one = [field0, field1, field2] as [str, int32, uint16];
-            return new MyStruct(one);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readTuple<[str, int32, uint16]>($json.field(obj, "one"), [$json.readStr, $json.readI32, $json.readU16]),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -354,30 +445,35 @@ fn struct_with_field_that_is_a_4_tuple() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public one: Tuple<[str, int32, uint16, float32]>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.one[0]);
-            serializer.serializeI32(this.one[1]);
-            serializer.serializeU16(this.one[2]);
-            serializer.serializeF32(this.one[3]);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "one": [value.one[0], value.one[1], value.one[2], $json.writeFloat(value.one[3])],
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const field0 = deserializer.deserializeStr();
-            const field1 = deserializer.deserializeI32();
-            const field2 = deserializer.deserializeU16();
-            const field3 = deserializer.deserializeF32();
-            const one = [field0, field1, field2, field3] as [str, int32, uint16, float32];
-            return new MyStruct(one);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readTuple<[str, int32, uint16, float32]>($json.field(obj, "one"), [$json.readStr, $json.readI32, $json.readU16, $json.readF32]),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -414,38 +510,31 @@ fn enum_with_unit_variants() {
         return cases[value.kind as EnumWithUnitVariants["kind"]](value as never);
     }
 
-    export function serializeEnumWithUnitVariants(value: EnumWithUnitVariants, serializer: Serializer): void {
+    export function toJsonEnumWithUnitVariants(value: EnumWithUnitVariants): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                break;
-            }
-            case "Variant2": {
-                serializer.serializeVariantIndex(1);
-                break;
-            }
-            case "Variant3": {
-                serializer.serializeVariantIndex(2);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return "Variant1";
+            case "Variant2": return "Variant2";
+            case "Variant3": return "Variant3";
+            default: throw $json.unknownVariant("EnumWithUnitVariants", value);
         }
     }
 
-    export function deserializeEnumWithUnitVariants(deserializer: Deserializer): EnumWithUnitVariants {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                return { kind: "Variant1" };
-            }
-            case 1: {
-                return { kind: "Variant2" };
-            }
-            case 2: {
-                return { kind: "Variant3" };
-            }
-            default: throw new Error("Unknown variant index for EnumWithUnitVariants: " + index);
+    export function fromJsonEnumWithUnitVariants(json: unknown): EnumWithUnitVariants {
+        const [variant] = $json.readExternal(json, "EnumWithUnitVariants", ["Variant1", "Variant2", "Variant3"]);
+        switch (variant) {
+            case "Variant1": return { kind: "Variant1" };
+            case "Variant2": return { kind: "Variant2" };
+            case "Variant3": return { kind: "Variant3" };
+            default: throw $json.unknownVariant("EnumWithUnitVariants", variant);
         }
+    }
+
+    export function jsonSerializeEnumWithUnitVariants(value: EnumWithUnitVariants): string {
+        return $json.stringify(toJsonEnumWithUnitVariants(value));
+    }
+
+    export function jsonDeserializeEnumWithUnitVariants(text: string): EnumWithUnitVariants {
+        return fromJsonEnumWithUnitVariants($json.parse(text));
     }
     "#);
 }
@@ -475,24 +564,27 @@ fn enum_with_unit_struct_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return "Variant1";
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                return { kind: "Variant1" };
-            }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant] = $json.readExternal(json, "MyEnum", ["Variant1"]);
+        switch (variant) {
+            case "Variant1": return { kind: "Variant1" };
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -521,26 +613,27 @@ fn enum_with_1_tuple_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                serializer.serializeStr(value.value);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return { "Variant1": value.value };
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                const value = deserializer.deserializeStr();
-                return { kind: "Variant1", value };
-            }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant, content] = $json.readExternal(json, "MyEnum", []);
+        switch (variant) {
+            case "Variant1": return { kind: "Variant1", value: $json.readStr(content) };
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -574,35 +667,29 @@ fn enum_with_newtype_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                serializer.serializeStr(value.value);
-                break;
-            }
-            case "Variant2": {
-                serializer.serializeVariantIndex(1);
-                serializer.serializeI32(value.value);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return { "Variant1": value.value };
+            case "Variant2": return { "Variant2": value.value };
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                const value = deserializer.deserializeStr();
-                return { kind: "Variant1", value };
-            }
-            case 1: {
-                const value = deserializer.deserializeI32();
-                return { kind: "Variant2", value };
-            }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant, content] = $json.readExternal(json, "MyEnum", []);
+        switch (variant) {
+            case "Variant1": return { kind: "Variant1", value: $json.readStr(content) };
+            case "Variant2": return { kind: "Variant2", value: $json.readI32(content) };
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -636,41 +723,35 @@ fn enum_with_tuple_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                serializer.serializeStr(value.field0);
-                serializer.serializeI32(value.field1);
-                break;
-            }
-            case "Variant2": {
-                serializer.serializeVariantIndex(1);
-                serializer.serializeBool(value.field0);
-                serializer.serializeF64(value.field1);
-                serializer.serializeU8(value.field2);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return { "Variant1": [value.field0, value.field1] };
+            case "Variant2": return { "Variant2": [value.field0, $json.writeFloat(value.field1), value.field2] };
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                const field0 = deserializer.deserializeStr();
-                const field1 = deserializer.deserializeI32();
-                return { kind: "Variant1", field0, field1 };
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant, content] = $json.readExternal(json, "MyEnum", []);
+        switch (variant) {
+            case "Variant1": {
+                const items = $json.readTuple<[str, int32]>(content, [$json.readStr, $json.readI32]);
+                return { kind: "Variant1", field0: items[0], field1: items[1] };
             }
-            case 1: {
-                const field0 = deserializer.deserializeBool();
-                const field1 = deserializer.deserializeF64();
-                const field2 = deserializer.deserializeU8();
-                return { kind: "Variant2", field0, field1, field2 };
+            case "Variant2": {
+                const items = $json.readTuple<[bool, float64, uint8]>(content, [$json.readBool, $json.readF64, $json.readU8]);
+                return { kind: "Variant2", field0: items[0], field1: items[1], field2: items[2] };
             }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -699,28 +780,39 @@ fn enum_with_struct_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Variant1": {
-                serializer.serializeVariantIndex(0);
-                serializer.serializeStr(value.field1);
-                serializer.serializeI32(value.field2);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Variant1": return {
+                "Variant1": {
+                    "field1": value.field1,
+                    "field2": value.field2,
+                },
+            };
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                const field1 = deserializer.deserializeStr();
-                const field2 = deserializer.deserializeI32();
-                return { kind: "Variant1", field1, field2 };
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant, content] = $json.readExternal(json, "MyEnum", []);
+        switch (variant) {
+            case "Variant1": {
+                const obj = $json.readObject(content, "MyEnum::Variant1");
+                return {
+                    kind: "Variant1",
+                    field1: $json.readStr($json.field(obj, "field1")),
+                    field2: $json.readI32($json.field(obj, "field2")),
+                };
             }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -764,53 +856,46 @@ fn enum_with_mixed_variants() {
         return cases[value.kind as MyEnum["kind"]](value as never);
     }
 
-    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+    export function toJsonMyEnum(value: MyEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Unit": {
-                serializer.serializeVariantIndex(0);
-                break;
-            }
-            case "NewType": {
-                serializer.serializeVariantIndex(1);
-                serializer.serializeStr(value.value);
-                break;
-            }
-            case "Tuple": {
-                serializer.serializeVariantIndex(2);
-                serializer.serializeStr(value.field0);
-                serializer.serializeI32(value.field1);
-                break;
-            }
-            case "Struct": {
-                serializer.serializeVariantIndex(3);
-                serializer.serializeBool(value.field);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Unit": return "Unit";
+            case "NewType": return { "NewType": value.value };
+            case "Tuple": return { "Tuple": [value.field0, value.field1] };
+            case "Struct": return {
+                "Struct": {
+                    "field": value.field,
+                },
+            };
+            default: throw $json.unknownVariant("MyEnum", value);
         }
     }
 
-    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                return { kind: "Unit" };
+    export function fromJsonMyEnum(json: unknown): MyEnum {
+        const [variant, content] = $json.readExternal(json, "MyEnum", ["Unit"]);
+        switch (variant) {
+            case "Unit": return { kind: "Unit" };
+            case "NewType": return { kind: "NewType", value: $json.readStr(content) };
+            case "Tuple": {
+                const items = $json.readTuple<[str, int32]>(content, [$json.readStr, $json.readI32]);
+                return { kind: "Tuple", field0: items[0], field1: items[1] };
             }
-            case 1: {
-                const value = deserializer.deserializeStr();
-                return { kind: "NewType", value };
+            case "Struct": {
+                const obj = $json.readObject(content, "MyEnum::Struct");
+                return {
+                    kind: "Struct",
+                    field: $json.readBool($json.field(obj, "field")),
+                };
             }
-            case 2: {
-                const field0 = deserializer.deserializeStr();
-                const field1 = deserializer.deserializeI32();
-                return { kind: "Tuple", field0, field1 };
-            }
-            case 3: {
-                const field = deserializer.deserializeBool();
-                return { kind: "Struct", field };
-            }
-            default: throw new Error("Unknown variant index for MyEnum: " + index);
+            default: throw $json.unknownVariant("MyEnum", variant);
         }
+    }
+
+    export function jsonSerializeMyEnum(value: MyEnum): string {
+        return $json.stringify(toJsonMyEnum(value));
+    }
+
+    export function jsonDeserializeMyEnum(text: string): MyEnum {
+        return fromJsonMyEnum($json.parse(text));
     }
     "#);
 }
@@ -825,43 +910,39 @@ fn struct_with_vec_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public items: Seq<str>, public numbers: Seq<int32>, public nested_items: Seq<Seq<str>>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeArray(this.items, serializer, (item, serializer) => {
-                serializer.serializeStr(item);
-            });
-            serializeArray(this.numbers, serializer, (item, serializer) => {
-                serializer.serializeI32(item);
-            });
-            serializeArray(this.nested_items, serializer, (item, serializer) => {
-                serializeArray(item, serializer, (item, serializer) => {
-                    serializer.serializeStr(item);
-                });
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "items": value.items,
+                "numbers": value.numbers,
+                "nested_items": value.nested_items,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const items = deserializeArray(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const numbers = deserializeArray(deserializer, (deserializer) => {
-                return deserializer.deserializeI32();
-            });
-            const nested_items = deserializeArray(deserializer, (deserializer) => {
-                return deserializeArray(deserializer, (deserializer) => {
-                    return deserializer.deserializeStr();
-                });
-            });
-            return new MyStruct(items,numbers,nested_items);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readSeq($json.field(obj, "items"), $json.readStr),
+                $json.readSeq($json.field(obj, "numbers"), $json.readI32),
+                $json.readSeq($json.field(obj, "nested_items"), (j0) => $json.readSeq(j0, $json.readStr)),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -875,39 +956,39 @@ fn struct_with_option_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public optional_string: Optional<str>, public optional_number: Optional<int32>, public optional_bool: Optional<bool>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeOption(this.optional_string, serializer, (value, serializer) => {
-                serializer.serializeStr(value);
-            });
-            serializeOption(this.optional_number, serializer, (value, serializer) => {
-                serializer.serializeI32(value);
-            });
-            serializeOption(this.optional_bool, serializer, (value, serializer) => {
-                serializer.serializeBool(value);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "optional_string": value.optional_string,
+                "optional_number": value.optional_number,
+                "optional_bool": value.optional_bool,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const optional_string = deserializeOption(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const optional_number = deserializeOption(deserializer, (deserializer) => {
-                return deserializer.deserializeI32();
-            });
-            const optional_bool = deserializeOption(deserializer, (deserializer) => {
-                return deserializer.deserializeBool();
-            });
-            return new MyStruct(optional_string,optional_number,optional_bool);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readOption($json.field(obj, "optional_string"), $json.readStr),
+                $json.readOption($json.field(obj, "optional_number"), $json.readI32),
+                $json.readOption($json.field(obj, "optional_bool"), $json.readBool),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -919,39 +1000,37 @@ fn struct_with_hashmap_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeMap(this.string_to_int, serializer, (key, value, serializer) => {
-                serializer.serializeStr(key);
-                serializer.serializeI32(value);
-            });
-            serializeMap(this.int_to_bool, serializer, (key, value, serializer) => {
-                serializer.serializeI32(key);
-                serializer.serializeBool(value);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "string_to_int": $json.writeMap(value.string_to_int, (k0) => k0, (v0) => v0),
+                "int_to_bool": $json.writeMap(value.int_to_bool, (k0) => `${k0}`, (v0) => v0),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const string_to_int = deserializeMap(deserializer, (deserializer) => {
-                const key = deserializer.deserializeStr();
-                const value = deserializer.deserializeI32();
-                return [key, value];
-            });
-            const int_to_bool = deserializeMap(deserializer, (deserializer) => {
-                const key = deserializer.deserializeI32();
-                const value = deserializer.deserializeBool();
-                return [key, value];
-            });
-            return new MyStruct(string_to_int,int_to_bool);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readMap($json.field(obj, "string_to_int"), (k0) => k0, $json.readI32),
+                $json.readMap($json.field(obj, "int_to_bool"), (k0) => $json.readI32($json.keyLiteral(k0)), $json.readBool),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -966,88 +1045,43 @@ fn struct_with_nested_generics() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public optional_list: Optional<Seq<str>>, public list_of_optionals: Seq<Optional<int32>>, public map_to_list: Map<str,Seq<bool>>, public optional_map: Optional<Map<str,int32>>, public complex: Seq<Optional<Map<str,Seq<bool>>>>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeOption(this.optional_list, serializer, (value, serializer) => {
-                serializeArray(value, serializer, (item, serializer) => {
-                    serializer.serializeStr(item);
-                });
-            });
-            serializeArray(this.list_of_optionals, serializer, (item, serializer) => {
-                serializeOption(item, serializer, (value, serializer) => {
-                    serializer.serializeI32(value);
-                });
-            });
-            serializeMap(this.map_to_list, serializer, (key, value, serializer) => {
-                serializer.serializeStr(key);
-                serializeArray(value, serializer, (item, serializer) => {
-                    serializer.serializeBool(item);
-                });
-            });
-            serializeOption(this.optional_map, serializer, (value, serializer) => {
-                serializeMap(value, serializer, (key, value, serializer) => {
-                    serializer.serializeStr(key);
-                    serializer.serializeI32(value);
-                });
-            });
-            serializeArray(this.complex, serializer, (item, serializer) => {
-                serializeOption(item, serializer, (value, serializer) => {
-                    serializeMap(value, serializer, (key, value, serializer) => {
-                        serializer.serializeStr(key);
-                        serializeArray(value, serializer, (item, serializer) => {
-                            serializer.serializeBool(item);
-                        });
-                    });
-                });
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "optional_list": value.optional_list,
+                "list_of_optionals": value.list_of_optionals,
+                "map_to_list": $json.writeMap(value.map_to_list, (k0) => k0, (v0) => v0),
+                "optional_map": (value.optional_map === null ? null : $json.writeMap(value.optional_map, (k0) => k0, (v0) => v0)),
+                "complex": value.complex.map((v0) => (v0 === null ? null : $json.writeMap(v0, (k1) => k1, (v1) => v1))),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const optional_list = deserializeOption(deserializer, (deserializer) => {
-                return deserializeArray(deserializer, (deserializer) => {
-                    return deserializer.deserializeStr();
-                });
-            });
-            const list_of_optionals = deserializeArray(deserializer, (deserializer) => {
-                return deserializeOption(deserializer, (deserializer) => {
-                    return deserializer.deserializeI32();
-                });
-            });
-            const map_to_list = deserializeMap(deserializer, (deserializer) => {
-                const key = deserializer.deserializeStr();
-                const value = deserializeArray(deserializer, (deserializer) => {
-                    return deserializer.deserializeBool();
-                });
-                return [key, value];
-            });
-            const optional_map = deserializeOption(deserializer, (deserializer) => {
-                return deserializeMap(deserializer, (deserializer) => {
-                    const key = deserializer.deserializeStr();
-                    const value = deserializer.deserializeI32();
-                    return [key, value];
-                });
-            });
-            const complex = deserializeArray(deserializer, (deserializer) => {
-                return deserializeOption(deserializer, (deserializer) => {
-                    return deserializeMap(deserializer, (deserializer) => {
-                        const key = deserializer.deserializeStr();
-                        const value = deserializeArray(deserializer, (deserializer) => {
-                            return deserializer.deserializeBool();
-                        });
-                        return [key, value];
-                    });
-                });
-            });
-            return new MyStruct(optional_list,list_of_optionals,map_to_list,optional_map,complex);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readOption($json.field(obj, "optional_list"), (j0) => $json.readSeq(j0, $json.readStr)),
+                $json.readSeq($json.field(obj, "list_of_optionals"), (j0) => $json.readOption(j0, $json.readI32)),
+                $json.readMap($json.field(obj, "map_to_list"), (k0) => k0, (j0) => $json.readSeq(j0, $json.readBool)),
+                $json.readOption($json.field(obj, "optional_map"), (j0) => $json.readMap(j0, (k1) => k1, $json.readI32)),
+                $json.readSeq($json.field(obj, "complex"), (j0) => $json.readOption(j0, (j1) => $json.readMap(j1, (k2) => k2, (j2) => $json.readSeq(j2, $json.readBool)))),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1061,42 +1095,39 @@ fn struct_with_array_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public fixed_array: ListTuple<[int32]>, public byte_array: ListTuple<[uint8]>, public string_array: ListTuple<[str]>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeTupleArray(this.fixed_array, serializer, (item, serializer) => {
-                serializer.serializeI32(item[0]);
-            });
-            serializeTupleArray(this.byte_array, serializer, (item, serializer) => {
-                serializer.serializeU8(item[0]);
-            });
-            serializeTupleArray(this.string_array, serializer, (item, serializer) => {
-                serializer.serializeStr(item[0]);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "fixed_array": value.fixed_array.map((v0) => v0[0]),
+                "byte_array": value.byte_array.map((v0) => v0[0]),
+                "string_array": value.string_array.map((v0) => v0[0]),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const fixed_array = deserializeTupleArray(deserializer, 5, (deserializer) => {
-                const item = deserializer.deserializeI32();
-                return [item];
-            });
-            const byte_array = deserializeTupleArray(deserializer, 32, (deserializer) => {
-                const item = deserializer.deserializeU8();
-                return [item];
-            });
-            const string_array = deserializeTupleArray(deserializer, 3, (deserializer) => {
-                const item = deserializer.deserializeStr();
-                return [item];
-            });
-            return new MyStruct(fixed_array,byte_array,string_array);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readSeq($json.field(obj, "fixed_array"), (j0): [int32] => [$json.readI32(j0)], 5),
+                $json.readSeq($json.field(obj, "byte_array"), (j0): [uint8] => [$json.readU8(j0)], 32),
+                $json.readSeq($json.field(obj, "string_array"), (j0): [str] => [$json.readStr(j0)], 3),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1108,39 +1139,37 @@ fn struct_with_btreemap_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public string_to_int: Map<str,int32>, public int_to_bool: Map<int32,bool>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeMap(this.string_to_int, serializer, (key, value, serializer) => {
-                serializer.serializeStr(key);
-                serializer.serializeI32(value);
-            });
-            serializeMap(this.int_to_bool, serializer, (key, value, serializer) => {
-                serializer.serializeI32(key);
-                serializer.serializeBool(value);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "string_to_int": $json.writeMap(value.string_to_int, (k0) => k0, (v0) => v0),
+                "int_to_bool": $json.writeMap(value.int_to_bool, (k0) => `${k0}`, (v0) => v0),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const string_to_int = deserializeMap(deserializer, (deserializer) => {
-                const key = deserializer.deserializeStr();
-                const value = deserializer.deserializeI32();
-                return [key, value];
-            });
-            const int_to_bool = deserializeMap(deserializer, (deserializer) => {
-                const key = deserializer.deserializeI32();
-                const value = deserializer.deserializeBool();
-                return [key, value];
-            });
-            return new MyStruct(string_to_int,int_to_bool);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readMap($json.field(obj, "string_to_int"), (k0) => k0, $json.readI32),
+                $json.readMap($json.field(obj, "int_to_bool"), (k0) => $json.readI32($json.keyLiteral(k0)), $json.readBool),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1152,33 +1181,37 @@ fn struct_with_hashset_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeSet(this.string_set, serializer, (item, serializer) => {
-                serializer.serializeStr(item);
-            });
-            serializeSet(this.int_set, serializer, (item, serializer) => {
-                serializer.serializeI32(item);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "string_set": value.string_set,
+                "int_set": value.int_set,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const string_set = deserializeSet(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const int_set = deserializeSet(deserializer, (deserializer) => {
-                return deserializer.deserializeI32();
-            });
-            return new MyStruct(string_set,int_set);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readSeq($json.field(obj, "string_set"), $json.readStr),
+                $json.readSeq($json.field(obj, "int_set"), $json.readI32),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1190,33 +1223,37 @@ fn struct_with_btreeset_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public string_set: Seq<str>, public int_set: Seq<int32>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeSet(this.string_set, serializer, (item, serializer) => {
-                serializer.serializeStr(item);
-            });
-            serializeSet(this.int_set, serializer, (item, serializer) => {
-                serializer.serializeI32(item);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "string_set": value.string_set,
+                "int_set": value.int_set,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const string_set = deserializeSet(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const int_set = deserializeSet(deserializer, (deserializer) => {
-                return deserializer.deserializeI32();
-            });
-            return new MyStruct(string_set,int_set);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readSeq($json.field(obj, "string_set"), $json.readStr),
+                $json.readSeq($json.field(obj, "int_set"), $json.readI32),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1229,25 +1266,37 @@ fn struct_with_box_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public boxed_string: str, public boxed_int: int32) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.boxed_string);
-            serializer.serializeI32(this.boxed_int);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "boxed_string": value.boxed_string,
+                "boxed_int": value.boxed_int,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const boxed_string = deserializer.deserializeStr();
-            const boxed_int = deserializer.deserializeI32();
-            return new MyStruct(boxed_string,boxed_int);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readStr($json.field(obj, "boxed_string")),
+                $json.readI32($json.field(obj, "boxed_int")),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1259,25 +1308,37 @@ fn struct_with_rc_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public rc_string: str, public rc_int: int32) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.rc_string);
-            serializer.serializeI32(this.rc_int);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "rc_string": value.rc_string,
+                "rc_int": value.rc_int,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const rc_string = deserializer.deserializeStr();
-            const rc_int = deserializer.deserializeI32();
-            return new MyStruct(rc_string,rc_int);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readStr($json.field(obj, "rc_string")),
+                $json.readI32($json.field(obj, "rc_int")),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1289,25 +1350,37 @@ fn struct_with_arc_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public arc_string: str, public arc_int: int32) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.arc_string);
-            serializer.serializeI32(this.arc_int);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "arc_string": value.arc_string,
+                "arc_int": value.arc_int,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const arc_string = deserializer.deserializeStr();
-            const arc_int = deserializer.deserializeI32();
-            return new MyStruct(arc_string,arc_int);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readStr($json.field(obj, "arc_string")),
+                $json.readI32($json.field(obj, "arc_int")),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1323,63 +1396,43 @@ fn struct_with_mixed_collections_and_pointers() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public vec_of_sets: Seq<Seq<str>>, public optional_btree: Optional<Map<str,int32>>, public boxed_vec: Seq<str>, public arc_option: Optional<str>, public array_of_boxes: ListTuple<[int32]>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializeArray(this.vec_of_sets, serializer, (item, serializer) => {
-                serializeSet(item, serializer, (item, serializer) => {
-                    serializer.serializeStr(item);
-                });
-            });
-            serializeOption(this.optional_btree, serializer, (value, serializer) => {
-                serializeMap(value, serializer, (key, value, serializer) => {
-                    serializer.serializeStr(key);
-                    serializer.serializeI32(value);
-                });
-            });
-            serializeArray(this.boxed_vec, serializer, (item, serializer) => {
-                serializer.serializeStr(item);
-            });
-            serializeOption(this.arc_option, serializer, (value, serializer) => {
-                serializer.serializeStr(value);
-            });
-            serializeTupleArray(this.array_of_boxes, serializer, (item, serializer) => {
-                serializer.serializeI32(item[0]);
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "vec_of_sets": value.vec_of_sets,
+                "optional_btree": (value.optional_btree === null ? null : $json.writeMap(value.optional_btree, (k0) => k0, (v0) => v0)),
+                "boxed_vec": value.boxed_vec,
+                "arc_option": value.arc_option,
+                "array_of_boxes": value.array_of_boxes.map((v0) => v0[0]),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const vec_of_sets = deserializeArray(deserializer, (deserializer) => {
-                return deserializeSet(deserializer, (deserializer) => {
-                    return deserializer.deserializeStr();
-                });
-            });
-            const optional_btree = deserializeOption(deserializer, (deserializer) => {
-                return deserializeMap(deserializer, (deserializer) => {
-                    const key = deserializer.deserializeStr();
-                    const value = deserializer.deserializeI32();
-                    return [key, value];
-                });
-            });
-            const boxed_vec = deserializeArray(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const arc_option = deserializeOption(deserializer, (deserializer) => {
-                return deserializer.deserializeStr();
-            });
-            const array_of_boxes = deserializeTupleArray(deserializer, 3, (deserializer) => {
-                const item = deserializer.deserializeI32();
-                return [item];
-            });
-            return new MyStruct(vec_of_sets,optional_btree,boxed_vec,arc_option,array_of_boxes);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readSeq($json.field(obj, "vec_of_sets"), (j0) => $json.readSeq(j0, $json.readStr)),
+                $json.readOption($json.field(obj, "optional_btree"), (j0) => $json.readMap(j0, (k1) => k1, $json.readI32)),
+                $json.readSeq($json.field(obj, "boxed_vec"), $json.readStr),
+                $json.readOption($json.field(obj, "arc_option"), $json.readStr),
+                $json.readSeq($json.field(obj, "array_of_boxes"), (j0): [int32] => [$json.readI32(j0)], 3),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1394,27 +1447,39 @@ fn struct_with_bytes_field() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeBytes(this.data);
-            serializer.serializeStr(this.name);
-            serializer.serializeBytes(this.header);
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "data": $json.writeBytes(value.data),
+                "name": value.name,
+                "header": $json.writeBytes(value.header),
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const data = deserializer.deserializeBytes();
-            const name = deserializer.deserializeStr();
-            const header = deserializer.deserializeBytes();
-            return new MyStruct(data,name,header);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readBytes($json.field(obj, "data")),
+                $json.readStr($json.field(obj, "name")),
+                $json.readBytes($json.field(obj, "header")),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1430,37 +1495,41 @@ fn struct_with_bytes_field_and_slice() {
     }
 
     let actual = emit!(MyStruct as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class MyStruct {
         constructor (public data: bytes, public name: str, public header: bytes, public optional_bytes: Optional<Seq<uint8>>) {
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeBytes(this.data);
-            serializer.serializeStr(this.name);
-            serializer.serializeBytes(this.header);
-            serializeOption(this.optional_bytes, serializer, (value, serializer) => {
-                serializeArray(value, serializer, (item, serializer) => {
-                    serializer.serializeU8(item);
-                });
-            });
+        static toJson(value: MyStruct): $json.JsonValue {
+            return {
+                "data": $json.writeBytes(value.data),
+                "name": value.name,
+                "header": $json.writeBytes(value.header),
+                "optional_bytes": value.optional_bytes,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): MyStruct {
-            const data = deserializer.deserializeBytes();
-            const name = deserializer.deserializeStr();
-            const header = deserializer.deserializeBytes();
-            const optional_bytes = deserializeOption(deserializer, (deserializer) => {
-                return deserializeArray(deserializer, (deserializer) => {
-                    return deserializer.deserializeU8();
-                });
-            });
-            return new MyStruct(data,name,header,optional_bytes);
+        static fromJson(json: unknown): MyStruct {
+            const obj = $json.readObject(json, "MyStruct");
+            return new MyStruct(
+                $json.readBytes($json.field(obj, "data")),
+                $json.readStr($json.field(obj, "name")),
+                $json.readBytes($json.field(obj, "header")),
+                $json.readOption($json.field(obj, "optional_bytes"), (j0) => $json.readSeq(j0, $json.readU8)),
+            );
+        }
+
+        static jsonSerialize(value: MyStruct): string {
+            return $json.stringify(MyStruct.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): MyStruct {
+            return MyStruct.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1475,7 +1544,7 @@ fn keyword_fields_struct() {
     }
 
     let actual = emit!(KeywordFields as TypeScript with JsonPlugin).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
 
     export class KeywordFields {
@@ -1491,22 +1560,34 @@ fn keyword_fields_struct() {
             this.import = import_;
         }
 
-        public serialize(serializer: Serializer): void {
-            serializer.serializeStr(this.default);
-            serializer.serializeI32(this.in);
-            serializer.serializeBool(this.object);
-            serializer.serializeBool(this.import);
+        static toJson(value: KeywordFields): $json.JsonValue {
+            return {
+                "default": value.default,
+                "in": value.in,
+                "object": value.object,
+                "import": value.import,
+            };
         }
 
-        static deserialize(deserializer: Deserializer): KeywordFields {
-            const default_ = deserializer.deserializeStr();
-            const in_ = deserializer.deserializeI32();
-            const object = deserializer.deserializeBool();
-            const import_ = deserializer.deserializeBool();
-            return new KeywordFields(default_,in_,object,import_);
+        static fromJson(json: unknown): KeywordFields {
+            const obj = $json.readObject(json, "KeywordFields");
+            return new KeywordFields(
+                $json.readStr($json.field(obj, "default")),
+                $json.readI32($json.field(obj, "in")),
+                $json.readBool($json.field(obj, "object")),
+                $json.readBool($json.field(obj, "import")),
+            );
+        }
+
+        static jsonSerialize(value: KeywordFields): string {
+            return $json.stringify(KeywordFields.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): KeywordFields {
+            return KeywordFields.fromJson($json.parse(text));
         }
     }
-    ");
+    "#);
 }
 
 #[test]
@@ -1543,43 +1624,539 @@ fn keyword_enum() {
         return cases[value.kind as KeywordEnum["kind"]](value as never);
     }
 
-    export function serializeKeywordEnum(value: KeywordEnum, serializer: Serializer): void {
+    export function toJsonKeywordEnum(value: KeywordEnum): $json.JsonValue {
         switch (value.kind) {
-            case "Default": {
-                serializer.serializeVariantIndex(0);
-                break;
-            }
-            case "Switch": {
-                serializer.serializeVariantIndex(1);
-                serializer.serializeStr(value.value);
-                break;
-            }
-            case "Where": {
-                serializer.serializeVariantIndex(2);
-                serializer.serializeI32(value.in);
-                serializer.serializeStr(value.default);
-                break;
-            }
-            default: throw new Error("Unknown variant: " + (value as any).kind);
+            case "Default": return "Default";
+            case "Switch": return { "Switch": value.value };
+            case "Where": return {
+                "Where": {
+                    "in": value.in,
+                    "default": value.default,
+                },
+            };
+            default: throw $json.unknownVariant("KeywordEnum", value);
         }
     }
 
-    export function deserializeKeywordEnum(deserializer: Deserializer): KeywordEnum {
-        const index = deserializer.deserializeVariantIndex();
-        switch (index) {
-            case 0: {
-                return { kind: "Default" };
+    export function fromJsonKeywordEnum(json: unknown): KeywordEnum {
+        const [variant, content] = $json.readExternal(json, "KeywordEnum", ["Default"]);
+        switch (variant) {
+            case "Default": return { kind: "Default" };
+            case "Switch": return { kind: "Switch", value: $json.readStr(content) };
+            case "Where": {
+                const obj = $json.readObject(content, "KeywordEnum::Where");
+                return {
+                    kind: "Where",
+                    in: $json.readI32($json.field(obj, "in")),
+                    default: $json.readStr($json.field(obj, "default")),
+                };
             }
-            case 1: {
-                const value = deserializer.deserializeStr();
-                return { kind: "Switch", value };
+            default: throw $json.unknownVariant("KeywordEnum", variant);
+        }
+    }
+
+    export function jsonSerializeKeywordEnum(value: KeywordEnum): string {
+        return $json.stringify(toJsonKeywordEnum(value));
+    }
+
+    export function jsonDeserializeKeywordEnum(text: string): KeywordEnum {
+        return fromJsonKeywordEnum($json.parse(text));
+    }
+    "#);
+}
+
+#[test]
+fn internally_tagged_enum() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(tag = "type")]
+    #[allow(unused)]
+    enum Shape {
+        Unit,
+        Wrapped(Point),
+        Struct { x: i32, c: char },
+    }
+
+    let actual = emit!(Shape as TypeScript with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export class Point {
+        constructor (public x: int32) {
+        }
+
+        static toJson(value: Point): $json.JsonValue {
+            return {
+                "x": value.x,
+            };
+        }
+
+        static fromJson(json: unknown): Point {
+            const obj = $json.readObject(json, "Point");
+            return new Point(
+                $json.readI32($json.field(obj, "x")),
+            );
+        }
+
+        static jsonSerialize(value: Point): string {
+            return $json.stringify(Point.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Point {
+            return Point.fromJson($json.parse(text));
+        }
+    }
+
+
+    export type Shape =
+        | { type: "Unit" }
+        | { type: "Wrapped" } & Point
+        | { type: "Struct"; x: int32; c: char };
+
+    export const shapeUnit = (): Shape => ({ type: "Unit" });
+
+    export const shapeWrapped = (value: Point): Shape => ({ type: "Wrapped", ...value });
+
+    export const shapeStruct = (x: int32, c: char): Shape => ({ type: "Struct", x, c });
+
+    export function matchShape<R>(value: Shape, cases: {
+        Unit: (v: Extract<Shape, { type: "Unit" }>) => R;
+        Wrapped: (v: Extract<Shape, { type: "Wrapped" }>) => R;
+        Struct: (v: Extract<Shape, { type: "Struct" }>) => R;
+    }): R {
+        return cases[value.type as Shape["type"]](value as never);
+    }
+
+    export function toJsonShape(value: Shape): $json.JsonValue {
+        switch (value.type) {
+            case "Unit": return { "type": "Unit" };
+            case "Wrapped": return $json.writeTagged("type", "Wrapped", Point.toJson(value));
+            case "Struct": return {
+                "type": "Struct",
+                "x": value.x,
+                "c": value.c,
+            };
+            default: throw $json.unknownVariant("Shape", value);
+        }
+    }
+
+    export function fromJsonShape(json: unknown): Shape {
+        const [variant, obj] = $json.readInternal(json, "type", "Shape");
+        switch (variant) {
+            case "Unit": return { type: "Unit" };
+            case "Wrapped": return { type: "Wrapped", ...Point.fromJson(obj) };
+            case "Struct": return {
+                type: "Struct",
+                x: $json.readI32($json.field(obj, "x")),
+                c: $json.readChar($json.field(obj, "c")),
+            };
+            default: throw $json.unknownVariant("Shape", variant);
+        }
+    }
+
+    export function jsonSerializeShape(value: Shape): string {
+        return $json.stringify(toJsonShape(value));
+    }
+
+    export function jsonDeserializeShape(text: string): Shape {
+        return fromJsonShape($json.parse(text));
+    }
+    "#);
+}
+
+#[test]
+fn internally_tagged_unit_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(tag = "kind")]
+    #[allow(unused)]
+    enum Mode {
+        Fast,
+        Slow,
+    }
+
+    let actual = emit!(Mode as TypeScript with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Mode =
+        | { kind: "Fast" }
+        | { kind: "Slow" };
+
+    export const modeFast = (): Mode => ({ kind: "Fast" });
+
+    export const modeSlow = (): Mode => ({ kind: "Slow" });
+
+    export function matchMode<R>(value: Mode, cases: {
+        Fast: (v: Extract<Mode, { kind: "Fast" }>) => R;
+        Slow: (v: Extract<Mode, { kind: "Slow" }>) => R;
+    }): R {
+        return cases[value.kind as Mode["kind"]](value as never);
+    }
+
+    export function toJsonMode(value: Mode): $json.JsonValue {
+        switch (value.kind) {
+            case "Fast": return { "kind": "Fast" };
+            case "Slow": return { "kind": "Slow" };
+            default: throw $json.unknownVariant("Mode", value);
+        }
+    }
+
+    export function fromJsonMode(json: unknown): Mode {
+        const [variant] = $json.readInternal(json, "kind", "Mode");
+        switch (variant) {
+            case "Fast": return { kind: "Fast" };
+            case "Slow": return { kind: "Slow" };
+            default: throw $json.unknownVariant("Mode", variant);
+        }
+    }
+
+    export function jsonSerializeMode(value: Mode): string {
+        return $json.stringify(toJsonMode(value));
+    }
+
+    export function jsonDeserializeMode(text: string): Mode {
+        return fromJsonMode($json.parse(text));
+    }
+    "#);
+}
+
+#[test]
+fn adjacently_tagged_enum() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(tag = "t", content = "c")]
+    #[allow(unused)]
+    enum Message {
+        Unit,
+        NewType(Option<u8>),
+        Tuple(u8, String),
+        Struct { name: String },
+    }
+
+    let actual = emit!(Message as TypeScript with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Message =
+        | { t: "Unit" }
+        | { t: "NewType"; c: Optional<uint8> }
+        | { t: "Tuple"; c: [uint8, str] }
+        | { t: "Struct"; c: { name: str; } };
+
+    export const messageUnit = (): Message => ({ t: "Unit" });
+
+    export const messageNewType = (value: Optional<uint8>): Message => ({ t: "NewType", c: value });
+
+    export const messageTuple = (field0: uint8, field1: str): Message => ({ t: "Tuple", c: [field0, field1] });
+
+    export const messageStruct = (name: str): Message => ({ t: "Struct", c: { name } });
+
+    export function matchMessage<R>(value: Message, cases: {
+        Unit: (v: Extract<Message, { t: "Unit" }>) => R;
+        NewType: (v: Extract<Message, { t: "NewType" }>) => R;
+        Tuple: (v: Extract<Message, { t: "Tuple" }>) => R;
+        Struct: (v: Extract<Message, { t: "Struct" }>) => R;
+    }): R {
+        return cases[value.t as Message["t"]](value as never);
+    }
+
+    export function toJsonMessage(value: Message): $json.JsonValue {
+        switch (value.t) {
+            case "Unit": return { "t": "Unit" };
+            case "NewType": return { "t": "NewType", "c": value.c };
+            case "Tuple": return { "t": "Tuple", "c": [value.c[0], value.c[1]] };
+            case "Struct": return {
+                "t": "Struct",
+                "c": {
+                    "name": value.c.name,
+                },
+            };
+            default: throw $json.unknownVariant("Message", value);
+        }
+    }
+
+    export function fromJsonMessage(json: unknown): Message {
+        const [variant, content] = $json.readAdjacent(json, "t", "c", "Message", ["Unit"]);
+        switch (variant) {
+            case "Unit": return { t: "Unit" };
+            case "NewType": return { t: "NewType", c: $json.readOption(content, $json.readU8) };
+            case "Tuple": return { t: "Tuple", c: $json.readTuple<[uint8, str]>(content, [$json.readU8, $json.readStr]) };
+            case "Struct": {
+                const obj = $json.readObject(content, "Message::Struct");
+                return {
+                    t: "Struct",
+                    c: {
+                        name: $json.readStr($json.field(obj, "name")),
+                    },
+                };
             }
-            case 2: {
-                const in_ = deserializer.deserializeI32();
-                const default_ = deserializer.deserializeStr();
-                return { kind: "Where", in: in_, default: default_ };
+            default: throw $json.unknownVariant("Message", variant);
+        }
+    }
+
+    export function jsonSerializeMessage(value: Message): string {
+        return $json.stringify(toJsonMessage(value));
+    }
+
+    export function jsonDeserializeMessage(text: string): Message {
+        return fromJsonMessage($json.parse(text));
+    }
+    "#);
+}
+
+#[test]
+fn renamed_fields_and_variants() {
+    #[derive(Facet)]
+    #[facet(rename_all = "camelCase")]
+    struct Renamed {
+        snake_case_field: u8,
+        #[facet(rename = "with-dash")]
+        dashed: u8,
+        #[facet(rename = "$ref")]
+        reference: String,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Choice {
+        #[facet(rename = "HIGH")]
+        High,
+        #[facet(rename = "Other")]
+        Renamed {
+            #[facet(rename = "bee")]
+            b: Option<String>,
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    let actual = emit!(Renamed, Choice as TypeScript with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Choice =
+        | { kind: "HIGH" }
+        | { kind: "Other"; bee: Optional<str>; "with-dash": uint8 };
+
+    export const choiceHigh = (): Choice => ({ kind: "HIGH" });
+
+    export const choiceOther = (bee: Optional<str>, with_dash: uint8): Choice => ({ kind: "Other", bee, "with-dash": with_dash });
+
+    export function matchChoice<R>(value: Choice, cases: {
+        HIGH: (v: Extract<Choice, { kind: "HIGH" }>) => R;
+        Other: (v: Extract<Choice, { kind: "Other" }>) => R;
+    }): R {
+        return cases[value.kind as Choice["kind"]](value as never);
+    }
+
+    export function toJsonChoice(value: Choice): $json.JsonValue {
+        switch (value.kind) {
+            case "HIGH": return "HIGH";
+            case "Other": return {
+                "Other": {
+                    "bee": value.bee,
+                    "with-dash": value["with-dash"],
+                },
+            };
+            default: throw $json.unknownVariant("Choice", value);
+        }
+    }
+
+    export function fromJsonChoice(json: unknown): Choice {
+        const [variant, content] = $json.readExternal(json, "Choice", ["HIGH"]);
+        switch (variant) {
+            case "HIGH": return { kind: "HIGH" };
+            case "Other": {
+                const obj = $json.readObject(content, "Choice::Other");
+                return {
+                    kind: "Other",
+                    bee: $json.readOption($json.field(obj, "bee"), $json.readStr),
+                    "with-dash": $json.readU8($json.field(obj, "with-dash")),
+                };
             }
-            default: throw new Error("Unknown variant index for KeywordEnum: " + index);
+            default: throw $json.unknownVariant("Choice", variant);
+        }
+    }
+
+    export function jsonSerializeChoice(value: Choice): string {
+        return $json.stringify(toJsonChoice(value));
+    }
+
+    export function jsonDeserializeChoice(text: string): Choice {
+        return fromJsonChoice($json.parse(text));
+    }
+
+
+    export class Renamed {
+        public snakeCaseField: uint8;
+        public "with-dash": uint8;
+        public $ref: str;
+
+        constructor (snakeCaseField: uint8, with_dash: uint8, $ref: str) {
+            this.snakeCaseField = snakeCaseField;
+            this["with-dash"] = with_dash;
+            this.$ref = $ref;
+        }
+
+        static toJson(value: Renamed): $json.JsonValue {
+            return {
+                "snakeCaseField": value.snakeCaseField,
+                "with-dash": value["with-dash"],
+                "$ref": value.$ref,
+            };
+        }
+
+        static fromJson(json: unknown): Renamed {
+            const obj = $json.readObject(json, "Renamed");
+            return new Renamed(
+                $json.readU8($json.field(obj, "snakeCaseField")),
+                $json.readU8($json.field(obj, "with-dash")),
+                $json.readStr($json.field(obj, "$ref")),
+            );
+        }
+
+        static jsonSerialize(value: Renamed): string {
+            return $json.stringify(Renamed.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Renamed {
+            return Renamed.fromJson($json.parse(text));
+        }
+    }
+    "#);
+}
+
+#[test]
+fn struct_with_map_keys_rust_writes_as_strings() {
+    #[derive(Facet, PartialEq, Eq, PartialOrd, Ord)]
+    struct Key(String);
+
+    #[derive(Facet, PartialEq, Eq, PartialOrd, Ord)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Level {
+        Low,
+        High,
+    }
+
+    #[derive(Facet)]
+    #[allow(clippy::struct_field_names)]
+    struct Maps {
+        by_big: BTreeMap<u128, u8>,
+        by_bool: BTreeMap<bool, u8>,
+        by_char: BTreeMap<char, u8>,
+        by_level: BTreeMap<Level, u8>,
+        by_key: BTreeMap<Key, Option<i128>>,
+        by_uuid: BTreeMap<uuid::Uuid, u8>,
+    }
+
+    let actual = emit!(Maps as TypeScript with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export class Key {
+        constructor (public value: str) {
+        }
+
+        static toJson(value: Key): $json.JsonValue {
+            return value.value;
+        }
+
+        static fromJson(json: unknown): Key {
+            return new Key($json.readStr(json));
+        }
+
+        static jsonSerialize(value: Key): string {
+            return $json.stringify(Key.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Key {
+            return Key.fromJson($json.parse(text));
+        }
+    }
+
+
+    export type Level =
+        | { kind: "Low" }
+        | { kind: "High" };
+
+    export const levelLow = (): Level => ({ kind: "Low" });
+
+    export const levelHigh = (): Level => ({ kind: "High" });
+
+    export function matchLevel<R>(value: Level, cases: {
+        Low: (v: Extract<Level, { kind: "Low" }>) => R;
+        High: (v: Extract<Level, { kind: "High" }>) => R;
+    }): R {
+        return cases[value.kind as Level["kind"]](value as never);
+    }
+
+    export function toJsonLevel(value: Level): $json.JsonValue {
+        switch (value.kind) {
+            case "Low": return "Low";
+            case "High": return "High";
+            default: throw $json.unknownVariant("Level", value);
+        }
+    }
+
+    export function fromJsonLevel(json: unknown): Level {
+        const [variant] = $json.readExternal(json, "Level", ["Low", "High"]);
+        switch (variant) {
+            case "Low": return { kind: "Low" };
+            case "High": return { kind: "High" };
+            default: throw $json.unknownVariant("Level", variant);
+        }
+    }
+
+    export function jsonSerializeLevel(value: Level): string {
+        return $json.stringify(toJsonLevel(value));
+    }
+
+    export function jsonDeserializeLevel(text: string): Level {
+        return fromJsonLevel($json.parse(text));
+    }
+
+
+    export class Maps {
+        constructor (public by_big: Map<uint128,uint8>, public by_bool: Map<bool,uint8>, public by_char: Map<char,uint8>, public by_level: Map<Level,uint8>, public by_key: Map<Key,Optional<int128>>, public by_uuid: Map<Uuid,uint8>) {
+        }
+
+        static toJson(value: Maps): $json.JsonValue {
+            return {
+                "by_big": $json.writeMap(value.by_big, (k0) => `${k0}`, (v0) => v0),
+                "by_bool": $json.writeMap(value.by_bool, (k0) => `${k0}`, (v0) => v0),
+                "by_char": $json.writeMap(value.by_char, (k0) => k0, (v0) => v0),
+                "by_level": $json.writeMap(value.by_level, (k0) => $json.writeKey(toJsonLevel(k0)), (v0) => v0),
+                "by_key": $json.writeMap(value.by_key, (k0) => $json.writeKey(Key.toJson(k0)), (v0) => (v0 === null ? null : $json.writeBigInt(v0))),
+                "by_uuid": $json.writeMap(value.by_uuid, (k0) => k0, (v0) => v0),
+            };
+        }
+
+        static fromJson(json: unknown): Maps {
+            const obj = $json.readObject(json, "Maps");
+            return new Maps(
+                $json.readMap($json.field(obj, "by_big"), (k0) => $json.readU128($json.keyLiteral(k0)), $json.readU8),
+                $json.readMap($json.field(obj, "by_bool"), (k0) => $json.readBool($json.keyLiteral(k0)), $json.readU8),
+                $json.readMap($json.field(obj, "by_char"), (k0) => $json.readChar(k0), $json.readU8),
+                $json.readMap($json.field(obj, "by_level"), (k0) => $json.readKey(k0, fromJsonLevel), $json.readU8),
+                $json.readMap($json.field(obj, "by_key"), (k0) => $json.readKey(k0, Key.fromJson), (j0) => $json.readOption(j0, $json.readI128)),
+                $json.readMap($json.field(obj, "by_uuid"), (k0) => $json.readUuid(k0) as Uuid, $json.readU8),
+            );
+        }
+
+        static jsonSerialize(value: Maps): string {
+            return $json.stringify(Maps.toJson(value));
+        }
+
+        static jsonDeserialize(text: string): Maps {
+            return Maps.fromJson($json.parse(text));
         }
     }
     "#);

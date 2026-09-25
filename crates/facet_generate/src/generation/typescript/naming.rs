@@ -84,21 +84,23 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ("Uint8Array", "globalThis.Uint8Array"),
 ];
 
-/// Globals the plugins' code constructs bare (`new Map`, `new Error`), each
-/// with the test for whether a container's code does. Sorted by name.
+/// Globals the Bincode plugin's code constructs bare (`new Map`, `new Error`),
+/// each with the test for whether a container's code does. Sorted by name.
 ///
 /// A namespace imported as one of these (`import * as Map`) shadows the
 /// global's value, so `new Map()` fails (TS2351), but not its type, so a
 /// global written only in type positions (`Map<K, V>`, `Uint8Array`) is
 /// still found. The installer rejects such a namespace in a module whose
-/// containers construct the global.
+/// containers construct the global, whichever plugins generate it: the JSON
+/// plugin's code names no global, reaching its runtime through `$json`, but
+/// another plugin's may.
 pub(crate) const CONSTRUCTED_GLOBALS: &[(&str, ConstructsGlobal)] = &[
-    // The plugins' enum functions throw on an unknown variant, and their
-    // `Uuid` helpers on a malformed UUID.
+    // The enum functions throw on an unknown variant, and the `Uuid` helpers
+    // on a malformed UUID.
     ("Error", |container| {
         matches!(container, ContainerFormat::Enum(..)) || mentions(container, is_uuid)
     }),
-    // The plugins' `deserializeMap` helper.
+    // The `deserializeMap` helper.
     ("Map", |container| {
         mentions(container, |format| matches!(format, Format::Map { .. }))
     }),
@@ -211,6 +213,35 @@ pub(crate) fn shadows(name: &str, config: &CodeGeneratorConfig) -> bool {
 /// otherwise.
 pub(crate) fn builtin<'a>(name: &'a str, config: &CodeGeneratorConfig) -> Cow<'a, str> {
     qualify(name, QUALIFIED, |n| shadows(n, config))
+}
+
+/// Whether `s` is a JavaScript identifier (reserved or not), which a property
+/// name can be written as without quotes.
+pub(crate) fn is_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+}
+
+/// The property `name` as an object-literal key or a type member: bare when
+/// it is an identifier, and quoted otherwise (`"with-dash"`).
+pub(crate) fn property_key(name: &str) -> Cow<'_, str> {
+    if is_identifier(name) {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(serde_json::to_string(name).expect("a string always serializes"))
+    }
+}
+
+/// The property `name` of `owner`: `owner.name`, or `owner["with-dash"]`.
+pub(crate) fn member(owner: &str, name: &str) -> String {
+    if is_identifier(name) {
+        format!("{owner}.{name}")
+    } else {
+        format!("{owner}[{}]", property_key(name))
+    }
 }
 
 /// A reference to the standalone function `{prefix}{Name}` that the plugins

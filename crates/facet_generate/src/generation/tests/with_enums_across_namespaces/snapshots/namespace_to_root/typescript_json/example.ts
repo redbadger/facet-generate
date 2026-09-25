@@ -1,4 +1,4 @@
-import type { Serializer, Deserializer } from "./serde";
+import * as $json from "./serde/json";
 import * as Kv from "./kv";
 type uint32 = number;
 
@@ -6,13 +6,25 @@ export class App {
     constructor (public entry: Kv.Entry) {
     }
 
-    public serialize(serializer: Serializer): void {
-        this.entry.serialize(serializer);
+    static toJson(value: App): $json.JsonValue {
+        return {
+            "entry": Kv.Entry.toJson(value.entry),
+        };
     }
 
-    static deserialize(deserializer: Deserializer): App {
-        const entry = Kv.Entry.deserialize(deserializer);
-        return new App(entry);
+    static fromJson(json: unknown): App {
+        const obj = $json.readObject(json, "App");
+        return new App(
+            Kv.Entry.fromJson($json.field(obj, "entry")),
+        );
+    }
+
+    static jsonSerialize(value: App): string {
+        return $json.stringify(App.toJson(value));
+    }
+
+    static jsonDeserialize(text: string): App {
+        return App.fromJson($json.parse(text));
     }
 }
 
@@ -31,31 +43,29 @@ export function matchLevel<R>(value: Level, cases: {
     return cases[value.kind as Level["kind"]](value as never);
 }
 
-export function serializeLevel(value: Level, serializer: Serializer): void {
+export function toJsonLevel(value: Level): $json.JsonValue {
     switch (value.kind) {
-        case "Low": {
-            serializer.serializeVariantIndex(0);
-            break;
-        }
-        case "High": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Low": return "Low";
+        case "High": return "High";
+        default: throw $json.unknownVariant("Level", value);
     }
 }
 
-export function deserializeLevel(deserializer: Deserializer): Level {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            return { kind: "Low" };
-        }
-        case 1: {
-            return { kind: "High" };
-        }
-        default: throw new Error("Unknown variant index for Level: " + index);
+export function fromJsonLevel(json: unknown): Level {
+    const [variant] = $json.readExternal(json, "Level", ["Low", "High"]);
+    switch (variant) {
+        case "Low": return { kind: "Low" };
+        case "High": return { kind: "High" };
+        default: throw $json.unknownVariant("Level", variant);
     }
+}
+
+export function jsonSerializeLevel(value: Level): string {
+    return $json.stringify(toJsonLevel(value));
+}
+
+export function jsonDeserializeLevel(text: string): Level {
+    return fromJsonLevel($json.parse(text));
 }
 
 export type Outcome =
@@ -73,31 +83,27 @@ export function matchOutcome<R>(value: Outcome, cases: {
     return cases[value.kind as Outcome["kind"]](value as never);
 }
 
-export function serializeOutcome(value: Outcome, serializer: Serializer): void {
+export function toJsonOutcome(value: Outcome): $json.JsonValue {
     switch (value.kind) {
-        case "Score": {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeU32(value.value);
-            break;
-        }
-        case "Missing": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Score": return { "Score": value.value };
+        case "Missing": return "Missing";
+        default: throw $json.unknownVariant("Outcome", value);
     }
 }
 
-export function deserializeOutcome(deserializer: Deserializer): Outcome {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            const value = deserializer.deserializeU32();
-            return { kind: "Score", value };
-        }
-        case 1: {
-            return { kind: "Missing" };
-        }
-        default: throw new Error("Unknown variant index for Outcome: " + index);
+export function fromJsonOutcome(json: unknown): Outcome {
+    const [variant, content] = $json.readExternal(json, "Outcome", ["Missing"]);
+    switch (variant) {
+        case "Score": return { kind: "Score", value: $json.readU32(content) };
+        case "Missing": return { kind: "Missing" };
+        default: throw $json.unknownVariant("Outcome", variant);
     }
+}
+
+export function jsonSerializeOutcome(value: Outcome): string {
+    return $json.stringify(toJsonOutcome(value));
+}
+
+export function jsonDeserializeOutcome(text: string): Outcome {
+    return fromJsonOutcome($json.parse(text));
 }

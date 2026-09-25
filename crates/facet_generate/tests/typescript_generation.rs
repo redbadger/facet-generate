@@ -326,3 +326,71 @@ fn test_that_typescript_code_naming_a_plugin_s_referenced_type_type_checks() {
     let registry = facet_generate::reflect!(App, Presence).unwrap();
     assert_installed_modules_type_check(&registry, NamesPresencePlugin);
 }
+
+/// Generate `registry` with the installer and the JSON plugin, then
+/// type-check every module it wrote, and the JSON runtime.
+fn assert_json_modules_type_check(registry: &facet_generate::Registry) {
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(registry)
+        .unwrap();
+    let runtime = dir.path().join("serde/json.ts");
+    assert!(runtime.exists(), "no JSON runtime");
+
+    let mut modules: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "ts"))
+        .collect();
+    modules.sort();
+    modules.push(runtime);
+
+    let status = Command::new("deno")
+        .current_dir(dir.path())
+        .arg("check")
+        .arg("--sloppy-imports")
+        .args(&modules)
+        .status()
+        .unwrap();
+    assert!(status.success(), "deno check failed");
+}
+
+/// The JSON plugin's code, and its runtime, type-check for every shape the
+/// fixtures hold, for types shadowing builtins or named like keywords, and
+/// across namespaces.
+#[test]
+fn test_that_typescript_json_code_type_checks() {
+    for registry in [
+        common::get_registry(),
+        common::get_keyword_registry(),
+        common::get_shadowing_registry(),
+        common::get_uuid_registry(),
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
+        common::across_namespaces::inherited::get_registry(),
+        serde_namespace_registry(),
+    ] {
+        assert_json_modules_type_check(&registry);
+    }
+}
+
+/// A ROOT type holding one in the namespace `serde`, whose module is
+/// `serde.ts`, beside the JSON runtime in `serde/`.
+fn serde_namespace_registry() -> facet_generate::Registry {
+    use facet_generate as fg;
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serde")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    facet_generate::reflect!(App).unwrap()
+}

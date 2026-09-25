@@ -13,10 +13,9 @@
 //!
 //! # TypeScript serialize/deserialize pattern
 //!
-//! Both Bincode and JSON encodings use the same `Serializer`/`Deserializer`
-//! interface pattern in TypeScript. The difference is purely which runtime
-//! library is installed. As a result, this plugin generates identical code to
-//! the JSON TypeScript plugin.
+//! Each type is written and read through the runtime's `Serializer` /
+//! `Deserializer` interfaces, field by field in declaration order and an enum
+//! variant by its index, as bincode lays them out.
 
 use std::collections::BTreeMap;
 use std::io;

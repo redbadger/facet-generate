@@ -34,9 +34,9 @@
 //!
 //! - [`BincodePlugin`](crate::generation::bincode::BincodePlugin) supplies
 //!   `serialize` / `deserialize` methods and the Bincode feature helpers.
-//! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies the same
-//!   interface for JSON (the TypeScript Serializer/Deserializer API is
-//!   identical for both encodings).
+//! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies static
+//!   `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` methods
+//!   (functions beside an enum) that match `serde_json`.
 //! - With no plugins, only plain type declarations are emitted.
 
 #[cfg(test)]
@@ -298,7 +298,7 @@ impl Emitter<TypeScript> for Format {
 
 impl Emitter<TypeScript> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
-        write!(w, "public {}: ", self.name)?;
+        write!(w, "public {}: ", naming::property_key(&self.name))?;
         self.value.write(w, lang)
     }
 }
@@ -392,7 +392,9 @@ pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
 /// or a `const` local derived from `name`.
 ///
 /// Reserved words are illegal as binding identifiers and cannot be quoted, so
-/// they are renamed with a trailing underscore (`default` → `default_`).
+/// they are renamed with a trailing underscore (`default` → `default_`), and
+/// each character a name that is no identifier at all cannot hold becomes an
+/// underscore (`with-dash` → `with_dash`).
 /// Property and wire names are *not* renamed — they stay identical to the
 /// Rust names — so a renamed binding is paired with an explicit
 /// `this.name = name_;` assignment or a `name: name_` object entry.
@@ -401,7 +403,23 @@ pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
 /// should route it through this so the result matches the emitter.
 #[must_use]
 pub fn param_name(name: &str) -> Cow<'_, str> {
-    naming::RULES.escape(name)
+    if naming::is_identifier(name) {
+        return naming::RULES.escape(name);
+    }
+    let mut binding: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '$' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if !binding.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') {
+        binding.insert(0, '_');
+    }
+    Cow::Owned(binding)
 }
 
 /// Returns `true` if `name` is a TypeScript reserved word, and therefore
@@ -434,21 +452,22 @@ fn output_struct_or_variant<W: IndentWrite>(
     write!(w, "export class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
-    // A field whose name is a reserved word cannot be a parameter property:
-    // the parameter is a binding identifier. When any field needs renaming the
+    // A field whose name is a reserved word, or no identifier at all, cannot
+    // be a parameter property: the parameter is a binding identifier. When
+    // any field needs renaming the
     // whole class switches to the explicit style — every field declared, every
     // parameter plain, every assignment written in the constructor body — so
     // that declaration order and property-insertion order still match the
     // registry. A class with no reserved field name keeps its parameter
     // properties and is emitted exactly as before.
-    let explicit = fields.iter().any(|f| is_reserved_word(&f.name));
+    let explicit = fields.iter().any(|f| param_name(&f.name) != f.name);
 
     if explicit {
         for field in fields {
             writeln!(
                 w,
                 "public {}: {};",
-                field.name,
+                naming::property_key(&field.name),
                 quote_type(&field.value, lang)
             )?;
         }
@@ -472,7 +491,12 @@ fn output_struct_or_variant<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         if explicit {
             for field in fields {
-                writeln!(w, "this.{} = {};", field.name, param_name(&field.name))?;
+                writeln!(
+                    w,
+                    "{} = {};",
+                    naming::member("this", &field.name),
+                    param_name(&field.name)
+                )?;
             }
         }
     }
@@ -540,13 +564,23 @@ fn write_variant_type_expr<W: std::io::Write>(
             if let Some(content) = content_field {
                 write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: {{ "#)?;
                 for field in fields {
-                    write!(w, "{}: {}; ", field.name, quote_type(&field.value, lang))?;
+                    write!(
+                        w,
+                        "{}: {}; ",
+                        naming::property_key(&field.name),
+                        quote_type(&field.value, lang)
+                    )?;
                 }
                 write!(w, "}} }}")?;
             } else {
                 write!(w, r#"{{ {tag_field}: "{variant_name}""#)?;
                 for field in fields {
-                    write!(w, "; {}: {}", field.name, quote_type(&field.value, lang))?;
+                    write!(
+                        w,
+                        "; {}: {}",
+                        naming::property_key(&field.name),
+                        quote_type(&field.value, lang)
+                    )?;
                 }
                 write!(w, " }}")?;
             }
@@ -620,10 +654,11 @@ fn write_variant_constructor<W: std::io::Write>(
             let field_names: Vec<String> = fields
                 .iter()
                 .map(|f| {
-                    if is_reserved_word(&f.name) {
-                        format!("{}: {}", f.name, param_name(&f.name))
-                    } else {
+                    let binding = param_name(&f.name);
+                    if binding == f.name {
                         f.name.clone()
+                    } else {
+                        format!("{}: {binding}", naming::property_key(&f.name))
                     }
                 })
                 .collect();
@@ -650,25 +685,6 @@ fn write_variant_constructor<W: std::io::Write>(
     Ok(())
 }
 
-fn is_js_identifier(s: &str) -> bool {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => false,
-        Some(c) => {
-            (c.is_alphabetic() || c == '_' || c == '$')
-                && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
-        }
-    }
-}
-
-fn js_property_key(s: &str) -> String {
-    if is_js_identifier(s) {
-        s.to_string()
-    } else {
-        format!("\"{s}\"")
-    }
-}
-
 fn write_match_function<W: std::io::Write>(
     w: &mut W,
     name: &str,
@@ -678,7 +694,7 @@ fn write_match_function<W: std::io::Write>(
     writeln!(w, "export function match{name}<R>(value: {name}, cases: {{")?;
     for variant in variants.values() {
         let vname = &variant.name;
-        let key = js_property_key(vname);
+        let key = naming::property_key(vname);
         writeln!(
             w,
             r#"    {key}: (v: Extract<{name}, {{ {tag_field}: "{vname}" }}>) => R;"#

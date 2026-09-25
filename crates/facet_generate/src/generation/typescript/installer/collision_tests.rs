@@ -8,7 +8,7 @@ use crate as fg;
 use crate::{
     Registry,
     generation::{
-        Error, ExternalPackage, PackageLocation, bincode::BincodePlugin,
+        Error, ExternalPackage, PackageLocation, bincode::BincodePlugin, json::JsonPlugin,
         typescript::installer::Installer,
     },
     reflect,
@@ -313,6 +313,30 @@ fn rejects_a_namespace_written_over_the_serde_runtime() {
          `./serde`, which the generated code imports `Serializer` and `Deserializer` from. Choose \
          a different namespace"
     );
+}
+
+/// The JSON plugin's code imports `./serde/json`, which `serde.ts` does not
+/// shadow.
+#[test]
+fn allows_a_namespace_named_serde_beside_the_json_runtime() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serde")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(&reflect!(App).unwrap())
+        .unwrap();
+    assert!(dir.path().join("serde.ts").exists());
+    assert!(dir.path().join("serde/json.ts").exists());
 }
 
 /// A global written only as a type (`Map<K, V>`, `type bytes = Uint8Array`)

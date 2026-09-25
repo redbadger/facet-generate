@@ -180,7 +180,7 @@ impl Installer {
     /// - a module imports a namespace under the name of a global that the
     ///   plugins' code for it constructs (`map` as `Map`, beside a map
     ///   field), which the namespace would shadow (TS2351).
-    /// - a module is written to `serde.ts`, which the generated code's
+    /// - a module is written to `serde.ts`, which the bincode code's
     ///   `./serde` imports would find instead of the runtime installed in
     ///   `serde/`.
     ///
@@ -208,12 +208,14 @@ impl Installer {
                 }),
         )?;
 
+        // `./serde` resolves to `serde.ts` before `serde/index.ts`; the JSON
+        // plugin's `./serde/json` is found either way.
         let installs_serde = !self.external_packages.contains_key(SERDE_NAMESPACE)
             && self.plugins.iter().any(|plugin| {
                 plugin
                     .runtime_files()
                     .iter()
-                    .any(|file| file.relative_path.starts_with("serde/"))
+                    .any(|file| file.relative_path == "serde/index.ts")
             });
         if installs_serde
             && let Some(name) = modules
@@ -315,9 +317,11 @@ impl Installer {
 
     /// Installs the serde TypeScript runtime sources into the output directory.
     ///
-    /// Delegates to the JSON plugin's [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files)
-    /// which embeds the serde sources via `include_dir!`.  Most callers should
-    /// prefer [`generate`](Self::generate).
+    /// Delegates to the bincode and JSON plugins'
+    /// [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files),
+    /// writing only the `serde/` files: the shared `Serializer` /
+    /// `Deserializer` interfaces and the JSON runtime, `serde/json.ts`.  Most
+    /// callers should prefer [`generate`](Self::generate).
     ///
     /// # Errors
     ///
@@ -325,9 +329,14 @@ impl Installer {
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(self.package_name.clone());
         let lang = TypeScript::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(BincodePlugin))
             .with_plugin(std::sync::Arc::new(JsonPlugin));
         for plugin in lang.plugins() {
-            for file in plugin.runtime_files() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("serde/"))
+            {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;

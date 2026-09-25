@@ -1,19 +1,31 @@
-import type { Serializer, Deserializer } from "./serde";
+import * as $json from "./serde/json";
 type float64 = number;
 
 export class Badge {
     constructor (public presence: Presence, public shape: Shape) {
     }
 
-    public serialize(serializer: Serializer): void {
-        serializePresence(this.presence, serializer);
-        serializeShape(this.shape, serializer);
+    static toJson(value: Badge): $json.JsonValue {
+        return {
+            "presence": toJsonPresence(value.presence),
+            "shape": toJsonShape(value.shape),
+        };
     }
 
-    static deserialize(deserializer: Deserializer): Badge {
-        const presence = deserializePresence(deserializer);
-        const shape = deserializeShape(deserializer);
-        return new Badge(presence,shape);
+    static fromJson(json: unknown): Badge {
+        const obj = $json.readObject(json, "Badge");
+        return new Badge(
+            fromJsonPresence($json.field(obj, "presence")),
+            fromJsonShape($json.field(obj, "shape")),
+        );
+    }
+
+    static jsonSerialize(value: Badge): string {
+        return $json.stringify(Badge.toJson(value));
+    }
+
+    static jsonDeserialize(text: string): Badge {
+        return Badge.fromJson($json.parse(text));
     }
 }
 
@@ -32,31 +44,29 @@ export function matchPresence<R>(value: Presence, cases: {
     return cases[value.kind as Presence["kind"]](value as never);
 }
 
-export function serializePresence(value: Presence, serializer: Serializer): void {
+export function toJsonPresence(value: Presence): $json.JsonValue {
     switch (value.kind) {
-        case "Online": {
-            serializer.serializeVariantIndex(0);
-            break;
-        }
-        case "Offline": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Online": return "Online";
+        case "Offline": return "Offline";
+        default: throw $json.unknownVariant("Presence", value);
     }
 }
 
-export function deserializePresence(deserializer: Deserializer): Presence {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            return { kind: "Online" };
-        }
-        case 1: {
-            return { kind: "Offline" };
-        }
-        default: throw new Error("Unknown variant index for Presence: " + index);
+export function fromJsonPresence(json: unknown): Presence {
+    const [variant] = $json.readExternal(json, "Presence", ["Online", "Offline"]);
+    switch (variant) {
+        case "Online": return { kind: "Online" };
+        case "Offline": return { kind: "Offline" };
+        default: throw $json.unknownVariant("Presence", variant);
     }
+}
+
+export function jsonSerializePresence(value: Presence): string {
+    return $json.stringify(toJsonPresence(value));
+}
+
+export function jsonDeserializePresence(text: string): Presence {
+    return fromJsonPresence($json.parse(text));
 }
 
 export type Shape =
@@ -74,31 +84,27 @@ export function matchShape<R>(value: Shape, cases: {
     return cases[value.kind as Shape["kind"]](value as never);
 }
 
-export function serializeShape(value: Shape, serializer: Serializer): void {
+export function toJsonShape(value: Shape): $json.JsonValue {
     switch (value.kind) {
-        case "Circle": {
-            serializer.serializeVariantIndex(0);
-            serializer.serializeF64(value.value);
-            break;
-        }
-        case "Empty": {
-            serializer.serializeVariantIndex(1);
-            break;
-        }
-        default: throw new Error("Unknown variant: " + (value as any).kind);
+        case "Circle": return { "Circle": $json.writeFloat(value.value) };
+        case "Empty": return "Empty";
+        default: throw $json.unknownVariant("Shape", value);
     }
 }
 
-export function deserializeShape(deserializer: Deserializer): Shape {
-    const index = deserializer.deserializeVariantIndex();
-    switch (index) {
-        case 0: {
-            const value = deserializer.deserializeF64();
-            return { kind: "Circle", value };
-        }
-        case 1: {
-            return { kind: "Empty" };
-        }
-        default: throw new Error("Unknown variant index for Shape: " + index);
+export function fromJsonShape(json: unknown): Shape {
+    const [variant, content] = $json.readExternal(json, "Shape", ["Empty"]);
+    switch (variant) {
+        case "Circle": return { kind: "Circle", value: $json.readF64(content) };
+        case "Empty": return { kind: "Empty" };
+        default: throw $json.unknownVariant("Shape", variant);
     }
+}
+
+export function jsonSerializeShape(value: Shape): string {
+    return $json.stringify(toJsonShape(value));
+}
+
+export function jsonDeserializeShape(text: string): Shape {
+    return fromJsonShape($json.parse(text));
 }
