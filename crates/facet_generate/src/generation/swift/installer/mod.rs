@@ -231,8 +231,13 @@ impl Installer {
     ///
     /// Namespaces provided by external packages are not generated, so they
     /// are not checked for targets.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
         const LANGUAGE: &str = "Swift";
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
 
         collision::check_files(
             LANGUAGE,

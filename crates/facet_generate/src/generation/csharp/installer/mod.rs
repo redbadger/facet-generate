@@ -180,7 +180,12 @@ impl Installer {
     ///
     /// Namespaces provided by external packages are not generated, so they
     /// are not checked.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
         let generated: Vec<(CodeGeneratorConfig, &Registry)> = modules
             .iter()
             .filter(|(m, _)| match &m.config().namespace {
@@ -336,6 +341,14 @@ impl Installer {
     /// The manifest includes a base `CommunityToolkit.Mvvm` `NuGet` reference,
     /// plus any external `NuGet` `PackageReference` (URL) or `ProjectReference`
     /// (path) entries configured via [`external_packages`](Self::external_packages).
+    ///
+    /// A URL package's `PackageReference` is named by its
+    /// [`module_name`](ExternalPackage::module_name) when it has one, and
+    /// otherwise by the package ID read from its URL (`Acme.Contracts` from
+    /// `https://www.nuget.org/packages/Acme.Contracts/2.4.1`), or by its
+    /// namespace when the URL names none. Its version is its
+    /// [`version`](ExternalPackage::version), or the version in its URL, or
+    /// `1.0.0`.
     #[must_use]
     pub fn make_manifest(&self, package_name: &str) -> String {
         let mut package_references = vec![
@@ -350,19 +363,18 @@ impl Installer {
                     project_references.push(format!("    <ProjectReference Include=\"{path}\" />"));
                 }
                 PackageLocation::Url(url) => {
-                    let package_name = url
-                        .split('/')
-                        .next_back()
-                        .filter(|segment| !segment.is_empty())
-                        .map_or_else(
-                            || external_package.for_namespace.clone(),
-                            ToString::to_string,
-                        );
+                    let from_url = NuGetUrl::parse(url);
+                    let package_name = external_package
+                        .module_name
+                        .as_deref()
+                        .or(from_url.id)
+                        .unwrap_or(&external_package.for_namespace);
 
                     let version = external_package
                         .version
-                        .clone()
-                        .unwrap_or_else(|| "1.0.0".to_string());
+                        .as_deref()
+                        .or(from_url.version)
+                        .unwrap_or("1.0.0");
 
                     package_references.push(format!(
                         "    <PackageReference Include=\"{package_name}\" Version=\"{version}\" />"
@@ -450,8 +462,13 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Error> {
-        let namespace = config.module_name().rsplit('.').next().unwrap_or_default();
-        let skip_module = self.external_packages.contains_key(namespace);
+        // Decide from the module's namespace, not the last segment of its
+        // name: the root module's name is the package name, whose last
+        // segment can be spelled like an external namespace.
+        let skip_module = match &config.namespace {
+            Namespace::Root => false,
+            Namespace::Named(namespace) => self.external_packages.contains_key(namespace),
+        };
         if skip_module {
             return Ok(());
         }
@@ -495,6 +512,115 @@ impl SourceInstaller for Installer {
 
         Ok(())
     }
+}
+
+/// The `NuGet` package ID and version that a package URL names, as far as
+/// they can be read from it.
+#[derive(Debug, PartialEq, Eq)]
+struct NuGetUrl<'a> {
+    id: Option<&'a str>,
+    version: Option<&'a str>,
+}
+
+impl<'a> NuGetUrl<'a> {
+    /// Reads the package ID and version from `url`, ignoring its query,
+    /// fragment and any trailing slash:
+    ///
+    /// - a `.nupkg` file name, `<id>.<version>.nupkg`, gives both;
+    /// - otherwise a `packages/<id>[/<version>]` path, as on the `nuget.org`
+    ///   gallery, or `package/<id>[/<version>]`, as in the v2 API's
+    ///   `api/v2/package/<id>/<version>`, gives the segment after it and the
+    ///   version after that, if there is one;
+    /// - otherwise the last path segment is the ID, unless it is a version,
+    ///   when it is the version and the segment before it is the ID.
+    fn parse(url: &'a str) -> Self {
+        let url = url.split(['?', '#']).next().unwrap_or(url);
+        // Only the path: the scheme and host are never the package.
+        let path = url.split_once("://").map_or(url, |(_, rest)| {
+            rest.split_once('/').map_or("", |(_, path)| path)
+        });
+        let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+
+        if let Some(file) = segments.last()
+            && let Some(stem) = strip_suffix_ignore_case(file, ".nupkg")
+        {
+            // The ID ends where a version begins: at the first dot whose rest
+            // is a version.
+            let split = stem
+                .match_indices('.')
+                .map(|(i, _)| i)
+                .find(|&i| i > 0 && is_version(&stem[i + 1..]));
+            return match split {
+                Some(i) => Self {
+                    id: Some(&stem[..i]),
+                    version: Some(&stem[i + 1..]),
+                },
+                None => Self {
+                    id: Some(stem).filter(|s| !s.is_empty()),
+                    version: None,
+                },
+            };
+        }
+
+        let version_at = |i: usize| segments.get(i).copied().filter(|s| is_version(s));
+        if let Some(i) = segments
+            .iter()
+            .rposition(|s| s.eq_ignore_ascii_case("packages") || s.eq_ignore_ascii_case("package"))
+            && let Some(id) = segments.get(i + 1)
+        {
+            return Self {
+                id: Some(id),
+                version: version_at(i + 2),
+            };
+        }
+
+        match segments.as_slice() {
+            [.., id, version] if is_version(version) && !is_version(id) => Self {
+                id: Some(id),
+                version: Some(version),
+            },
+            [.., version] if is_version(version) => Self {
+                id: None,
+                version: Some(version),
+            },
+            [.., id] => Self {
+                id: Some(id),
+                version: None,
+            },
+            [] => Self {
+                id: None,
+                version: None,
+            },
+        }
+    }
+}
+
+/// `s` without `suffix`, compared ignoring ASCII case.
+fn strip_suffix_ignore_case<'a>(s: &'a str, suffix: &str) -> Option<&'a str> {
+    let at = s.len().checked_sub(suffix.len())?;
+    (s.is_char_boundary(at) && s[at..].eq_ignore_ascii_case(suffix)).then(|| &s[..at])
+}
+
+/// Whether `s` is a `NuGet` package version: one to four dot-separated
+/// numbers (`2.4.1`), then optionally a `-` pre-release label and a `+`
+/// build metadata label, each of dot-separated alphanumerics and hyphens.
+fn is_version(s: &str) -> bool {
+    let (rest, metadata) = s.split_once('+').map_or((s, None), |(r, m)| (r, Some(m)));
+    let (core, label) = rest
+        .split_once('-')
+        .map_or((rest, None), |(c, l)| (c, Some(l)));
+    let numbers = core.split('.').collect::<Vec<_>>();
+    let is_label = |label: &str| {
+        label.split('.').all(|part| {
+            !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        })
+    };
+    (1..=4).contains(&numbers.len())
+        && numbers
+            .iter()
+            .all(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        && label.is_none_or(is_label)
+        && metadata.is_none_or(is_label)
 }
 
 /// The C# spelling of the dotted module name `name`, as the emitter declares

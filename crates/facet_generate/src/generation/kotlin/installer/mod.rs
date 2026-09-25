@@ -173,8 +173,13 @@ impl Installer {
     /// A namespace spelled like a ROOT type only in another case (`kv` beside
     /// `Kv`) is fine: Kotlin names are case-sensitive. Namespaces provided by
     /// external packages are not generated, so they are not checked.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
         const LANGUAGE: &str = "Kotlin";
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
 
         let generated: Vec<(CodeGeneratorConfig, &Registry)> = modules
             .iter()
@@ -424,10 +429,13 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Error> {
-        // Extract the namespace from the module name to check if it's external
-        let module_parts: Vec<&str> = config.module_name().split('.').collect();
-        let namespace = module_parts.last().map_or("", |v| *v);
-        let skip_module = self.external_packages.contains_key(namespace);
+        // Decide from the module's namespace, not the last segment of its
+        // name: the root module's name is the package name, whose last
+        // segment can be spelled like an external namespace.
+        let skip_module = match &config.namespace {
+            Namespace::Root => false,
+            Namespace::Named(namespace) => self.external_packages.contains_key(namespace),
+        };
 
         if skip_module {
             return Ok(());

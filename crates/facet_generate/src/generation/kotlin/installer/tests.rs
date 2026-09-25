@@ -185,3 +185,48 @@ fn root_module_refers_to_a_namespace_named_like_the_package_leaf() {
     assert!(kv.contains("val shared: com.kv.Shared,"), "{kv}");
     assert!(!kv.contains("com.kv.kv.kv"), "{kv}");
 }
+
+/// The root module is named after the package, whose last segment `shared`
+/// is spelled like an external namespace: it is still written, and the
+/// external namespace's module is not (#186).
+#[test]
+fn root_module_is_written_when_the_package_ends_in_an_external_namespace() {
+    use crate as fg;
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "shared")]
+    struct Ext {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        e: Ext,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("com.acme.shared", install_dir.path())
+        .plugin(BincodePlugin)
+        .external_packages(&[ExternalPackage {
+            for_namespace: "shared".to_string(),
+            module_name: None,
+            location: PackageLocation::Path("../shared".to_string()),
+            version: None,
+        }])
+        .generate(&registry)
+        .unwrap();
+
+    let root =
+        std::fs::read_to_string(install_dir.path().join("com/acme/shared/Shared.kt")).unwrap();
+    assert!(root.contains("data class App("), "{root}");
+    assert!(
+        !install_dir
+            .path()
+            .join("com/acme/shared/shared/Shared.kt")
+            .exists()
+    );
+
+    let manifest = std::fs::read_to_string(install_dir.path().join("build.gradle.kts")).unwrap();
+    assert!(manifest.contains(r#"files("../shared")"#), "{manifest}");
+}
