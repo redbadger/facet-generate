@@ -318,6 +318,48 @@ fn type_named_bincode_serializer_is_rejected() {
     );
 }
 
+/// The `char` helper classes are only declared in a registry with a `char`,
+/// so a type of either name only collides there (#213).
+#[test]
+fn type_named_like_a_char_helper_is_rejected_beside_a_char() {
+    #[derive(facet::Facet)]
+    struct CharSerde {
+        name: String,
+    }
+
+    #[derive(facet::Facet)]
+    struct JsonCharConverter {
+        letter: char,
+    }
+
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    let registry = crate::reflect!(CharSerde).unwrap();
+    assert!(
+        CSharpCodeGenerator::new(&cfg)
+            .output(&mut Vec::new(), &registry)
+            .is_ok()
+    );
+
+    let registry = crate::reflect!(CharSerde, JsonCharConverter).unwrap();
+    let err = CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "C#: type `CharSerde` collides with the generated `CharSerde` helper class used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+
+    let registry = crate::reflect!(JsonCharConverter).unwrap();
+    let err = CSharpCodeGenerator::new(&cfg)
+        .output(&mut Vec::new(), &registry)
+        .unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "C#: type `JsonCharConverter` collides with the generated `JsonCharConverter` converter used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
 #[test]
 fn field_named_get_hash_code_is_rejected() {
     #[derive(facet::Facet)]

@@ -566,9 +566,10 @@ fn option_value_type_needs_dot_value_for_serialize() {
         actual.contains("FacetHelpers.SerializeOption(MaybeDouble, serializer,"),
         "double? should use FacetHelpers.SerializeOption\n{actual}"
     );
+    // A `char` is a `string`, a reference type.
     assert!(
-        actual.contains("FacetHelpers.SerializeOption(MaybeChar, serializer,"),
-        "char? should use FacetHelpers.SerializeOption\n{actual}"
+        actual.contains("FacetHelpers.SerializeOptionRef(MaybeChar, serializer,"),
+        "string? should use FacetHelpers.SerializeOptionRef\n{actual}"
     );
     assert!(
         actual.contains("FacetHelpers.SerializeOption(MaybeInt, serializer,"),

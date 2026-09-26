@@ -224,6 +224,46 @@ fn test_that_typescript_code_shadowing_builtin_names_type_checks() {
     }
 }
 
+/// A type named `String` shadows the global one, which the Bincode plugin's
+/// `char` helper constructs a string with (#213).
+#[test]
+fn test_that_typescript_code_with_chars_beside_a_type_named_string_type_checks() {
+    #[derive(Facet)]
+    pub struct String {
+        pub letter: char,
+        pub letters: Vec<char>,
+        pub maybe: Option<char>,
+    }
+
+    let registry = facet_generate::reflect!(String).unwrap();
+    for plugin in [
+        Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<typescript::TypeScript>>,
+        Arc::new(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        let mut installer = typescript::Installer::new("testing", dir.path());
+        installer.install_serde_runtime().unwrap();
+        installer.install_bincode_runtime().unwrap();
+
+        let source_path = dir.path().join("testing.ts");
+        let mut source = File::create(&source_path).unwrap();
+        let config = CodeGeneratorConfig::new("testing".to_string());
+        let generator =
+            typescript::TypeScriptCodeGenerator::new(&config).with_plugins(vec![plugin]);
+        generator.output(&mut source, &registry).unwrap();
+        drop(source);
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&source_path)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}
+
 /// Generate `registry` with the installer and `plugin`, then type-check every
 /// module it wrote.
 fn assert_installed_modules_type_check(

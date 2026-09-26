@@ -379,6 +379,186 @@ Console.WriteLine("Simple data roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// `char`s, which C# declares as `string` so that one outside the BMP fits,
+/// of one to four UTF-8 bytes, in a sequence, an option and a map (#213).
+#[allow(clippy::unsafe_derive_deserialize)]
+mod char_fixture {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct CharData {
+        pub ascii: char,
+        pub two_bytes: char,
+        pub three_bytes: char,
+        pub four_bytes: char,
+        pub chars: Vec<char>,
+        pub maybe_char: Option<char>,
+        pub no_char: Option<char>,
+        pub by_char: BTreeMap<char, char>,
+        pub letter: Letter,
+    }
+
+    /// Nothing but a `char`, so that a value that isn't one is rejected by
+    /// the `char` and not by what follows it.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Letter(pub char);
+
+    /// The value the C# side also builds, field for field.
+    pub fn sample() -> CharData {
+        CharData {
+            ascii: 'a',
+            two_bytes: 'é',
+            three_bytes: '€',
+            four_bytes: '🦀',
+            chars: vec!['z', 'ß', '✓', '😀'],
+            maybe_char: Some('🦀'),
+            no_char: None,
+            by_char: BTreeMap::from([('k', '🦀')]),
+            letter: Letter('Ω'),
+        }
+    }
+
+    /// The same value in C#, as the generated types spell it.
+    pub const CSHARP_SAMPLE: &str = r#"
+static CharData Sample() => new CharData
+{
+    Ascii = "a",
+    TwoBytes = "é",
+    ThreeBytes = "€",
+    FourBytes = "🦀",
+    Chars = new ObservableCollection<string> { "z", "ß", "✓", "😀" },
+    MaybeChar = "🦀",
+    NoChar = null,
+    ByChar = new Dictionary<string, string> { ["k"] = "🦀" },
+    Letter = new Letter { Value = "Ω" },
+};
+
+// Strings that aren't exactly one Unicode scalar value: none, two, a letter
+// and a combining accent, lone or reversed surrogates, and null.
+static string?[] NotChars() => new string?[]
+{
+    "", "ab", "🦀🦀", "e\u0301", "\uD83E", "\uDD80", "\uD83Ea", "\uDD80\uD83E", null,
+};
+"#;
+}
+
+/// Round-trips `char`s of one to four UTF-8 bytes between Rust's `bincode` and
+/// the generated C#: C# decodes Rust's bytes into the value it builds itself
+/// and encodes both back into those bytes. A string that isn't exactly one
+/// Unicode scalar value isn't serialized, and bytes that aren't the UTF-8
+/// encoding of one aren't deserialized (#213).
+#[test]
+fn test_csharp_bincode_runtime_on_chars() {
+    use char_fixture::{CSHARP_SAMPLE, CharData, sample};
+
+    // Rust's `bincode` writes a `char` as its UTF-8 bytes, with no length.
+    assert_eq!(bincode::serialize(&'a').unwrap(), b"a");
+    assert_eq!(bincode::serialize(&'🦀').unwrap(), "🦀".as_bytes());
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&reflect!(CharData).unwrap())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    make_executable(&dir, "Example.Testing");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using Example.Testing;
+using Facet.Runtime.Serde;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+{CSHARP_SAMPLE}
+byte[] input = {bytes};
+var value = CharData.BincodeDeserialize(input);
+var sample = Sample();
+
+Assert(value.Ascii == "a" && value.TwoBytes == "é" && value.ThreeBytes == "€" && value.FourBytes == "🦀", "chars");
+Assert(value.Chars.SequenceEqual(sample.Chars), "Vec<char>");
+Assert(value.MaybeChar == "🦀" && value.NoChar is null, "Option<char>");
+Assert(value.ByChar.Count == 1 && value.ByChar["k"] == "🦀", "BTreeMap<char, char>");
+Assert(value.Letter.Value == "Ω", "newtype of a char");
+
+foreach (var output in new[] {{ value.BincodeSerialize(), sample.BincodeSerialize() }})
+{{
+    Assert(input.SequenceEqual(output), $"roundtrip failed: {{string.Join(", ", output)}}");
+}}
+
+foreach (var bad in NotChars())
+{{
+    try
+    {{
+        new Letter {{ Value = bad! }}.BincodeSerialize();
+        Assert(false, $"serialized a bad char: {{bad}}");
+    }}
+    catch (SerializationError)
+    {{
+    }}
+}}
+
+// Bytes that aren't the UTF-8 encoding of one: a continuation byte first, a
+// byte UTF-8 never uses, a lead byte followed by something other than a
+// continuation, overlong encodings, a surrogate, and a code point past
+// U+10FFFF.
+foreach (var bad in new byte[][]
+{{
+    new byte[] {{ 0x80 }},
+    new byte[] {{ 0xff }},
+    new byte[] {{ 0xc3, 0x41 }},
+    new byte[] {{ 0xc0, 0x80 }},
+    new byte[] {{ 0xe0, 0x80, 0x80 }},
+    new byte[] {{ 0xf0, 0x80, 0x80, 0x80 }},
+    new byte[] {{ 0xed, 0xa0, 0x80 }},
+    new byte[] {{ 0xf4, 0x90, 0x80, 0x80 }},
+}})
+{{
+    try
+    {{
+        Letter.BincodeDeserialize(bad);
+        Assert(false, $"deserialized a bad char: {{string.Join(", ", bad)}}");
+    }}
+    catch (DeserializationError)
+    {{
+    }}
+}}
+// Nor are too few of them, which the runtime rejects as it does any truncated
+// input.
+var truncated = false;
+try
+{{
+    Letter.BincodeDeserialize(new byte[] {{ 0xf0, 0x9f }});
+}}
+catch (Exception)
+{{
+    truncated = true;
+}}
+Assert(truncated, "deserialized a truncated char");
+
+Console.WriteLine("Chars roundtrip: PASSED");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 /// Round-trips values across a namespaced module and the root one: the ROOT
 /// `App` holds a `kv::Entry`, which holds ROOT types (a struct, unit and data
 /// enums, and an enum sharing its name with a `kv` struct). Each module names
@@ -767,10 +947,10 @@ Console.WriteLine($"Supported types roundtrip + mutation: {{passed}}/{{positiveI
 /// `serde_json`'s: the C# side must read it and write JSON that reads back to
 /// the same Rust value.
 ///
-/// The Kotlin runtime test's fixture, but for what C# cannot hold: a `char`
-/// outside the Basic Multilingual Plane (a C# `char` is one UTF-16 unit), and
-/// `Option<Option<T>>` (C# has no `T??`). It adds the variants of #174 and
-/// #193.
+/// The Kotlin runtime test's fixture, but for what C# cannot hold,
+/// `Option<Option<T>>` (C# has no `T??`), and for a `char` outside the Basic
+/// Multilingual Plane, which the `char` test covers. It adds the variants of
+/// #174 and #193.
 #[allow(
     clippy::unsafe_derive_deserialize,
     clippy::struct_field_names,
@@ -1159,22 +1339,22 @@ static JsonData Sample()
         Floats = new Floats { Tenth = 0.1f, Pi = Math.PI, Whole = 3.0, Tiny = 1e-300, Negative = -2.5f, Optional = null },
         Text = new Text
         {
-            Ascii = 'a',
-            Accented = 'é',
-            Symbol = '✓',
+            Ascii = "a",
+            Accented = "é",
+            Symbol = "✓",
             Escaped = "quote \" backslash \\ slash / tab \t newline \n dollar $x crab 🦀",
             Ref = "#/defs",
         },
         Bytes = new byte[] { 0, 1, 127, 128, 255 },
         Maybe = 5,
-        MaybeChars = new ObservableCollection<char?> { 'x', null },
+        MaybeChars = new ObservableCollection<string?> { "x", null },
         Maps = new Maps
         {
             ByString = new Dictionary<string, uint> { ["one"] = 1, ["two"] = 2 },
             ByInt = new Dictionary<uint, string> { [1] = "one", [20] = "twenty" },
             ByNegative = new Dictionary<long, bool> { [-5] = true, [long.MaxValue] = false },
             ByBool = new Dictionary<bool, byte> { [false] = 0, [true] = 1 },
-            ByChar = new Dictionary<char, ObservableCollection<char?>> { ['k'] = new ObservableCollection<char?> { 'v', null } },
+            ByChar = new Dictionary<string, ObservableCollection<string?>> { ["k"] = new ObservableCollection<string?> { "v", null } },
             ByLevel = new Dictionary<Level, byte> { [Level.Low] = 1, [Level.High] = 2 },
             ByUuid = new Dictionary<Guid, byte> { [id] = 7 },
             ByNewtype = new Dictionary<NewType, byte> { [new NewType { Value = "key" }] = 3 },
@@ -1183,8 +1363,8 @@ static JsonData Sample()
         {
             new Choice.Unit(),
             new Choice.NewType("new"),
-            new Choice.Char('c'),
-            new Choice.Tuple(1, 't'),
+            new Choice.Char("c"),
+            new Choice.Tuple(1, "t"),
             new Choice.Struct(1, "b"),
             new Choice.Struct(2, null),
             new Choice.Other(-1),
@@ -1197,7 +1377,7 @@ static JsonData Sample()
         {
             new Internal.Unit(),
             new Internal.Wrapped(new Point { X = 1, Y = -1 }),
-            new Internal.Struct(3, 'z'),
+            new Internal.Struct(3, "z"),
         },
         Adjacent = new ObservableCollection<Adjacent>
         {
@@ -1229,7 +1409,7 @@ static JsonData Sample()
         Newtype = new NewType { Value = "wrapped" },
         TupleStruct = new TupleStruct { Field0 = 7, Field1 = -7 },
         Pair = (8, "eight"),
-        Tuple = (1, 'q', null),
+        Tuple = (1, "q", null),
         NestedTuples = new ObservableCollection<(sbyte, (bool, string))> { (-1, (true, "yes")) },
         TupleMap = new Dictionary<string, (byte, byte)> { ["pair"] = (1, 2) },
         UnitValues = new Dictionary<string, Unit> { ["a"] = default, ["b"] = default },
@@ -1375,6 +1555,116 @@ Assert(Rejects<Point>("{{\"x\": 1, \"y\": 2147483648}}"), "accepted an out-of-ra
         // Rust ignores keys it does not know, so compare the JSON itself too.
         let actual: serde_json::Value = serde_json::from_str(output).unwrap();
         assert_eq!(actual, expected, "{output}");
+    }
+}
+
+/// Round-trips `char`s of one to four UTF-8 bytes through JSON between
+/// `serde_json` and the generated C#, both ways, as values and as object keys.
+/// A string that isn't exactly one Unicode scalar value is neither read nor
+/// written, as `serde_json` reads none (#213).
+#[test]
+fn test_csharp_json_runtime_on_chars() {
+    use char_fixture::{CSHARP_SAMPLE, CharData, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&reflect!(CharData).unwrap())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+    // `serde_json` rejects a string of two scalar values for a `char`.
+    assert!(serde_json::from_str::<char_fixture::Letter>(r#""e\u0301""#).is_err());
+
+    let outputs = run_csharp_json_program(
+        &dir,
+        "Example.Testing",
+        &format!(
+            r#"using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using Example.Testing;
+using Facet.Runtime.Json;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+static bool Rejects<T>(string input)
+{{
+    try
+    {{
+        JsonSerde.Deserialize<T>(input);
+        return false;
+    }}
+    catch (JsonException)
+    {{
+        return true;
+    }}
+}}
+{CSHARP_SAMPLE}
+var input = File.ReadAllText("input.json");
+var value = CharData.JsonDeserialize(input);
+var sample = Sample();
+
+Assert(value.Ascii == "a" && value.TwoBytes == "é" && value.ThreeBytes == "€" && value.FourBytes == "🦀", "chars");
+Assert(value.Chars.SequenceEqual(sample.Chars), "Vec<char>");
+Assert(value.MaybeChar == "🦀" && value.NoChar is null, "Option<char>");
+Assert(value.ByChar.Count == 1 && value.ByChar["k"] == "🦀", "BTreeMap<char, char>");
+Assert(value.Letter.Value == "Ω", "newtype of a char");
+Assert(value.JsonSerialize() == sample.JsonSerialize(), $"decoded mismatch:\n  {{value.JsonSerialize()}}\n  {{sample.JsonSerialize()}}");
+
+Console.WriteLine("JSON:" + value.JsonSerialize());
+Console.WriteLine("JSON:" + sample.JsonSerialize());
+
+foreach (var bad in NotChars())
+{{
+    try
+    {{
+        new Letter {{ Value = bad! }}.JsonSerialize();
+        Assert(false, $"wrote a bad char: {{bad}}");
+    }}
+    catch (JsonException)
+    {{
+    }}
+    try
+    {{
+        var badKey = Sample();
+        badKey.ByChar = new Dictionary<string, string> {{ [bad ?? ""] = "v" }};
+        badKey.JsonSerialize();
+        Assert(false, $"wrote a bad char key: {{bad}}");
+    }}
+    catch (JsonException)
+    {{
+    }}
+}}
+// JSON strings that aren't one: none, two, a letter and a combining accent,
+// and a lone surrogate.
+foreach (var bad in new[] {{ "\"\"", "\"ab\"", "\"🦀🦀\"", "\"e\\u0301\"", "\"\\ud83e\"" }})
+{{
+    Assert(Rejects<Letter>(bad), $"read a bad char: {{bad}}");
+    Assert(Rejects<CharData>(input.Replace("\"k\":", bad + ":")), $"read a bad char key: {{bad}}");
+}}
+// Nor is anything but a string.
+foreach (var bad in new[] {{ "null", "1", "[\"a\"]" }})
+{{
+    Assert(Rejects<Letter>(bad), $"read a bad char: {{bad}}");
+}}
+"#
+        ),
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    for output in &outputs {
+        let value: CharData = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read C#'s JSON: {e}\n{output}"));
+        assert_eq!(value, sample(), "{output}");
     }
 }
 

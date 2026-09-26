@@ -392,6 +392,138 @@ let package = Package(
     assert!(status.success());
 }
 
+/// `char`s of one to four UTF-8 bytes, in a sequence, an option and a map,
+/// which Swift declares as `Character` (#213).
+#[allow(clippy::unsafe_derive_deserialize)]
+mod char_fixture {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct CharData {
+        pub ascii: char,
+        pub two_bytes: char,
+        pub three_bytes: char,
+        pub four_bytes: char,
+        pub chars: Vec<char>,
+        pub maybe_char: Option<char>,
+        pub no_char: Option<char>,
+        pub by_char: BTreeMap<char, char>,
+        pub letter: Letter,
+    }
+
+    /// Nothing but a `char`, so that a value that isn't one is rejected by
+    /// the `char` and not by what follows it.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Letter(pub char);
+
+    /// The value the Swift side also builds, field for field.
+    pub fn sample() -> CharData {
+        CharData {
+            ascii: 'a',
+            two_bytes: 'é',
+            three_bytes: '€',
+            four_bytes: '🦀',
+            chars: vec!['z', 'ß', '✓', '😀'],
+            maybe_char: Some('🦀'),
+            no_char: None,
+            by_char: BTreeMap::from([('k', '🦀')]),
+            letter: Letter('Ω'),
+        }
+    }
+
+    /// The same value in Swift, as the generated types spell it, and
+    /// `Character`s that are more than one Unicode scalar value: a letter and
+    /// a combining accent, a flag, a line break and a skin-toned emoji.
+    pub const SWIFT_SAMPLE: &str = r#"
+let sample = CharData(
+    ascii: "a",
+    twoBytes: "é",
+    threeBytes: "€",
+    fourBytes: "🦀",
+    chars: ["z", "ß", "✓", "😀"],
+    maybeChar: "🦀",
+    noChar: nil,
+    byChar: ["k": "🦀"],
+    letter: Letter(value: "Ω")
+)
+let notChars: [Character] = ["e\u{301}", "🇬🇧", "\r\n", "👍🏽"]
+"#;
+}
+
+/// Round-trips `char`s of one to four UTF-8 bytes between Rust's `bincode`
+/// and the generated Swift: Swift decodes Rust's bytes into the value it
+/// builds itself and encodes both back into those bytes. A `Character` that
+/// isn't exactly one Unicode scalar value isn't serialized, and bytes that
+/// aren't the UTF-8 encoding of one aren't deserialized (#213).
+#[test]
+fn test_swift_bincode_runtime_on_chars() {
+    use char_fixture::{CharData, SWIFT_SAMPLE, sample};
+
+    // Rust's `bincode` writes a `char` as its UTF-8 bytes, with no length.
+    assert_eq!(bincode::serialize(&'a').unwrap(), b"a");
+    assert_eq!(bincode::serialize(&'🦀').unwrap(), "🦀".as_bytes());
+
+    let dir = tempfile::tempdir().unwrap();
+    swift::Installer::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .generate(&facet_generate::reflect!(CharData).unwrap())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    run_swift_main(
+        dir.path(),
+        &format!(
+            r#"
+import Serde
+import Example
+{SWIFT_SAMPLE}
+let input: [UInt8] = {input}
+let value = try CharData.bincodeDeserialize(input: input)
+precondition(value == sample, "decoded mismatch:\n  \(value)\n  \(sample)")
+for output in [try value.bincodeSerialize(), try sample.bincodeSerialize()] {{
+    precondition(output == input, "roundtrip failed:\n  \(input)\n  \(output)")
+}}
+
+for bad in notChars {{
+    do {{
+        _ = try Letter(value: bad).bincodeSerialize()
+        fatalError("serialized a bad char: \(bad.unicodeScalars.map {{ $0.value }})")
+    }} catch is SerializationError {{}}
+}}
+
+// Bytes that aren't the UTF-8 encoding of one: a continuation byte first, a
+// byte UTF-8 never uses, a lead byte followed by something other than a
+// continuation or by too few of them, overlong encodings, a surrogate, and a
+// code point past U+10FFFF.
+let notUtf8: [[UInt8]] = [
+    [0x80],
+    [0xff],
+    [0xc3, 0x41],
+    [0xf0, 0x9f],
+    [0xc0, 0x80],
+    [0xe0, 0x80, 0x80],
+    [0xf0, 0x80, 0x80, 0x80],
+    [0xed, 0xa0, 0x80],
+    [0xf4, 0x90, 0x80, 0x80],
+]
+for bad in notUtf8 {{
+    do {{
+        _ = try Letter.bincodeDeserialize(input: bad)
+        fatalError("deserialized a bad char: \(bad)")
+    }} catch is DeserializationError {{}}
+}}
+
+print("Chars roundtrip: PASSED")
+"#,
+            input = quote_bytes(&reference),
+        ),
+    );
+}
+
 /// Types exercising every shape the JSON plugin encodes, whose JSON is
 /// `serde_json`'s: the Swift side must read it and write JSON that reads
 /// back to the same Rust value.
@@ -885,6 +1017,82 @@ for bad in ["", "{{}}", "[]", String(decoding: input.dropLast(), as: UTF8.self)]
     assert_eq!(outputs.len(), 2, "{outputs:?}");
     for output in &outputs {
         let value: JsonData = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read Swift's JSON: {e}\n{output}"));
+        assert_eq!(value, sample(), "{output}");
+    }
+}
+
+/// Round-trips `char`s of one to four UTF-8 bytes through JSON between
+/// `serde_json` and the generated Swift, both ways, as values and as object
+/// keys. A `Character` or JSON string that isn't exactly one Unicode scalar
+/// value is neither written nor read, as `serde_json` reads none (#213).
+#[test]
+fn test_swift_json_runtime_on_chars() {
+    use char_fixture::{CharData, SWIFT_SAMPLE, sample};
+
+    let dir = tempfile::tempdir().unwrap();
+    swift::Installer::new("Example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(&facet_generate::reflect!(CharData).unwrap())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+    // `serde_json` rejects a string of two scalar values for a `char`.
+    assert!(serde_json::from_str::<char_fixture::Letter>(r#""e\u0301""#).is_err());
+
+    let outputs = run_swift_main(
+        dir.path(),
+        &format!(
+            r#"
+import Foundation
+import Serde
+import Example
+{SWIFT_SAMPLE}
+let input: [UInt8] = {input}
+let value = try CharData.jsonDeserialize(input: input)
+precondition(value == sample, "decoded mismatch:\n  \(value)\n  \(sample)")
+
+print("JSON:" + String(decoding: try value.jsonSerialize(), as: UTF8.self))
+print("JSON:" + String(decoding: try sample.jsonSerialize(), as: UTF8.self))
+
+for bad in notChars {{
+    if (try? Letter(value: bad).jsonSerialize()) != nil {{
+        fatalError("wrote a bad char: \(bad.unicodeScalars.map {{ $0.value }})")
+    }}
+    var badKey = sample
+    badKey.byChar = [bad: "v"]
+    if (try? badKey.jsonSerialize()) != nil {{
+        fatalError("wrote a bad char key: \(bad.unicodeScalars.map {{ $0.value }})")
+    }}
+}}
+
+// JSON strings that aren't one: none, two, a letter and a combining accent,
+// and a flag.
+let text = String(decoding: input, as: UTF8.self)
+for bad in ["\"\"", "\"ab\"", "\"e\\u0301\"", "\"🇬🇧\""] {{
+    if (try? Letter.jsonDeserialize(input: Array(bad.utf8))) != nil {{
+        fatalError("read a bad char: \(bad)")
+    }}
+    let badKey = text.replacingOccurrences(of: "\"k\":", with: bad + ":")
+    precondition(badKey != text, "no key to replace")
+    if (try? CharData.jsonDeserialize(input: Array(badKey.utf8))) != nil {{
+        fatalError("read a bad char key: \(bad)")
+    }}
+}}
+// Nor is anything but a string.
+for bad in ["null", "1", "[\"a\"]"] {{
+    if (try? Letter.jsonDeserialize(input: Array(bad.utf8))) != nil {{
+        fatalError("read a bad char: \(bad)")
+    }}
+}}
+"#,
+            input = quote_bytes(&reference),
+        ),
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    for output in &outputs {
+        let value: CharData = serde_json::from_str(output)
             .unwrap_or_else(|e| panic!("Rust could not read Swift's JSON: {e}\n{output}"));
         assert_eq!(value, sample(), "{output}");
     }

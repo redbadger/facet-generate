@@ -96,10 +96,14 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
 /// plugin's code names no global, reaching its runtime through `$json`, but
 /// another plugin's may.
 pub(crate) const CONSTRUCTED_GLOBALS: &[(&str, ConstructsGlobal)] = &[
-    // The enum functions throw on an unknown variant, and the `Uuid` helpers
-    // on a malformed UUID.
+    // The enum functions throw on an unknown variant, the `Uuid` helpers on a
+    // malformed UUID, and the `char` helpers on a string or bytes that aren't
+    // one Unicode scalar value.
     ("Error", |container| {
-        matches!(container, ContainerFormat::Enum(..)) || mentions(container, is_uuid)
+        matches!(container, ContainerFormat::Enum(..))
+            || mentions(container, |format| {
+                matches!(format, Format::Uuid | Format::Char)
+            })
     }),
     // The `deserializeMap` helper.
     ("Map", |container| {
