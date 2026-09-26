@@ -937,6 +937,94 @@ pub mod fixed_arrays {
 );"#;
 }
 
+/// Tuples nested in tuples, beside each other in one type, and inside every
+/// other format, including a field named like a tuple element's local (#211).
+pub mod tuples {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Pairs {
+        pub nested: (u8, (String, bool)),
+        pub first: (u16, String),
+        pub second: (bool, u32),
+        pub deep: ((u8, (u8, u8)), u8),
+        pub field0: (u8, (u8, u8)),
+        pub list: Vec<(u8, (String, bool))>,
+        pub maybe: Option<(u8, (String, bool))>,
+        pub by_pair: BTreeMap<(u8, u16), (String, (bool, u8))>,
+        pub fixed: [(u8, (u8, bool)); 2],
+        pub pairings: Vec<Pairing>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Pairing {
+        Tuple((u8, (String, bool)), (u16, u8)),
+        Wrapped((u8, (String, bool))),
+        Struct {
+            first: (u8, bool),
+            second: (String, (u8, u8)),
+        },
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Pairs).unwrap()
+    }
+
+    /// A value holding every field. The map's keys are the same length, so
+    /// bincode's order for them (by encoding) is Rust's.
+    pub fn sample() -> Pairs {
+        Pairs {
+            nested: (1, ("one".to_string(), true)),
+            first: (515, "first".to_string()),
+            second: (false, 70000),
+            deep: ((2, (3, 4)), 5),
+            field0: (6, (7, 8)),
+            list: vec![
+                (9, ("a".to_string(), false)),
+                (10, ("bc".to_string(), true)),
+            ],
+            maybe: Some((11, ("maybe".to_string(), true))),
+            by_pair: BTreeMap::from([
+                ((1, 2), ("x".to_string(), (true, 3))),
+                ((4, 5), ("yz".to_string(), (false, 6))),
+            ]),
+            fixed: [(12, (13, true)), (14, (15, false))],
+            pairings: vec![
+                Pairing::Tuple((16, ("t".to_string(), false)), (17, 18)),
+                Pairing::Wrapped((19, ("w".to_string(), true))),
+                Pairing::Struct {
+                    first: (20, true),
+                    second: ("s".to_string(), (21, 22)),
+                },
+            ],
+        }
+    }
+
+    /// [`sample`] as the generated TypeScript spells it: a `[T; N]` is an
+    /// array of one-element tuples, `[T][]`.
+    pub const TYPESCRIPT_SAMPLE: &str = r#"const sample = new Pairs(
+    [1, ["one", true]],
+    [515, "first"],
+    [false, 70000],
+    [[2, [3, 4]], 5],
+    [6, [7, 8]],
+    [[9, ["a", false]], [10, ["bc", true]]],
+    [11, ["maybe", true]],
+    new Map([[[1, 2], ["x", [true, 3]]], [[4, 5], ["yz", [false, 6]]]]),
+    [[[12, [13, true]]], [[14, [15, false]]]],
+    [
+        pairingTuple([16, ["t", false]], [17, 18]),
+        pairingWrapped([19, ["w", true]]),
+        pairingStruct([20, true], ["s", [21, 22]]),
+    ],
+);"#;
+}
+
 // ---------------------------------------------------------------------------
 // Cross-namespace fixtures — shared by the per-language compilation tests.
 //

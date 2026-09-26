@@ -17,7 +17,7 @@
 //! `Deserializer` interfaces, field by field in declaration order and an enum
 //! variant by its index, as bincode lays them out.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use heck::ToUpperCamelCase;
@@ -338,8 +338,15 @@ fn write_struct_type_body(
     writeln!(w)?;
     write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
     with_block(w, Newlines::BOTH, |w| {
+        let mut locals = Locals::new(fields.iter().map(|f| param_name(&f.name).into_owned()));
         for field in fields {
-            write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+            write_deserialize(
+                w,
+                Some(&param_name(&field.name)),
+                &field.value,
+                &mut locals,
+                config,
+            )?;
         }
         writeln!(
             w,
@@ -497,24 +504,35 @@ fn write_deserialize_variant_return(
         EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
     };
 
+    // Each variant is read in its own `case` block, with its own locals.
+    let mut locals = Locals::new(match variant {
+        VariantFormat::NewType(_) => vec!["inner".to_string(), "value".to_string()],
+        VariantFormat::Tuple(formats) => (0..formats.len()).map(|i| format!("field{i}")).collect(),
+        VariantFormat::Struct(fields) => fields
+            .iter()
+            .map(|f| param_name(&f.name).into_owned())
+            .collect(),
+        VariantFormat::Unit | VariantFormat::Variable(_) => vec![],
+    });
+
     match (tagging, variant) {
         (_, VariantFormat::Unit) => {
             writeln!(w, r#"return {{ {tag_field}: "{variant_name}" }};"#)
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("inner"), format, config)?;
+            write_deserialize(w, Some("inner"), format, &mut locals, config)?;
             writeln!(
                 w,
                 r#"return {{ {tag_field}: "{variant_name}", {content}: inner }};"#
             )
         }
         (_, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("value"), format, config)?;
+            write_deserialize(w, Some("value"), format, &mut locals, config)?;
             writeln!(w, r#"return {{ {tag_field}: "{variant_name}", value }};"#)
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Tuple(formats)) => {
             for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+                write_deserialize(w, Some(&format!("field{i}")), f, &mut locals, config)?;
             }
             let fields_joined = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -527,7 +545,7 @@ fn write_deserialize_variant_return(
         }
         (_, VariantFormat::Tuple(formats)) => {
             for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+                write_deserialize(w, Some(&format!("field{i}")), f, &mut locals, config)?;
             }
             let field_names: Vec<String> =
                 (0..formats.len()).map(|i| format!("field{i}")).collect();
@@ -539,7 +557,13 @@ fn write_deserialize_variant_return(
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+                write_deserialize(
+                    w,
+                    Some(&param_name(&field.name)),
+                    &field.value,
+                    &mut locals,
+                    config,
+                )?;
             }
             let struct_fields = fields
                 .iter()
@@ -553,7 +577,13 @@ fn write_deserialize_variant_return(
         }
         (_, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+                write_deserialize(
+                    w,
+                    Some(&param_name(&field.name)),
+                    &field.value,
+                    &mut locals,
+                    config,
+                )?;
             }
             let field_names: Vec<String> = fields.iter().map(object_entry).collect();
             let all_parts: Vec<String> =
@@ -761,15 +791,52 @@ const fn is_primitive_or_named(format: &Format) -> bool {
     )
 }
 
+/// The names bound by `const` in one scope of a generated `deserialize`, so
+/// that the locals holding a tuple's elements never collide with each other,
+/// with another tuple's, or with a field's.
+///
+/// A struct body, an enum variant's `case` block and each callback passed to
+/// a runtime helper is a scope of its own.
+#[derive(Default)]
+struct Locals {
+    taken: BTreeSet<String>,
+    next: usize,
+}
+
+impl Locals {
+    /// A scope in which the caller binds `names` itself.
+    fn new(names: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            taken: names.into_iter().collect(),
+            next: 0,
+        }
+    }
+
+    /// The first `field{n}` not yet bound in this scope, for a tuple element.
+    fn element(&mut self) -> String {
+        loop {
+            let name = format!("field{}", self.next);
+            self.next += 1;
+            if self.taken.insert(name.clone()) {
+                return name;
+            }
+        }
+    }
+}
+
 /// Write a deserialize statement for `format`.
 ///
 /// When `field_name` is `Some`, emits `const <name> = <expr>;`.
 /// When `field_name` is `None`, emits `return <expr>;`.
+///
+/// `locals` holds the names already bound in the current scope, `field_name`
+/// among them. A tuple's elements are bound as fresh locals in that scope.
 #[allow(clippy::too_many_lines)]
 fn write_deserialize(
     w: &mut dyn IndentWrite,
     field_name: Option<&str>,
     format: &Format,
+    locals: &mut Locals,
     config: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     match format {
@@ -796,7 +863,7 @@ fn write_deserialize(
                 )?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -814,7 +881,7 @@ fn write_deserialize(
                 )?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -829,7 +896,7 @@ fn write_deserialize(
                 write!(w, "return deserializeSet(deserializer, (deserializer) => ")?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -844,37 +911,22 @@ fn write_deserialize(
                 write!(w, "return deserializeMap(deserializer, (deserializer) => ")?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                if is_primitive_or_named(key) {
-                    writeln!(
-                        w,
-                        "const key = {};",
-                        deserialize_primitive_expr(key, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("key"), key, config)?;
-                }
-                if is_primitive_or_named(value) {
-                    writeln!(
-                        w,
-                        "const value = {};",
-                        deserialize_primitive_expr(value, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("value"), value, config)?;
-                }
+                let mut locals = Locals::new(["key".to_string(), "value".to_string()]);
+                write_deserialize(w, Some("key"), key, &mut locals, config)?;
+                write_deserialize(w, Some("value"), value, &mut locals, config)?;
                 writeln!(w, "return [key, value];")
             })?;
             writeln!(w, ");")
         }
 
         Format::Tuple(formats) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+            // Every element is named before any is read, so a nested tuple's
+            // elements take the names after them.
+            let elements: Vec<String> = formats.iter().map(|_| locals.element()).collect();
+            for (element, f) in elements.iter().zip(formats) {
+                write_deserialize(w, Some(element), f, locals, config)?;
             }
-            let fields_joined = (0..formats.len())
-                .map(|i| format!("field{i}"))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let fields_joined = elements.join(", ");
             let type_str = formats
                 .iter()
                 .map(|f| render_type(f, config))
@@ -903,7 +955,8 @@ fn write_deserialize(
             // inferred as.
             let item_type = render_type(content, config);
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, Some("item"), content, config)?;
+                let mut locals = Locals::new(["item".to_string()]);
+                write_deserialize(w, Some("item"), content, &mut locals, config)?;
                 writeln!(w, "return [item] as [{item_type}];")
             })?;
             writeln!(w, ");")

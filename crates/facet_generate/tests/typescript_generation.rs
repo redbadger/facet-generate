@@ -465,6 +465,21 @@ fn test_that_typescript_code_with_fixed_size_arrays_type_checks() {
     }
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, type-check with
+/// Bincode and with JSON (#211). Bincode read each tuple's elements into
+/// `const field0`, `const field1`, … in the enclosing scope, so a second tuple
+/// declared them again (`TS2451 [ERROR]: Cannot redeclare block-scoped
+/// variable 'field0'.`), and an outer tuple was built from its inner tuple's
+/// elements (`TS2352 [ERROR]: Conversion of type '[number, boolean]' to type
+/// '[number, [string, boolean]]' may be a mistake`).
+#[test]
+fn test_that_typescript_code_with_nested_tuples_type_checks() {
+    let registry = common::tuples::get_registry();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+    assert_installed_modules_type_check(&registry, JsonPlugin);
+}
+
 /// A `Uuid` field type-checks with no plugin, with each plugin, and with both
 /// on one module (#191). Only the plugins declared the `Uuid` alias, so with
 /// none it was missing (`TS2304 [ERROR]: Cannot find name 'Uuid'.`), and with

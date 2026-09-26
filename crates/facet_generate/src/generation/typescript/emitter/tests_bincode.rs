@@ -381,6 +381,179 @@ fn struct_with_field_that_is_a_4_tuple() {
     ");
 }
 
+/// Each tuple's elements get locals of their own, so a nested tuple and a
+/// second tuple in the same type don't redeclare `field0` (#211).
+#[test]
+fn struct_with_a_nested_tuple_and_a_second_tuple() {
+    #[derive(Facet)]
+    struct MyStruct {
+        nested: (u8, (String, bool)),
+        second: (u16, u32),
+    }
+
+    let actual = emit!(MyStruct as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class MyStruct {
+        constructor (public nested: Tuple<[uint8, Tuple<[str, bool]>]>, public second: Tuple<[uint16, uint32]>) {
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializer.serializeU8(this.nested[0]);
+            serializer.serializeStr(this.nested[1][0]);
+            serializer.serializeBool(this.nested[1][1]);
+            serializer.serializeU16(this.second[0]);
+            serializer.serializeU32(this.second[1]);
+        }
+
+        static deserialize(deserializer: Deserializer): MyStruct {
+            const field0 = deserializer.deserializeU8();
+            const field2 = deserializer.deserializeStr();
+            const field3 = deserializer.deserializeBool();
+            const field1 = [field2, field3] as [str, bool];
+            const nested = [field0, field1] as [uint8, Tuple<[str, bool]>];
+            const field4 = deserializer.deserializeU16();
+            const field5 = deserializer.deserializeU32();
+            const second = [field4, field5] as [uint16, uint32];
+            return new MyStruct(nested,second);
+        }
+    }
+    ");
+}
+
+/// A field named like a tuple element's local keeps its name, and the
+/// element takes the next one free (#211).
+#[test]
+fn struct_with_a_tuple_beside_a_field_named_field0() {
+    #[derive(Facet)]
+    struct MyStruct {
+        pair: (u8, u16),
+        field0: bool,
+    }
+
+    let actual = emit!(MyStruct as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class MyStruct {
+        constructor (public pair: Tuple<[uint8, uint16]>, public field0: bool) {
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializer.serializeU8(this.pair[0]);
+            serializer.serializeU16(this.pair[1]);
+            serializer.serializeBool(this.field0);
+        }
+
+        static deserialize(deserializer: Deserializer): MyStruct {
+            const field1 = deserializer.deserializeU8();
+            const field2 = deserializer.deserializeU16();
+            const pair = [field1, field2] as [uint8, uint16];
+            const field0 = deserializer.deserializeBool();
+            return new MyStruct(pair,field0);
+        }
+    }
+    ");
+}
+
+/// A map's key and value are read in one callback, so a tuple key and a
+/// tuple value take different locals (#211).
+#[test]
+fn struct_with_a_map_from_tuple_to_tuple() {
+    #[derive(Facet)]
+    struct MyStruct {
+        map: BTreeMap<(u8, u16), (String, bool)>,
+    }
+
+    let actual = emit!(MyStruct as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class MyStruct {
+        constructor (public map: Map<Tuple<[uint8, uint16]>,Tuple<[str, bool]>>) {
+        }
+
+        public serialize(serializer: Serializer): void {
+            serializeMap(this.map, serializer, (key, value, serializer) => {
+                serializer.serializeU8(key[0]);
+                serializer.serializeU16(key[1]);
+                serializer.serializeStr(value[0]);
+                serializer.serializeBool(value[1]);
+            });
+        }
+
+        static deserialize(deserializer: Deserializer): MyStruct {
+            const map = deserializeMap(deserializer, (deserializer) => {
+                const field0 = deserializer.deserializeU8();
+                const field1 = deserializer.deserializeU16();
+                const key = [field0, field1] as [uint8, uint16];
+                const field2 = deserializer.deserializeStr();
+                const field3 = deserializer.deserializeBool();
+                const value = [field2, field3] as [str, bool];
+                return [key, value];
+            });
+            return new MyStruct(map);
+        }
+    }
+    ");
+}
+
+/// A tuple variant's own `field0`, `field1` stay its property names, and a
+/// tuple inside one takes the locals after them (#211).
+#[test]
+fn enum_with_a_tuple_variant_holding_a_tuple() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum MyEnum {
+        Pair((u8, bool), u16),
+    }
+
+    let actual = emit!(MyEnum as TypeScript with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type MyEnum =
+        | { kind: "Pair"; field0: Tuple<[uint8, bool]>; field1: uint16 };
+
+    export const myEnumPair = (field0: Tuple<[uint8, bool]>, field1: uint16): MyEnum => ({ kind: "Pair", field0, field1 });
+
+    export function matchMyEnum<R>(value: MyEnum, cases: {
+        Pair: (v: Extract<MyEnum, { kind: "Pair" }>) => R;
+    }): R {
+        return cases[value.kind as MyEnum["kind"]](value as never);
+    }
+
+    export function serializeMyEnum(value: MyEnum, serializer: Serializer): void {
+        switch (value.kind) {
+            case "Pair": {
+                serializer.serializeVariantIndex(0);
+                serializer.serializeU8(value.field0[0]);
+                serializer.serializeBool(value.field0[1]);
+                serializer.serializeU16(value.field1);
+                break;
+            }
+            default: throw new Error("Unknown variant: " + (value as any).kind);
+        }
+    }
+
+    export function deserializeMyEnum(deserializer: Deserializer): MyEnum {
+        const index = deserializer.deserializeVariantIndex();
+        switch (index) {
+            case 0: {
+                const field2 = deserializer.deserializeU8();
+                const field3 = deserializer.deserializeBool();
+                const field0 = [field2, field3] as [uint8, bool];
+                const field1 = deserializer.deserializeU16();
+                return { kind: "Pair", field0, field1 };
+            }
+            default: throw new Error("Unknown variant index for MyEnum: " + index);
+        }
+    }
+    "#);
+}
+
 #[test]
 fn enum_with_unit_variants() {
     #[derive(Facet)]
