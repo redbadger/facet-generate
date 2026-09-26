@@ -139,7 +139,8 @@ impl Kotlin {
 
 /// Write the module header — the `package` declaration and the sorted,
 /// deduplicated `import` lines (feature-driven, plugin-provided, and the
-/// caller's `extra_imports`, each a whole `import …` line).
+/// caller's `extra_imports`, each a whole `import …` line), less any that
+/// would hide a plugin's [module declaration](EmitterPlugin::module_declarations).
 ///
 /// Shared by [`Module`]'s emitter and by the generator when it renders a
 /// plugin's companion file, which needs the same header but none of the module
@@ -175,10 +176,9 @@ pub(crate) fn write_module_header<W: IndentWrite>(
         imports.push("import java.math.BigInteger".to_string());
     }
 
-    // With no plugin nothing else brings `UUID` in scope (#191). Not with
-    // one: Bincode imports it, and JSON declares its own `UUID` alias, which
-    // an explicit import would hide.
-    if features.contains(&Feature::Uuid) && lang.plugins().is_empty() {
+    // The emitter, not a plugin, imports `UUID`, so that it's in scope with
+    // no plugin (#191). JSON's `UUID` alias drops it below.
+    if features.contains(&Feature::Uuid) {
         imports.push("import java.util.UUID".to_string());
     }
 
@@ -188,6 +188,16 @@ pub(crate) fn write_module_header<W: IndentWrite>(
     }
 
     imports.extend(extra_imports.iter().cloned());
+
+    // An import outranks a declaration in the same package, so drop any
+    // import of a name a plugin declares, such as JSON's `UUID` and `Bytes`
+    // aliases. Bincode then uses those aliases, which are the same types (#204).
+    let declared: Vec<String> = lang
+        .plugins()
+        .iter()
+        .flat_map(|plugin| plugin.module_declarations(config))
+        .collect();
+    imports.retain(|import| !declared.iter().any(|name| imported_name(import) == name));
 
     imports.sort_unstable();
     imports.dedup();
@@ -199,6 +209,16 @@ pub(crate) fn write_module_header<W: IndentWrite>(
     }
 
     Ok(())
+}
+
+/// The name an `import …` line brings into scope: its alias, or the last
+/// segment of its path.
+fn imported_name(import: &str) -> &str {
+    let import = import.trim_start_matches("import ").trim();
+    match import.split_once(" as ") {
+        Some((_, alias)) => alias.trim(),
+        None => import.rsplit('.').next().unwrap_or(import),
+    }
 }
 
 impl Emitter<Kotlin> for Module {

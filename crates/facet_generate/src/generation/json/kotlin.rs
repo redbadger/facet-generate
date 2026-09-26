@@ -10,6 +10,7 @@
 //! |---|---|
 //! | `imports` | `kotlinx.serialization` imports, and the runtime's JSON serializers |
 //! | `module_helpers` | serializers for `Bytes`, `UUID` and `BigInteger` |
+//! | `module_declarations` | the `Bytes` and `UUID` aliases, so no import hides them |
 //! | `type_annotations` | `@Serializable`, naming the type's own serializer where it has one |
 //! | `field_annotations` | `@SerialName` with the field's wire name (and `@EncodeDefault` on an optional field) |
 //! | `enum_variant_annotations` | `@SerialName` with the variant's wire name |
@@ -255,6 +256,18 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
             writeln!(w)?;
         }
         Ok(())
+    }
+
+    /// The `Bytes` and `UUID` aliases from [`module_helpers`](Self::module_helpers).
+    fn module_declarations(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut names = vec![];
+        if config.features.contains(&Feature::Bytes) {
+            names.push("Bytes".to_string());
+        }
+        if config.features.contains(&Feature::Uuid) {
+            names.push("UUID".to_string());
+        }
+        names
     }
 
     /// The annotations above each type.
