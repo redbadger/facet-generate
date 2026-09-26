@@ -210,6 +210,72 @@ function deserializeUuid(deserializer: Deserializer): Uuid {
 }
 ";
 
+// Rust's `bincode` writes a `char` as its UTF-8 bytes with no length prefix,
+// the first byte giving the length, which these write and read a byte at a
+// time through the runtime's `u8` methods, so that an external serde package
+// needs nothing new. A string that isn't exactly one Unicode scalar value is
+// rejected. No enum's `serialize{Name}` function can be named like them, and
+// `globalThis.String` is the global whatever the module declares or imports.
+const FEATURE_CHAR: &str = r#"function writeChar(value: string, serializer: Serializer): void {
+    const code = value.codePointAt(0);
+    if (
+        code === undefined ||
+        value.length !== (code > 0xffff ? 2 : 1) ||
+        (code >= 0xd800 && code <= 0xdfff)
+    ) {
+        throw new Error("A char must be exactly one Unicode scalar value");
+    }
+    if (code < 0x80) {
+        serializer.serializeU8(code);
+    } else if (code < 0x800) {
+        serializer.serializeU8(0xc0 | (code >> 6));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    } else if (code < 0x10000) {
+        serializer.serializeU8(0xe0 | (code >> 12));
+        serializer.serializeU8(0x80 | ((code >> 6) & 0x3f));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    } else {
+        serializer.serializeU8(0xf0 | (code >> 18));
+        serializer.serializeU8(0x80 | ((code >> 12) & 0x3f));
+        serializer.serializeU8(0x80 | ((code >> 6) & 0x3f));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    }
+}
+
+function readChar(deserializer: Deserializer): string {
+    const first = deserializer.deserializeU8();
+    let width: number;
+    let code: number;
+    if (first <= 0x7f) {
+        width = 1;
+        code = first;
+    } else if (first >= 0xc2 && first <= 0xdf) {
+        width = 2;
+        code = first & 0x1f;
+    } else if (first >= 0xe0 && first <= 0xef) {
+        width = 3;
+        code = first & 0x0f;
+    } else if (first >= 0xf0 && first <= 0xf4) {
+        width = 4;
+        code = first & 0x07;
+    } else {
+        throw new Error("Invalid char encoding");
+    }
+    for (let i = 1; i < width; i++) {
+        const byte = deserializer.deserializeU8();
+        if ((byte & 0xc0) !== 0x80) {
+            throw new Error("Invalid char encoding");
+        }
+        code = (code << 6) | (byte & 0x3f);
+    }
+    const shortest = [0, 0, 0x80, 0x800, 0x10000][width];
+    if (code < shortest || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+        throw new Error("Invalid char encoding");
+    }
+    return globalThis.String.fromCodePoint(code);
+}
+"#;
+
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
@@ -289,7 +355,11 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
                     writeln!(w)?;
                     write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
-                Feature::BigInt | Feature::Bytes | Feature::Char | Feature::Tuple(_) => {}
+                Feature::Char => {
+                    writeln!(w)?;
+                    write!(w, "{}", qualified(FEATURE_CHAR, config))?;
+                }
+                Feature::BigInt | Feature::Bytes | Feature::Tuple(_) => {}
             }
         }
         Ok(())
@@ -662,7 +732,7 @@ fn write_serialize(
         Format::U128 => writeln!(w, "serializer.serializeU128({value_expr});"),
         Format::F32 => writeln!(w, "serializer.serializeF32({value_expr});"),
         Format::F64 => writeln!(w, "serializer.serializeF64({value_expr});"),
-        Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
+        Format::Char => writeln!(w, "writeChar({value_expr}, serializer);"),
         Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
         Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
         Format::Uuid => writeln!(w, "serializeUuid({value_expr}, serializer);"),
@@ -757,7 +827,7 @@ fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> 
         Format::U128 => "deserializer.deserializeU128()".to_string(),
         Format::F32 => "deserializer.deserializeF32()".to_string(),
         Format::F64 => "deserializer.deserializeF64()".to_string(),
-        Format::Char => "deserializer.deserializeChar()".to_string(),
+        Format::Char => "readChar(deserializer)".to_string(),
         Format::Str => "deserializer.deserializeStr()".to_string(),
         Format::Bytes => "deserializer.deserializeBytes()".to_string(),
         Format::Uuid => "deserializeUuid(deserializer)".to_string(),

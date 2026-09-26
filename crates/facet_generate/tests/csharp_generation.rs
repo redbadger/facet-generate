@@ -374,7 +374,8 @@ mod named_like_types {
         pub other: Presence,
     }
 
-    /// The helper classes: `MoodBincode`, `FacetHelpers` and `UuidSerde`.
+    /// The helper classes: `MoodBincode`, `FacetHelpers`, `UuidSerde` and
+    /// `CharSerde`.
     #[derive(Facet)]
     pub struct Tally {
         pub mood_bincode: u32,
@@ -382,6 +383,8 @@ mod named_like_types {
         pub facet_helpers: Vec<u32>,
         pub uuid_serde: u32,
         pub id: uuid::Uuid,
+        pub char_serde: u32,
+        pub letter: char,
     }
 
     /// A property of a variant's nested record hides a helper class in the

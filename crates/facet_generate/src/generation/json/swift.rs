@@ -9,6 +9,7 @@
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | `import Serde` |
+//! | `module_helpers` | the adapter of a `char`, which checks it is one Unicode scalar value |
 //! | `type_conformances` | `Codable` |
 //! | `has_type_body` | Always `true` |
 //! | `type_body` | `CodingKeys`, hand-written `init(from:)` / `encode(to:)` where synthesis would not match, and `jsonSerialize` / `jsonDeserialize` wrappers |
@@ -51,8 +52,9 @@ use heck::{ToLowerCamelCase as _, ToUpperCamelCase as _};
 use indoc::writedoc;
 
 use crate::generation::{
-    CodeGeneratorConfig,
+    CodeGeneratorConfig, Feature,
     indent::{IndentWrite, Newlines, with_block},
+    naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
     swift::{Swift, case_name, emitter::needs_indirect, field_name, naming, render_type},
 };
@@ -96,6 +98,25 @@ impl EmitterPlugin<Swift> for JsonPlugin {
 
     fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec!["Serde".to_string()]
+    }
+
+    /// Emits the `char` adapter when `Feature::Char` is active.
+    fn module_helpers(
+        &self,
+        w: &mut dyn IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> io::Result<()> {
+        if config.features.contains(&Feature::Char) {
+            writeln!(w)?;
+            write!(
+                w,
+                "{}",
+                qualify_helper(FEATURE_CHAR, naming::QUALIFIED, |name| {
+                    naming::shadows(name, config)
+                })
+            )?;
+        }
+        Ok(())
     }
 
     fn type_conformances(&self, ctx: &EmitContext) -> Vec<String> {
@@ -161,6 +182,50 @@ impl<'a> Names<'a> {
     }
 }
 
+/// The adapter of a `char`, emitted once per module that has one.
+///
+/// A Swift `Character` is a grapheme cluster, wider than a Rust `char`, which
+/// is one Unicode scalar value, and `serde_json` rejects a string holding
+/// anything else. The runtime's `Serde.JsonChar` counts grapheme clusters, so
+/// it reads `e` and a combining accent, and writes any `Character`. This one
+/// rejects both, and is generated rather than in the runtime so that an
+/// external serde package needs nothing new. It's nested in an extension of
+/// `Serde.JsonChar`, privately to the file, so no generated type can clash
+/// with it.
+const FEATURE_CHAR: &str = r#"extension Serde.JsonChar {
+    fileprivate struct Scalar: Codable {
+        var value: Character
+
+        init(_ value: Character) {
+            self.value = value
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            guard string.unicodeScalars.count == 1, let value = string.first else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Expected a single Unicode scalar value, found \"\(string)\""
+                )
+            }
+            self.value = value
+        }
+
+        func encode(to encoder: Encoder) throws {
+            guard value.unicodeScalars.count == 1 else {
+                throw EncodingError.invalidValue(
+                    value,
+                    .init(codingPath: encoder.codingPath, debugDescription: "A char must be exactly one Unicode scalar value")
+                )
+            }
+            var container = encoder.singleValueContainer()
+            try container.encode(String(value))
+        }
+    }
+}
+"#;
+
 /// The key type of objects whose keys are computed at run time.
 const JSON_KEY: &str = "Serde.JsonKey";
 
@@ -212,7 +277,7 @@ fn is_native(format: &Format) -> bool {
 fn adapter(format: &Format) -> Option<&'static str> {
     match format {
         Format::Unit => Some("Serde.JsonUnit"),
-        Format::Char => Some("Serde.JsonChar"),
+        Format::Char => Some("Serde.JsonChar.Scalar"),
         Format::Uuid => Some("Serde.JsonUuid"),
         _ => None,
     }

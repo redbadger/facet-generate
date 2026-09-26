@@ -167,7 +167,7 @@ fn struct_with_fields_of_primitive_types() {
             serializer.serializeU128(this.u128);
             serializer.serializeF32(this.f32);
             serializer.serializeF64(this.f64);
-            serializer.serializeChar(this.char);
+            writeChar(this.char, serializer);
             serializer.serializeStr(this.string);
         }
 
@@ -186,7 +186,7 @@ fn struct_with_fields_of_primitive_types() {
             const u128 = deserializer.deserializeU128();
             const f32 = deserializer.deserializeF32();
             const f64 = deserializer.deserializeF64();
-            const char = deserializer.deserializeChar();
+            const char = readChar(deserializer);
             const string = deserializer.deserializeStr();
             return new StructWithFields(unit,bool,i8,i16,i32,i64,i128,u8,u16,u32,u64,u128,f32,f64,char,string);
         }

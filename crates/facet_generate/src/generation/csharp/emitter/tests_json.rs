@@ -237,7 +237,7 @@ fn struct_with_fields_of_primitive_types() {
         private double _f64;
         [property: JsonPropertyName("char")]
         [ObservableProperty]
-        private char _char;
+        private string _char;
         [property: JsonPropertyName("string")]
         [ObservableProperty]
         private string _string;
@@ -268,7 +268,7 @@ fn struct_with_fields_of_primitive_types() {
         private static readonly JsonConverter<UInt128> _11 = FacetJson.U128;
         private static readonly JsonConverter<float> _12 = FacetJson.F32;
         private static readonly JsonConverter<double> _13 = FacetJson.F64;
-        private static readonly JsonConverter<char> _14 = FacetJson.Char;
+        private static readonly JsonConverter<string> _14 = new JsonCharConverter();
         private static readonly JsonConverter<string> _15 = FacetJson.Str;
 
         public override bool HandleNull => true;
@@ -304,7 +304,7 @@ fn struct_with_fields_of_primitive_types() {
             var has12 = false;
             double f13 = default!;
             var has13 = false;
-            char f14 = default!;
+            string f14 = default!;
             var has14 = false;
             string f15 = default!;
             var has15 = false;
@@ -3905,7 +3905,7 @@ fn struct_with_tuples_bytes_and_big_integers() {
         private UInt128 _big;
         [property: JsonPropertyName("by_big")]
         [ObservableProperty]
-        private Dictionary<Int128, char?> _byBig;
+        private Dictionary<Int128, string?> _byBig;
         [property: JsonPropertyName("array")]
         [ObservableProperty]
         private ushort[] _array;
@@ -3926,7 +3926,7 @@ fn struct_with_tuples_bytes_and_big_integers() {
         private static readonly JsonConverter<ObservableCollection<Unit>> _1 = FacetJson.List(FacetJson.Unit);
         private static readonly JsonConverter<byte[]> _2 = FacetJson.Bytes;
         private static readonly JsonConverter<UInt128> _3 = FacetJson.U128;
-        private static readonly JsonConverter<Dictionary<Int128, char?>> _4 = FacetJson.Map(FacetJson.I128, FacetJson.Option(FacetJson.Char));
+        private static readonly JsonConverter<Dictionary<Int128, string?>> _4 = FacetJson.Map(FacetJson.I128, FacetJson.OptionRef(new JsonCharConverter()));
         private static readonly JsonConverter<ushort[]> _5 = FacetJson.Array(FacetJson.U16, 3);
 
         public override bool HandleNull => true;
@@ -3942,7 +3942,7 @@ fn struct_with_tuples_bytes_and_big_integers() {
             var has2 = false;
             UInt128 f3 = default!;
             var has3 = false;
-            Dictionary<Int128, char?> f4 = default!;
+            Dictionary<Int128, string?> f4 = default!;
             var has4 = false;
             ushort[] f5 = default!;
             var has5 = false;
