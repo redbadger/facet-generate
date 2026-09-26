@@ -302,6 +302,35 @@ Deno.test("fixed-size arrays round-trip through bincode", () => {{
     project.run();
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, round-trip through
+/// bincode (#211).
+#[test]
+fn test_typescript_runtime_bincode_nested_tuples_roundtrip() {
+    use common::tuples::{TYPESCRIPT_SAMPLE, get_registry, sample};
+
+    let mut project = TsProject::new(&get_registry());
+    let bytes = to_byte_list(&bincode::serialize(&sample()).unwrap());
+
+    project.write_test(&format!(
+        r#"
+Deno.test("nested tuples round-trip through bincode", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  {TYPESCRIPT_SAMPLE}
+
+  const actual = Pairs.deserialize(new BincodeDeserializer(expectedBytes));
+  assertEquals(actual, sample);
+
+  const serializer = new BincodeSerializer();
+  sample.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes);
+}});
+"#
+    ));
+
+    project.run();
+}
+
 #[test]
 fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
     const LARGE_I64: i64 = 1_785_688_513_662;
