@@ -508,7 +508,7 @@ fn write_deserialize<W: IndentWrite>(
                     writeln!(w, "Triple(first, second, third)")?;
                 }
                 _ => {
-                    let typename = format!("NTuple{len}");
+                    let typename = format!("Tuple{len}");
                     write!(w, "run ")?;
                     let mut w = w.block(Newlines::BOTH)?;
                     for (i, format) in formats.iter().enumerate() {
@@ -920,6 +920,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                 Feature::Char => {
                     // The helper rejects a string that is not one scalar value.
                     imports.push(format!("import {sp}.SerializationError"));
+                }
+                Feature::Tuple(len) => {
+                    imports.push(format!("import {sp}.Tuple{len}"));
                 }
                 // Other features add helper *code* (via module_helpers),
                 // not imports.

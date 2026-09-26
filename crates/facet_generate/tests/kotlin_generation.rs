@@ -212,6 +212,18 @@ fn test_that_kotlin_code_compiles_when_the_package_ends_in_a_namespace() {
     }
 }
 
+/// Tuples of four to twelve elements, bare and nested in tuples, lists,
+/// options, maps and enum variants, are the runtime's `Tuple4` to `Tuple12`
+/// with each plugin and with both on one module (#129). They were written as
+/// an `NTupleN` that nothing declared: `Unresolved reference 'NTuple4'.`
+#[test]
+fn test_that_kotlin_code_with_wide_tuples_compiles() {
+    let registry = common::get_wide_tuples_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}
+
 /// A `Uuid` field compiles with no plugin, as with each plugin (#191). Only
 /// the Bincode plugin imported `java.util.UUID`, so with none it was missing:
 /// "Unresolved reference 'UUID'."

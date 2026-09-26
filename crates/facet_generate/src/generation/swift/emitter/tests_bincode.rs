@@ -645,9 +645,6 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
-    // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
-
     let actual = emit!(MyStruct as Swift with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 

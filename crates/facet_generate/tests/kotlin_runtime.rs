@@ -430,6 +430,59 @@ fun main() {{
     compile_and_run(&dir);
 }
 
+/// Round-trips tuples of four to twelve elements, as the runtime's `Tuple4`
+/// to `Tuple12`, through bincode between Rust and the generated Kotlin
+/// (#129).
+#[test]
+fn test_kotlin_bincode_runtime_on_wide_tuples() {
+    if !kotlinc_available() {
+        return;
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&common::get_wide_tuples_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&common::wide_tuples_sample()).unwrap();
+
+    fs::write(
+        dir.join("Main.kt"),
+        format!(
+            r#"import com.example.testing.WideTuples
+import com.novi.serde.Tuple12
+import com.novi.serde.Tuple4
+
+fun main() {{
+    val input = {bytes}
+    val value = WideTuples.bincodeDeserialize(input)
+
+    val four = Tuple4<UByte, Int, String, Boolean>(1u, -2, "three", true)
+    check(value.four == four) {{ "four mismatch: ${{value.four}}" }}
+    val twelve = Tuple12<UByte, UShort, UInt, ULong, Byte, Short, Int, Long, Float, Double, Boolean, String>(
+        1u, 2u, 3u, ULong.MAX_VALUE, -5, -6, -7, Long.MIN_VALUE, 2.5f, -0.25, true, "twelve",
+    )
+    check(value.twelve == twelve) {{ "twelve mismatch: ${{value.twelve}}" }}
+
+    val output = value.bincodeSerialize()
+    check(input.contentEquals(output)) {{
+        "roundtrip failed:\n  input  = ${{input.toList()}}\n  output = ${{output.toList()}}"
+    }}
+
+    println("Wide tuples roundtrip: PASSED")
+}}
+"#,
+            bytes = quote_bytes_kotlin(&reference),
+        ),
+    )
+    .unwrap();
+
+    compile_and_run(&dir);
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------
@@ -1047,4 +1100,63 @@ fun main() {
         let actual: serde_json::Value = serde_json::from_str(output).unwrap();
         assert_eq!(actual, expected, "{output}");
     }
+}
+
+/// Round-trips tuples of four to twelve elements, as the runtime's `Tuple4`
+/// to `Tuple12`, through JSON between `serde_json` and the generated Kotlin,
+/// which writes each as an array (#129).
+#[test]
+fn test_kotlin_json_runtime_on_wide_tuples() {
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&common::get_wide_tuples_registry())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&common::wide_tuples_sample()).unwrap();
+
+    let outputs = run_kotlin_json_main(
+        &dir,
+        r#"import com.example.testing.WideTuples
+import com.novi.serde.JsonTuple4Serializer
+import com.novi.serde.Tuple12
+import com.novi.serde.Tuple4
+import java.io.File
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+
+fun main() {
+    val value = Json.decodeFromString(WideTuples.serializer(), File("input.json").readText())
+
+    val four = Tuple4<UByte, Int, String, Boolean>(1u, -2, "three", true)
+    check(value.four == four) { "four mismatch: ${value.four}" }
+    val twelve = Tuple12<UByte, UShort, UInt, ULong, Byte, Short, Int, Long, Float, Double, Boolean, String>(
+        1u, 2u, 3u, ULong.MAX_VALUE, -5, -6, -7, Long.MIN_VALUE, 2.5f, -0.25, true, "twelve",
+    )
+    check(value.twelve == twelve) { "twelve mismatch: ${value.twelve}" }
+
+    // An array of the wrong length is not a 4-tuple.
+    val fourSerializer = JsonTuple4Serializer(
+        UByte.serializer(), Int.serializer(), String.serializer(), Boolean.serializer(),
+    )
+    for (bad in listOf("[1, -2, \"three\"]", "[1, -2, \"three\", true, 5]", "{}")) {
+        val accepted = runCatching { Json.decodeFromString(fourSerializer, bad) }.isSuccess
+        check(!accepted) { "accepted bad 4-tuple: $bad" }
+    }
+
+    println("JSON:" + Json.encodeToString(WideTuples.serializer(), value))
+}
+"#,
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 1, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    let output = &outputs[0];
+    let value: common::WideTuples = serde_json::from_str(output)
+        .unwrap_or_else(|e| panic!("Rust could not read Kotlin's JSON: {e}\n{output}"));
+    assert_eq!(value, common::wide_tuples_sample(), "{output}");
+    let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+    assert_eq!(actual, expected, "{output}");
 }

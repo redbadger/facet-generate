@@ -635,14 +635,11 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
-    // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
-
     let actual = emit!(MyStruct as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     data class MyStruct(
-        val one: NTuple4<String, Int, UShort, Float>,
+        val one: Tuple4<String, Int, UShort, Float>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -667,7 +664,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                     val v1 = deserializer.deserialize_i32()
                     val v2 = deserializer.deserialize_u16()
                     val v3 = deserializer.deserialize_f32()
-                    NTuple4(v0, v1, v2, v3)
+                    Tuple4(v0, v1, v2, v3)
                 }
                 deserializer.decrease_container_depth()
                 return MyStruct(one)

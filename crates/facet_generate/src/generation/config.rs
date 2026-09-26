@@ -138,6 +138,10 @@ pub enum Feature {
     MapOfT,
     OptionOfT,
     SetOfT,
+    /// A tuple of this many elements, recorded for four or more. Kotlin has
+    /// no builtin type for one, so writes it as the serde runtime's
+    /// `Tuple4` to `Tuple12`, which a module holding one imports.
+    Tuple(usize),
     TupleArray,
     Uuid,
 }
@@ -375,6 +379,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::TupleArray { .. } => {
                             self.features.insert(Feature::TupleArray);
+                        }
+                        Format::Tuple(formats) if formats.len() > 3 => {
+                            self.features.insert(Feature::Tuple(formats.len()));
                         }
                         _ => (),
                     }
