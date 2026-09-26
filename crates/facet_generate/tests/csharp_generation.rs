@@ -577,3 +577,35 @@ fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles(
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// Tuples of eight to twelve elements, bare and nested in tuples, lists,
+/// options, maps and enum variants, compile with each plugin and with both
+/// (#212). The JSON converters named a `FacetJson.Tuple` overload the runtime
+/// stopped at seven elements for:
+/// `error CS1501: No overload for method 'Tuple' takes 12 arguments`.
+#[test]
+fn test_that_csharp_code_with_long_tuples_compiles() {
+    let registry = common::long_tuples::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
