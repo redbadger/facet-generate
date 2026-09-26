@@ -133,6 +133,7 @@ pub struct CodeGeneratorConfig {
 pub enum Feature {
     BigInt,
     Bytes,
+    Char,
     ListOfT,
     MapOfT,
     OptionOfT,
@@ -353,6 +354,9 @@ impl CodeGeneratorConfig {
                         }
                         Format::Bytes => {
                             self.features.insert(Feature::Bytes);
+                        }
+                        Format::Char => {
+                            self.features.insert(Feature::Char);
                         }
                         Format::Uuid => {
                             self.features.insert(Feature::Uuid);

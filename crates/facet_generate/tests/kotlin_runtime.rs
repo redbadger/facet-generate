@@ -241,6 +241,195 @@ fun main() {{
     compile_and_run(&dir);
 }
 
+/// Types whose bincode the Kotlin runtime once could not write (#127):
+/// 128-bit integers, declared as `BigInteger`; `char`s, declared as `String`
+/// so that one outside the BMP fits; and fixed-size arrays, which bincode
+/// writes with no length prefix. Sequences and maps of `()` are here too.
+#[allow(clippy::zero_sized_map_values)]
+mod bincode_fixture {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use serde::Serialize;
+
+    #[derive(Facet, Serialize)]
+    pub struct BincodeData {
+        pub u128_max: u128,
+        pub u128_zero: u128,
+        pub i128_min: i128,
+        pub i128_max: i128,
+        pub i128_zero: i128,
+        pub i128_minus_one: i128,
+        pub by_big: BTreeMap<u128, i128>,
+        pub maybe_big: Option<i128>,
+        pub ascii: char,
+        pub two_bytes: char,
+        pub three_bytes: char,
+        pub four_bytes: char,
+        pub chars: Vec<char>,
+        pub maybe_char: Option<char>,
+        pub units: Vec<()>,
+        pub unit_values: BTreeMap<String, ()>,
+        pub array: [u16; 3],
+        pub nested_array: [[u8; 2]; 2],
+        pub letter: Letter,
+    }
+
+    /// Nothing but a `char`, so that bytes that do not encode one are
+    /// rejected by the `char` and not by what follows it.
+    #[derive(Facet, Serialize)]
+    pub struct Letter(pub char);
+
+    /// The value the Kotlin side also builds, field for field.
+    pub fn sample() -> BincodeData {
+        BincodeData {
+            u128_max: u128::MAX,
+            u128_zero: 0,
+            i128_min: i128::MIN,
+            i128_max: i128::MAX,
+            i128_zero: 0,
+            i128_minus_one: -1,
+            by_big: BTreeMap::from([(0, -1), (u128::MAX, i128::MIN)]),
+            maybe_big: Some(i128::MAX),
+            ascii: 'a',
+            two_bytes: 'é',
+            three_bytes: '€',
+            four_bytes: '🦀',
+            chars: vec!['z', 'ß', '✓', '😀'],
+            maybe_char: Some('🦀'),
+            units: vec![(), (), ()],
+            unit_values: BTreeMap::from([("a".to_string(), ()), ("b".to_string(), ())]),
+            array: [1, 2, u16::MAX],
+            nested_array: [[1, 2], [3, u8::MAX]],
+            letter: Letter('Ω'),
+        }
+    }
+
+    /// The same value in Kotlin, as the generated types spell it.
+    pub const KOTLIN_SAMPLE: &str = r#"
+val u128Max = BigInteger("340282366920938463463374607431768211455")
+val i128Min = BigInteger("-170141183460469231731687303715884105728")
+val i128Max = BigInteger("170141183460469231731687303715884105727")
+
+val sample = BincodeData(
+    u128Max = u128Max,
+    u128Zero = BigInteger.ZERO,
+    i128Min = i128Min,
+    i128Max = i128Max,
+    i128Zero = BigInteger.ZERO,
+    i128MinusOne = BigInteger.ONE.negate(),
+    byBig = mapOf(BigInteger.ZERO to BigInteger.ONE.negate(), u128Max to i128Min),
+    maybeBig = i128Max,
+    ascii = "a",
+    twoBytes = "é",
+    threeBytes = "€",
+    fourBytes = "🦀",
+    chars = listOf("z", "ß", "✓", "😀"),
+    maybeChar = "🦀",
+    units = listOf(Unit, Unit, Unit),
+    unitValues = mapOf("a" to Unit, "b" to Unit),
+    array = listOf(1u, 2u, UShort.MAX_VALUE),
+    nestedArray = listOf(listOf(1u, 2u), listOf(3u, UByte.MAX_VALUE)),
+    letter = Letter("Ω"),
+)
+"#;
+}
+
+/// Round-trips 128-bit integers at their extremes, `char`s of one to four
+/// UTF-8 bytes, fixed-size arrays and sequences and maps of `()` between
+/// Rust's `bincode` and the generated Kotlin: Kotlin decodes Rust's bytes
+/// into the value it builds itself and encodes both back into those bytes.
+/// Values bincode cannot represent are rejected both ways (#127).
+#[test]
+fn test_kotlin_bincode_runtime_on_big_integers_chars_and_units() {
+    use bincode_fixture::{BincodeData, KOTLIN_SAMPLE, sample};
+
+    if !kotlinc_available() {
+        return;
+    }
+
+    // Rust's `bincode` writes a `char` as its UTF-8 bytes, with no length.
+    assert_eq!(bincode::serialize(&'a').unwrap(), b"a");
+    assert_eq!(bincode::serialize(&'🦀').unwrap(), "🦀".as_bytes());
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&facet_generate::reflect!(BincodeData).unwrap())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    fs::write(
+        dir.join("Main.kt"),
+        format!(
+            r#"import com.example.testing.BincodeData
+import com.example.testing.Letter
+import com.novi.serde.DeserializationError
+import com.novi.serde.SerializationError
+import java.math.BigInteger
+{KOTLIN_SAMPLE}
+fun main() {{
+    val input = {bytes}
+    val value = BincodeData.bincodeDeserialize(input)
+    check(value == sample) {{ "decoded mismatch:\n  $value\n  $sample" }}
+
+    for (output in listOf(value.bincodeSerialize(), sample.bincodeSerialize())) {{
+        check(input.contentEquals(output)) {{
+            "roundtrip failed:\n  input  = ${{input.toList()}}\n  output = ${{output.toList()}}"
+        }}
+    }}
+
+    // A `BigInteger` out of range of the Rust integer is not serialized.
+    val two = BigInteger.valueOf(2)
+    for (bad in listOf(
+        sample.copy(u128Max = u128Max + BigInteger.ONE),
+        sample.copy(u128Zero = BigInteger.ONE.negate()),
+        sample.copy(i128Min = i128Min - BigInteger.ONE),
+        sample.copy(i128Max = i128Max + BigInteger.ONE),
+        sample.copy(maybeBig = two.pow(200)),
+    )) {{
+        val error = runCatching {{ bad.bincodeSerialize() }}.exceptionOrNull()
+        check(error is SerializationError) {{ "serialized an out-of-range integer: $error" }}
+    }}
+    // Nor is a `String` that is not exactly one Unicode scalar value: none,
+    // two, a letter and a combining accent, or lone or reversed surrogates.
+    for (bad in listOf("", "ab", "🦀🦀", "e" + 0x301.toChar(), "\uD83E", "\uDD80", "\uD83Ea", "\uDD80\uD83E")) {{
+        val error = runCatching {{ Letter(bad).bincodeSerialize() }}.exceptionOrNull()
+        check(error is SerializationError) {{ "serialized a bad char ${{bad.toList()}}: $error" }}
+    }}
+
+    // Nor are bytes that are not the UTF-8 encoding of one: a continuation
+    // byte first, a byte UTF-8 never uses, a lead byte followed by something
+    // other than a continuation or by too few of them, overlong encodings, a
+    // surrogate, and a code point past U+10FFFF.
+    for (bad in listOf(
+        byteArrayOf(0x80.toByte()),
+        byteArrayOf(0xff.toByte()),
+        byteArrayOf(0xc3.toByte(), 0x41),
+        byteArrayOf(0xf0.toByte(), 0x9f.toByte()),
+        byteArrayOf(0xc0.toByte(), 0x80.toByte()),
+        byteArrayOf(0xe0.toByte(), 0x80.toByte(), 0x80.toByte()),
+        byteArrayOf(0xed.toByte(), 0xa0.toByte(), 0x80.toByte()),
+        byteArrayOf(0xf4.toByte(), 0x90.toByte(), 0x80.toByte(), 0x80.toByte()),
+    )) {{
+        val error = runCatching {{ Letter.bincodeDeserialize(bad) }}.exceptionOrNull()
+        check(error is DeserializationError) {{ "deserialized a bad char ${{bad.toList()}}: $error" }}
+    }}
+
+    println("Big integers, chars and units roundtrip: PASSED")
+}}
+"#,
+            bytes = quote_bytes_kotlin(&reference),
+        ),
+    )
+    .unwrap();
+
+    compile_and_run(&dir);
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------

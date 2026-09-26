@@ -195,7 +195,7 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("Tuple4", "the runtime type `com.novi.serde.Tuple4`"),
     ("Tuple5", "the runtime type `com.novi.serde.Tuple5`"),
     ("Tuple6", "the runtime type `com.novi.serde.Tuple6`"),
-    ("UInt128", "the runtime type `com.novi.serde.UInt128`"),
+    ("UInt128", "the `UInt128` import"),
     ("UUID", "the `java.util.UUID` import"),
     ("UUIDSerializer", "the generated `UUIDSerializer` object"),
 ];
