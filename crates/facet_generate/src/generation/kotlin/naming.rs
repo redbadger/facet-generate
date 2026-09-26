@@ -154,6 +154,24 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
         "the runtime type `com.novi.serde.JsonTripleSerializer`",
     ),
     (
+        "JsonTuple10Serializer",
+        "the `JsonTuple10Serializer` import",
+    ),
+    (
+        "JsonTuple11Serializer",
+        "the `JsonTuple11Serializer` import",
+    ),
+    (
+        "JsonTuple12Serializer",
+        "the `JsonTuple12Serializer` import",
+    ),
+    ("JsonTuple4Serializer", "the `JsonTuple4Serializer` import"),
+    ("JsonTuple5Serializer", "the `JsonTuple5Serializer` import"),
+    ("JsonTuple6Serializer", "the `JsonTuple6Serializer` import"),
+    ("JsonTuple7Serializer", "the `JsonTuple7Serializer` import"),
+    ("JsonTuple8Serializer", "the `JsonTuple8Serializer` import"),
+    ("JsonTuple9Serializer", "the `JsonTuple9Serializer` import"),
+    (
         "JsonUnitSerializer",
         "the runtime type `com.novi.serde.JsonUnitSerializer`",
     ),
@@ -165,9 +183,6 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
         "KSerializer",
         "the `kotlinx.serialization.KSerializer` import",
     ),
-    ("NTuple4", "the generated tuple type `NTuple4`"),
-    ("NTuple5", "the generated tuple type `NTuple5`"),
-    ("NTuple6", "the generated tuple type `NTuple6`"),
     ("Nothing", "the Kotlin bottom type `kotlin.Nothing`"),
     (
         "PrimitiveKind",
@@ -192,10 +207,16 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("SerializationError", "the `SerializationError` import"),
     ("Serializer", "the `Serializer` import"),
     ("Slice", "the runtime type `com.novi.serde.Slice`"),
-    ("Tuple4", "the runtime type `com.novi.serde.Tuple4`"),
-    ("Tuple5", "the runtime type `com.novi.serde.Tuple5`"),
-    ("Tuple6", "the runtime type `com.novi.serde.Tuple6`"),
-    ("UInt128", "the runtime type `com.novi.serde.UInt128`"),
+    ("Tuple10", "the `Tuple10` import"),
+    ("Tuple11", "the `Tuple11` import"),
+    ("Tuple12", "the `Tuple12` import"),
+    ("Tuple4", "the `Tuple4` import"),
+    ("Tuple5", "the `Tuple5` import"),
+    ("Tuple6", "the `Tuple6` import"),
+    ("Tuple7", "the `Tuple7` import"),
+    ("Tuple8", "the `Tuple8` import"),
+    ("Tuple9", "the `Tuple9` import"),
+    ("UInt128", "the `UInt128` import"),
     ("UUID", "the `java.util.UUID` import"),
     ("UUIDSerializer", "the generated `UUIDSerializer` object"),
 ];
@@ -203,20 +224,36 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
 /// The entries of [`FORBIDDEN_TYPES`] that the generated code mentions only
 /// beside a field of a particular format: `Bytes` where a `#[facet(bytes)]`
 /// field is serialized, `UUID` beside a `Uuid`, `BigInteger` beside a 128-bit
-/// integer, `NTupleN` beside an N-tuple. Elsewhere the import, alias or helper
-/// is not even written, so a declaration of that name only collides within the
-/// scope that has such a field — the whole module for a top-level type, and the
-/// enclosing enum for a variant, since a nested class outranks the file's
-/// imports inside the class that declares it. Sorted by name.
+/// integer, `TupleN` and `JsonTupleNSerializer` beside an N-tuple. Elsewhere
+/// the import, alias or helper is not even written, so a declaration of that
+/// name only collides within the scope that has such a field — the whole
+/// module for a top-level type, and the enclosing enum for a variant, since a
+/// nested class outranks the file's imports inside the class that declares
+/// it. Sorted by name.
 pub(crate) const FORMAT_BOUND_TYPES: FormatBoundNames = &[
     ("BigInteger", is_128_bit),
     ("BigIntegerSerializer", is_128_bit),
     ("Bytes", is_bytes_or_uuid),
     ("BytesSerializer", is_bytes_or_uuid),
     ("Int128", is_128_bit),
-    ("NTuple4", is_tuple_of_4),
-    ("NTuple5", is_tuple_of_5),
-    ("NTuple6", is_tuple_of_6),
+    ("JsonTuple10Serializer", is_tuple_of::<10>),
+    ("JsonTuple11Serializer", is_tuple_of::<11>),
+    ("JsonTuple12Serializer", is_tuple_of::<12>),
+    ("JsonTuple4Serializer", is_tuple_of::<4>),
+    ("JsonTuple5Serializer", is_tuple_of::<5>),
+    ("JsonTuple6Serializer", is_tuple_of::<6>),
+    ("JsonTuple7Serializer", is_tuple_of::<7>),
+    ("JsonTuple8Serializer", is_tuple_of::<8>),
+    ("JsonTuple9Serializer", is_tuple_of::<9>),
+    ("Tuple10", is_tuple_of::<10>),
+    ("Tuple11", is_tuple_of::<11>),
+    ("Tuple12", is_tuple_of::<12>),
+    ("Tuple4", is_tuple_of::<4>),
+    ("Tuple5", is_tuple_of::<5>),
+    ("Tuple6", is_tuple_of::<6>),
+    ("Tuple7", is_tuple_of::<7>),
+    ("Tuple8", is_tuple_of::<8>),
+    ("Tuple9", is_tuple_of::<9>),
     ("UInt128", is_128_bit),
     ("UUID", is_uuid),
     ("UUIDSerializer", is_uuid),
@@ -236,16 +273,10 @@ const fn is_uuid(format: &Format) -> bool {
     matches!(format, Format::Uuid)
 }
 
-fn is_tuple_of_4(format: &Format) -> bool {
-    matches!(format, Format::Tuple(formats) if formats.len() == 4)
-}
-
-fn is_tuple_of_5(format: &Format) -> bool {
-    matches!(format, Format::Tuple(formats) if formats.len() == 5)
-}
-
-fn is_tuple_of_6(format: &Format) -> bool {
-    matches!(format, Format::Tuple(formats) if formats.len() == 6)
+/// The runtime's `TupleN`, and its JSON serializer, are imported for a tuple of
+/// `N` elements only.
+fn is_tuple_of<const N: usize>(format: &Format) -> bool {
+    matches!(format, Format::Tuple(formats) if formats.len() == N)
 }
 
 /// Property names the generated code cannot accommodate, with the clause

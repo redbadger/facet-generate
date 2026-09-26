@@ -289,7 +289,7 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
                     writeln!(w)?;
                     write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
-                Feature::BigInt | Feature::Bytes => {}
+                Feature::BigInt | Feature::Bytes | Feature::Char | Feature::Tuple(_) => {}
             }
         }
         Ok(())

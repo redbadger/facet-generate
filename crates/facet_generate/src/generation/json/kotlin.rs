@@ -193,6 +193,17 @@ impl EmitterPlugin<Kotlin> for JsonPlugin {
             imports.push("import kotlinx.serialization.builtins.MapSerializer".to_string());
         }
 
+        // A tuple of four or more elements is the runtime's `TupleN`, which
+        // its serializer writes as an array.
+        for feature in features {
+            if let Feature::Tuple(len) = feature {
+                imports.extend([
+                    format!("import {serde}.Tuple{len}"),
+                    format!("import {serde}.JsonTuple{len}Serializer"),
+                ]);
+            }
+        }
+
         // Bytes JSON-specific imports
         if features.contains(&Feature::Bytes) {
             imports.extend([
@@ -399,7 +410,8 @@ fn serde_package(config: &CodeGeneratorConfig) -> String {
 /// `serde_json` encodes the Rust value.
 ///
 /// kotlinx writes `Unit` as `{}` and a `Pair` or `Triple` as an object, and
-/// has no serializer for `BigInteger`. It writes a map's string, number,
+/// has no serializer for `BigInteger` or for the runtime's `Tuple4` to
+/// `Tuple12`. It writes a map's string, number,
 /// boolean and enum keys as strings, as Rust does.
 fn is_native(format: &Format) -> bool {
     match format {
@@ -521,7 +533,7 @@ impl<'a> Names<'a> {
                     match formats.len() {
                         2 => format!("JsonPairSerializer({serializers})"),
                         3 => format!("JsonTripleSerializer({serializers})"),
-                        len => format!("NTuple{len}.serializer({serializers})"),
+                        len => format!("JsonTuple{len}Serializer({serializers})"),
                     }
                 }
             },

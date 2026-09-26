@@ -15,7 +15,7 @@ use crate::{
         config::PackageLocation,
         indent::IndentedWriter,
         kotlin::{
-            emitter::{Kotlin, write_module_header},
+            emitter::{Kotlin, check_tuple_sizes, write_module_header},
             naming,
         },
         module::Module,
@@ -72,7 +72,10 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if the underlying writer fails.
+    /// Returns an error if the underlying writer fails, or an
+    /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) one, before writing
+    /// anything, if the registry has a name the generated code cannot use or
+    /// a tuple of more than twelve elements.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
@@ -80,6 +83,7 @@ impl<'a> KotlinCodeGenerator<'a> {
         config.update_from(registry);
         config.requalify_enums(registry, Self::requalify);
         check_reserved_names(registry, &naming::RULES)?;
+        check_tuple_sizes(registry)?;
 
         let mut lang = Kotlin::new(&config, registry);
         for p in &self.plugins {

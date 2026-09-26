@@ -271,15 +271,15 @@ fn struct_with_fields_of_primitive_types() {
             serializer.serialize_i16(i16)
             serializer.serialize_i32(i32)
             serializer.serialize_i64(i64)
-            serializer.serialize_i128(i128)
+            serializer.serializeI128(i128)
             serializer.serialize_u8(u8)
             serializer.serialize_u16(u16)
             serializer.serialize_u32(u32)
             serializer.serialize_u64(u64)
-            serializer.serialize_u128(u128)
+            serializer.serializeU128(u128)
             serializer.serialize_f32(f32)
             serializer.serialize_f64(f64)
-            serializer.serialize_char(char)
+            serializer.serializeChar(char)
             serializer.serialize_str(string)
             serializer.decrease_container_depth()
         }
@@ -299,15 +299,15 @@ fn struct_with_fields_of_primitive_types() {
                 val i16 = deserializer.deserialize_i16()
                 val i32 = deserializer.deserialize_i32()
                 val i64 = deserializer.deserialize_i64()
-                val i128 = deserializer.deserialize_i128()
+                val i128 = deserializer.deserializeI128()
                 val u8 = deserializer.deserialize_u8()
                 val u16 = deserializer.deserialize_u16()
                 val u32 = deserializer.deserialize_u32()
                 val u64 = deserializer.deserialize_u64()
-                val u128 = deserializer.deserialize_u128()
+                val u128 = deserializer.deserializeU128()
                 val f32 = deserializer.deserialize_f32()
                 val f64 = deserializer.deserialize_f64()
-                val char = deserializer.deserialize_char()
+                val char = deserializer.deserializeChar()
                 val string = deserializer.deserialize_str()
                 deserializer.decrease_container_depth()
                 return StructWithFields(unit, bool, i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, f32, f64, char, string)
@@ -635,14 +635,11 @@ fn struct_with_field_that_is_a_4_tuple() {
         one: (String, i32, u16, f32),
     }
 
-    // TODO: The NTuple4 struct should be emitted in the preamble if required, e.g.
-    // data class NTuple4<T1, T2, T3, T4>(val t1: T1, val t2: T2, val t3: T3, val t4: T4)
-
     let actual = emit!(MyStruct as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
     data class MyStruct(
-        val one: NTuple4<String, Int, UShort, Float>,
+        val one: Tuple4<String, Int, UShort, Float>,
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
@@ -667,7 +664,7 @@ fn struct_with_field_that_is_a_4_tuple() {
                     val v1 = deserializer.deserialize_i32()
                     val v2 = deserializer.deserialize_u16()
                     val v3 = deserializer.deserialize_f32()
-                    NTuple4(v0, v1, v2, v3)
+                    Tuple4(v0, v1, v2, v3)
                 }
                 deserializer.decrease_container_depth()
                 return MyStruct(one)
@@ -1769,9 +1766,15 @@ fn struct_with_array_field() {
     ) {
         fun serialize(serializer: Serializer) {
             serializer.increase_container_depth()
-            fixedArray.serialize(serializer)
-            byteArray.serialize(serializer)
-            stringArray.serialize(serializer)
+            fixedArray.forEach {
+                serializer.serialize_i32(it)
+            }
+            byteArray.forEach {
+                serializer.serialize_u8(it)
+            }
+            stringArray.forEach {
+                serializer.serialize_str(it)
+            }
             serializer.decrease_container_depth()
         }
 
@@ -2361,7 +2364,9 @@ fn struct_with_mixed_collections_and_pointers() {
             arcOption.serializeOptionOf(serializer) {
                 serializer.serialize_str(it)
             }
-            arrayOfBoxes.serialize(serializer)
+            arrayOfBoxes.forEach {
+                serializer.serialize_i32(it)
+            }
             serializer.decrease_container_depth()
         }
 

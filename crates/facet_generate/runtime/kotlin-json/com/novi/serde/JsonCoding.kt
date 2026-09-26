@@ -250,3 +250,354 @@ class JsonTripleSerializer<A, B, C>(
         Triple(decode(first, items[0]), decode(second, items[1]), decode(third, items[2]))
     },
 )
+
+/** A Rust 4-tuple, which JSON writes as an array. */
+class JsonTuple4Serializer<T0, T1, T2, T3>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+) : JsonElementSerializer<Tuple4<T0, T1, T2, T3>>(
+    "a 4-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 4)
+        Tuple4(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+        )
+    },
+)
+
+/** A Rust 5-tuple, which JSON writes as an array. */
+class JsonTuple5Serializer<T0, T1, T2, T3, T4>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+) : JsonElementSerializer<Tuple5<T0, T1, T2, T3, T4>>(
+    "a 5-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 5)
+        Tuple5(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+        )
+    },
+)
+
+/** A Rust 6-tuple, which JSON writes as an array. */
+class JsonTuple6Serializer<T0, T1, T2, T3, T4, T5>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+) : JsonElementSerializer<Tuple6<T0, T1, T2, T3, T4, T5>>(
+    "a 6-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 6)
+        Tuple6(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+        )
+    },
+)
+
+/** A Rust 7-tuple, which JSON writes as an array. */
+class JsonTuple7Serializer<T0, T1, T2, T3, T4, T5, T6>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+) : JsonElementSerializer<Tuple7<T0, T1, T2, T3, T4, T5, T6>>(
+    "a 7-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 7)
+        Tuple7(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+        )
+    },
+)
+
+/** A Rust 8-tuple, which JSON writes as an array. */
+class JsonTuple8Serializer<T0, T1, T2, T3, T4, T5, T6, T7>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+    private val serializer7: KSerializer<T7>,
+) : JsonElementSerializer<Tuple8<T0, T1, T2, T3, T4, T5, T6, T7>>(
+    "a 8-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+            encode(serializer7, value.field7),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 8)
+        Tuple8(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+            decode(serializer7, items[7]),
+        )
+    },
+)
+
+/** A Rust 9-tuple, which JSON writes as an array. */
+class JsonTuple9Serializer<T0, T1, T2, T3, T4, T5, T6, T7, T8>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+    private val serializer7: KSerializer<T7>,
+    private val serializer8: KSerializer<T8>,
+) : JsonElementSerializer<Tuple9<T0, T1, T2, T3, T4, T5, T6, T7, T8>>(
+    "a 9-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+            encode(serializer7, value.field7),
+            encode(serializer8, value.field8),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 9)
+        Tuple9(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+            decode(serializer7, items[7]),
+            decode(serializer8, items[8]),
+        )
+    },
+)
+
+/** A Rust 10-tuple, which JSON writes as an array. */
+class JsonTuple10Serializer<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+    private val serializer7: KSerializer<T7>,
+    private val serializer8: KSerializer<T8>,
+    private val serializer9: KSerializer<T9>,
+) : JsonElementSerializer<Tuple10<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9>>(
+    "a 10-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+            encode(serializer7, value.field7),
+            encode(serializer8, value.field8),
+            encode(serializer9, value.field9),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 10)
+        Tuple10(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+            decode(serializer7, items[7]),
+            decode(serializer8, items[8]),
+            decode(serializer9, items[9]),
+        )
+    },
+)
+
+/** A Rust 11-tuple, which JSON writes as an array. */
+class JsonTuple11Serializer<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+    private val serializer7: KSerializer<T7>,
+    private val serializer8: KSerializer<T8>,
+    private val serializer9: KSerializer<T9>,
+    private val serializer10: KSerializer<T10>,
+) : JsonElementSerializer<Tuple11<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>>(
+    "a 11-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+            encode(serializer7, value.field7),
+            encode(serializer8, value.field8),
+            encode(serializer9, value.field9),
+            encode(serializer10, value.field10),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 11)
+        Tuple11(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+            decode(serializer7, items[7]),
+            decode(serializer8, items[8]),
+            decode(serializer9, items[9]),
+            decode(serializer10, items[10]),
+        )
+    },
+)
+
+/** A Rust 12-tuple, which JSON writes as an array. */
+class JsonTuple12Serializer<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
+    private val serializer0: KSerializer<T0>,
+    private val serializer1: KSerializer<T1>,
+    private val serializer2: KSerializer<T2>,
+    private val serializer3: KSerializer<T3>,
+    private val serializer4: KSerializer<T4>,
+    private val serializer5: KSerializer<T5>,
+    private val serializer6: KSerializer<T6>,
+    private val serializer7: KSerializer<T7>,
+    private val serializer8: KSerializer<T8>,
+    private val serializer9: KSerializer<T9>,
+    private val serializer10: KSerializer<T10>,
+    private val serializer11: KSerializer<T11>,
+) : JsonElementSerializer<Tuple12<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>>(
+    "a 12-tuple",
+    toJson = { value ->
+        array(
+            encode(serializer0, value.field0),
+            encode(serializer1, value.field1),
+            encode(serializer2, value.field2),
+            encode(serializer3, value.field3),
+            encode(serializer4, value.field4),
+            encode(serializer5, value.field5),
+            encode(serializer6, value.field6),
+            encode(serializer7, value.field7),
+            encode(serializer8, value.field8),
+            encode(serializer9, value.field9),
+            encode(serializer10, value.field10),
+            encode(serializer11, value.field11),
+        )
+    },
+    fromJson = { element ->
+        val items = tuple(element, 12)
+        Tuple12(
+            decode(serializer0, items[0]),
+            decode(serializer1, items[1]),
+            decode(serializer2, items[2]),
+            decode(serializer3, items[3]),
+            decode(serializer4, items[4]),
+            decode(serializer5, items[5]),
+            decode(serializer6, items[6]),
+            decode(serializer7, items[7]),
+            decode(serializer8, items[8]),
+            decode(serializer9, items[9]),
+            decode(serializer10, items[10]),
+            decode(serializer11, items[11]),
+        )
+    },
+)

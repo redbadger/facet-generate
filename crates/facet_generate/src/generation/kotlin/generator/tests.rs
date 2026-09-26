@@ -1211,6 +1211,68 @@ fn type_named_bytes_is_rejected_when_the_module_has_a_bytes_field() {
     );
 }
 
+/// A module imports the runtime's `TupleN`, and with JSON its serializer, for
+/// each length of tuple it holds, so a type may be named `Tuple5` beside a
+/// 4-tuple but not `Tuple4` (#129).
+#[test]
+fn type_named_like_a_runtime_tuple_is_rejected_only_beside_a_tuple_that_long() {
+    use crate::generation::{bincode::BincodePlugin, json::JsonPlugin, plugin::EmitterPlugin};
+
+    #[derive(facet::Facet)]
+    #[facet(rename = "Tuple5")]
+    struct Five {
+        name: String,
+    }
+
+    #[derive(facet::Facet)]
+    #[facet(rename = "Tuple4")]
+    struct Four {
+        name: String,
+    }
+
+    #[derive(facet::Facet)]
+    struct Holder {
+        four: (u8, u8, u8, u8),
+    }
+
+    let generate = |registry: &Registry, plugin: Arc<dyn EmitterPlugin<Kotlin>>| {
+        let mut cfg = CodeGeneratorConfig::new("com.example".to_string());
+        cfg.update_from(registry);
+        let mut out = Vec::new();
+        KotlinCodeGenerator::new(&cfg)
+            .with_plugins(vec![plugin])
+            .output(&mut out, registry)
+            .map(|()| String::from_utf8(out).unwrap())
+    };
+
+    let registry = crate::reflect!(Five, Holder).unwrap();
+    let source = generate(&registry, Arc::new(BincodePlugin)).unwrap();
+    assert!(
+        source.contains("import com.novi.serde.Tuple4\n"),
+        "{source}"
+    );
+    assert!(!source.contains("import com.novi.serde.Tuple5"), "{source}");
+    assert!(source.contains("class Tuple5("), "{source}");
+    let source = generate(&registry, Arc::new(JsonPlugin)).unwrap();
+    assert!(
+        source.contains("import com.novi.serde.Tuple4\n"),
+        "{source}"
+    );
+    assert!(
+        source.contains("import com.novi.serde.JsonTuple4Serializer\n"),
+        "{source}"
+    );
+    assert!(!source.contains("Tuple5Serializer"), "{source}");
+
+    let registry = crate::reflect!(Four, Holder).unwrap();
+    let err = generate(&registry, Arc::new(BincodePlugin)).unwrap_err();
+    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(
+        err.to_string(),
+        "Kotlin: type `Tuple4` collides with the `Tuple4` import used by the generated code; rename it with #[facet(rename = \"...\")]"
+    );
+}
+
 #[test]
 fn field_named_to_string_is_rejected() {
     #[derive(facet::Facet)]

@@ -131,6 +131,75 @@ fun <T> Deserializer.deserializeSetOf(deserializeElement: (Deserializer) -> T): 
 }
 ";
 
+// The runtime holds a 128-bit integer as an `Int128` / `UInt128`, but the
+// generated types declare it as a `BigInteger`, which these convert from and
+// to. A `BigInteger` out of the Rust type's range is rejected rather than
+// truncated.
+const FEATURE_BIG_INT: &str = r#"private fun Serializer.serializeI128(value: BigInteger) {
+    if (value.bitLength() > 127) {
+        throw SerializationError("Value out of range for an i128: $value")
+    }
+    serialize_i128(Int128(high = value.shiftRight(64).toLong(), low = value.toLong().toULong()))
+}
+
+private fun Serializer.serializeU128(value: BigInteger) {
+    if (value.signum() < 0 || value.bitLength() > 128) {
+        throw SerializationError("Value out of range for a u128: $value")
+    }
+    serialize_u128(UInt128(high = value.shiftRight(64).toLong().toULong(), low = value.toLong().toULong()))
+}
+
+private fun Deserializer.deserializeI128(): BigInteger {
+    val value = deserialize_i128()
+    return BigInteger.valueOf(value.high).shiftLeft(64).or(BigInteger(value.low.toString()))
+}
+
+private fun Deserializer.deserializeU128(): BigInteger {
+    val value = deserialize_u128()
+    return BigInteger(value.high.toString()).shiftLeft(64).or(BigInteger(value.low.toString()))
+}
+"#;
+
+// A Rust `char` is one Unicode scalar value, which a Kotlin `Char` cannot hold
+// outside the BMP, so the generated types declare it as a `String`. Rust's
+// `bincode` writes it as its UTF-8 bytes with no length prefix, the first byte
+// giving the length, which these write and read a byte at a time.
+const FEATURE_CHAR: &str = r#"private fun Serializer.serializeChar(value: String) {
+    val isScalar = when (value.length) {
+        1 -> !value[0].isSurrogate()
+        2 -> value[0].isHighSurrogate() && value[1].isLowSurrogate()
+        else -> false
+    }
+    if (!isScalar) {
+        throw SerializationError("A char must be exactly one Unicode scalar value")
+    }
+    for (byte in value.encodeToByteArray()) {
+        serialize_u8(byte.toUByte())
+    }
+}
+
+private fun Deserializer.deserializeChar(): String {
+    val first = deserialize_u8()
+    val width = when (first.toInt()) {
+        in 0x00..0x7f -> 1
+        in 0xc2..0xdf -> 2
+        in 0xe0..0xef -> 3
+        in 0xf0..0xf4 -> 4
+        else -> throw DeserializationError("Invalid char encoding")
+    }
+    val bytes = ByteArray(width)
+    bytes[0] = first.toByte()
+    for (i in 1 until width) {
+        bytes[i] = deserialize_u8().toByte()
+    }
+    return try {
+        bytes.decodeToString(throwOnInvalidSequence = true)
+    } catch (e: kotlin.text.CharacterCodingException) {
+        throw DeserializationError("Invalid char encoding")
+    }
+}
+"#;
+
 const FEATURE_UUID: &str = r#"fun UUID.serialize(serializer: Serializer) {
     val bytes = ByteArray(16)
     val msb = mostSignificantBits
@@ -250,18 +319,18 @@ fn write_serialize<W: IndentWrite>(
         Format::I16 => writeln!(w, "serializer.serialize_i16({field_name})"),
         Format::I32 => writeln!(w, "serializer.serialize_i32({field_name})"),
         Format::I64 => writeln!(w, "serializer.serialize_i64({field_name})"),
-        Format::I128 => writeln!(w, "serializer.serialize_i128({field_name})"),
+        Format::I128 => writeln!(w, "serializer.serializeI128({field_name})"),
         Format::U8 => writeln!(w, "serializer.serialize_u8({field_name})"),
         Format::U16 => writeln!(w, "serializer.serialize_u16({field_name})"),
         Format::U32 => writeln!(w, "serializer.serialize_u32({field_name})"),
         Format::U64 => writeln!(w, "serializer.serialize_u64({field_name})"),
-        Format::U128 => writeln!(w, "serializer.serialize_u128({field_name})"),
+        Format::U128 => writeln!(w, "serializer.serializeU128({field_name})"),
         Format::F32 => writeln!(w, "serializer.serialize_f32({field_name})"),
         Format::F64 => writeln!(w, "serializer.serialize_f64({field_name})"),
-        Format::Char => writeln!(w, "serializer.serialize_char({field_name})"),
+        Format::Char => writeln!(w, "serializer.serializeChar({field_name})"),
         Format::Str => writeln!(w, "serializer.serialize_str({field_name})"),
         Format::Bytes => writeln!(w, "serializer.serialize_bytes({field_name})"),
-        Format::Uuid => writeln!(w, "{field_name}.serialize(serializer)"),
+        Format::Uuid | Format::TypeName(..) => writeln!(w, "{field_name}.serialize(serializer)"),
 
         Format::Option(inner_format) => {
             write!(w, "{field_name}.serializeOptionOf(serializer) ")?;
@@ -281,8 +350,12 @@ fn write_serialize<W: IndentWrite>(
             Ok(())
         }
 
-        Format::TypeName(..) | Format::TupleArray { .. } => {
-            writeln!(w, "{field_name}.serialize(serializer)")
+        // A fixed-size array is a tuple to bincode: its elements with no
+        // length prefix, so not the `List<T>.serialize` helper.
+        Format::TupleArray { content, .. } => {
+            write!(w, "{field_name}.forEach ")?;
+            write_serialize_lambda(w, content, level)?;
+            Ok(())
         }
 
         Format::Tuple(formats) => {
@@ -373,15 +446,15 @@ fn write_deserialize<W: IndentWrite>(
         Format::I16 => write!(w, "deserializer.deserialize_i16()"),
         Format::I32 => write!(w, "deserializer.deserialize_i32()"),
         Format::I64 => write!(w, "deserializer.deserialize_i64()"),
-        Format::I128 => write!(w, "deserializer.deserialize_i128()"),
+        Format::I128 => write!(w, "deserializer.deserializeI128()"),
         Format::U8 => write!(w, "deserializer.deserialize_u8()"),
         Format::U16 => write!(w, "deserializer.deserialize_u16()"),
         Format::U32 => write!(w, "deserializer.deserialize_u32()"),
         Format::U64 => write!(w, "deserializer.deserialize_u64()"),
-        Format::U128 => write!(w, "deserializer.deserialize_u128()"),
+        Format::U128 => write!(w, "deserializer.deserializeU128()"),
         Format::F32 => write!(w, "deserializer.deserialize_f32()"),
         Format::F64 => write!(w, "deserializer.deserialize_f64()"),
-        Format::Char => write!(w, "deserializer.deserialize_char()"),
+        Format::Char => write!(w, "deserializer.deserializeChar()"),
         Format::Str => write!(w, "deserializer.deserialize_str()"),
         Format::Bytes => write!(w, "deserializer.deserialize_bytes()"),
         Format::Uuid => write!(w, "deserializer.deserializeUuid()"),
@@ -435,7 +508,7 @@ fn write_deserialize<W: IndentWrite>(
                     writeln!(w, "Triple(first, second, third)")?;
                 }
                 _ => {
-                    let typename = format!("NTuple{len}");
+                    let typename = format!("Tuple{len}");
                     write!(w, "run ")?;
                     let mut w = w.block(Newlines::BOTH)?;
                     for (i, format) in formats.iter().enumerate() {
@@ -840,6 +913,16 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                     // BigInteger is JVM-only; kept for backward compat.
                     imports.push("import java.math.BigInteger".to_string());
                     imports.push(format!("import {sp}.Int128"));
+                    imports.push(format!("import {sp}.UInt128"));
+                    // The helpers reject a value out of the Rust type's range.
+                    imports.push(format!("import {sp}.SerializationError"));
+                }
+                Feature::Char => {
+                    // The helper rejects a string that is not one scalar value.
+                    imports.push(format!("import {sp}.SerializationError"));
+                }
+                Feature::Tuple(len) => {
+                    imports.push(format!("import {sp}.Tuple{len}"));
                 }
                 // Other features add helper *code* (via module_helpers),
                 // not imports.
@@ -855,8 +938,9 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
     /// These are small Kotlin source fragments (extension functions on
     /// `Serializer` / `Deserializer`) that teach the serde runtime how to
     /// handle generic containers (`List<T>`, `Set<T>`, `Map<K,V>`,
-    /// `Optional<T>`).  They are written into the module header, after
-    /// imports but before any type declarations.
+    /// `Optional<T>`), and how to write the `BigInteger` of a 128-bit
+    /// integer and the `String` of a `char`.  They are written into the
+    /// module header, after imports but before any type declarations.
     fn module_helpers(
         &self,
         w: &mut dyn IndentWrite,
@@ -884,7 +968,15 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
                     write!(w, "{}", qualified(FEATURE_UUID, config))?;
                     writeln!(w)?;
                 }
-                // BigInt and Bytes add imports (handled above); TupleArray is
+                Feature::BigInt => {
+                    write!(w, "{}", qualified(FEATURE_BIG_INT, config))?;
+                    writeln!(w)?;
+                }
+                Feature::Char => {
+                    write!(w, "{}", qualified(FEATURE_CHAR, config))?;
+                    writeln!(w)?;
+                }
+                // Bytes adds an import (handled above); TupleArray is
                 // encoding-independent and stays in the emitter.
                 _ => {}
             }
@@ -1043,7 +1135,8 @@ mod tests {
         let imports = plugin.imports(&cfg);
 
         assert!(imports.iter().any(|i| i.contains("BigInteger")));
-        assert!(imports.iter().any(|i| i.contains("Int128")));
+        assert!(imports.iter().any(|i| i.ends_with(".Int128")));
+        assert!(imports.iter().any(|i| i.ends_with(".UInt128")));
     }
 
     #[test]

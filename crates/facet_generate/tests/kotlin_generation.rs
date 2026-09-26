@@ -142,14 +142,19 @@ fn assert_generated_code_compiles_in(package: &str, registry: &Registry, encodin
 /// The main fixture — the full [`SerdeData`](common::SerdeData) tree of
 /// primitives, containers, tuples, maps and recursive enums.
 ///
-/// JSON only: the bincode plugin does not compile this fixture (128-bit
-/// integers are declared as `BigInteger` but serialized through
-/// `Int128`/`UInt128`, `char` is declared as `String` but serialized as
-/// `Char`, and `Vec<()>` / `BTreeMap<_, ()>` call the container helpers
-/// without their `serializeElement` argument). All pre-existing bugs.
+/// Under each encoding and both together, where each plugin writes its own
+/// helpers for 128-bit integers. Bincode did not compile it (#127): 128-bit
+/// integers, declared as `BigInteger`, were serialized as the runtime's
+/// `Int128`/`UInt128`; a `char`, declared as `String`, as a Kotlin `Char`; and
+/// a fixed-size array such as `[u32; 2]`, alone or as the key of a
+/// `BTreeMap<_, ()>`, through the `List<T>` helper without its
+/// `serializeElement` argument.
 #[test]
 fn test_that_kotlin_code_compiles() {
-    assert_generated_code_compiles(&common::get_registry(), Encoding::Json);
+    let registry = common::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
 }
 
 /// Field and variant names that collide with Kotlin hard keywords must be
@@ -204,6 +209,18 @@ fn test_that_kotlin_code_compiles_when_the_package_ends_in_a_namespace() {
     let registry = common::across_namespaces::to_root::get_registry();
     for encoding in [Encoding::Bincode, Encoding::Json] {
         assert_generated_code_compiles_in("com.kv", &registry, encoding);
+    }
+}
+
+/// Tuples of four to twelve elements, bare and nested in tuples, lists,
+/// options, maps and enum variants, are the runtime's `Tuple4` to `Tuple12`
+/// with each plugin and with both on one module (#129). They were written as
+/// an `NTupleN` that nothing declared: `Unresolved reference 'NTuple4'.`
+#[test]
+fn test_that_kotlin_code_with_wide_tuples_compiles() {
+    let registry = common::get_wide_tuples_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
     }
 }
 

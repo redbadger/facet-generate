@@ -509,6 +509,105 @@ pub enum SwiftList<T> {
 pub struct SwiftSimpleList(pub Option<Box<Self>>);
 
 // ---------------------------------------------------------------------------
+// Tuple fixtures
+// ---------------------------------------------------------------------------
+
+/// Tuples of four to twelve elements (#129): bare, nested in each other and
+/// in pairs, and held by a list, an option, a map and an enum variant.
+#[allow(clippy::type_complexity)]
+#[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+pub struct WideTuples {
+    pub four: (u8, i32, String, bool),
+    pub six: (u8, u16, u32, u64, i8, i16),
+    pub seven: (String, u8, bool, Option<u32>, Vec<i64>, f64, (u8, u16)),
+    pub twelve: (u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, bool, String),
+    pub nested: (u8, u8, u8, (String, bool, i32, u64)),
+    pub in_pair: (String, (u8, u8, u8, u8, u8, u8)),
+    pub list: Vec<(u32, u32, u32, u32)>,
+    pub maybe: Option<(bool, String, u8, u16, u32, u64, i64)>,
+    pub keyed: BTreeMap<String, (i8, i16, i32, i64, u8)>,
+    pub choices: Vec<WideChoice>,
+}
+
+/// Eleven elements and a 4-tuple.
+pub type NestedTwelve = (
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    i8,
+    (String, u8, u8, u8),
+);
+
+#[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+#[repr(C)]
+pub enum WideChoice {
+    Narrow,
+    Wide((u8, u16, u32, u64)),
+    Wider { twelve: NestedTwelve },
+}
+
+/// Returns a registry containing only [`WideTuples`] and the types it holds.
+pub fn get_wide_tuples_registry() -> Registry {
+    reflect!(WideTuples).unwrap()
+}
+
+/// A sample [`WideTuples`], with every element distinct from its neighbours
+/// so that a transposition would show.
+pub fn wide_tuples_sample() -> WideTuples {
+    WideTuples {
+        four: (1, -2, "three".to_string(), true),
+        six: (1, 2, 3, 4, -5, -6),
+        seven: ("s".to_string(), 7, false, Some(9), vec![-1, 2], 1.5, (3, 4)),
+        twelve: (
+            1,
+            2,
+            3,
+            u64::MAX,
+            -5,
+            -6,
+            -7,
+            i64::MIN,
+            2.5,
+            -0.25,
+            true,
+            "twelve".to_string(),
+        ),
+        nested: (1, 2, 3, ("four".to_string(), false, -5, 6)),
+        in_pair: ("pair".to_string(), (1, 2, 3, 4, 5, 6)),
+        list: vec![(1, 2, 3, 4), (5, 6, 7, 8)],
+        maybe: Some((true, "maybe".to_string(), 1, 2, 3, 4, -5)),
+        keyed: BTreeMap::from([("key".to_string(), (-1, -2, -3, -4, 5))]),
+        choices: vec![
+            WideChoice::Narrow,
+            WideChoice::Wide((1, 2, 3, 4)),
+            WideChoice::Wider {
+                twelve: (
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    ("x".to_string(), 1, 2, 3),
+                ),
+            },
+        ],
+    }
+}
+
+// ---------------------------------------------------------------------------
 // UUID round-trip fixtures
 // ---------------------------------------------------------------------------
 

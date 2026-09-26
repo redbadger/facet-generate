@@ -19,7 +19,9 @@
 //!
 //! The [`Format`] emitter maps Rust/reflection types to Kotlin equivalents —
 //! for example `I32` → `Int`, `Seq(T)` → `List<T>`, `Option(T)` → `T?`,
-//! tuples of size 2/3 → `Pair`/`Triple`, and larger tuples to `NTupleN<…>`.
+//! tuples of size 2/3 → `Pair`/`Triple`, and tuples of 4 to
+//! [`MAX_TUPLE_LEN`] elements to the serde runtime's `Tuple4<…>` to
+//! `Tuple12<…>`.
 //!
 //! # Plugin-dependent output
 //!
@@ -62,12 +64,15 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Container, Emitter, Feature,
+        collision::TypeName,
         indent::{IndentWrite, Newlines},
         module::Module,
         naming::qualify_helper,
         plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
-    reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName, VariantFormat},
+    reflection::format::{
+        ContainerFormat, Doc, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat,
+    },
 };
 
 const FEATURE_TUPLE_ARRAY: &str = r"/**
@@ -611,6 +616,50 @@ pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
     super::naming::RULES.escape(identifier)
 }
 
+/// The most elements a tuple the generated code holds can have: the serde
+/// runtime's tuple types go up to `Tuple12`. That is as far as `facet`
+/// reflects a tuple too (with its `tuples-12` feature, and to four without),
+/// and as far as the standard library implements traits such as `PartialEq`
+/// and `Debug` for one, so only a hand-built registry has a longer tuple.
+pub(crate) const MAX_TUPLE_LEN: usize = 12;
+
+/// Reject a registry holding a tuple longer than [`MAX_TUPLE_LEN`], which the
+/// generated code would name as a `TupleN` the serde runtime does not have.
+///
+/// Run before anything is written, so a failing registry produces no output.
+/// A tuple struct or a tuple variant can have any number of fields: the
+/// generated code declares a class for each.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::InvalidInput`](std::io::ErrorKind::InvalidInput)
+/// naming the first type that holds such a tuple.
+pub(crate) fn check_tuple_sizes(registry: &Registry) -> Result<()> {
+    for (name, container) in registry {
+        let mut longest = 0;
+        // The visitor only fails on an unresolved variable, which a finished
+        // registry never contains.
+        let _ = container.visit(&mut |format| {
+            if let Format::Tuple(formats) = format {
+                longest = longest.max(formats.len());
+            }
+            Ok(())
+        });
+        if longest > MAX_TUPLE_LEN {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Kotlin: {type_name} holds a tuple of {longest} elements, but the serde \
+                     runtime's tuple types stop at `Tuple{MAX_TUPLE_LEN}`; group some of its \
+                     elements into a struct or a nested tuple",
+                    type_name = TypeName(name),
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl Emitter<Kotlin> for Format {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         match &self {
@@ -685,8 +734,9 @@ impl Emitter<Kotlin> for Format {
                         write!(w, ">")
                     }
                     _ => {
-                        // For larger tuples, we'll use a data class NTupleN
-                        write!(w, "NTuple{len}<")?;
+                        // The serde runtime's `TupleN`, which the plugins
+                        // import; `check_tuple_sizes` rejects a longer one.
+                        write!(w, "Tuple{len}<")?;
                         for (i, format) in formats.iter().enumerate() {
                             if i > 0 {
                                 write!(w, ", ")?;

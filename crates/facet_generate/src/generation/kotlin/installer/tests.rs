@@ -230,3 +230,76 @@ fn root_module_is_written_when_the_package_ends_in_an_external_namespace() {
     let manifest = std::fs::read_to_string(install_dir.path().join("build.gradle.kts")).unwrap();
     assert!(manifest.contains(r#"files("../shared")"#), "{manifest}");
 }
+
+/// A tuple of more than twelve elements has no `TupleN` in the serde runtime,
+/// so generation fails before writing anything (#129). `facet` reflects no
+/// tuple that long, so the registry is built by hand; a tuple struct of any
+/// length is fine, as the generated code declares its own class.
+#[test]
+fn rejects_a_tuple_of_more_than_twelve_elements() {
+    use std::sync::Arc;
+
+    use crate::{
+        Registry,
+        generation::{Error, kotlin::KotlinCodeGenerator},
+        reflection::format::{ContainerFormat, Doc, Format, Named, QualifiedTypeName},
+    };
+
+    fn registry(len: usize) -> Registry {
+        let tuple = Format::Tuple(vec![Format::U8; len]);
+        Registry::from([
+            (
+                QualifiedTypeName::root("Wide".to_string()),
+                ContainerFormat::Struct(
+                    vec![Named {
+                        name: "list".to_string(),
+                        doc: Doc::new(),
+                        value: Format::Seq(Box::new(tuple)),
+                    }],
+                    Doc::new(),
+                ),
+            ),
+            (
+                QualifiedTypeName::root("Long".to_string()),
+                ContainerFormat::TupleStruct(vec![Format::U8; 13], Doc::new()),
+            ),
+        ])
+    }
+
+    let message = "Kotlin: type `Wide` in the root namespace holds a tuple of 13 elements, \
+                   but the serde runtime's tuple types stop at `Tuple12`; group some of its \
+                   elements into a struct or a nested tuple";
+
+    for plugin in [
+        Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<Kotlin>>,
+        Arc::new(JsonPlugin),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut installer = Installer::new("com.example", dir.path());
+        installer.plugins.push(plugin.clone());
+        let Error::Io(error) = installer.generate(&registry(13)).unwrap_err() else {
+            panic!("expected an I/O error");
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), message);
+        assert!(
+            std::fs::read_dir(dir.path()).unwrap().next().is_none(),
+            "nothing is written"
+        );
+
+        // The generator on its own rejects it too, having written nothing.
+        let config = CodeGeneratorConfig::new("com.example".to_string());
+        let generator = KotlinCodeGenerator::new(&config).with_plugins(vec![plugin.clone()]);
+        let mut out = Vec::new();
+        let error = generator.output(&mut out, &registry(13)).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), message);
+        assert!(out.is_empty(), "nothing is written");
+
+        // Twelve is the most there is a `TupleN` for.
+        let dir = tempfile::tempdir().unwrap();
+        let mut installer = Installer::new("com.example", dir.path());
+        installer.plugins.push(plugin);
+        installer.generate(&registry(12)).unwrap();
+    }
+}
