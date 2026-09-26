@@ -613,6 +613,60 @@ Console.WriteLine("Variants named like their own properties roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// Tuples of eight to twelve elements round trip (#212). Past seven, a C#
+/// `ValueTuple` nests the rest of its elements in its `TRest`, which the
+/// elements are read from and written to in order.
+#[test]
+fn test_csharp_bincode_runtime_on_long_tuples() {
+    use common::long_tuples::{CSHARP_SAMPLE, get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+{CSHARP_SAMPLE}
+byte[] input = {bytes};
+var value = LongTuples.BincodeDeserialize(input);
+
+Assert(value.Eight.Item8 == 8, "eighth element");
+Assert(value.Nine.Item9 == "nine", "ninth element");
+Assert(value.Twelve.Item12 == "twelve", "twelfth element");
+Assert(value.Nested.Item8.Item6 == "s8" && value.Nested.Item9 == 9, "8-tuple as the eighth element");
+Assert(value.NestedLast.Item12.Item9.SequenceEqual(new byte[] {{ 8, 9 }}), "9-tuple as the twelfth element");
+Assert(value.Choices[3] is LongChoice.Named {{ Twelve.Item12: "x" }}, "12-tuple in a variant");
+Assert(input.SequenceEqual(value.BincodeSerialize()), "decoded value did not roundtrip");
+Assert(input.SequenceEqual(Sample().BincodeSerialize()), "sample did not serialize as Rust does");
+
+Console.WriteLine("Long tuples roundtrip: PASSED");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 #[test]
 #[ignore = "too slow for now, let's fix it later"]
 fn test_csharp_bincode_runtime_on_supported_types() {
@@ -1387,6 +1441,87 @@ Console.WriteLine("JSON:" + expected.JsonSerialize());
     assert_eq!(outputs.len(), 2, "{outputs:?}");
     let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
     for output in &outputs {
+        let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+        assert_eq!(actual, expected, "{output}");
+    }
+}
+
+/// Round-trips tuples of eight to twelve elements through JSON between
+/// `serde_json` and the generated C# (#212), each a flat array of its elements
+/// as Rust writes it, though a C# `ValueTuple` nests those past the seventh in
+/// its `TRest`.
+#[test]
+fn test_csharp_json_runtime_on_long_tuples() {
+    use common::long_tuples::{CSHARP_SAMPLE, LongTuples, get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+
+    let outputs = run_csharp_json_program(
+        &dir,
+        "Example",
+        &format!(
+            r#"using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using Example;
+using Facet.Runtime.Json;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+static bool Rejects<T>(string input)
+{{
+    try
+    {{
+        JsonSerde.Deserialize<T>(input);
+        return false;
+    }}
+    catch (Exception)
+    {{
+        return true;
+    }}
+}}
+{CSHARP_SAMPLE}
+var value = LongTuples.JsonDeserialize(File.ReadAllText("input.json"));
+var sample = Sample();
+
+Assert(value.Eight.Item8 == 8, "eighth element");
+Assert(value.Nine.Item9 == "nine", "ninth element");
+Assert(value.Twelve.Item12 == "twelve", "twelfth element");
+Assert(value.Nested.Item8.Item6 == "s8" && value.Nested.Item9 == 9, "8-tuple as the eighth element");
+Assert(value.NestedLast.Item12.Item9.SequenceEqual(new byte[] {{ 8, 9 }}), "9-tuple as the twelfth element");
+Assert(value.Choices[3] is LongChoice.Named {{ Twelve.Item12: "x" }}, "12-tuple in a variant");
+Assert(value.JsonSerialize() == sample.JsonSerialize(), $"decoded mismatch:\n  {{value.JsonSerialize()}}\n  {{sample.JsonSerialize()}}");
+
+// An 8-tuple is one array of eight, not seven and an array of the rest.
+Assert(Rejects<LongChoice>("{{\"Wrapped\": [1, -2, 3, -4, true, \"s\", 0.5, [8]]}}"), "accepted a nested eighth element");
+Assert(Rejects<LongChoice>("{{\"Wrapped\": [1, -2, 3, -4, true, \"s\", 0.5]}}"), "accepted seven elements");
+Assert(Rejects<LongChoice>("{{\"Wrapped\": [1, -2, 3, -4, true, \"s\", 0.5, 8, 9]}}"), "accepted nine elements");
+
+Console.WriteLine("JSON:" + value.JsonSerialize());
+Console.WriteLine("JSON:" + sample.JsonSerialize());
+"#
+        ),
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    for output in &outputs {
+        let value: LongTuples = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read C#'s JSON: {e}\n{output}"));
+        assert_eq!(value, sample(), "{output}");
         let actual: serde_json::Value = serde_json::from_str(output).unwrap();
         assert_eq!(actual, expected, "{output}");
     }
