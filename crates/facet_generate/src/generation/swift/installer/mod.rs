@@ -46,7 +46,10 @@ use crate::{
         collision::{self, Origin, TypeName},
         module::{self, Module},
         plugin::EmitterPlugin,
-        swift::{Swift, conformance::Conformance, generator::SwiftCodeGenerator},
+        swift::{
+            Swift, conformance::Conformance, emitter::base_imports,
+            foundation_types::FOUNDATION_TYPES, generator::SwiftCodeGenerator, naming,
+        },
     },
     reflection::format::QualifiedTypeName,
 };
@@ -221,12 +224,27 @@ impl Installer {
     ///   inside the type `Kv`. This covers a ROOT type named like a namespace,
     ///   a type named like its own namespace's module, and a type named like
     ///   the root package's module, which namespaced modules qualify ROOT
-    ///   types with.
+    ///   types with. A type of the `Swift` or `_Concurrency` module
+    ///   (`string` for `String`, `error` for `Error`) is always in scope, so
+    ///   it hides the module the same way. So does a type of the `Serde`
+    ///   runtime (`serializer`) in a module that imports it, and a type that
+    ///   `Foundation` brings into scope (`data` for `Data`) in a module that
+    ///   imports `Foundation` itself.
+    /// - a module is named like one the package imports: `Swift`, the
+    ///   `Serde` runtime, `Foundation` when any module imports it, or one of
+    ///   the SDK modules `Foundation` loads (`system` for `System`) when that
+    ///   module imports `Foundation`, directly, through the runtime or through
+    ///   another module, as it would then depend on itself.
     ///
     /// Namespaces provided by external packages are not generated, so they
     /// are not checked for targets.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
         const LANGUAGE: &str = "Swift";
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
 
         collision::check_files(
             LANGUAGE,
@@ -243,19 +261,40 @@ impl Installer {
                 }),
         )?;
 
+        let mut generated = Vec::new();
+        for (m, registry) in modules {
+            if self
+                .external_packages
+                .contains_key(m.config().module_name())
+            {
+                continue;
+            }
+            let module_config = SwiftCodeGenerator::new(&self.module_config(m.config()))
+                .with_plugins(self.plugins.clone())
+                .module_config(registry)?;
+            generated.push((m.config(), registry, module_config));
+        }
+
+        self.check_module_names(&generated)?;
+
         let types: BTreeMap<&str, Vec<&QualifiedTypeName>> = modules
             .iter()
             .map(|(m, registry)| (m.config().module_name(), registry.keys().collect()))
             .collect();
-        for (m, registry) in modules {
-            let config = m.config();
-            if self.external_packages.contains_key(config.module_name()) {
-                continue;
-            }
-            let module_config = SwiftCodeGenerator::new(&self.module_config(config))
-                .with_plugins(self.plugins.clone())
-                .module_config(registry)?;
-
+        let runtime_types = naming::runtime_types(
+            &self
+                .plugins
+                .iter()
+                .flat_map(|p| p.runtime_files())
+                .collect::<Vec<_>>(),
+        );
+        for (config, registry, module_config) in &generated {
+            // What the module imports itself: a module's names are not in
+            // scope in the modules that import it.
+            let imports: Vec<String> = base_imports(module_config)
+                .into_iter()
+                .chain(self.plugins.iter().flat_map(|p| p.imports(module_config)))
+                .collect();
             // Every module this one imports, by the name it qualifies their
             // types with.
             let imported: Vec<&str> = module_config
@@ -272,17 +311,27 @@ impl Installer {
             };
             for &name in &imported {
                 let qualifier = name.to_upper_camel_case();
+                let origin = Origin::of_module(name, &self.package_name);
+                let subject = format!(
+                    "{origin} becomes the module `{qualifier}`, which qualifies its types in \
+                     module `{}`",
+                    config.module_name().to_upper_camel_case()
+                );
                 if let Some(hiding) = in_scope().find(|t| t.name == qualifier) {
-                    let origin = Origin::of_module(name, &self.package_name);
                     return Err(collision::error(
                         LANGUAGE,
-                        format_args!(
-                            "{origin} becomes the module `{qualifier}`, which qualifies its \
-                             types in module `{}`",
-                            config.module_name().to_upper_camel_case()
-                        ),
+                        subject,
                         TypeName(hiding),
                         origin.rename_type(),
+                    )
+                    .into());
+                }
+                if let Some(collider) = builtin_type(&qualifier, &imports, &runtime_types) {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        collider,
+                        origin.choose_namespace(),
                     )
                     .into());
                 }
@@ -290,6 +339,97 @@ impl Installer {
         }
 
         Ok(())
+    }
+
+    /// Fails when a module is named like one the package imports (see
+    /// [`check_namespaces`](Self::check_namespaces)). `generated` holds each
+    /// generated module's config, registry and generator config.
+    fn check_module_names(
+        &self,
+        generated: &[(&CodeGeneratorConfig, &Registry, CodeGeneratorConfig)],
+    ) -> Result<(), Error> {
+        const LANGUAGE: &str = "Swift";
+
+        let imports_serde = generated.iter().any(|(_, _, config)| {
+            self.plugins
+                .iter()
+                .any(|p| p.imports(config).iter().any(|i| i == "Serde"))
+        });
+        let imports_foundation = self.modules_importing_foundation(generated);
+        for (config, _, _) in generated {
+            let name = config.module_name();
+            let target = name.to_upper_camel_case();
+            // Every module finds a target named `Foundation` in its place, but
+            // another SDK module's name only breaks a module that imports
+            // `Foundation`, which then imports it back.
+            let sdk_module_breaks = if target == "Foundation" {
+                !imports_foundation.is_empty()
+            } else {
+                imports_foundation.contains(name)
+            };
+            let collider = if target == "Swift" {
+                Some("the standard library's module `Swift`".to_string())
+            } else if target == "Serde" && imports_serde {
+                Some("the runtime module `Serde`, which the generated code imports".to_string())
+            } else if sdk_module_breaks {
+                naming::FOUNDATION_MODULES
+                    .binary_search_by_key(&target.as_str(), |(module, _)| module)
+                    .ok()
+                    .map(|i| {
+                        format!(
+                            "the SDK module `{target}`, {}, so the target would depend on itself",
+                            naming::FOUNDATION_MODULES[i].1
+                        )
+                    })
+            } else {
+                None
+            };
+            if let Some(collider) = collider {
+                let origin = Origin::of_module(name, &self.package_name);
+                return Err(collision::error(
+                    LANGUAGE,
+                    format_args!("{origin} becomes the module `{target}`"),
+                    collider,
+                    origin.choose_namespace(),
+                )
+                .into());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// The generated modules that import `Foundation`, directly, through the
+    /// Serde runtime, or through a module they import.
+    fn modules_importing_foundation<'a>(
+        &self,
+        generated: &[(&'a CodeGeneratorConfig, &Registry, CodeGeneratorConfig)],
+    ) -> BTreeSet<&'a str> {
+        let mut importing: BTreeSet<&str> = generated
+            .iter()
+            .filter(|(_, _, config)| {
+                base_imports(config)
+                    .into_iter()
+                    .chain(self.plugins.iter().flat_map(|p| p.imports(config)))
+                    .any(|i| i == "Foundation" || i == "Serde")
+            })
+            .map(|(config, _, _)| config.module_name())
+            .collect();
+        loop {
+            let before = importing.len();
+            for (config, _, module_config) in generated {
+                if module_config
+                    .external_definitions
+                    .keys()
+                    .any(|name| importing.contains(name.as_str()))
+                {
+                    importing.insert(config.module_name());
+                }
+            }
+            if importing.len() == before {
+                return importing;
+            }
+        }
     }
 
     /// The config a module is generated with: `config`, as split from the
@@ -615,6 +755,41 @@ impl Installer {
         } else {
             format!("\n    platforms: [{}],", self.platforms.join(", "))
         }
+    }
+}
+
+/// The clause naming the type that hides a module qualified as `qualifier`
+/// in a module that imports `imports`, if a builtin one does: a type of the
+/// standard library, of the `Serde` runtime (whose types are `runtime_types`),
+/// or one that `Foundation` brings into scope.
+fn builtin_type(
+    qualifier: &str,
+    imports: &[String],
+    runtime_types: &BTreeSet<String>,
+) -> Option<String> {
+    if naming::STDLIB_TYPES.binary_search(&qualifier).is_ok() {
+        Some(format!(
+            "the standard-library type `{qualifier}`, which Swift finds instead of the module"
+        ))
+    } else if imports.iter().any(|i| i == "Serde") && runtime_types.contains(qualifier) {
+        Some(format!(
+            "the runtime type `Serde.{qualifier}`, which Swift finds instead of the module"
+        ))
+    } else if imports.iter().any(|i| i == "Foundation") {
+        FOUNDATION_TYPES
+            .binary_search_by_key(&qualifier, |(name, _)| name)
+            .ok()
+            .map(|i| match FOUNDATION_TYPES[i].1 {
+                "Foundation" => format!(
+                    "the Foundation type `{qualifier}`, which Swift finds instead of the module"
+                ),
+                module => format!(
+                    "the {module} type `{qualifier}`, which `Foundation` imports and Swift finds \
+                     instead of the module"
+                ),
+            })
+    } else {
+        None
     }
 }
 

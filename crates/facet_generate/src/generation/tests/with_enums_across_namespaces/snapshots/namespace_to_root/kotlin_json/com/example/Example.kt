@@ -1,12 +1,18 @@
 package com.example
 
+import com.novi.serde.JsonElementSerializer
+import com.novi.serde.JsonNewTypeSerializer
+import com.novi.serde.JsonPairSerializer
+import com.novi.serde.JsonTripleSerializer
+import com.novi.serde.JsonUnitSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 
 @Serializable
 @SerialName("App")
 data class App(
-    val entry: com.example.kv.Entry,
+    @SerialName("entry") val entry: com.example.kv.Entry,
 )
 
 @Serializable
@@ -19,16 +25,29 @@ enum class Level {
         get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
 }
 
-@Serializable
-@SerialName("Outcome")
+@Serializable(with = Outcome.JsonSerializer::class)
 sealed interface Outcome {
-    @Serializable
-    @SerialName("Score")
     data class Score(
         val value: UInt,
     ) : Outcome
 
-    @Serializable
-    @SerialName("Missing")
     data object Missing: Outcome
+
+    object JsonSerializer : JsonElementSerializer<Outcome>(
+        "Outcome",
+        toJson = { value ->
+            when (value) {
+                is Score -> variant("Score", encode(UInt.serializer(), value.value))
+                is Missing -> variant("Missing")
+            }
+        },
+        fromJson = { element ->
+            val (tag, content) = variant(element)
+            when (tag) {
+                "Score" -> Score(decode(UInt.serializer(), payload(content)))
+                "Missing" -> Missing
+                else -> unknownVariant(tag)
+            }
+        },
+    )
 }

@@ -326,3 +326,172 @@ fn test_that_typescript_code_naming_a_plugin_s_referenced_type_type_checks() {
     let registry = facet_generate::reflect!(App, Presence).unwrap();
     assert_installed_modules_type_check(&registry, NamesPresencePlugin);
 }
+
+/// Generate `registry` with the installer and the JSON plugin, then
+/// type-check every module it wrote, and the JSON runtime.
+fn assert_json_modules_type_check(registry: &facet_generate::Registry) {
+    let dir = tempdir().unwrap();
+    typescript::Installer::new("example", dir.path())
+        .plugin(JsonPlugin)
+        .generate(registry)
+        .unwrap();
+    let runtime = dir.path().join("serde/json.ts");
+    assert!(runtime.exists(), "no JSON runtime");
+
+    let mut modules: Vec<_> = std::fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "ts"))
+        .collect();
+    modules.sort();
+    modules.push(runtime);
+
+    let status = Command::new("deno")
+        .current_dir(dir.path())
+        .arg("check")
+        .arg("--sloppy-imports")
+        .args(&modules)
+        .status()
+        .unwrap();
+    assert!(status.success(), "deno check failed");
+}
+
+/// The JSON plugin's code, and its runtime, type-check for every shape the
+/// fixtures hold, for types shadowing builtins or named like keywords, and
+/// across namespaces.
+#[test]
+fn test_that_typescript_json_code_type_checks() {
+    for registry in [
+        common::get_registry(),
+        common::get_keyword_registry(),
+        common::get_shadowing_registry(),
+        common::get_uuid_registry(),
+        common::across_namespaces::get_registry(),
+        common::across_namespaces::get_sibling_registry(),
+        common::across_namespaces::to_root::get_registry(),
+        common::across_namespaces::inherited::get_registry(),
+        serde_namespace_registry(),
+    ] {
+        assert_json_modules_type_check(&registry);
+    }
+}
+
+/// A ROOT type holding one in the namespace `serde`, whose module is
+/// `serde.ts`, beside the JSON runtime in `serde/`.
+fn serde_namespace_registry() -> facet_generate::Registry {
+    use facet_generate as fg;
+
+    #[derive(Facet)]
+    #[facet(fg::namespace = "serde")]
+    struct Thing {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        thing: Thing,
+    }
+
+    facet_generate::reflect!(App).unwrap()
+}
+
+/// A field whose wire name isn't an identifier type-checks under the Bincode
+/// plugin, on a struct and on a struct variant (#197). Written bare,
+/// `this.with-dash` reads as `this.with - dash` (`TS2339 [ERROR]: Property
+/// 'with' does not exist on type 'Renamed'.`, `TS2304 [ERROR]: Cannot find
+/// name 'dash'.`), and the variant's `return { kind: "Other", with-dash }`
+/// doesn't parse (`SyntaxError: Expression expected`).
+#[test]
+fn test_that_typescript_bincode_code_with_non_identifier_field_names_type_checks() {
+    #[derive(Facet)]
+    struct Renamed {
+        #[facet(rename = "with-dash")]
+        dashed: u8,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Choice {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    #[derive(Facet)]
+    #[facet(tag = "type", content = "content")]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Adjacent {
+        Other {
+            #[facet(rename = "with-dash")]
+            dashed: u8,
+        },
+    }
+
+    let registry = facet_generate::reflect!(Renamed, Choice, Adjacent).unwrap();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+}
+
+/// `[T; N]`, in every position a format nests, type-checks with no plugin,
+/// with Bincode and with JSON (#190). Its `ListTuple` alias was written
+/// through `Tuple`, which a module without a tuple does not declare
+/// (`TS2304 [ERROR]: Cannot find name 'Tuple'.`), and Bincode read an element
+/// as `[item]`, a `number[]` rather than a `[number]` (`TS2322 [ERROR]: Type
+/// 'number[][]' is not assignable to type 'ListTuple<[number]>'.`).
+#[test]
+fn test_that_typescript_code_with_fixed_size_arrays_type_checks() {
+    let registry = common::fixed_arrays::get_registry();
+    for install in [
+        (|i| i) as fn(typescript::Installer) -> typescript::Installer,
+        |i| i.plugin(BincodePlugin),
+        |i| i.plugin(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        install(typescript::Installer::new("example", dir.path()))
+            .generate(&registry)
+            .unwrap();
+        let module = dir.path().join("example.ts");
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&module)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}
+
+/// A `Uuid` field type-checks with no plugin, with each plugin, and with both
+/// on one module (#191). Only the plugins declared the `Uuid` alias, so with
+/// none it was missing (`TS2304 [ERROR]: Cannot find name 'Uuid'.`), and with
+/// both it was declared twice (`TS2300 [ERROR]: Duplicate identifier
+/// 'Uuid'.`).
+#[test]
+fn test_that_typescript_code_with_a_uuid_type_checks() {
+    let registry = common::get_uuid_registry();
+    for install in [
+        (|i| i) as fn(typescript::Installer) -> typescript::Installer,
+        |i| i.plugin(BincodePlugin),
+        |i| i.plugin(JsonPlugin),
+        |i| i.plugin(BincodePlugin).plugin(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        install(typescript::Installer::new("example", dir.path()))
+            .generate(&registry)
+            .unwrap();
+        let module = dir.path().join("example.ts");
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&module)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}

@@ -1,18 +1,30 @@
-import type { Serializer, Deserializer } from "./serde";
+import * as $json from "./serde/json";
 import * as Example from "./example";
 
 export class Entry {
     constructor (public level: Example.Level, public outcome: Example.Outcome) {
     }
 
-    public serialize(serializer: Serializer): void {
-        Example.serializeLevel(this.level, serializer);
-        Example.serializeOutcome(this.outcome, serializer);
+    static toJson(value: Entry): $json.JsonValue {
+        return {
+            "level": Example.toJsonLevel(value.level),
+            "outcome": Example.toJsonOutcome(value.outcome),
+        };
     }
 
-    static deserialize(deserializer: Deserializer): Entry {
-        const level = Example.deserializeLevel(deserializer);
-        const outcome = Example.deserializeOutcome(deserializer);
-        return new Entry(level,outcome);
+    static fromJson(json: unknown): Entry {
+        const obj = $json.readObject(json, "Entry");
+        return new Entry(
+            Example.fromJsonLevel($json.field(obj, "level")),
+            Example.fromJsonOutcome($json.field(obj, "outcome")),
+        );
+    }
+
+    static jsonSerialize(value: Entry): string {
+        return $json.stringify(Entry.toJson(value));
+    }
+
+    static jsonDeserialize(text: string): Entry {
+        return Entry.fromJson($json.parse(text));
     }
 }

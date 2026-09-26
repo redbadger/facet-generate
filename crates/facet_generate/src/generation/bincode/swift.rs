@@ -222,12 +222,8 @@ impl EmitterPlugin<Swift> for BincodePlugin {
             .collect()
     }
 
-    fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
-        let mut imports = vec!["Serde".to_string()];
-        if config.features.contains(&Feature::Uuid) {
-            imports.push("Foundation".to_string());
-        }
-        imports
+    fn imports(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
+        vec!["Serde".to_string()]
     }
 
     fn module_helpers(

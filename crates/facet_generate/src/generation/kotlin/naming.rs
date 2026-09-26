@@ -116,8 +116,16 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("DeserializationError", "the `DeserializationError` import"),
     ("Deserializer", "the `Deserializer` import"),
     (
+        "EncodeDefault",
+        "the `kotlinx.serialization.EncodeDefault` import",
+    ),
+    (
         "Encoder",
         "the `kotlinx.serialization.encoding.Encoder` import",
+    ),
+    (
+        "ExperimentalSerializationApi",
+        "the `kotlinx.serialization.ExperimentalSerializationApi` import",
     ),
     ("Int128", "the `Int128` import"),
     (
@@ -125,8 +133,29 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
         "the `kotlinx.serialization.json.JsonDecoder` import",
     ),
     (
+        "JsonElementSerializer",
+        "the runtime type `com.novi.serde.JsonElementSerializer`",
+    ),
+    (
         "JsonEncoder",
         "the `kotlinx.serialization.json.JsonEncoder` import",
+    ),
+    (
+        "JsonNewTypeSerializer",
+        "the runtime type `com.novi.serde.JsonNewTypeSerializer`",
+    ),
+    (
+        "JsonPairSerializer",
+        "the runtime type `com.novi.serde.JsonPairSerializer`",
+    ),
+    ("JsonSerializer", "the generated `JsonSerializer` object"),
+    (
+        "JsonTripleSerializer",
+        "the runtime type `com.novi.serde.JsonTripleSerializer`",
+    ),
+    (
+        "JsonUnitSerializer",
+        "the runtime type `com.novi.serde.JsonUnitSerializer`",
     ),
     (
         "JsonUnquotedLiteral",

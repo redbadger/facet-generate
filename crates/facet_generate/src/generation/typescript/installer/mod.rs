@@ -48,7 +48,7 @@ use crate::{
         json::JsonPlugin,
         module::{self, Module},
         plugin::EmitterPlugin,
-        typescript::{TypeScript, TypeScriptCodeGenerator},
+        typescript::{TypeScript, TypeScriptCodeGenerator, emitter, naming},
     },
 };
 
@@ -177,11 +177,26 @@ impl Installer {
     /// - a module imports two namespaces under the same name (`my_ns` and
     ///   `MyNs`), or imports one under the name of a type it declares
     ///   (TS2440), as a ROOT type named like a namespace would be.
+    /// - a module imports a namespace under a name that its header already
+    ///   binds: one its plugins import (`serializer` as `Serializer`, TS2300),
+    ///   an alias it exports (`uuid` as `Uuid`, beside a `Uuid` field,
+    ///   TS2395), or a value its plugins' helpers declare (TS2440).
+    /// - a module imports a namespace under the name of a global that the
+    ///   plugins' code for it constructs (`map` as `Map`, beside a map
+    ///   field), which the namespace would shadow (TS2351).
+    /// - a module is written to `serde.ts`, which the bincode code's
+    ///   `./serde` imports would find instead of the runtime installed in
+    ///   `serde/`.
     ///
     /// Namespaces provided by external packages are not generated, so only
     /// the names they are imported under are checked.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
         const LANGUAGE: &str = "TypeScript";
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
 
         collision::check_files(
             LANGUAGE,
@@ -197,6 +212,8 @@ impl Installer {
                 }),
         )?;
 
+        self.check_serde_file(modules)?;
+
         for (m, registry) in modules {
             let config = m.config();
             if self.external_packages.contains_key(config.module_name()) {
@@ -206,6 +223,8 @@ impl Installer {
                 .with_plugins(self.plugins.clone())
                 .module_config(registry)?;
 
+            let file = format!("{}.ts", config.module_name());
+            let scope = emitter::module_scope(&module_config, &self.plugins, &file)?;
             let mut bindings = BTreeMap::<String, &str>::new();
             for name in &module_config.referenced_namespaces {
                 let binding = name.to_upper_camel_case();
@@ -235,9 +254,72 @@ impl Installer {
                     )
                     .into());
                 }
+                if let Some((_, clause)) = scope.iter().find(|(name, _)| *name == binding) {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        clause,
+                        origin.choose_namespace(),
+                    )
+                    .into());
+                }
+                if let Some((global, _)) =
+                    naming::CONSTRUCTED_GLOBALS
+                        .iter()
+                        .find(|(global, constructs)| {
+                            *global == binding
+                                && !self.plugins.is_empty()
+                                && registry.values().any(constructs)
+                        })
+                {
+                    return Err(collision::error(
+                        LANGUAGE,
+                        subject,
+                        format_args!(
+                            "the global `{global}`, which `{}.ts` constructs, so \
+                             `new {global}(...)` would find the namespace instead",
+                            config.module_name()
+                        ),
+                        origin.choose_namespace(),
+                    )
+                    .into());
+                }
             }
         }
 
+        Ok(())
+    }
+
+    /// Fails when a module is written to `serde.ts` beside the runtime (see
+    /// [`check_namespaces`](Self::check_namespaces)).
+    fn check_serde_file(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
+        const LANGUAGE: &str = "TypeScript";
+        // `./serde` resolves to `serde.ts` before `serde/index.ts`; the JSON
+        // plugin's `./serde/json` is found either way.
+        let installs_serde = !self.external_packages.contains_key(SERDE_NAMESPACE)
+            && self.plugins.iter().any(|plugin| {
+                plugin
+                    .runtime_files()
+                    .iter()
+                    .any(|file| file.relative_path == "serde/index.ts")
+            });
+        if installs_serde
+            && let Some(name) = modules
+                .keys()
+                .map(|m| m.config().module_name())
+                .filter(|name| !self.external_packages.contains_key(*name))
+                .find(|name| name.eq_ignore_ascii_case(SERDE_NAMESPACE))
+        {
+            let origin = Origin::of_module(name, &self.package_name);
+            return Err(collision::error(
+                LANGUAGE,
+                format_args!("{origin} is written to `{name}.ts`"),
+                "the runtime module `./serde`, which the generated code imports `Serializer` \
+                 and `Deserializer` from",
+                origin.choose_namespace(),
+            )
+            .into());
+        }
         Ok(())
     }
 
@@ -258,9 +340,11 @@ impl Installer {
 
     /// Installs the serde TypeScript runtime sources into the output directory.
     ///
-    /// Delegates to the JSON plugin's [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files)
-    /// which embeds the serde sources via `include_dir!`.  Most callers should
-    /// prefer [`generate`](Self::generate).
+    /// Delegates to the bincode and JSON plugins'
+    /// [`runtime_files`](crate::generation::plugin::EmitterPlugin::runtime_files),
+    /// writing only the `serde/` files: the shared `Serializer` /
+    /// `Deserializer` interfaces and the JSON runtime, `serde/json.ts`.  Most
+    /// callers should prefer [`generate`](Self::generate).
     ///
     /// # Errors
     ///
@@ -268,9 +352,14 @@ impl Installer {
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(self.package_name.clone());
         let lang = TypeScript::new(&config, &BTreeMap::default())
+            .with_plugin(std::sync::Arc::new(BincodePlugin))
             .with_plugin(std::sync::Arc::new(JsonPlugin));
         for plugin in lang.plugins() {
-            for file in plugin.runtime_files() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("serde/"))
+            {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;

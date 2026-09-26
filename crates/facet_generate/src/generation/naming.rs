@@ -73,8 +73,8 @@ pub(crate) struct NamingRules {
     /// Whether each variant of a data-carrying enum becomes a type of its own
     /// (a nested class in Kotlin, a record in C#).
     pub variants_are_types: bool,
-    /// Whether a member may not share its name with the type that encloses it
-    /// (C# CS0542).
+    /// Whether a member of a top-level type may not share its name with the
+    /// type (C# CS0542). A variant's type renames such a member instead.
     pub member_equals_type_forbidden: bool,
     /// Whether `component1`..`componentN` are generated for an N-field type
     /// (Kotlin data classes).
@@ -238,15 +238,21 @@ pub(crate) fn check_reserved_names(registry: &Registry, rules: &NamingRules) -> 
         match container {
             ContainerFormat::UnitStruct(_) => {}
             ContainerFormat::NewTypeStruct(..) => {
-                check_member(&type_name.name, "value", rules, 1)?;
+                check_member(&type_name.name, "value", rules, 1, false)?;
             }
             ContainerFormat::TupleStruct(formats, _) => {
                 for i in 0..formats.len() {
-                    check_member(&type_name.name, &format!("field{i}"), rules, formats.len())?;
+                    check_member(
+                        &type_name.name,
+                        &format!("field{i}"),
+                        rules,
+                        formats.len(),
+                        false,
+                    )?;
                 }
             }
             ContainerFormat::Struct(fields, _) => {
-                check_fields(&type_name.name, fields, rules)?;
+                check_fields(&type_name.name, fields, rules, false)?;
             }
             ContainerFormat::Enum(variants, _, _) => {
                 for variant in variants.values() {
@@ -324,23 +330,37 @@ fn check_variant(
     } else {
         enum_name
     };
+    // Where the variant is a type, it is the type that renames a member named
+    // like it.
+    let in_variant = rules.variants_are_types;
 
     match &variant.value {
         VariantFormat::Unit | VariantFormat::Variable(_) => Ok(()),
-        VariantFormat::NewType(_) => check_member(owner, "value", rules, 1),
+        VariantFormat::NewType(_) => check_member(owner, "value", rules, 1, in_variant),
         VariantFormat::Tuple(formats) => {
             for i in 0..formats.len() {
-                check_member(owner, &format!("field{i}"), rules, formats.len())?;
+                check_member(
+                    owner,
+                    &format!("field{i}"),
+                    rules,
+                    formats.len(),
+                    in_variant,
+                )?;
             }
             Ok(())
         }
-        VariantFormat::Struct(fields) => check_fields(owner, fields, rules),
+        VariantFormat::Struct(fields) => check_fields(owner, fields, rules, in_variant),
     }
 }
 
-fn check_fields(owner: &str, fields: &[Named<Format>], rules: &NamingRules) -> io::Result<()> {
+fn check_fields(
+    owner: &str,
+    fields: &[Named<Format>],
+    rules: &NamingRules,
+    in_variant: bool,
+) -> io::Result<()> {
     for field in fields {
-        check_member(owner, &field.name, rules, fields.len())?;
+        check_member(owner, &field.name, rules, fields.len(), in_variant)?;
     }
     Ok(())
 }
@@ -350,6 +370,7 @@ fn check_member(
     rust_name: &str,
     rules: &NamingRules,
     field_count: usize,
+    in_variant: bool,
 ) -> io::Result<()> {
     let ident = (rules.member_case)(rust_name);
 
@@ -376,7 +397,9 @@ fn check_member(
         )));
     }
 
-    if rules.member_equals_type_forbidden && ident == (rules.type_case)(owner) {
+    // A variant's type renames a member named like it, so only a top-level
+    // type's clashes (redbadger/facet-generate#193).
+    if rules.member_equals_type_forbidden && !in_variant && ident == (rules.type_case)(owner) {
         return Err(invalid(format!(
             "{lang}: field `{rust_name}` of `{owner}` would become property `{ident}`, \
              the same name as its enclosing type (CS0542); \

@@ -29,9 +29,9 @@
 //! encoding-specific behaviour is delegated to those plugins — the emitter
 //! itself contains no encoding checks. For example:
 //!
-//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonPropertyName]`,
-//!   `[JsonPolymorphic]`, `[JsonDerivedType]`, `[JsonConverter]`) plus
-//!   `JsonSerde` static helper methods.
+//! - `JsonPlugin` supplies `System.Text.Json` annotations (`[JsonConverter]`,
+//!   `[JsonPropertyName]`), a `JsonConverter` for each type, and `JsonSerde`
+//!   static helper methods.
 //! - `BincodePlugin` supplies `IFacetSerializable`/`IFacetDeserializable<T>`
 //!   interface implementations with `Serialize`/`Deserialize` methods and
 //!   `BincodeSerialize`/`BincodeDeserialize` wrappers.
@@ -54,7 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::builtin;
+use super::naming::{builtin, global_name, variant_properties};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -287,6 +287,7 @@ fn write_sealed_record<W: IndentWrite>(
 
     let record_name = name.to_upper_camel_case();
     let ctx = EmitContext::top_level(container, &lang.config);
+    write_type_annotations(w, &ctx, lang)?;
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -311,6 +312,19 @@ fn write_sealed_record<W: IndentWrite>(
     write_after_type(w, &ctx, lang)
 }
 
+/// Write the plugin type annotations (e.g. `[JsonConverter(…)]`) for a
+/// top-level type, each on its own line.
+fn write_type_annotations<W: IndentWrite>(
+    w: &mut W,
+    ctx: &EmitContext<'_>,
+    lang: &CSharp,
+) -> Result<()> {
+    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(ctx)) {
+        writeln!(w, "{annotation}")?;
+    }
+    Ok(())
+}
+
 /// Run the plugin `after_type` hook for a top-level type, at the indentation
 /// level of the type declaration itself.
 fn write_after_type<W: IndentWrite>(w: &mut W, ctx: &EmitContext<'_>, lang: &CSharp) -> Result<()> {
@@ -332,6 +346,7 @@ fn write_class<W: IndentWrite>(
 
     let class_name = name.to_upper_camel_case();
     let ctx = EmitContext::top_level(container, &lang.config);
+    write_type_annotations(w, &ctx, lang)?;
 
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
     let conforms = if conformances.is_empty() {
@@ -383,11 +398,7 @@ fn write_enum<W: IndentWrite>(
     let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
-
-    // Type annotations from plugins (e.g. [JsonConverter(typeof(JsonStringEnumConverter))]).
-    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(&ctx)) {
-        writeln!(w, "{annotation}")?;
-    }
+    write_type_annotations(w, &ctx, lang)?;
 
     write!(w, "public enum {enum_name} ")?;
     {
@@ -420,11 +431,7 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
     let ctx = EmitContext::top_level(container, &lang.config);
 
     doc.write(w, lang)?;
-
-    // Type annotations from plugins (e.g. [JsonPolymorphic] + [JsonDerivedType(…)]).
-    for annotation in collect_from_plugins(lang.plugins(), |p| p.type_annotations(&ctx)) {
-        writeln!(w, "{annotation}")?;
-    }
+    write_type_annotations(w, &ctx, lang)?;
 
     // Type conformances from plugins (e.g. IFacetSerializable, IFacetDeserializable<T>).
     let conformances = collect_from_plugins(lang.plugins(), |p| p.type_conformances(&ctx));
@@ -459,6 +466,15 @@ fn write_variant_record_hierarchy<W: IndentWrite>(
 
 /// Write the `sealed record` declaration for each variant of an
 /// `abstract record` hierarchy.
+///
+/// Every variant record is a nested type of the base record, so inside the
+/// hierarchy a variant's name hides a type of the same name
+/// (redbadger/facet-generate#174). A type named like a variant is written
+/// through its `global::` name, and a positional property named like one is
+/// declared again with `new`: otherwise the record would take the inherited
+/// nested type for the property (CS8866). A property named like its own
+/// variant is renamed instead, by [`variant_properties`]. None of these
+/// changes a record that doesn't clash.
 fn write_variant_records<W: IndentWrite>(
     w: &mut W,
     base_name: &str,
@@ -466,48 +482,41 @@ fn write_variant_records<W: IndentWrite>(
     partial: &str,
     lang: &CSharp,
 ) -> Result<()> {
+    let nested: Vec<String> = variants
+        .iter()
+        .map(|variant| variant.name.to_upper_camel_case())
+        .collect();
+    let render = |format: &Format| csharp_type_in(format, &lang.config, &nested);
+
     for variant in variants {
         variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
-        write!(w, "public sealed{partial} record {variant_name}")?;
-        match &variant.value {
-            VariantFormat::Unit => {
-                writeln!(w, "() : {base_name};")?;
+        let properties: Vec<(String, String)> = variant_properties(variant)
+            .into_iter()
+            .map(|(name, format)| (render(format), name))
+            .collect();
+        let parameters = properties
+            .iter()
+            .map(|(ty, name)| format!("{ty} {name}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(
+            w,
+            "public sealed{partial} record {variant_name}({parameters}) : {base_name}"
+        )?;
+
+        let hiding: Vec<_> = properties
+            .iter()
+            .filter(|(_, name)| nested.contains(name))
+            .collect();
+        if hiding.is_empty() {
+            writeln!(w, ";")?;
+        } else {
+            write!(w, " ")?;
+            let mut w = w.block(Newlines::BOTH)?;
+            for (ty, name) in hiding {
+                writeln!(w, "public new {ty} {name} {{ get; init; }} = {name};")?;
             }
-            VariantFormat::NewType(inner) => {
-                writeln!(
-                    w,
-                    "({} Value) : {};",
-                    csharp_type(inner, &lang.config),
-                    base_name
-                )?;
-            }
-            VariantFormat::Tuple(values) => {
-                write!(w, "(")?;
-                for (index, format) in values.iter().enumerate() {
-                    if index > 0 {
-                        write!(w, ", ")?;
-                    }
-                    write!(w, "{} Field{}", csharp_type(format, &lang.config), index)?;
-                }
-                writeln!(w, ") : {base_name};")?;
-            }
-            VariantFormat::Struct(fields) => {
-                write!(w, "(")?;
-                for (index, field) in fields.iter().enumerate() {
-                    if index > 0 {
-                        write!(w, ", ")?;
-                    }
-                    write!(
-                        w,
-                        "{} {}",
-                        csharp_type(&field.value, &lang.config),
-                        field.name.to_upper_camel_case()
-                    )?;
-                }
-                writeln!(w, ") : {base_name};")?;
-            }
-            VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
         }
         writeln!(w)?;
     }
@@ -624,9 +633,60 @@ pub fn escape_identifier(identifier: &str) -> Cow<'_, str> {
 }
 
 fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
+    csharp_type_in(format, config, &[])
+}
+
+/// [`render_type`] inside a type whose members named `hidden` would hide a
+/// type of the same name: such a type is written through its `global::` name.
+pub(crate) fn render_type_hiding(
+    format: &Format,
+    config: &CodeGeneratorConfig,
+    hidden: &[String],
+) -> String {
+    csharp_type_in(format, config, hidden)
+}
+
+/// Whether the C# type of `format` is a value type — a primitive, `Guid`, a
+/// tuple, `Unit` or a C-style enum — so that its option is a `Nullable<T>`.
+pub(crate) fn is_value_type(format: &Format, config: &CodeGeneratorConfig) -> bool {
+    matches!(
+        format,
+        Format::Unit
+            | Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::I64
+            | Format::I128
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::U64
+            | Format::U128
+            | Format::F32
+            | Format::F64
+            | Format::Char
+            | Format::Uuid
+            | Format::Tuple(_)
+    ) || matches!(format, Format::TypeName(name) if config.is_unit_enum(name))
+}
+
+/// [`csharp_type`] inside a type whose nested types are named `nested`: a type
+/// whose first name segment is one of them is written through its `global::`
+/// name, which they can't hide.
+fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[String]) -> String {
+    let render = |format: &Format| csharp_type_in(format, config, nested);
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
-        Format::TypeName(qualified_type_name) => format_qualified_type_name(qualified_type_name),
+        Format::TypeName(qualified_type_name) => {
+            let name = format_qualified_type_name(qualified_type_name);
+            let first = name.split('.').next().unwrap_or(&name);
+            if nested.iter().any(|nested| nested == first) {
+                global_name(&name, &qualified_type_name.namespace, config)
+            } else {
+                name
+            }
+        }
         Format::Unit => builtin("Unit", config).into_owned(),
         Format::Bool => "bool".to_string(),
         Format::I8 => "sbyte".to_string(),
@@ -645,37 +705,29 @@ fn csharp_type(format: &Format, config: &CodeGeneratorConfig) -> String {
         Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
         Format::Uuid => builtin("Guid", config).into_owned(),
-        Format::Option(inner) => format!("{}?", csharp_type(inner, config)),
+        Format::Option(inner) => format!("{}?", render(inner)),
         Format::Seq(inner) => format!(
             "{}<{}>",
             builtin("ObservableCollection", config),
-            csharp_type(inner, config)
+            render(inner)
         ),
-        Format::Set(inner) => format!(
-            "{}<{}>",
-            builtin("HashSet", config),
-            csharp_type(inner, config)
-        ),
+        Format::Set(inner) => format!("{}<{}>", builtin("HashSet", config), render(inner)),
         Format::Map { key, value } => {
             format!(
                 "{}<{}, {}>",
                 builtin("Dictionary", config),
-                csharp_type(key, config),
-                csharp_type(value, config)
+                render(key),
+                render(value)
             )
         }
         Format::Tuple(formats) => {
             if formats.is_empty() {
                 return builtin("Unit", config).into_owned();
             }
-            let values = formats
-                .iter()
-                .map(|f| csharp_type(f, config))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let values = formats.iter().map(render).collect::<Vec<_>>().join(", ");
             format!("({values})")
         }
-        Format::TupleArray { content, size: _ } => format!("{}[]", csharp_type(content, config)),
+        Format::TupleArray { content, size: _ } => format!("{}[]", render(content)),
     }
 }
 

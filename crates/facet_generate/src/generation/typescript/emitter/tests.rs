@@ -71,7 +71,7 @@ fn test_format_type_aliases() {
     type int32 = number;
     type int64 = bigint;
     type int8 = number;
-    type ListTuple<T extends any[]> = Tuple<T>[];
+    type ListTuple<T extends any[]> = T[];
     type Optional<T> = T | null;
     type Seq<T> = T[];
     type str = string;
@@ -999,4 +999,77 @@ fn declared_map_qualifies_the_global_map() {
         }
     }
     ");
+}
+
+// `[T; N]` in every position a format nests, with no tuple anywhere, so the
+// module declares no `Tuple` alias (#190).
+#[derive(Facet)]
+pub(super) struct Grid {
+    cells: [u8; 4],
+    maybe: Option<[u16; 2]>,
+    rows: Vec<[i32; 3]>,
+    by_name: BTreeMap<String, [bool; 2]>,
+    nested: [[u8; 2]; 3],
+    cell: Cell,
+}
+
+#[derive(Facet)]
+#[repr(C)]
+#[allow(unused)]
+pub(super) enum Cell {
+    Empty,
+    Filled([u8; 2]),
+    Named { values: [String; 2] },
+}
+
+/// The whole module generated for [`Grid`] with `plugins`, aliases included.
+pub(super) fn grid_module(plugins: Vec<Arc<dyn EmitterPlugin<TypeScript>>>) -> String {
+    let registry = crate::reflect!(Grid).unwrap();
+    let config = CodeGeneratorConfig::new("test".to_string());
+    let mut out = Vec::new();
+    TypeScriptCodeGenerator::new(&config)
+        .with_plugins(plugins)
+        .output(&mut out, &registry)
+        .unwrap();
+    String::from_utf8(out).unwrap()
+}
+
+/// A module with `[T; N]` but no tuple declares the `ListTuple` alias without
+/// needing `Tuple` (#190).
+#[test]
+fn fixed_size_arrays_module() {
+    insta::assert_snapshot!(grid_module(vec![]), @r#"
+    type bool = boolean;
+    type int32 = number;
+    type ListTuple<T extends any[]> = T[];
+    type Optional<T> = T | null;
+    type Seq<T> = T[];
+    type str = string;
+    type uint16 = number;
+    type uint8 = number;
+
+    export type Cell =
+        | { kind: "Empty" }
+        | { kind: "Filled"; value: ListTuple<[uint8]> }
+        | { kind: "Named"; values: ListTuple<[str]> };
+
+    export const cellEmpty = (): Cell => ({ kind: "Empty" });
+
+    export const cellFilled = (value: ListTuple<[uint8]>): Cell => ({ kind: "Filled", value });
+
+    export const cellNamed = (values: ListTuple<[str]>): Cell => ({ kind: "Named", values });
+
+    export function matchCell<R>(value: Cell, cases: {
+        Empty: (v: Extract<Cell, { kind: "Empty" }>) => R;
+        Filled: (v: Extract<Cell, { kind: "Filled" }>) => R;
+        Named: (v: Extract<Cell, { kind: "Named" }>) => R;
+    }): R {
+        return cases[value.kind as Cell["kind"]](value as never);
+    }
+
+    export class Grid {
+        constructor (public cells: ListTuple<[uint8]>, public maybe: Optional<ListTuple<[uint16]>>, public rows: Seq<ListTuple<[int32]>>, public by_name: Map<str,ListTuple<[bool]>>, public nested: ListTuple<[ListTuple<[uint8]>]>, public cell: Cell) {
+        }
+    }
+    "#);
 }

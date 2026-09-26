@@ -9,7 +9,10 @@
 
 use std::{collections::BTreeMap, fmt, io};
 
-use crate::reflection::format::{Namespace, QualifiedTypeName};
+use crate::{
+    generation::ExternalPackages,
+    reflection::format::{Namespace, QualifiedTypeName},
+};
 
 /// What the reader can do about a collision.
 #[derive(Clone, Copy, Debug)]
@@ -124,6 +127,32 @@ pub(crate) fn error(
         io::ErrorKind::InvalidInput,
         format!("{language}: {subject}, the same as {collider}. {fix}"),
     )
+}
+
+/// Fails when the root package is named exactly like a namespace that an
+/// external package provides.
+///
+/// [`module::split`](super::module::split) merges a namespace spelled exactly
+/// like the root package into the root module, so that module would be both
+/// generated, for the ROOT types, and provided by the external package.
+pub(crate) fn check_root_package(
+    language: &str,
+    root_package: &str,
+    external_packages: &ExternalPackages,
+) -> io::Result<()> {
+    if external_packages.contains_key(root_package) {
+        return Err(error(
+            language,
+            format_args!("the root package is \"{root_package}\""),
+            format_args!(
+                "{}, which an external package provides, so it would be merged into the root \
+                 module",
+                Origin::Namespace(root_package)
+            ),
+            Fix::ChooseNamespaceOrPackage,
+        ));
+    }
+    Ok(())
 }
 
 /// Fails when two of the generated `files` would be the same file, naming the

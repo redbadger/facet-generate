@@ -13,10 +13,9 @@
 //!
 //! # TypeScript serialize/deserialize pattern
 //!
-//! Both Bincode and JSON encodings use the same `Serializer`/`Deserializer`
-//! interface pattern in TypeScript. The difference is purely which runtime
-//! library is installed. As a result, this plugin generates identical code to
-//! the JSON TypeScript plugin.
+//! Each type is written and read through the runtime's `Serializer` /
+//! `Deserializer` interfaces, field by field in declaration order and an enum
+//! variant by its index, as bincode lays them out.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -28,7 +27,7 @@ use crate::generation::{
     indent::{IndentWrite, Newlines, with_block},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    typescript::{TypeScript, is_reserved_word, naming, param_name, render_type},
+    typescript::{TypeScript, naming, param_name, render_type},
 };
 use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
 
@@ -169,9 +168,7 @@ function deserializeTupleArray<T>(
 }
 ";
 
-const FEATURE_UUID: &str = r"export type Uuid = string & { readonly __uuid: unique symbol };
-
-const HEX = '0123456789abcdef';
+const FEATURE_UUID: &str = r"const HEX = '0123456789abcdef';
 
 function uuidStringToBytes(value: Uuid): Uint8Array {
     const hex = (value as string).replace(/-/g, '');
@@ -333,7 +330,8 @@ fn write_struct_type_body(
     write!(w, "public serialize(serializer: Serializer): void ")?;
     with_block(w, Newlines::BOTH, |w| {
         for field in fields {
-            write_serialize(w, &format!("this.{}", field.name), &field.value, config)?;
+            let expr = naming::member("this", &field.name);
+            write_serialize(w, &expr, &field.value, config)?;
         }
         Ok(())
     })?;
@@ -453,9 +451,10 @@ fn write_serialize_variant_fields(
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
             for field in fields {
+                let owner = naming::member("value", content);
                 write_serialize(
                     w,
-                    &format!("value.{content}.{}", field.name),
+                    &naming::member(&owner, &field.name),
                     &field.value,
                     config,
                 )?;
@@ -464,7 +463,8 @@ fn write_serialize_variant_fields(
         }
         (_, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_serialize(w, &format!("value.{}", field.name), &field.value, config)?;
+                let expr = naming::member("value", &field.name);
+                write_serialize(w, &expr, &field.value, config)?;
             }
             Ok(())
         }
@@ -473,13 +473,14 @@ fn write_serialize_variant_fields(
 }
 
 /// The object-literal entry for a struct-variant field: shorthand normally,
-/// but `name: name_` when the field name is a reserved word and the local
-/// binding had to be renamed.
+/// but written out in full when the local binding had to be renamed
+/// (`default: default_`, `"with-dash": with_dash`).
 fn object_entry(field: &Named<Format>) -> String {
-    if is_reserved_word(&field.name) {
-        format!("{}: {}", field.name, param_name(&field.name))
-    } else {
+    let binding = param_name(&field.name);
+    if binding == field.name {
         field.name.clone()
+    } else {
+        format!("{}: {binding}", naming::property_key(&field.name))
     }
 }
 
@@ -898,9 +899,12 @@ fn write_deserialize(
                     "return deserializeTupleArray(deserializer, {size}, (deserializer) => "
                 )?;
             }
+            // Typed as a one-element tuple, which `[item]` alone is not
+            // inferred as.
+            let item_type = render_type(content, config);
             with_block(w, Newlines::OPEN, |w| {
                 write_deserialize(w, Some("item"), content, config)?;
-                writeln!(w, "return [item];")
+                writeln!(w, "return [item] as [{item_type}];")
             })?;
             writeln!(w, ");")
         }

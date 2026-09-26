@@ -192,6 +192,81 @@ fn test_that_csharp_code_shadowing_builtin_names_compiles_with_bincode() {
     dotnet_build(&dir);
 }
 
+/// The JSON converters of types shadowing builtins still reach them.
+#[test]
+fn test_that_csharp_code_shadowing_builtin_names_compiles_with_json() {
+    let registry = common::get_shadowing_registry();
+    let dir = tempdir().unwrap();
+
+    csharp::Installer::new("Example.Testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
+/// Types named like the `System.Text.Json` and runtime types a JSON converter
+/// names, or like the members it inherits from `JsonConverter<T>`, which the
+/// converter reaches through their qualified names.
+#[test]
+fn test_that_csharp_code_shadowing_json_converter_names_compiles_with_json() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Utf8JsonReader {
+        r#type: Type,
+        options: Option<JsonSerializerOptions>,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Type {
+        A,
+        B,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Utf8JsonWriter(u8);
+
+    #[derive(Facet)]
+    struct JsonSerializerOptions;
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Read {
+        Write(Write),
+        Other { writer: Utf8JsonWriter },
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Write {
+        reader: Vec<Utf8JsonReader>,
+        json_enum: Option<JsonEnum>,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct JsonEnum {
+        facet_json: FacetJson,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct FacetJson(u8, Type);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&reflect!(Read).unwrap())
+        .unwrap();
+
+    dotnet_build(&dir);
+}
+
 /// A unit-only enum from another namespace goes through its helper class,
 /// qualified like the type (`Example.Kit.PresenceBincode`), and the ROOT
 /// `Unit` struct, which shadows the runtime's `Unit` in the `Kit` namespace
@@ -342,6 +417,151 @@ fn test_that_csharp_code_with_properties_named_like_types_compiles() {
     use named_like_types::{Badge, Card, Event, MaybeOwn, Own, Tally, Wire};
 
     let registry = reflect!(Card, Badge, Tally, Event, Own, MaybeOwn, Wire).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
+/// Enums whose variants share a name with a type a variant holds, or with a
+/// property of a sibling variant (redbadger/facet-generate#174).
+///
+/// Each variant is a record nested in the enum's base record, so inside the
+/// hierarchy a variant's name hides the type of the same name, and a
+/// positional property named like a variant collides with the nested record
+/// it inherits.
+#[allow(dead_code)]
+mod named_like_variants {
+    use facet::Facet;
+
+    #[derive(Facet)]
+    pub struct Presence {
+        pub x: u32,
+    }
+
+    /// The issue's repro. Before the fix, with either plugin:
+    ///
+    /// ```text
+    /// error CS8910: The primary constructor conflicts with the synthesized copy constructor.
+    /// error CS8866: Record member 'Example.Event.Presence' must be a readable instance property or field of type 'uint' to match positional parameter 'Presence'.
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Event {
+        Presence(Presence),
+        Seen { presence: u32, other: Presence },
+    }
+
+    /// `Presence` in `Seen` meant the variant `Sighting.Presence`. With JSON
+    /// that compiled, to the wrong type; with bincode:
+    ///
+    /// ```text
+    /// error CS1503: Argument 1: cannot convert from 'Example.Presence' to 'Example.Sighting.Presence'
+    /// error CS1503: Argument 2: cannot convert from 'System.Collections.ObjectModel.ObservableCollection<Example.Presence>' to 'System.Collections.ObjectModel.ObservableCollection<Example.Sighting.Presence?>'
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Sighting {
+        Presence {
+            x: u32,
+        },
+        Seen {
+            other: Presence,
+            others: Vec<Option<Presence>>,
+        },
+    }
+
+    /// The properties a newtype and a tuple variant name themselves. Before
+    /// the fix, with either plugin:
+    ///
+    /// ```text
+    /// error CS8866: Record member 'Example.Shape.Value' must be a readable instance property or field of type 'uint' to match positional parameter 'Value'.
+    /// error CS8866: Record member 'Example.Shape.Field0' must be a readable instance property or field of type 'uint' to match positional parameter 'Field0'.
+    /// ```
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Shape {
+        Value { x: u32 },
+        Wrap(u32),
+        Pair(u32, u32),
+        Field0,
+    }
+}
+
+#[test]
+fn test_that_csharp_code_with_variants_named_like_types_or_properties_compiles() {
+    use named_like_variants::{Event, Shape, Sighting};
+
+    let registry = reflect!(Event, Sighting, Shape).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
+/// A `Uuid` field builds with no plugin, as a `System.Guid` (#191).
+#[test]
+fn test_that_csharp_code_with_a_uuid_compiles_without_serialization() {
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .generate(&common::get_uuid_registry())
+        .unwrap();
+    dotnet_build(&dir);
+}
+
+/// Variants with a property named like the variant itself
+/// (redbadger/facet-generate#193).
+///
+/// C# forbids a member named like its enclosing type (CS0542), so each such
+/// property is renamed with a trailing underscore.
+#[allow(dead_code)]
+mod named_like_their_own_properties {
+    use facet::Facet;
+
+    /// The issue's repro, with a field named like a sibling beside it.
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Event {
+        Presence { presence: u32, status: u8 },
+        Status { status: u8 },
+    }
+
+    /// The properties a newtype and a tuple variant name themselves, where
+    /// `Field1`'s `Field0` is also named like a sibling.
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Shape {
+        Value(u32),
+        Field0(u32, u32),
+        Field1(u32, u32),
+    }
+}
+
+#[test]
+fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles() {
+    use named_like_their_own_properties::{Event, Shape};
+
+    let registry = reflect!(Event, Shape).unwrap();
 
     let dir = tempdir().unwrap();
     csharp::Installer::new("Example", &dir)

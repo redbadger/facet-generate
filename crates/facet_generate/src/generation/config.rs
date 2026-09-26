@@ -643,6 +643,9 @@ pub struct ExternalPackage {
     pub location: PackageLocation,
     /// The name of the module, if you are importing one from a package.
     /// e.g. in TypeScript: `import { Foo } from 'package_name/module_name';`
+    ///
+    /// For C#, the `NuGet` package ID of a [`PackageLocation::Url`] package;
+    /// when it is `None`, the ID is read from the URL.
     pub module_name: Option<String>,
     /// An optional string to specify the version of a published package.
     pub version: Option<String>,

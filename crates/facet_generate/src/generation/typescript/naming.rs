@@ -8,16 +8,17 @@
 //! declarations). They are perfectly legal as property names, so the emitter
 //! keeps property and wire names untouched and renames bindings instead.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
 use heck::ToUpperCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
-        naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+        naming::{EscapeStyle, ForbiddenNames, NamingRules, mentions, qualify},
     },
-    reflection::format::QualifiedTypeName,
+    reflection::format::{ContainerFormat, Format, QualifiedTypeName},
 };
 
 /// TypeScript reserved words, sorted.
@@ -83,6 +84,87 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ("Map", "globalThis.Map"),
     ("Uint8Array", "globalThis.Uint8Array"),
 ];
+
+/// Globals the Bincode plugin's code constructs bare (`new Map`, `new Error`),
+/// each with the test for whether a container's code does. Sorted by name.
+///
+/// A namespace imported as one of these (`import * as Map`) shadows the
+/// global's value, so `new Map()` fails (TS2351), but not its type, so a
+/// global written only in type positions (`Map<K, V>`, `Uint8Array`) is
+/// still found. The installer rejects such a namespace in a module whose
+/// containers construct the global, whichever plugins generate it: the JSON
+/// plugin's code names no global, reaching its runtime through `$json`, but
+/// another plugin's may.
+pub(crate) const CONSTRUCTED_GLOBALS: &[(&str, ConstructsGlobal)] = &[
+    // The enum functions throw on an unknown variant, and the `Uuid` helpers
+    // on a malformed UUID.
+    ("Error", |container| {
+        matches!(container, ContainerFormat::Enum(..)) || mentions(container, is_uuid)
+    }),
+    // The `deserializeMap` helper.
+    ("Map", |container| {
+        mentions(container, |format| matches!(format, Format::Map { .. }))
+    }),
+    // The Bincode plugin's `Uuid` helper.
+    ("Uint8Array", |container| mentions(container, is_uuid)),
+];
+
+/// Whether a container's code constructs a global.
+type ConstructsGlobal = fn(&ContainerFormat) -> bool;
+
+fn is_uuid(format: &Format) -> bool {
+    matches!(format, Format::Uuid)
+}
+
+/// The names that the top-level statements of `source`, a part of the file
+/// `file`, bind and that a namespace import of the same name collides with,
+/// each with the clause that says where it is from: every import (TS2300), an
+/// exported declaration (TS2395) and a value (TS2440). A type that is not
+/// exported merges with a namespace import, so it is left out.
+pub(crate) fn scope_names<'a>(
+    source: &'a str,
+    file: &'a str,
+) -> impl Iterator<Item = (String, String)> + 'a {
+    static IMPORT: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"^import\s+(?:type\s+)?(.*?)\s+from\s+"([^"]*)""#).expect("a valid regex")
+    });
+    static DECLARATION: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"^(export\s+)?(?:declare\s+)?(?:async\s+)?(?:abstract\s+)?(function\*?|const|let|var|class|enum|namespace|type|interface)\s+([\w$]+)",
+        )
+        .expect("a valid regex")
+    });
+    source.lines().flat_map(move |line| {
+        if let Some(import) = IMPORT.captures(line) {
+            let from = import[2].to_string();
+            let clause = |name: &str| format!("`{name}`, which `{file}` imports from `{from}`");
+            // `* as X`, `X`, `{ A, B as C, type D }`, or a default and braces.
+            import[1]
+                .split([',', '{', '}'])
+                .filter_map(|binding| binding.split_whitespace().last())
+                .filter(|name| *name != "*" && *name != "type")
+                .map(|name| (name.to_string(), clause(name)))
+                .collect::<Vec<_>>()
+        } else if let Some(declaration) = DECLARATION.captures(line) {
+            let name = &declaration[3];
+            let exported = declaration.get(1).is_some();
+            let is_type = matches!(&declaration[2], "type" | "interface");
+            match (exported, is_type) {
+                (true, true) => vec![(
+                    name.to_string(),
+                    format!("the type `{name}`, which `{file}` exports"),
+                )],
+                (_, false) => vec![(
+                    name.to_string(),
+                    format!("`{name}`, which `{file}` declares"),
+                )],
+                (false, true) => vec![],
+            }
+        } else {
+            vec![]
+        }
+    })
+}
 
 /// Type names the generated module already uses for something else, with the
 /// clause that names what each collides with. Sorted by name.
@@ -184,6 +266,35 @@ pub(crate) fn builtin<'a>(name: &'a str, config: &CodeGeneratorConfig) -> Cow<'a
     qualify(name, QUALIFIED, |n| shadows(n, config))
 }
 
+/// Whether `s` is a JavaScript identifier (reserved or not), which a property
+/// name can be written as without quotes.
+pub(crate) fn is_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+}
+
+/// The property `name` as an object-literal key or a type member: bare when
+/// it is an identifier, and quoted otherwise (`"with-dash"`).
+pub(crate) fn property_key(name: &str) -> Cow<'_, str> {
+    if is_identifier(name) {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(serde_json::to_string(name).expect("a string always serializes"))
+    }
+}
+
+/// The property `name` of `owner`: `owner.name`, or `owner["with-dash"]`.
+pub(crate) fn member(owner: &str, name: &str) -> String {
+    if is_identifier(name) {
+        format!("{owner}.{name}")
+    } else {
+        format!("{owner}[{}]", property_key(name))
+    }
+}
+
 /// A reference to the standalone function `{prefix}{Name}` that the plugins
 /// emit beside an enum (`serializeColor`, `deserializeColor`), qualified the
 /// same way as a reference to the enum itself: bare within its own module,
@@ -205,6 +316,10 @@ mod tests {
         assert!(
             QUALIFIED.windows(2).all(|w| w[0].0 < w[1].0),
             "QUALIFIED must be sorted by the bare name"
+        );
+        assert!(
+            CONSTRUCTED_GLOBALS.windows(2).all(|w| w[0].0 < w[1].0),
+            "CONSTRUCTED_GLOBALS must be sorted by name"
         );
         assert!(
             FORBIDDEN_TYPES.windows(2).all(|w| w[0].0 < w[1].0),

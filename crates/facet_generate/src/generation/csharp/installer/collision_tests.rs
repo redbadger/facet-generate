@@ -7,16 +7,29 @@ use facet::Facet;
 use crate as fg;
 use crate::{
     Registry,
-    generation::{Error, bincode::BincodePlugin, csharp::installer::Installer},
+    generation::{
+        Error, ExternalPackage, PackageLocation, bincode::BincodePlugin,
+        csharp::installer::Installer,
+    },
     reflect,
 };
 
 /// The error generating `registry` fails with, after checking that nothing
 /// was written.
 fn rejection(package: &str, registry: &Registry) -> String {
+    rejection_with(package, registry, &[])
+}
+
+/// [`rejection`], with `external_packages` provided by external packages.
+fn rejection_with(
+    package: &str,
+    registry: &Registry,
+    external_packages: &[ExternalPackage],
+) -> String {
     let dir = tempfile::tempdir().unwrap();
     let error = Installer::new(package, dir.path())
         .plugin(BincodePlugin)
+        .external_packages(external_packages)
         .generate(registry)
         .unwrap_err();
     assert!(
@@ -280,4 +293,41 @@ fn allows_a_root_type_named_like_an_undotted_package_without_qualified_reference
     }
 
     generates("Example", &reflect!(Example).unwrap());
+}
+
+/// `module::split` merges namespace "shared" into the root module of package
+/// `shared`, which would then be both generated and provided by the external
+/// package for namespace "shared" (#186).
+#[test]
+fn rejects_a_root_package_named_like_an_external_namespace() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "shared")]
+    struct Ext {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct App {
+        e: Ext,
+    }
+
+    let external = [ExternalPackage {
+        for_namespace: "shared".to_string(),
+        module_name: None,
+        location: PackageLocation::Path("../shared".to_string()),
+        version: None,
+    }];
+    let expected = "C#: the root package is \"shared\", the same as namespace \"shared\", \
+                    which an external package provides, so it would be merged into the root \
+                    module. Choose a different namespace or package name";
+
+    assert_eq!(
+        rejection_with("shared", &reflect!(App).unwrap(), &external),
+        expected
+    );
+    // Whether or not the registry has types in that namespace.
+    assert_eq!(
+        rejection_with("shared", &reflect!(Ext).unwrap(), &external),
+        expected
+    );
 }

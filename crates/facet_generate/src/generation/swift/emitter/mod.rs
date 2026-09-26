@@ -65,7 +65,7 @@ use indoc::formatdoc;
 
 use heck::ToUpperCamelCase as _;
 
-use crate::generation::CodeGeneratorConfig;
+use crate::generation::{CodeGeneratorConfig, Feature};
 use crate::{
     Registry,
     generation::{
@@ -245,12 +245,7 @@ pub(crate) fn write_module_header<W: IndentWrite>(
     lang: &Swift,
     extra_imports: &[String],
 ) -> Result<()> {
-    let mut imports = vec![];
-
-    // Encoding-independent base imports (external namespaces).
-    for ns in config.external_definitions.keys() {
-        imports.push(ns.to_upper_camel_case());
-    }
+    let mut imports = base_imports(config);
 
     // Plugin imports (e.g. `import Serde`).
     for plugin in lang.plugins() {
@@ -266,6 +261,20 @@ pub(crate) fn write_module_header<W: IndentWrite>(
     }
 
     Ok(())
+}
+
+/// The modules a module imports whatever its plugins: each external namespace,
+/// and `Foundation` for `UUID` (#191).
+pub(crate) fn base_imports(config: &CodeGeneratorConfig) -> Vec<String> {
+    let mut imports: Vec<String> = config
+        .external_definitions
+        .keys()
+        .map(|ns| ns.to_upper_camel_case())
+        .collect();
+    if config.features.contains(&Feature::Uuid) {
+        imports.push("Foundation".to_string());
+    }
+    imports
 }
 
 impl Emitter<Swift> for Module {

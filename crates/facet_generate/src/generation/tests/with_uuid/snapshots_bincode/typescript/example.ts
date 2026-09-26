@@ -1,6 +1,7 @@
 import type { Serializer, Deserializer } from "./serde";
 type Optional<T> = T | null;
 type str = string;
+export type Uuid = string & { readonly __uuid: unique symbol };
 
 function serializeOption<T>(
     value: T | null,
@@ -26,8 +27,6 @@ function deserializeOption<T>(
         return deserializeElement(deserializer);
     }
 }
-
-export type Uuid = string & { readonly __uuid: unique symbol };
 
 const HEX = '0123456789abcdef';
 

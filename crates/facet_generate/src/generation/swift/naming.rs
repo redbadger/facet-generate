@@ -8,14 +8,16 @@
 //! contextual keywords (`get`, `set`, `Type`, `Protocol`, …) are legal
 //! identifiers, so neither group is listed.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::BTreeSet, sync::LazyLock};
 
 use heck::ToLowerCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
         naming::{EscapeStyle, ForbiddenNames, NamingRules, qualify},
+        plugin::RuntimeFile,
     },
     reflection::format::Namespace,
 };
@@ -115,6 +117,442 @@ pub(crate) const QUALIFIED: &[(&str, &str)] = &[
     ("UUID", "Foundation.UUID"),
     ("Void", "Swift.Void"),
 ];
+
+/// The public top-level types of the modules every Swift file imports,
+/// `Swift`, `_Concurrency` and `_StringProcessing` (structs, enums, classes,
+/// protocols, actors and typealiases), less those that start with `_` and
+/// those no namespace becomes (`SIMD2`, `UTF8`). Sorted.
+///
+/// Swift looks a qualifier up as a type before it looks for a module, and
+/// every module imports these, so a module named like one of them cannot be
+/// qualified, whether or not the generated code writes the type:
+/// `String.Foo` looks for `Foo` in `Swift.String`.
+//
+// Generated from Apple Swift 6.4 (swiftlang-6.4.0.34.1), macOS 27.0 SDK:
+// every line of `$(xcrun --show-sdk-path)/usr/lib/swift/{Swift,_Concurrency,
+// _StringProcessing}.swiftmodule/arm64e-apple-macos.swiftinterface` that
+// starts in column 0 and matches `\b(public|open)\b( [a-z]+)*? (struct|enum|
+// class|protocol|actor|typealias) (\w+)`, keeping each name that does not
+// start with `_` and for which `name.to_snake_case().to_upper_camel_case() ==
+// name` (heck 0.5), sorted bytewise. Those three are the modules the
+// `-emit-loaded-module-trace` of a file with no imports lists
+// (`Synchronization`, `RegexBuilder` and `_Backtracing` are not among them),
+// and `swiftc -typecheck` of `public typealias P = Name.Missing`, with no
+// imports, fails for each name with "'Missing' is not a member type of ...".
+pub(crate) const STDLIB_TYPES: &[&str] = &[
+    "Actor",
+    "AdditiveArithmetic",
+    "AnyActor",
+    "AnyBidirectionalCollection",
+    "AnyClass",
+    "AnyCollection",
+    "AnyHashable",
+    "AnyIndex",
+    "AnyIterator",
+    "AnyKeyPath",
+    "AnyObject",
+    "AnyRandomAccessCollection",
+    "AnyRegexOutput",
+    "AnySequence",
+    "Array",
+    "ArrayLiteralConvertible",
+    "ArraySlice",
+    "AsyncCompactMapSequence",
+    "AsyncDropFirstSequence",
+    "AsyncDropWhileSequence",
+    "AsyncFilterSequence",
+    "AsyncFlatMapSequence",
+    "AsyncIteratorProtocol",
+    "AsyncMapSequence",
+    "AsyncPrefixSequence",
+    "AsyncPrefixWhileSequence",
+    "AsyncSequence",
+    "AsyncStream",
+    "AsyncThrowingCompactMapSequence",
+    "AsyncThrowingDropWhileSequence",
+    "AsyncThrowingFilterSequence",
+    "AsyncThrowingFlatMapSequence",
+    "AsyncThrowingMapSequence",
+    "AsyncThrowingPrefixWhileSequence",
+    "AsyncThrowingStream",
+    "AutoreleasingUnsafeMutablePointer",
+    "BidirectionalCollection",
+    "BidirectionalIndexable",
+    "BidirectionalSlice",
+    "BinaryFloatingPoint",
+    "BinaryInteger",
+    "BitwiseCopyable",
+    "Bool",
+    "BooleanLiteralConvertible",
+    "BooleanLiteralType",
+    "BorrowingIteratorAdapter",
+    "BorrowingIteratorProtocol",
+    "ByteOrder",
+    "CBool",
+    "CChar",
+    "CChar16",
+    "CChar32",
+    "CChar8",
+    "CDouble",
+    "CFloat",
+    "CFloat16",
+    "CInt",
+    "CLong",
+    "CLongDouble",
+    "CLongLong",
+    "CShort",
+    "CSignedChar",
+    "CUnsignedChar",
+    "CUnsignedInt",
+    "CUnsignedLong",
+    "CUnsignedLongLong",
+    "CUnsignedShort",
+    "CVaListPointer",
+    "CVarArg",
+    "CWideChar",
+    "CancellationError",
+    "CaseIterable",
+    "Character",
+    "CheckedContinuation",
+    "Clock",
+    "ClosedRange",
+    "ClosedRangeIndex",
+    "Codable",
+    "CodingKey",
+    "CodingKeyRepresentable",
+    "CodingUserInfoKey",
+    "Collection",
+    "CollectionDifference",
+    "CollectionOfOne",
+    "CommandLine",
+    "Comparable",
+    "ConcurrentValue",
+    "ContiguousArray",
+    "Continuation",
+    "ContinuousClock",
+    "ConvertibleFromBytes",
+    "ConvertibleToBytes",
+    "Copyable",
+    "CountableClosedRange",
+    "CountablePartialRangeFrom",
+    "CountableRange",
+    "CustomConsumingRegexComponent",
+    "CustomDebugStringConvertible",
+    "CustomLeafReflectable",
+    "CustomPlaygroundDisplayConvertible",
+    "CustomPlaygroundQuickLookable",
+    "CustomReflectable",
+    "CustomStringConvertible",
+    "Decodable",
+    "Decoder",
+    "DecodingError",
+    "DefaultBidirectionalIndices",
+    "DefaultIndices",
+    "DefaultRandomAccessIndices",
+    "DefaultStringInterpolation",
+    "Dictionary",
+    "DictionaryIndex",
+    "DictionaryIterator",
+    "DictionaryLiteral",
+    "DictionaryLiteralConvertible",
+    "DiscardingTaskGroup",
+    "DiscontiguousSlice",
+    "Double",
+    "DropFirstSequence",
+    "DropWhileSequence",
+    "Duration",
+    "DurationProtocol",
+    "EmptyCollection",
+    "EmptyIterator",
+    "Encodable",
+    "Encoder",
+    "EncodingError",
+    "EnumeratedIterator",
+    "EnumeratedSequence",
+    "Equatable",
+    "Error",
+    "Escapable",
+    "Executor",
+    "ExecutorJob",
+    "ExpressibleByArrayLiteral",
+    "ExpressibleByBooleanLiteral",
+    "ExpressibleByDictionaryLiteral",
+    "ExpressibleByExtendedGraphemeClusterLiteral",
+    "ExpressibleByFloatLiteral",
+    "ExpressibleByIntegerLiteral",
+    "ExpressibleByNilLiteral",
+    "ExpressibleByStringInterpolation",
+    "ExpressibleByStringLiteral",
+    "ExpressibleByUnicodeScalarLiteral",
+    "ExtendedGraphemeClusterLiteralConvertible",
+    "ExtendedGraphemeClusterType",
+    "FixedWidthInteger",
+    "FlattenBidirectionalCollection",
+    "FlattenBidirectionalCollectionIndex",
+    "FlattenCollection",
+    "FlattenCollectionIndex",
+    "FlattenSequence",
+    "Float",
+    "Float16",
+    "Float32",
+    "Float64",
+    "Float80",
+    "FloatLiteralConvertible",
+    "FloatLiteralType",
+    "FloatingPoint",
+    "FloatingPointClassification",
+    "FloatingPointRoundingRule",
+    "FloatingPointSign",
+    "FullyInhabited",
+    "GlobalActor",
+    "Hashable",
+    "Hasher",
+    "Identifiable",
+    "ImplicitlyUnwrappedOptional",
+    "Indexable",
+    "IndexableBase",
+    "IndexingIterator",
+    "InlineArray",
+    "InstantProtocol",
+    "Int",
+    "Int128",
+    "Int16",
+    "Int32",
+    "Int64",
+    "Int8",
+    "IntegerLiteralConvertible",
+    "IntegerLiteralType",
+    "Iterable",
+    "IteratorOverOne",
+    "IteratorProtocol",
+    "IteratorSequence",
+    "Job",
+    "JobPriority",
+    "JoinedIterator",
+    "JoinedSequence",
+    "KeyPath",
+    "KeyValuePairs",
+    "KeyedDecodingContainer",
+    "KeyedDecodingContainerProtocol",
+    "KeyedEncodingContainer",
+    "KeyedEncodingContainerProtocol",
+    "LazyBidirectionalCollection",
+    "LazyCollection",
+    "LazyCollectionProtocol",
+    "LazyDropWhileBidirectionalCollection",
+    "LazyDropWhileCollection",
+    "LazyDropWhileIndex",
+    "LazyDropWhileIterator",
+    "LazyDropWhileSequence",
+    "LazyFilterBidirectionalCollection",
+    "LazyFilterCollection",
+    "LazyFilterIndex",
+    "LazyFilterIterator",
+    "LazyFilterSequence",
+    "LazyMapBidirectionalCollection",
+    "LazyMapCollection",
+    "LazyMapIterator",
+    "LazyMapRandomAccessCollection",
+    "LazyMapSequence",
+    "LazyPrefixWhileBidirectionalCollection",
+    "LazyPrefixWhileCollection",
+    "LazyPrefixWhileIndex",
+    "LazyPrefixWhileIterator",
+    "LazyPrefixWhileSequence",
+    "LazyRandomAccessCollection",
+    "LazySequence",
+    "LazySequenceProtocol",
+    "LosslessStringConvertible",
+    "MainActor",
+    "ManagedBuffer",
+    "ManagedBufferPointer",
+    "MemoryLayout",
+    "Mirror",
+    "MirrorPath",
+    "MutableBidirectionalSlice",
+    "MutableCollection",
+    "MutableIndexable",
+    "MutableRandomAccessSlice",
+    "MutableRangeReplaceableBidirectionalSlice",
+    "MutableRangeReplaceableRandomAccessSlice",
+    "MutableRangeReplaceableSlice",
+    "MutableRawSpan",
+    "MutableRef",
+    "MutableSlice",
+    "MutableSpan",
+    "Never",
+    "NilLiteralConvertible",
+    "Numeric",
+    "ObjectIdentifier",
+    "OpaquePointer",
+    "OptionSet",
+    "Optional",
+    "OutputRawSpan",
+    "OutputSpan",
+    "PartialAsyncTask",
+    "PartialKeyPath",
+    "PartialRangeFrom",
+    "PartialRangeThrough",
+    "PartialRangeUpTo",
+    "PlaygroundQuickLook",
+    "PrefixSequence",
+    "RandomAccessCollection",
+    "RandomAccessIndexable",
+    "RandomAccessSlice",
+    "RandomNumberGenerator",
+    "Range",
+    "RangeExpression",
+    "RangeReplaceableBidirectionalSlice",
+    "RangeReplaceableCollection",
+    "RangeReplaceableIndexable",
+    "RangeReplaceableRandomAccessSlice",
+    "RangeReplaceableSlice",
+    "RangeSet",
+    "RawRepresentable",
+    "RawSpan",
+    "Ref",
+    "ReferenceWritableKeyPath",
+    "Regex",
+    "RegexComponent",
+    "RegexRepetitionBehavior",
+    "RegexSemanticLevel",
+    "RegexWordBoundaryKind",
+    "Repeated",
+    "Result",
+    "ReversedCollection",
+    "ReversedIndex",
+    "ReversedRandomAccessCollection",
+    "Sendable",
+    "SendableMetatype",
+    "Sequence",
+    "SerialExecutor",
+    "Set",
+    "SetAlgebra",
+    "SetIndex",
+    "SetIterator",
+    "SignedInteger",
+    "SignedNumeric",
+    "SingleValueDecodingContainer",
+    "SingleValueEncodingContainer",
+    "Slice",
+    "Span",
+    "StaticBigInt",
+    "StaticString",
+    "StrideThrough",
+    "StrideThroughIterator",
+    "StrideTo",
+    "StrideToIterator",
+    "Strideable",
+    "String",
+    "StringInterpolationConvertible",
+    "StringInterpolationProtocol",
+    "StringLiteralConvertible",
+    "StringLiteralType",
+    "StringProtocol",
+    "Substring",
+    "SuspendingClock",
+    "SystemRandomNumberGenerator",
+    "Task",
+    "TaskExecutor",
+    "TaskGroup",
+    "TaskLocal",
+    "TaskPriority",
+    "TextOutputStream",
+    "TextOutputStreamable",
+    "ThrowingDiscardingTaskGroup",
+    "ThrowingTaskGroup",
+    "UInt",
+    "UInt128",
+    "UInt16",
+    "UInt32",
+    "UInt64",
+    "UInt8",
+    "UnboundedRange",
+    "UnfoldFirstSequence",
+    "UnfoldSequence",
+    "Unicode",
+    "UnicodeCodec",
+    "UnicodeDecodingResult",
+    "UnicodeScalar",
+    "UnicodeScalarLiteralConvertible",
+    "UnicodeScalarType",
+    "UniqueArray",
+    "UniqueBox",
+    "UnkeyedDecodingContainer",
+    "UnkeyedEncodingContainer",
+    "Unmanaged",
+    "UnownedJob",
+    "UnownedSerialExecutor",
+    "UnownedTaskExecutor",
+    "UnsafeBufferPointer",
+    "UnsafeBufferPointerIterator",
+    "UnsafeConcurrentValue",
+    "UnsafeContinuation",
+    "UnsafeCurrentTask",
+    "UnsafeMutableBufferPointer",
+    "UnsafeMutablePointer",
+    "UnsafeMutableRawBufferPointer",
+    "UnsafeMutableRawBufferPointerIterator",
+    "UnsafeMutableRawPointer",
+    "UnsafePointer",
+    "UnsafeRawBufferPointer",
+    "UnsafeRawBufferPointerIterator",
+    "UnsafeRawPointer",
+    "UnsafeSendable",
+    "UnsafeThrowingContinuation",
+    "UnsignedInteger",
+    "Void",
+    "WritableKeyPath",
+    "Zip2Iterator",
+    "Zip2Sequence",
+];
+
+/// SDK modules that `Foundation` loads, with the clause that says how the
+/// generated code reaches each. Sorted by name.
+///
+/// A target of the same name would stand in for the SDK's module, which
+/// then depends on the target: "module dependency cycle".
+pub(crate) const FOUNDATION_MODULES: &[(&str, &str)] = &[
+    ("Combine", "which `Foundation` imports"),
+    ("CoreFoundation", "which `Foundation` imports"),
+    ("Darwin", "which `Foundation` imports"),
+    ("Dispatch", "which `Foundation` imports"),
+    ("Foundation", "which the generated code imports"),
+    ("ObjectiveC", "which `Foundation` imports"),
+    ("Observation", "which `Foundation` imports"),
+    ("System", "which `Foundation` imports"),
+];
+
+/// The public top-level types that the Swift sources of the `Serde` runtime in
+/// `files` declare, less those that start with `_`: every other file is
+/// skipped. Sorted.
+///
+/// A module that imports `Serde` finds these before a module of the same
+/// name, as it does the standard library's.
+pub(crate) fn runtime_types(files: &[RuntimeFile]) -> BTreeSet<String> {
+    static DECLARATION: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"(?m)^(?:@\w+\s+)*(?:public|open)(?:\s+(?:final|indirect))*\s+(?:struct|enum|class|protocol|actor|typealias)\s+(\w+)",
+        )
+        .expect("a valid regex")
+    });
+    files
+        .iter()
+        .filter(|file| {
+            file.relative_path.starts_with("Sources/Serde/")
+                && std::path::Path::new(&file.relative_path)
+                    .extension()
+                    .is_some_and(|extension| extension == "swift")
+        })
+        .flat_map(|file| {
+            DECLARATION
+                .captures_iter(&String::from_utf8_lossy(&file.contents))
+                .map(|captures| captures[1].to_string())
+                .collect::<Vec<_>>()
+        })
+        .filter(|name| !name.starts_with('_'))
+        .collect()
+}
 
 /// Type names the generated module already uses for something else, with the
 /// clause that names what each collides with. Sorted by name.
@@ -237,6 +675,14 @@ mod tests {
     #[test]
     fn lookup_tables_are_sorted_for_binary_search() {
         assert!(
+            STDLIB_TYPES.windows(2).all(|w| w[0] < w[1]),
+            "STDLIB_TYPES must be sorted"
+        );
+        assert!(
+            FOUNDATION_MODULES.windows(2).all(|w| w[0].0 < w[1].0),
+            "FOUNDATION_MODULES must be sorted by name"
+        );
+        assert!(
             QUALIFIED.windows(2).all(|w| w[0].0 < w[1].0),
             "QUALIFIED must be sorted by the bare name"
         );
@@ -247,6 +693,42 @@ mod tests {
         assert!(
             FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
             "FORBIDDEN_MEMBERS must be sorted by name"
+        );
+    }
+
+    /// Pins what the runtime check reads from the sources each plugin ships.
+    #[test]
+    fn finds_the_types_of_the_serde_runtime() {
+        use crate::generation::{
+            bincode::BincodePlugin, json::JsonPlugin, plugin::EmitterPlugin, swift::Swift,
+        };
+
+        let types = |plugin: &dyn EmitterPlugin<Swift>| {
+            runtime_types(&plugin.runtime_files())
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            types(&BincodePlugin),
+            [
+                "BinaryDeserializer",
+                "BinarySerializer",
+                "BincodeDeserializer",
+                "BincodeSerializer",
+                "DeserializationError",
+                "Deserializer",
+                "Indirect",
+                "Int128",
+                "SerializationError",
+                "Serializer",
+                "UInt128",
+            ]
+        );
+        assert_eq!(
+            types(&JsonPlugin),
+            [
+                "Indirect", "Int128", "JsonChar", "JsonKey", "JsonUnit", "JsonUuid", "UInt128"
+            ]
         );
     }
 

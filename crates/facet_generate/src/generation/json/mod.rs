@@ -8,12 +8,14 @@
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `imports` | `kotlinx.serialization.*` imports (Kotlin), `import Serde` (Swift) |
-//! | `module_helpers` | BigInt JSON helper (Kotlin) |
-//! | `type_annotations` | `@Serializable`, `@SerialName("…")` above each type (Kotlin) |
+//! | `imports` | `kotlinx.serialization.*` and runtime serializer imports (Kotlin), `import Serde` (Swift), `System.Text.Json` usings (C#), `import * as $json` (TypeScript) |
+//! | `module_helpers` | `Bytes`, `UUID` and `BigInteger` JSON serializers (Kotlin) |
+//! | `type_annotations` | `@Serializable`, naming the type's own serializer where it has one (Kotlin); `[JsonConverter]` naming the type's converter (C#) |
+//! | `field_annotations` | `@SerialName("…")` (Kotlin), `[property: JsonPropertyName("…")]` (C#), with the wire name |
 //! | `type_conformances` | `Codable` (Swift) |
-//! | `type_body` | `val serialName` accessor for enum classes (Kotlin); `CodingKeys`, `init(from:)` / `encode(to:)` where needed, and `jsonSerialize` / `jsonDeserialize` wrappers (Swift) |
-//! | `has_type_body` | Always `true` (Swift) |
+//! | `type_body` | `val serialName` accessor for enum classes, and a nested `JsonSerializer` where needed (Kotlin); `CodingKeys`, `init(from:)` / `encode(to:)` where needed, and `jsonSerialize` / `jsonDeserialize` wrappers (Swift); `JsonSerialize` / `JsonDeserialize` wrappers (C#); static `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` on a class (TypeScript) |
+//! | `has_type_body` | Where the type has a `JsonSerializer` (Kotlin); always `true` (Swift); all but unit enums (C#); always `true` (TypeScript) |
+//! | `after_type` | the type's `JsonConverter` (C#); an enum's `toJson{Enum}` / `fromJson{Enum}` and `jsonSerialize{Enum}` / `jsonDeserialize{Enum}` functions (TypeScript) |
 //!
 
 #[cfg(feature = "kotlin")]

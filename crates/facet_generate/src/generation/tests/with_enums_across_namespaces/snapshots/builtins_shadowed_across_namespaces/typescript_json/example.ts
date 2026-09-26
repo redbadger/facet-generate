@@ -1,50 +1,35 @@
-import type { Serializer, Deserializer } from "./serde";
+import * as $json from "./serde/json";
 import * as Kit from "./kit";
 type Seq<T> = T[];
 type uint32 = number;
-
-function serializeSet<T>(
-    value: T[],
-    serializer: Serializer,
-    serializeElement: (item: T, serializer: Serializer) => void,
-): void {
-    serializer.serializeLen(value.length);
-    value.forEach((item) => {
-        serializeElement(item, serializer);
-    });
-}
-
-function deserializeSet<T>(
-    deserializer: Deserializer,
-    deserializeElement: (deserializer: Deserializer) => T,
-): T[] {
-    const length = deserializer.deserializeLen();
-    const list: T[] = [];
-    for (let i = 0; i < length; i++) {
-        list.push(deserializeElement(deserializer));
-    }
-    return list;
-}
 
 export class Shelf {
     constructor (public set: Kit.Set, public ids: Seq<uint32>, public unit: Unit) {
     }
 
-    public serialize(serializer: Serializer): void {
-        this.set.serialize(serializer);
-        serializeSet(this.ids, serializer, (item, serializer) => {
-            serializer.serializeU32(item);
-        });
-        this.unit.serialize(serializer);
+    static toJson(value: Shelf): $json.JsonValue {
+        return {
+            "set": Kit.Set.toJson(value.set),
+            "ids": value.ids,
+            "unit": Unit.toJson(value.unit),
+        };
     }
 
-    static deserialize(deserializer: Deserializer): Shelf {
-        const set = Kit.Set.deserialize(deserializer);
-        const ids = deserializeSet(deserializer, (deserializer) => {
-            return deserializer.deserializeU32();
-        });
-        const unit = Unit.deserialize(deserializer);
-        return new Shelf(set,ids,unit);
+    static fromJson(json: unknown): Shelf {
+        const obj = $json.readObject(json, "Shelf");
+        return new Shelf(
+            Kit.Set.fromJson($json.field(obj, "set")),
+            $json.readSeq($json.field(obj, "ids"), $json.readU32),
+            Unit.fromJson($json.field(obj, "unit")),
+        );
+    }
+
+    static jsonSerialize(value: Shelf): string {
+        return $json.stringify(Shelf.toJson(value));
+    }
+
+    static jsonDeserialize(text: string): Shelf {
+        return Shelf.fromJson($json.parse(text));
     }
 }
 
@@ -52,12 +37,24 @@ export class Unit {
     constructor (public value: uint32) {
     }
 
-    public serialize(serializer: Serializer): void {
-        serializer.serializeU32(this.value);
+    static toJson(value: Unit): $json.JsonValue {
+        return {
+            "value": value.value,
+        };
     }
 
-    static deserialize(deserializer: Deserializer): Unit {
-        const value = deserializer.deserializeU32();
-        return new Unit(value);
+    static fromJson(json: unknown): Unit {
+        const obj = $json.readObject(json, "Unit");
+        return new Unit(
+            $json.readU32($json.field(obj, "value")),
+        );
+    }
+
+    static jsonSerialize(value: Unit): string {
+        return $json.stringify(Unit.toJson(value));
+    }
+
+    static jsonDeserialize(text: string): Unit {
+        return Unit.fromJson($json.parse(text));
     }
 }

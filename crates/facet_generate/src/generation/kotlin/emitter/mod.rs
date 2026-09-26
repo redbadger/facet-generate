@@ -27,8 +27,11 @@
 //! encoding-specific behaviour is delegated to those plugins — the emitter
 //! itself contains no encoding checks. For example:
 //!
-//! - `JsonPlugin` supplies `@Serializable` / `@SerialName` type annotations
-//!   and inline `@SerialName` annotations for all-unit enum class variants.
+//! - `JsonPlugin` supplies `@Serializable` type annotations, `@SerialName`
+//!   annotations on properties (through
+//!   [`EmitterPlugin::field_annotations`]) and on all-unit enum class
+//!   variants, and a nested `JsonSerializer` for the types whose JSON the
+//!   compiler plugin would not write the way Rust does.
 //! - `BincodePlugin` supplies `serialize` / `deserialize` methods and
 //!   convenience `bincodeSerialize` / `bincodeDeserialize` wrappers.
 //! - With no plugins, only plain type declarations are emitted.
@@ -41,8 +44,8 @@
 //!
 //! Bincode container helpers (`List<T>.serialize`, `Set<T>.serialize`, etc.)
 //! are inlined in `BincodePlugin` (`generation/bincode/kotlin.rs`).
-//! The JSON `BigInteger` `KSerializer` is inlined in `JsonPlugin`
-//! (`generation/json/kotlin.rs`).
+//! The JSON `Bytes`, `UUID` and `BigInteger` `KSerializer`s are inlined in
+//! `JsonPlugin` (`generation/json/kotlin.rs`).
 
 use std::{
     borrow::Cow,
@@ -172,6 +175,13 @@ pub(crate) fn write_module_header<W: IndentWrite>(
         imports.push("import java.math.BigInteger".to_string());
     }
 
+    // With no plugin nothing else brings `UUID` in scope (#191). Not with
+    // one: Bincode imports it, and JSON declares its own `UUID` alias, which
+    // an explicit import would hide.
+    if features.contains(&Feature::Uuid) && lang.plugins().is_empty() {
+        imports.push("import java.util.UUID".to_string());
+    }
+
     // --- Plugin imports ---
     for plugin in lang.plugins() {
         imports.extend(plugin.imports(config));
@@ -232,27 +242,26 @@ impl Emitter<Kotlin> for Container<'_> {
         } = self;
         match format {
             ContainerFormat::UnitStruct(doc) => {
-                data_object(w, name, None, doc, lang, None)?;
+                data_object(w, name, Site::TopLevel(self), doc, lang)?;
             }
             ContainerFormat::NewTypeStruct(format, doc) => {
                 data_class(
                     w,
                     name,
-                    None,
+                    Site::TopLevel(self),
                     &[Named::new(format, "value".to_string())],
                     doc,
                     lang,
-                    None,
                 )?;
             }
             ContainerFormat::TupleStruct(formats, doc) => {
-                data_class(w, name, None, &named(formats), doc, lang, None)?;
+                data_class(w, name, Site::TopLevel(self), &named(formats), doc, lang)?;
             }
             ContainerFormat::Struct(fields, doc) => {
                 if fields.is_empty() {
-                    data_object(w, name, None, doc, lang, None)?;
+                    data_object(w, name, Site::TopLevel(self), doc, lang)?;
                 } else {
-                    data_class(w, name, None, fields, doc, lang, None)?;
+                    data_class(w, name, Site::TopLevel(self), fields, doc, lang)?;
                 }
             }
             ContainerFormat::Enum(variants, _, doc) => {
@@ -285,20 +294,34 @@ impl Emitter<Kotlin> for Container<'_> {
 
 impl Emitter<Kotlin> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
-        self.doc.write(w, lang)?;
-
-        let name = &property_name(&self.name);
-        write!(w, "val {name}: ")?;
-
-        self.value.write(w, lang)?;
-
-        // Add = null default only for top-level Option types
-        if matches!(self.value, Format::Option(_)) {
-            write!(w, " = null")?;
-        }
-
-        writeln!(w, ",")
+        write_property(w, self, &[], lang)
     }
+}
+
+/// Writes a `val` property declaration, preceded on its line by `annotations`.
+fn write_property<W: IndentWrite>(
+    w: &mut W,
+    field: &Named<Format>,
+    annotations: &[String],
+    lang: &Kotlin,
+) -> Result<()> {
+    field.doc.write(w, lang)?;
+
+    for annotation in annotations {
+        write!(w, "{annotation} ")?;
+    }
+
+    let name = &property_name(&field.name);
+    write!(w, "val {name}: ")?;
+
+    field.value.write(w, lang)?;
+
+    // Add = null default only for top-level Option types
+    if matches!(field.value, Format::Option(_)) {
+        write!(w, " = null")?;
+    }
+
+    writeln!(w, ",")
 }
 
 impl Emitter<Kotlin> for Doc {
@@ -339,7 +362,7 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 unreachable!("placeholders should not get this far")
             }
             (VariantFormat::Unit, VariantContext::SealedInterface(interface_name, index)) => {
-                data_object(w, name, Some(interface_name), doc, lang, Some(*index))?;
+                data_object(w, name, Site::variant(interface_name, *index), doc, lang)?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
                 doc.write(w, lang)?;
@@ -363,11 +386,10 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 data_class(
                     w,
                     name,
-                    Some(interface_name),
+                    Site::variant(interface_name, *index),
                     &[Named::new(inner, "value".to_string())],
                     doc,
                     lang,
-                    Some(*index),
                 )?;
             }
             (VariantFormat::NewType(_format), VariantContext::EnumClass) => {
@@ -380,11 +402,10 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 data_class(
                     w,
                     name,
-                    Some(interface_name),
+                    Site::variant(interface_name, *index),
                     &named(formats),
                     doc,
                     lang,
-                    Some(*index),
                 )?;
             }
             (VariantFormat::Tuple(_formats), VariantContext::EnumClass) => {
@@ -397,11 +418,10 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 data_class(
                     w,
                     name,
-                    Some(interface_name),
+                    Site::variant(interface_name, *index),
                     fields,
                     doc,
                     lang,
-                    Some(*index),
                 )?;
             }
             (VariantFormat::Struct(_fields), VariantContext::EnumClass) => {
@@ -666,120 +686,134 @@ impl Emitter<Kotlin> for Format {
     }
 }
 
+/// Where a `data object` or `data class` is declared: at the top level, for
+/// the container it renders, or nested in a `sealed interface` as a variant.
+#[derive(Clone, Copy)]
+enum Site<'a> {
+    TopLevel(&'a Container<'a>),
+    Variant { interface: &'a str, index: usize },
+}
+
+impl<'a> Site<'a> {
+    const fn variant(interface: &'a str, index: usize) -> Self {
+        Self::Variant { interface, index }
+    }
+
+    const fn interface(self) -> Option<&'a str> {
+        match self {
+            Self::TopLevel(_) => None,
+            Self::Variant { interface, .. } => Some(interface),
+        }
+    }
+
+    /// Calls `f` with the plugin context for a type named `name` declared
+    /// here: the container itself at the top level, and a variant `format`
+    /// with `fields` inside a `sealed interface`.
+    fn with_context<T>(
+        self,
+        name: &str,
+        format: &VariantFormat,
+        fields: &[Named<Format>],
+        lang: &Kotlin,
+        f: impl FnOnce(&EmitContext) -> T,
+    ) -> T {
+        match self {
+            Self::TopLevel(container) => f(&EmitContext::top_level(container, &lang.config)),
+            Self::Variant { interface, index } => {
+                let temp_name = QualifiedTypeName::root(name.to_string());
+                let temp_format = match format {
+                    VariantFormat::Unit => ContainerFormat::UnitStruct(Doc::default()),
+                    _ => ContainerFormat::Struct(fields.to_vec(), Doc::default()),
+                };
+                let temp_container = Container {
+                    name: &temp_name,
+                    format: &temp_format,
+                };
+                f(&EmitContext::for_variant(
+                    &temp_container,
+                    &lang.config,
+                    VariantInfo {
+                        name,
+                        index,
+                        format,
+                        fields,
+                        parent_name: interface,
+                    },
+                ))
+            }
+        }
+    }
+}
+
 /// Emits a Kotlin `data object` — used for unit structs and unit variants.
 ///
-/// When `interface` is `Some`, the object implements it (i.e. it is a variant
-/// inside a `sealed interface`). Encoding-specific body code (e.g. serialize /
-/// deserialize methods) is delegated to plugins via the `type_body` hook.
+/// A variant object implements its `sealed interface`. Encoding-specific body
+/// code (e.g. serialize / deserialize methods) is delegated to plugins via the
+/// `type_body` hook.
 fn data_object<W: IndentWrite>(
     w: &mut W,
     name: &str,
-    interface: Option<&str>,
+    site: Site,
     doc: &Doc,
     lang: &Kotlin,
-    variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write_plugin_annotations(w, name, lang)?;
+    site.with_context(name, &VariantFormat::Unit, &[], lang, |ctx| {
+        write_plugin_annotations(w, lang, ctx)?;
 
-    write!(w, "data object {name}")?;
+        write!(w, "data object {name}")?;
 
-    if let Some(interface) = interface {
-        write!(w, ": {interface}")?;
-    }
+        if let Some(interface) = site.interface() {
+            write!(w, ": {interface}")?;
+        }
 
-    // Plugin type body
-    {
-        let temp_name = QualifiedTypeName::root(name.to_string());
-        let temp_format = ContainerFormat::UnitStruct(Doc::default());
-        let temp_container = Container {
-            name: &temp_name,
-            format: &temp_format,
-        };
-        let variant_format = VariantFormat::Unit;
-        let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
-            EmitContext::for_variant(
-                &temp_container,
-                &lang.config,
-                VariantInfo {
-                    name,
-                    index,
-                    format: &variant_format,
-                    fields: &[],
-                    parent_name,
-                },
-            )
-        } else {
-            EmitContext::top_level(&temp_container, &lang.config)
-        };
-        write_plugin_body(w, lang, &ctx)?;
-    }
-
-    Ok(())
+        write_plugin_body(w, lang, ctx)
+    })
 }
 
 /// Emits a Kotlin `data class` — used for structs (with fields), newtype
 /// structs, tuple structs, and non-unit sealed-interface variants.
 ///
-/// When `interface` is `Some`, the class implements it. Encoding-specific
-/// body code (e.g. serialize / deserialize methods) is delegated to plugins
-/// via the `type_body` hook.
+/// A variant class implements its `sealed interface`. Encoding-specific body
+/// code (e.g. serialize / deserialize methods) is delegated to plugins via the
+/// `type_body` hook, and annotations on each property to the
+/// `field_annotations` hook.
 fn data_class<W: IndentWrite>(
     w: &mut W,
     name: &str,
-    interface: Option<&str>,
+    site: Site,
     fields: &[Named<Format>],
     doc: &Doc,
     lang: &Kotlin,
-    variant_index: Option<usize>,
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write_plugin_annotations(w, name, lang)?;
+    let variant_format = VariantFormat::Struct(fields.to_vec());
+    site.with_context(name, &variant_format, fields, lang, |ctx| {
+        write_plugin_annotations(w, lang, ctx)?;
 
-    writeln!(w, "data class {name}(")?;
+        writeln!(w, "data class {name}(")?;
 
-    w.indent();
-    for field in fields {
-        field.write(w, lang)?;
-    }
-    w.unindent();
+        w.indent();
+        for field in fields {
+            let annotations: Vec<String> = lang
+                .plugins()
+                .iter()
+                .flat_map(|p| p.field_annotations(field, ctx))
+                .collect();
+            write_property(w, field, &annotations, lang)?;
+        }
+        w.unindent();
 
-    write!(w, ")")?;
+        write!(w, ")")?;
 
-    if let Some(interface) = interface {
-        write!(w, " : {interface}")?;
-    }
+        if let Some(interface) = site.interface() {
+            write!(w, " : {interface}")?;
+        }
 
-    // Plugin type body
-    {
-        let temp_name = QualifiedTypeName::root(name.to_string());
-        let temp_format = ContainerFormat::Struct(fields.to_vec(), Doc::default());
-        let temp_container = Container {
-            name: &temp_name,
-            format: &temp_format,
-        };
-        let variant_format = VariantFormat::Struct(fields.to_vec());
-        let ctx = if let (Some(parent_name), Some(index)) = (interface, variant_index) {
-            EmitContext::for_variant(
-                &temp_container,
-                &lang.config,
-                VariantInfo {
-                    name,
-                    index,
-                    format: &variant_format,
-                    fields,
-                    parent_name,
-                },
-            )
-        } else {
-            EmitContext::top_level(&temp_container, &lang.config)
-        };
-        write_plugin_body(w, lang, &ctx)?;
-    }
-
-    Ok(())
+        write_plugin_body(w, lang, ctx)
+    })
 }
 
 /// Emits a Kotlin `enum class` — used when all variants are unit variants.
@@ -796,7 +830,7 @@ fn enum_class<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write_plugin_annotations(w, name, lang)?;
+    write_plugin_annotations(w, lang, &EmitContext::top_level(container, &lang.config))?;
 
     write!(w, "enum class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
@@ -837,7 +871,7 @@ fn sealed_interface<W: IndentWrite>(
 ) -> Result<()> {
     doc.write(w, lang)?;
 
-    write_plugin_annotations(w, name, lang)?;
+    write_plugin_annotations(w, lang, &EmitContext::top_level(container, &lang.config))?;
 
     write!(w, "sealed interface {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
@@ -885,23 +919,15 @@ fn write_plugin_body<W: IndentWrite>(w: &mut W, lang: &Kotlin, ctx: &EmitContext
     Ok(())
 }
 
-/// Emits plugin type annotations (e.g. `@Serializable`, `@SerialName`) for a
-/// named type. Creates a temporary [`Container`] so that the plugin
-/// [`EmitContext`] can be constructed without threading the real container
-/// through every helper function.
-fn write_plugin_annotations<W: IndentWrite>(w: &mut W, name: &str, lang: &Kotlin) -> Result<()> {
-    if lang.plugins().is_empty() {
-        return Ok(());
-    }
-    let temp_name = QualifiedTypeName::root(name.to_string());
-    let temp_format = ContainerFormat::UnitStruct(Doc::default());
-    let temp_container = Container {
-        name: &temp_name,
-        format: &temp_format,
-    };
-    let ctx = EmitContext::top_level(&temp_container, &lang.config);
+/// Emits plugin type annotations (e.g. `@Serializable`, `@SerialName`), each
+/// on its own line, for the type `ctx` describes.
+fn write_plugin_annotations<W: IndentWrite>(
+    w: &mut W,
+    lang: &Kotlin,
+    ctx: &EmitContext,
+) -> Result<()> {
     for plugin in lang.plugins() {
-        for annotation in plugin.type_annotations(&ctx) {
+        for annotation in plugin.type_annotations(ctx) {
             writeln!(w, "{annotation}")?;
         }
     }

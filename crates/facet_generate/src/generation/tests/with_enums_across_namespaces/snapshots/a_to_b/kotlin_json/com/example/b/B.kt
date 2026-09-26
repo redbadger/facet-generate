@@ -1,20 +1,39 @@
 package com.example.b
 
+import com.novi.serde.JsonElementSerializer
+import com.novi.serde.JsonNewTypeSerializer
+import com.novi.serde.JsonPairSerializer
+import com.novi.serde.JsonTripleSerializer
+import com.novi.serde.JsonUnitSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 
-@Serializable
-@SerialName("Signal")
+@Serializable(with = Signal.JsonSerializer::class)
 sealed interface Signal {
-    @Serializable
-    @SerialName("Level")
     data class Level(
         val value: UByte,
     ) : Signal
 
-    @Serializable
-    @SerialName("Silent")
     data object Silent: Signal
+
+    object JsonSerializer : JsonElementSerializer<Signal>(
+        "Signal",
+        toJson = { value ->
+            when (value) {
+                is Level -> variant("Level", encode(UByte.serializer(), value.value))
+                is Silent -> variant("Silent")
+            }
+        },
+        fromJson = { element ->
+            val (tag, content) = variant(element)
+            when (tag) {
+                "Level" -> Level(decode(UByte.serializer(), payload(content)))
+                "Silent" -> Silent
+                else -> unknownVariant(tag)
+            }
+        },
+    )
 }
 
 @Serializable

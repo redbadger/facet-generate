@@ -1,190 +1,60 @@
 //! `EmitterPlugin<TypeScript>` implementation for the [`JsonPlugin`].
 //!
-//! Provides feature helper snippets and full type-body generation
-//! (serialize / deserialize methods) for TypeScript JSON code generation.
+//! Every generated type converts to and from the plain JSON value
+//! `serde_json` gives the same Rust type, and `JSON.stringify` /
+//! `JSON.parse` do the text — so JSON written on either side reads on the
+//! other.
 //!
 //! # What this plugin handles
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `module_helpers` | Feature helper snippets (`ArrayOfT`, `SetOfT`, …) |
-//! | `has_type_body` | Always `true` |
-//! | `type_body` | `serialize` / `deserialize` methods for structs and enums |
+//! | `imports` | `import * as $json from "./serde/json";` |
+//! | `type_body` | static `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` on a class |
+//! | `after_type` | `toJson{Enum}` / `fromJson{Enum}` and `jsonSerialize{Enum}` / `jsonDeserialize{Enum}` beside an enum |
+//! | `runtime_files` | `serde/json.ts` |
 //!
-//! # TypeScript serialize/deserialize pattern
+//! A class's methods are static, so that the plain object an internally
+//! tagged variant spreads a struct into (`{ type: "V", ...point }`) is
+//! written the same way as the struct itself.
 //!
-//! Both JSON and Bincode encodings use the same `Serializer`/`Deserializer`
-//! interface pattern in TypeScript. The difference is purely which runtime
-//! library is installed. As a result, this plugin generates identical code to
-//! the Bincode TypeScript plugin.
+//! # Wire format
+//!
+//! | Rust | JSON |
+//! |---|---|
+//! | struct with named fields | object keyed by the field's (renamed) Rust name |
+//! | unit struct, `()` | `null` |
+//! | newtype struct | the inner value |
+//! | tuple struct, tuple | array |
+//! | `Option<T>` | `null` or the value (a missing key reads as `null`) |
+//! | `Vec<T>`, `[T; N]`, sets, bytes | array |
+//! | map | object, with integer, boolean and newtype keys written as strings |
+//! | `char`, `Uuid` | string |
+//! | 64- and 128-bit integer | number, written and read exactly |
+//! | float | number, always with a fraction or an exponent; `null` when not finite |
+//! | enum | externally tagged — `"Unit"`, `{"NewType": …}`, `{"Tuple": […]}`, `{"Struct": {…}}` — or internally / adjacently tagged per `#[facet(tag, content)]` |
+//!
+//! The generated code reaches the runtime only through the `$json` import,
+//! which no generated name can shadow, and names no global itself.
 
-use std::collections::BTreeMap;
 use std::io;
 
 use heck::ToUpperCamelCase;
 
 use crate::generation::{
-    CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
-    indent::{IndentWrite, Newlines, with_block},
-    naming::qualify_helper,
+    CodeGeneratorConfig, PackageLocation, SERDE_NAMESPACE,
+    indent::{IndentWrite, IndentedWriter, Newlines, with_block},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
-    typescript::{TypeScript, is_reserved_word, naming, param_name, render_type},
+    typescript::{TypeScript, naming, render_type},
 };
-use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
+use crate::reflection::format::{
+    ContainerFormat, EnumTagging, Format, Named, QualifiedTypeName, VariantFormat,
+};
 
 use super::JsonPlugin;
 
-/// Rewrite the builtin type names in a module-level helper snippet to their
-/// `globalThis` form where the generated module shadows them.
-fn qualified<'a>(src: &'a str, config: &CodeGeneratorConfig) -> std::borrow::Cow<'a, str> {
-    qualify_helper(src, naming::QUALIFIED, |name| naming::shadows(name, config))
-}
-
-// ---------------------------------------------------------------------------
-// Inlined feature helper snippets
-// ---------------------------------------------------------------------------
-
-const FEATURE_LIST_OF_T: &str = r"function serializeArray<T>(
-    value: T[],
-    serializer: Serializer,
-    serializeElement: (item: T, serializer: Serializer) => void,
-): void {
-    serializer.serializeLen(value.length);
-    value.forEach((item) => {
-        serializeElement(item, serializer);
-    });
-}
-
-function deserializeArray<T>(
-    deserializer: Deserializer,
-    deserializeElement: (deserializer: Deserializer) => T,
-): T[] {
-    const length = deserializer.deserializeLen();
-    const list: T[] = [];
-    for (let i = 0; i < length; i++) {
-        list.push(deserializeElement(deserializer));
-    }
-    return list;
-}
-";
-
-const FEATURE_SET_OF_T: &str = r"function serializeSet<T>(
-    value: T[],
-    serializer: Serializer,
-    serializeElement: (item: T, serializer: Serializer) => void,
-): void {
-    serializer.serializeLen(value.length);
-    value.forEach((item) => {
-        serializeElement(item, serializer);
-    });
-}
-
-function deserializeSet<T>(
-    deserializer: Deserializer,
-    deserializeElement: (deserializer: Deserializer) => T,
-): T[] {
-    const length = deserializer.deserializeLen();
-    const list: T[] = [];
-    for (let i = 0; i < length; i++) {
-        list.push(deserializeElement(deserializer));
-    }
-    return list;
-}
-";
-
-const FEATURE_MAP_OF_T: &str = r"function serializeMap<K, V>(
-    value: Map<K, V>,
-    serializer: Serializer,
-    serializeEntry: (key: K, value: V, serializer: Serializer) => void,
-): void {
-    serializer.serializeLen(value.size);
-    const offsets: number[] = [];
-    for (const [k, v] of value.entries()) {
-        offsets.push(serializer.getBufferOffset());
-        serializeEntry(k, v, serializer);
-    }
-    serializer.sortMapEntries(offsets);
-}
-
-function deserializeMap<K, V>(
-    deserializer: Deserializer,
-    deserializeEntry: (deserializer: Deserializer) => [K, V],
-): Map<K, V> {
-    const length = deserializer.deserializeLen();
-    const obj = new Map<K, V>();
-    for (let i = 0; i < length; i++) {
-        const [key, value] = deserializeEntry(deserializer);
-        obj.set(key, value);
-    }
-    return obj;
-}
-";
-
-const FEATURE_OPTION_OF_T: &str = r"function serializeOption<T>(
-    value: T | null,
-    serializer: Serializer,
-    serializeElement: (value: T, serializer: Serializer) => void,
-): void {
-    if (value !== null) {
-        serializer.serializeOptionTag(true);
-        serializeElement(value, serializer);
-    } else {
-        serializer.serializeOptionTag(false);
-    }
-}
-
-function deserializeOption<T>(
-    deserializer: Deserializer,
-    deserializeElement: (deserializer: Deserializer) => T,
-): T | null {
-    const tag = deserializer.deserializeOptionTag();
-    if (!tag) {
-        return null;
-    } else {
-        return deserializeElement(deserializer);
-    }
-}
-";
-
-const FEATURE_TUPLE_ARRAY: &str = r"function serializeTupleArray<T>(
-    value: T[],
-    serializer: Serializer,
-    serializeElement: (item: T, serializer: Serializer) => void,
-): void {
-    value.forEach((item) => {
-        serializeElement(item, serializer);
-    });
-}
-
-function deserializeTupleArray<T>(
-    deserializer: Deserializer,
-    size: number,
-    deserializeElement: (deserializer: Deserializer) => T,
-): T[] {
-    const list: T[] = [];
-    for (let i = 0; i < size; i++) {
-        list.push(deserializeElement(deserializer));
-    }
-    return list;
-}
-";
-
-const FEATURE_UUID: &str = r"export type Uuid = string & { readonly __uuid: unique symbol };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function serializeUuid(value: Uuid, serializer: Serializer): void {
-    serializer.serializeStr(value as string);
-}
-
-function deserializeUuid(deserializer: Deserializer): Uuid {
-    const s = deserializer.deserializeStr();
-    if (!UUID_RE.test(s)) {
-        throw new Error(`Invalid UUID string: ${s}`);
-    }
-    return s.toLowerCase() as Uuid;
-}
-";
+/// The binding the generated code imports the runtime under.
+const JSON: &str = "$json";
 
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
@@ -192,7 +62,7 @@ function deserializeUuid(deserializer: Deserializer): Uuid {
 
 impl EmitterPlugin<TypeScript> for JsonPlugin {
     fn imports(&self, config: &CodeGeneratorConfig) -> Vec<String> {
-        let import_path = config.external_packages.get(SERDE_NAMESPACE).map_or_else(
+        let serde = config.external_packages.get(SERDE_NAMESPACE).map_or_else(
             || "./serde".to_string(),
             |path| match &path.location {
                 PackageLocation::Path(_) => {
@@ -204,58 +74,14 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
                 PackageLocation::Url(_) => path.for_namespace.clone(),
             },
         );
-        vec![format!(
-            r#"import type {{ Serializer, Deserializer }} from "{import_path}";"#
-        )]
+        vec![format!(r#"import * as {JSON} from "{serde}/json";"#)]
     }
 
     fn runtime_files(&self) -> Vec<RuntimeFile> {
-        static SERDE: include_dir::Dir<'static> =
-            include_dir::include_dir!("$CARGO_MANIFEST_DIR/runtime/typescript-node/serde");
-        SERDE
-            .files()
-            .map(|f| RuntimeFile {
-                relative_path: format!("serde/{}", f.path().display()),
-                contents: f.contents().to_vec(),
-            })
-            .collect()
-    }
-
-    fn module_helpers(
-        &self,
-        w: &mut dyn IndentWrite,
-        config: &CodeGeneratorConfig,
-    ) -> io::Result<()> {
-        for feature in &config.features {
-            match feature {
-                Feature::ListOfT => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_LIST_OF_T, config))?;
-                }
-                Feature::OptionOfT => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_OPTION_OF_T, config))?;
-                }
-                Feature::SetOfT => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_SET_OF_T, config))?;
-                }
-                Feature::MapOfT => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_MAP_OF_T, config))?;
-                }
-                Feature::TupleArray => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_TUPLE_ARRAY, config))?;
-                }
-                Feature::Uuid => {
-                    writeln!(w)?;
-                    write!(w, "{}", qualified(FEATURE_UUID, config))?;
-                }
-                Feature::BigInt | Feature::Bytes => {}
-            }
-        }
-        Ok(())
+        vec![RuntimeFile {
+            relative_path: "serde/json.ts".to_string(),
+            contents: include_bytes!("../../../runtime/typescript-json/serde/json.ts").to_vec(),
+        }]
     }
 
     fn has_type_body(&self, _ctx: &EmitContext) -> bool {
@@ -263,410 +89,152 @@ impl EmitterPlugin<TypeScript> for JsonPlugin {
     }
 
     fn type_body(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
-        if matches!(ctx.container.format, ContainerFormat::Enum(_, _, _)) {
-            return Ok(());
+        let codec = Codec { config: ctx.config };
+        match ctx.container.format {
+            ContainerFormat::Enum(..) => Ok(()),
+            format => codec.write_class_methods(w, ctx.name(), format),
         }
-        write_struct_type_body(w, ctx.name(), &ctx.fields(), ctx.config)
     }
 
     fn after_type(&self, w: &mut dyn IndentWrite, ctx: &EmitContext) -> io::Result<()> {
         if let ContainerFormat::Enum(variants, tagging, _) = ctx.container.format {
-            write_enum_standalone_functions(w, ctx.name(), variants, tagging, ctx.config)?;
+            let codec = Codec { config: ctx.config };
+            let variants: Vec<_> = variants.values().collect();
+            codec.write_enum_functions(w, ctx.name(), &variants, tagging)?;
         }
         Ok(())
     }
 }
 
 // ---------------------------------------------------------------------------
-// Type body writers
+// Literals and property access
 // ---------------------------------------------------------------------------
 
-/// Emit `serialize` / `deserialize` for a plain struct or newtype.
-fn write_struct_type_body(
-    w: &mut dyn IndentWrite,
-    name: &str,
-    fields: &[Named<Format>],
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    writeln!(w)?;
-    write!(w, "public serialize(serializer: Serializer): void ")?;
-    with_block(w, Newlines::BOTH, |w| {
-        for field in fields {
-            write_serialize(w, &format!("this.{}", field.name), &field.value, config)?;
-        }
-        Ok(())
-    })?;
-    writeln!(w)?;
-    write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
-    with_block(w, Newlines::BOTH, |w| {
-        for field in fields {
-            write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
-        }
-        writeln!(
-            w,
-            "return new {name}({args});",
-            args = fields
-                .iter()
-                .map(|f| param_name(&f.name).into_owned())
-                .collect::<Vec<_>>()
-                .join(",")
-        )
-    })?;
-    Ok(())
+/// `s` as a JavaScript string literal.
+fn literal(s: &str) -> String {
+    serde_json::to_string(s).expect("a string always serializes")
 }
 
-/// Emit standalone `export function serialize{Name}` and `export function deserialize{Name}`.
-fn write_enum_standalone_functions(
-    w: &mut dyn IndentWrite,
-    name: &str,
-    variants: &BTreeMap<u32, Named<VariantFormat>>,
-    tagging: &EnumTagging,
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    let tag_field = match tagging {
-        EnumTagging::External => "kind",
-        EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
-    };
-
-    writeln!(w)?;
-    write!(
-        w,
-        "export function serialize{name}(value: {name}, serializer: Serializer): void "
-    )?;
-    with_block(w, Newlines::BOTH, |w| {
-        write!(w, "switch (value.{tag_field}) ")?;
-        with_block(w, Newlines::BOTH, |w| {
-            for (index, variant) in variants {
-                let vname = &variant.name;
-                write!(w, r#"case "{vname}": "#)?;
-                with_block(w, Newlines::BOTH, |w| {
-                    writeln!(w, "serializer.serializeVariantIndex({index});")?;
-                    write_serialize_variant_fields(w, tagging, &variant.value, config)?;
-                    writeln!(w, "break;")
-                })?;
-            }
-            writeln!(
-                w,
-                r#"default: throw new {error}("Unknown variant: " + (value as any).{tag_field});"#,
-                error = naming::builtin("Error", config),
-            )
-        })
-    })?;
-
-    writeln!(w)?;
-    write!(
-        w,
-        "export function deserialize{name}(deserializer: Deserializer): {name} "
-    )?;
-    with_block(w, Newlines::BOTH, |w| {
-        writeln!(w, "const index = deserializer.deserializeVariantIndex();")?;
-        write!(w, "switch (index) ")?;
-        with_block(w, Newlines::BOTH, |w| {
-            for (index, variant) in variants {
-                write!(w, "case {index}: ")?;
-                with_block(w, Newlines::BOTH, |w| {
-                    write_deserialize_variant_return(
-                        w,
-                        &variant.name,
-                        tagging,
-                        &variant.value,
-                        config,
-                    )
-                })?;
-            }
-            writeln!(
-                w,
-                r#"default: throw new {error}("Unknown variant index for {name}: " + index);"#,
-                error = naming::builtin("Error", config),
-            )
-        })
-    })?;
-
-    Ok(())
-}
-
-/// Emit serialize statements for a single variant's payload fields.
-fn write_serialize_variant_fields(
-    w: &mut dyn IndentWrite,
-    tagging: &EnumTagging,
-    variant: &VariantFormat,
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    match (tagging, variant) {
-        (_, VariantFormat::Unit) => Ok(()),
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::NewType(format)) => {
-            write_serialize(w, &format!("value.{content}"), format, config)
-        }
-        (_, VariantFormat::NewType(format)) => write_serialize(w, "value.value", format, config),
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::Tuple(formats)) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_serialize(w, &format!("value.{content}[{i}]"), f, config)?;
-            }
-            Ok(())
-        }
-        (_, VariantFormat::Tuple(formats)) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_serialize(w, &format!("value.field{i}"), f, config)?;
-            }
-            Ok(())
-        }
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
-            for field in fields {
-                write_serialize(
-                    w,
-                    &format!("value.{content}.{}", field.name),
-                    &field.value,
-                    config,
-                )?;
-            }
-            Ok(())
-        }
-        (_, VariantFormat::Struct(fields)) => {
-            for field in fields {
-                write_serialize(w, &format!("value.{}", field.name), &field.value, config)?;
-            }
-            Ok(())
-        }
-        (_, VariantFormat::Variable(_)) => panic!("unexpected variable in variant fields"),
-    }
-}
-
-/// The object-literal entry for a struct-variant field: shorthand normally,
-/// but `name: name_` when the field name is a reserved word and the local
-/// binding had to be renamed.
-fn object_entry(field: &Named<Format>) -> String {
-    if is_reserved_word(&field.name) {
-        format!("{}: {}", field.name, param_name(&field.name))
+/// The key of an object-literal entry holding the JSON field `name`.
+///
+/// Quoted, as it is a wire name; `__proto__` is computed, since the plain
+/// key would set the object's prototype instead.
+fn json_key(name: &str) -> String {
+    if name == "__proto__" {
+        format!("[{}]", literal(name))
     } else {
-        field.name.clone()
-    }
-}
-
-/// Emit deserialize statements and a `return { ... }` for a single variant.
-fn write_deserialize_variant_return(
-    w: &mut dyn IndentWrite,
-    variant_name: &str,
-    tagging: &EnumTagging,
-    variant: &VariantFormat,
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    let tag_field = match tagging {
-        EnumTagging::External => "kind",
-        EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
-    };
-
-    match (tagging, variant) {
-        (_, VariantFormat::Unit) => {
-            writeln!(w, r#"return {{ {tag_field}: "{variant_name}" }};"#)
-        }
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("inner"), format, config)?;
-            writeln!(
-                w,
-                r#"return {{ {tag_field}: "{variant_name}", {content}: inner }};"#
-            )
-        }
-        (_, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("value"), format, config)?;
-            writeln!(w, r#"return {{ {tag_field}: "{variant_name}", value }};"#)
-        }
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::Tuple(formats)) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
-            }
-            let fields_joined = (0..formats.len())
-                .map(|i| format!("field{i}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            writeln!(
-                w,
-                r#"return {{ {tag_field}: "{variant_name}", {content}: [{fields_joined}] }};"#
-            )
-        }
-        (_, VariantFormat::Tuple(formats)) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
-            }
-            let field_names: Vec<String> =
-                (0..formats.len()).map(|i| format!("field{i}")).collect();
-            let all_parts: Vec<String> =
-                std::iter::once(format!(r#"{tag_field}: "{variant_name}""#))
-                    .chain(field_names)
-                    .collect();
-            writeln!(w, "return {{ {} }};", all_parts.join(", "))
-        }
-        (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
-            for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
-            }
-            let struct_fields = fields
-                .iter()
-                .map(object_entry)
-                .collect::<Vec<_>>()
-                .join(", ");
-            writeln!(
-                w,
-                r#"return {{ {tag_field}: "{variant_name}", {content}: {{ {struct_fields} }} }};"#
-            )
-        }
-        (_, VariantFormat::Struct(fields)) => {
-            for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
-            }
-            let field_names: Vec<String> = fields.iter().map(object_entry).collect();
-            let all_parts: Vec<String> =
-                std::iter::once(format!(r#"{tag_field}: "{variant_name}""#))
-                    .chain(field_names)
-                    .collect();
-            writeln!(w, "return {{ {} }};", all_parts.join(", "))
-        }
-        (_, VariantFormat::Variable(_)) => panic!("unexpected variable in variant return"),
+        literal(name)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Serialize helpers
+// Code generation
 // ---------------------------------------------------------------------------
 
-fn write_serialize(
-    w: &mut dyn IndentWrite,
-    value_expr: &str,
-    format: &Format,
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    match format {
-        Format::TypeName(qualified_name) => {
-            if config.is_enum(qualified_name) {
-                let function = naming::enum_function("serialize", qualified_name);
-                writeln!(w, "{function}({value_expr}, serializer);")
-            } else {
-                writeln!(w, "{value_expr}.serialize(serializer);")
-            }
-        }
-        Format::Unit => writeln!(w, "serializer.serializeUnit({value_expr});"),
-        Format::Bool => writeln!(w, "serializer.serializeBool({value_expr});"),
-        Format::I8 => writeln!(w, "serializer.serializeI8({value_expr});"),
-        Format::I16 => writeln!(w, "serializer.serializeI16({value_expr});"),
-        Format::I32 => writeln!(w, "serializer.serializeI32({value_expr});"),
-        Format::I64 => writeln!(w, "serializer.serializeI64({value_expr});"),
-        Format::I128 => writeln!(w, "serializer.serializeI128({value_expr});"),
-        Format::U8 => writeln!(w, "serializer.serializeU8({value_expr});"),
-        Format::U16 => writeln!(w, "serializer.serializeU16({value_expr});"),
-        Format::U32 => writeln!(w, "serializer.serializeU32({value_expr});"),
-        Format::U64 => writeln!(w, "serializer.serializeU64({value_expr});"),
-        Format::U128 => writeln!(w, "serializer.serializeU128({value_expr});"),
-        Format::F32 => writeln!(w, "serializer.serializeF32({value_expr});"),
-        Format::F64 => writeln!(w, "serializer.serializeF64({value_expr});"),
-        Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
-        Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
-        Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
-        Format::Uuid => writeln!(w, "serializeUuid({value_expr}, serializer);"),
-        Format::Option(inner) => {
-            write!(
-                w,
-                "serializeOption({value_expr}, serializer, (value, serializer) => "
-            )?;
-            with_block(w, Newlines::OPEN, |w| {
-                write_serialize(w, "value", inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-        Format::Seq(inner) => {
-            write!(
-                w,
-                "serializeArray({value_expr}, serializer, (item, serializer) => "
-            )?;
-            with_block(w, Newlines::OPEN, |w| {
-                write_serialize(w, "item", inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-        Format::Set(inner) => {
-            write!(
-                w,
-                "serializeSet({value_expr}, serializer, (item, serializer) => "
-            )?;
-            with_block(w, Newlines::OPEN, |w| {
-                write_serialize(w, "item", inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-        Format::Map { key, value } => {
-            write!(
-                w,
-                "serializeMap({value_expr}, serializer, (key, value, serializer) => "
-            )?;
-            with_block(w, Newlines::OPEN, |w| {
-                write_serialize(w, "key", key, config)?;
-                write_serialize(w, "value", value, config)
-            })?;
-            writeln!(w, ");")
-        }
-        Format::Tuple(formats) => {
-            for (i, fmt) in formats.iter().enumerate() {
-                write_serialize(w, &format!("{value_expr}[{i}]"), fmt, config)?;
-            }
-            Ok(())
-        }
-        Format::TupleArray { content, .. } => {
-            write!(
-                w,
-                "serializeTupleArray({value_expr}, serializer, (item, serializer) => "
-            )?;
-            with_block(w, Newlines::OPEN, |w| {
-                write_serialize(w, "item[0]", content, config)
-            })?;
-            writeln!(w, ");")
-        }
-        Format::Variable(_) => panic!("unexpected variable in write_serialize"),
-    }
+/// Writes the expressions converting TypeScript values to and from JSON.
+struct Codec<'a> {
+    config: &'a CodeGeneratorConfig,
 }
 
-// ---------------------------------------------------------------------------
-// Deserialize helpers
-// ---------------------------------------------------------------------------
-
-/// Returns the deserialize expression for a primitive or named type.
-fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> String {
-    match format {
-        Format::TypeName(qualified_name) => {
-            if config.is_enum(qualified_name) {
-                let function = naming::enum_function("deserialize", qualified_name);
-                format!("{function}(deserializer)")
-            } else {
-                let type_name = qualified_name.format(ToUpperCamelCase::to_upper_camel_case, ".");
-                format!("{type_name}.deserialize(deserializer)")
-            }
-        }
-        Format::Unit => "deserializer.deserializeUnit()".to_string(),
-        Format::Bool => "deserializer.deserializeBool()".to_string(),
-        Format::I8 => "deserializer.deserializeI8()".to_string(),
-        Format::I16 => "deserializer.deserializeI16()".to_string(),
-        Format::I32 => "deserializer.deserializeI32()".to_string(),
-        Format::I64 => "deserializer.deserializeI64()".to_string(),
-        Format::I128 => "deserializer.deserializeI128()".to_string(),
-        Format::U8 => "deserializer.deserializeU8()".to_string(),
-        Format::U16 => "deserializer.deserializeU16()".to_string(),
-        Format::U32 => "deserializer.deserializeU32()".to_string(),
-        Format::U64 => "deserializer.deserializeU64()".to_string(),
-        Format::U128 => "deserializer.deserializeU128()".to_string(),
-        Format::F32 => "deserializer.deserializeF32()".to_string(),
-        Format::F64 => "deserializer.deserializeF64()".to_string(),
-        Format::Char => "deserializer.deserializeChar()".to_string(),
-        Format::Str => "deserializer.deserializeStr()".to_string(),
-        Format::Bytes => "deserializer.deserializeBytes()".to_string(),
-        Format::Uuid => "deserializeUuid(deserializer)".to_string(),
-        _ => panic!("deserialize_primitive_expr called with non-primitive format"),
+impl Codec<'_> {
+    /// `Type` or `Namespace.Type`, for a struct.
+    fn class(name: &QualifiedTypeName) -> String {
+        name.format(ToUpperCamelCase::to_upper_camel_case, ".")
     }
-}
 
-/// Returns `true` for primitive types and named (user-defined) type references.
-const fn is_primitive_or_named(format: &Format) -> bool {
-    matches!(
-        format,
-        Format::TypeName(_)
-            | Format::Unit
-            | Format::Bool
+    fn render(&self, format: &Format) -> String {
+        render_type(format, self.config)
+    }
+
+    /// Whether a value of `format` is its own JSON value.
+    fn is_plain(format: &Format) -> bool {
+        match format {
+            Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::Char
+            | Format::Str
+            | Format::Uuid => true,
+            Format::Option(inner) | Format::Seq(inner) | Format::Set(inner) => {
+                Self::is_plain(inner)
+            }
+            _ => false,
+        }
+    }
+
+    /// The expression converting `expr`, a value of `format`, to JSON.
+    fn write_json(&self, format: &Format, expr: &str, depth: usize) -> String {
+        match format {
+            f if Self::is_plain(f) => expr.to_string(),
+            Format::TypeName(name) if self.config.is_enum(name) => {
+                format!("{}({expr})", naming::enum_function("toJson", name))
+            }
+            Format::TypeName(name) => format!("{}.toJson({expr})", Self::class(name)),
+            Format::Unit => "null".to_string(),
+            Format::I64 | Format::I128 | Format::U64 | Format::U128 => {
+                format!("{JSON}.writeBigInt({expr})")
+            }
+            Format::F32 | Format::F64 => format!("{JSON}.writeFloat({expr})"),
+            Format::Bytes => format!("{JSON}.writeBytes({expr})"),
+            Format::Option(inner) => format!(
+                "({expr} === null ? null : {})",
+                self.write_json(inner, expr, depth)
+            ),
+            Format::Seq(inner) | Format::Set(inner) => {
+                let v = format!("v{depth}");
+                format!(
+                    "{expr}.map(({v}) => {})",
+                    self.write_json(inner, &v, depth + 1)
+                )
+            }
+            Format::Map { key, value } => {
+                let (k, v) = (format!("k{depth}"), format!("v{depth}"));
+                format!(
+                    "{JSON}.writeMap({expr}, ({k}) => {}, ({v}) => {})",
+                    self.write_key(key, &k, depth + 1),
+                    self.write_json(value, &v, depth + 1)
+                )
+            }
+            Format::Tuple(formats) => self.write_json_array(
+                formats
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| (f, format!("{expr}[{i}]"))),
+                depth,
+            ),
+            Format::TupleArray { content, .. } => {
+                let v = format!("v{depth}");
+                format!(
+                    "{expr}.map(({v}) => {})",
+                    self.write_json(content, &format!("{v}[0]"), depth + 1)
+                )
+            }
+            Format::Variable(_) => panic!("unexpected variable in a JSON format"),
+            _ => unreachable!("plain formats are handled above"),
+        }
+    }
+
+    /// `[…]`, the JSON of each `(format, expr)` element.
+    fn write_json_array<'f>(
+        &self,
+        elements: impl Iterator<Item = (&'f Format, String)>,
+        depth: usize,
+    ) -> String {
+        let items: Vec<String> = elements
+            .map(|(f, expr)| self.write_json(f, &expr, depth))
+            .collect();
+        format!("[{}]", items.join(", "))
+    }
+
+    /// The expression for the object key of `expr`, a map key of `format`.
+    fn write_key(&self, format: &Format, expr: &str, depth: usize) -> String {
+        match format {
+            Format::Str | Format::Char | Format::Uuid => expr.to_string(),
+            Format::Bool
             | Format::I8
             | Format::I16
             | Format::I32
@@ -676,164 +244,558 @@ const fn is_primitive_or_named(format: &Format) -> bool {
             | Format::U16
             | Format::U32
             | Format::U64
-            | Format::U128
-            | Format::F32
-            | Format::F64
-            | Format::Char
-            | Format::Str
-            | Format::Bytes
-            | Format::Uuid
-    )
+            | Format::U128 => format!("`${{{expr}}}`"),
+            _ => format!("{JSON}.writeKey({})", self.write_json(format, expr, depth)),
+        }
+    }
+
+    /// The runtime reader of a leaf format, if it has one.
+    const fn leaf_reader(format: &Format) -> Option<&'static str> {
+        Some(match format {
+            Format::Unit => "readUnit",
+            Format::Bool => "readBool",
+            Format::I8 => "readI8",
+            Format::I16 => "readI16",
+            Format::I32 => "readI32",
+            Format::I64 => "readI64",
+            Format::I128 => "readI128",
+            Format::U8 => "readU8",
+            Format::U16 => "readU16",
+            Format::U32 => "readU32",
+            Format::U64 => "readU64",
+            Format::U128 => "readU128",
+            Format::F32 => "readF32",
+            Format::F64 => "readF64",
+            Format::Char => "readChar",
+            Format::Str => "readStr",
+            Format::Bytes => "readBytes",
+            _ => return None,
+        })
+    }
+
+    /// The expression reading a value of `format` from `expr`, a JSON value.
+    fn read_json(&self, format: &Format, expr: &str, depth: usize) -> String {
+        if let Some(reader) = Self::leaf_reader(format) {
+            return format!("{JSON}.{reader}({expr})");
+        }
+        match format {
+            Format::TypeName(name) if self.config.is_enum(name) => {
+                format!("{}({expr})", naming::enum_function("fromJson", name))
+            }
+            Format::TypeName(name) => format!("{}.fromJson({expr})", Self::class(name)),
+            Format::Uuid => format!("{JSON}.readUuid({expr}) as Uuid"),
+            Format::Option(inner) => {
+                format!("{JSON}.readOption({expr}, {})", self.reader(inner, depth))
+            }
+            Format::Seq(inner) | Format::Set(inner) => {
+                format!("{JSON}.readSeq({expr}, {})", self.reader(inner, depth))
+            }
+            Format::Map { key, value } => {
+                let k = format!("k{depth}");
+                format!(
+                    "{JSON}.readMap({expr}, ({k}) => {}, {})",
+                    self.read_key(key, &k, depth + 1),
+                    self.reader(value, depth)
+                )
+            }
+            Format::Tuple(formats) => self.read_tuple(formats, expr, depth),
+            Format::TupleArray { content, size } => {
+                let j = format!("j{depth}");
+                format!(
+                    "{JSON}.readSeq({expr}, ({j}): [{}] => [{}], {size})",
+                    self.render(content),
+                    self.read_json(content, &j, depth + 1)
+                )
+            }
+            Format::Variable(_) => panic!("unexpected variable in a JSON format"),
+            _ => unreachable!("leaf formats are handled above"),
+        }
+    }
+
+    /// `$json.readTuple<[…]>(expr, […])`: an array of exactly one element of
+    /// each of `formats`.
+    fn read_tuple(&self, formats: &[Format], expr: &str, depth: usize) -> String {
+        let types: Vec<String> = formats.iter().map(|f| self.render(f)).collect();
+        let readers: Vec<String> = formats.iter().map(|f| self.reader(f, depth)).collect();
+        format!(
+            "{JSON}.readTuple<[{}]>({expr}, [{}])",
+            types.join(", "),
+            readers.join(", ")
+        )
+    }
+
+    /// A function reading a value of `format` from its JSON value.
+    fn reader(&self, format: &Format, depth: usize) -> String {
+        if let Some(reader) = Self::leaf_reader(format) {
+            return format!("{JSON}.{reader}");
+        }
+        match format {
+            Format::TypeName(name) if self.config.is_enum(name) => {
+                naming::enum_function("fromJson", name)
+            }
+            Format::TypeName(name) => format!("{}.fromJson", Self::class(name)),
+            _ => {
+                let j = format!("j{depth}");
+                format!("({j}) => {}", self.read_json(format, &j, depth + 1))
+            }
+        }
+    }
+
+    /// The expression reading a map key of `format` from `expr`, an object
+    /// key.
+    fn read_key(&self, format: &Format, expr: &str, depth: usize) -> String {
+        match format {
+            Format::Str => expr.to_string(),
+            Format::Char | Format::Uuid => self.read_json(format, expr, depth),
+            Format::Bool
+            | Format::I8
+            | Format::I16
+            | Format::I32
+            | Format::I64
+            | Format::I128
+            | Format::U8
+            | Format::U16
+            | Format::U32
+            | Format::U64
+            | Format::U128 => self.read_json(format, &format!("{JSON}.keyLiteral({expr})"), depth),
+            _ => format!("{JSON}.readKey({expr}, {})", self.reader(format, depth)),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Structs
+    // -----------------------------------------------------------------------
+
+    /// The `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize`
+    /// static methods of the class `name`.
+    fn write_class_methods(
+        &self,
+        w: &mut dyn IndentWrite,
+        name: &str,
+        format: &ContainerFormat,
+    ) -> io::Result<()> {
+        writeln!(w)?;
+        write!(w, "static toJson(value: {name}): {JSON}.JsonValue ")?;
+        with_block(w, Newlines::BOTH, |w| match format {
+            ContainerFormat::UnitStruct(_) => writeln!(w, "return null;"),
+            ContainerFormat::NewTypeStruct(inner, _) => {
+                writeln!(w, "return {};", self.write_json(inner, "value.value", 0))
+            }
+            ContainerFormat::TupleStruct(formats, _) => {
+                let array = self.write_json_array(
+                    formats
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| (f, format!("value.field{i}"))),
+                    0,
+                );
+                writeln!(w, "return {array};")
+            }
+            ContainerFormat::Struct(fields, _) => {
+                write!(w, "return ")?;
+                self.write_object(w, &[], fields, "value")?;
+                writeln!(w, ";")
+            }
+            ContainerFormat::Enum(..) => unreachable!("an enum is not a class"),
+        })?;
+
+        writeln!(w)?;
+        write!(w, "static fromJson(json: unknown): {name} ")?;
+        with_block(w, Newlines::BOTH, |w| match format {
+            ContainerFormat::UnitStruct(_) => {
+                writeln!(w, "{JSON}.readUnitStruct(json, {});", literal(name))?;
+                writeln!(w, "return new {name}();")
+            }
+            ContainerFormat::NewTypeStruct(inner, _) => {
+                writeln!(
+                    w,
+                    "return new {name}({});",
+                    self.read_json(inner, "json", 0)
+                )
+            }
+            ContainerFormat::TupleStruct(formats, _) => {
+                writeln!(
+                    w,
+                    "return new {name}(...{});",
+                    self.read_tuple(formats, "json", 0)
+                )
+            }
+            ContainerFormat::Struct(fields, _) => {
+                writeln!(w, "const obj = {JSON}.readObject(json, {});", literal(name))?;
+                self.write_new(w, name, fields, "obj")
+            }
+            ContainerFormat::Enum(..) => unreachable!("an enum is not a class"),
+        })?;
+
+        writeln!(w)?;
+        write!(w, "static jsonSerialize(value: {name}): string ")?;
+        with_block(w, Newlines::BOTH, |w| {
+            writeln!(w, "return {JSON}.stringify({name}.toJson(value));")
+        })?;
+
+        writeln!(w)?;
+        write!(w, "static jsonDeserialize(text: string): {name} ")?;
+        with_block(w, Newlines::BOTH, |w| {
+            writeln!(w, "return {name}.fromJson({JSON}.parse(text));")
+        })?;
+        Ok(())
+    }
+
+    /// An object literal: the `(key, expression)` entries of `prefix`, then
+    /// each of `fields` of `owner` under its wire name.
+    fn write_object(
+        &self,
+        w: &mut dyn IndentWrite,
+        prefix: &[(&str, String)],
+        fields: &[Named<Format>],
+        owner: &str,
+    ) -> io::Result<()> {
+        if prefix.is_empty() && fields.is_empty() {
+            return write!(w, "{{}}");
+        }
+        writeln!(w, "{{")?;
+        w.indent();
+        for (key, expr) in prefix {
+            writeln!(w, "{}: {expr},", json_key(key))?;
+        }
+        for field in fields {
+            let expr = naming::member(owner, &field.name);
+            writeln!(
+                w,
+                "{}: {},",
+                json_key(&field.name),
+                self.write_json(&field.value, &expr, 0)
+            )?;
+        }
+        w.unindent();
+        write!(w, "}}")
+    }
+
+    /// `return new name(…)`, reading each of `fields` from the object `obj`.
+    fn write_new(
+        &self,
+        w: &mut dyn IndentWrite,
+        name: &str,
+        fields: &[Named<Format>],
+        obj: &str,
+    ) -> io::Result<()> {
+        if fields.is_empty() {
+            return writeln!(w, "return new {name}();");
+        }
+        writeln!(w, "return new {name}(")?;
+        w.indent();
+        for field in fields {
+            writeln!(w, "{},", self.read_field(obj, field))?;
+        }
+        w.unindent();
+        writeln!(w, ");")
+    }
+
+    /// The expression reading `field` from the object `obj`.
+    fn read_field(&self, obj: &str, field: &Named<Format>) -> String {
+        self.read_json(
+            &field.value,
+            &format!("{JSON}.field({obj}, {})", literal(&field.name)),
+            0,
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // Enums
+    // -----------------------------------------------------------------------
+
+    /// `toJson{Enum}` / `fromJson{Enum}` and `jsonSerialize{Enum}` /
+    /// `jsonDeserialize{Enum}`.
+    fn write_enum_functions(
+        &self,
+        w: &mut dyn IndentWrite,
+        name: &str,
+        variants: &[&Named<VariantFormat>],
+        tagging: &EnumTagging,
+    ) -> io::Result<()> {
+        let tag_field = match tagging {
+            EnumTagging::External => "kind",
+            EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
+        };
+        let what = literal(name);
+
+        writeln!(w)?;
+        write!(
+            w,
+            "export function toJson{name}(value: {name}): {JSON}.JsonValue "
+        )?;
+        with_block(w, Newlines::BOTH, |w| {
+            if variants.is_empty() {
+                return writeln!(w, "throw {JSON}.unknownVariant({what}, value);");
+            }
+            write!(w, "switch ({}) ", naming::member("value", tag_field))?;
+            with_block(w, Newlines::BOTH, |w| {
+                for variant in variants {
+                    write!(w, "case {}: ", literal(&variant.name))?;
+                    self.write_variant_to_json(w, variant, tagging)?;
+                }
+                writeln!(w, "default: throw {JSON}.unknownVariant({what}, value);")
+            })
+        })?;
+
+        writeln!(w)?;
+        write!(w, "export function fromJson{name}(json: unknown): {name} ")?;
+        with_block(w, Newlines::BOTH, |w| {
+            let units: Vec<String> = variants
+                .iter()
+                .filter(|v| matches!(v.value, VariantFormat::Unit))
+                .map(|v| literal(&v.name))
+                .collect();
+            let units = format!("[{}]", units.join(", "));
+            let (content, read) = match tagging {
+                EnumTagging::External => (
+                    "content",
+                    format!("{JSON}.readExternal(json, {what}, {units})"),
+                ),
+                EnumTagging::Internal { tag } => (
+                    "obj",
+                    format!("{JSON}.readInternal(json, {}, {what})", literal(tag)),
+                ),
+                EnumTagging::Adjacent { tag, content } => (
+                    "content",
+                    format!(
+                        "{JSON}.readAdjacent(json, {}, {}, {what}, {units})",
+                        literal(tag),
+                        literal(content)
+                    ),
+                ),
+            };
+            if variants
+                .iter()
+                .all(|v| matches!(v.value, VariantFormat::Unit))
+            {
+                writeln!(w, "const [variant] = {read};")?;
+            } else {
+                writeln!(w, "const [variant, {content}] = {read};")?;
+            }
+            if variants.is_empty() {
+                return writeln!(w, "throw {JSON}.unknownVariant({what}, variant);");
+            }
+            write!(w, "switch (variant) ")?;
+            with_block(w, Newlines::BOTH, |w| {
+                for variant in variants {
+                    write!(w, "case {}: ", literal(&variant.name))?;
+                    self.write_variant_from_json(w, name, variant, tagging, tag_field, content)?;
+                }
+                writeln!(w, "default: throw {JSON}.unknownVariant({what}, variant);")
+            })
+        })?;
+
+        writeln!(w)?;
+        write!(
+            w,
+            "export function jsonSerialize{name}(value: {name}): string "
+        )?;
+        with_block(w, Newlines::BOTH, |w| {
+            writeln!(w, "return {JSON}.stringify(toJson{name}(value));")
+        })?;
+
+        writeln!(w)?;
+        write!(
+            w,
+            "export function jsonDeserialize{name}(text: string): {name} "
+        )?;
+        with_block(w, Newlines::BOTH, |w| {
+            writeln!(w, "return fromJson{name}({JSON}.parse(text));")
+        })
+    }
+
+    /// `return …;`, the JSON of the variant `variant` held in `value`.
+    fn write_variant_to_json(
+        &self,
+        w: &mut dyn IndentWrite,
+        variant: &Named<VariantFormat>,
+        tagging: &EnumTagging,
+    ) -> io::Result<()> {
+        let vname = variant.name.as_str();
+        // The TypeScript value holding the variant's content, and the
+        // elements of a tuple variant.
+        let (holder, element): (String, fn(&str, usize) -> String) = match tagging {
+            EnumTagging::Adjacent { content, .. } => {
+                (naming::member("value", content), |h, i| format!("{h}[{i}]"))
+            }
+            _ => ("value".to_string(), |h, i| format!("{h}.field{i}")),
+        };
+        let content = match &variant.value {
+            VariantFormat::Unit => None,
+            VariantFormat::NewType(inner) => Some(match (tagging, inner.as_ref()) {
+                (EnumTagging::Adjacent { .. }, f) => self.write_json(f, &holder, 0),
+                // The emitter spreads a named type into the variant.
+                (EnumTagging::Internal { .. }, f @ Format::TypeName(_)) => {
+                    self.write_json(f, "value", 0)
+                }
+                (_, f) => self.write_json(f, "value.value", 0),
+            }),
+            VariantFormat::Tuple(formats) => Some(
+                self.write_json_array(
+                    formats
+                        .iter()
+                        .enumerate()
+                        .map(|(i, f)| (f, element(&holder, i))),
+                    0,
+                ),
+            ),
+            VariantFormat::Struct(fields) => {
+                if let EnumTagging::Internal { tag } = tagging {
+                    write!(w, "return ")?;
+                    self.write_object(w, &[(tag, literal(vname))], fields, "value")?;
+                    return writeln!(w, ";");
+                }
+                let mut buf = Vec::new();
+                {
+                    let mut inner = IndentedWriter::new(&mut buf, self.config.indent);
+                    self.write_object(&mut inner, &[], fields, &holder)?;
+                }
+                Some(String::from_utf8(buf).expect("generated code is UTF-8"))
+            }
+            VariantFormat::Variable(_) => panic!("unexpected variable in a variant"),
+        };
+
+        match (tagging, content) {
+            (EnumTagging::External, None) => writeln!(w, "return {};", literal(vname)),
+            (EnumTagging::External, Some(content)) => write_return_object(w, &[(vname, content)]),
+            (EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. }, None) => {
+                write_return_object(w, &[(tag, literal(vname))])
+            }
+            (EnumTagging::Internal { tag }, Some(content)) => writeln!(
+                w,
+                "return {JSON}.writeTagged({}, {}, {content});",
+                literal(tag),
+                literal(vname)
+            ),
+            (EnumTagging::Adjacent { tag, content: key }, Some(content)) => {
+                write_return_object(w, &[(tag, literal(vname)), (key, content)])
+            }
+        }
+    }
+
+    /// `return …;`, the variant `variant` read from the local `content`,
+    /// the variant's JSON content (or, internally tagged, the whole object).
+    fn write_variant_from_json(
+        &self,
+        w: &mut dyn IndentWrite,
+        enum_name: &str,
+        variant: &Named<VariantFormat>,
+        tagging: &EnumTagging,
+        tag_field: &str,
+        content: &str,
+    ) -> io::Result<()> {
+        let vname = variant.name.as_str();
+        let tag_entry = format!("{}: {}", naming::property_key(tag_field), literal(vname));
+        let internal = match tagging {
+            EnumTagging::Internal { tag } => Some(tag.as_str()),
+            _ => None,
+        };
+        // The JSON content, which an internally tagged variant shares with
+        // its tag.
+        let untagged = |content: &str| match internal {
+            Some(tag) => format!("{JSON}.untag({content}, {})", literal(tag)),
+            None => content.to_string(),
+        };
+        let adjacent = match tagging {
+            EnumTagging::Adjacent { content, .. } => Some(content.as_str()),
+            _ => None,
+        };
+
+        match &variant.value {
+            VariantFormat::Unit => writeln!(w, "return {{ {tag_entry} }};"),
+            VariantFormat::NewType(inner) => match (internal, adjacent, inner.as_ref()) {
+                (Some(_), _, f @ Format::TypeName(_)) => writeln!(
+                    w,
+                    "return {{ {tag_entry}, ...{} }};",
+                    self.read_json(f, content, 0)
+                ),
+                (_, Some(key), f) => writeln!(
+                    w,
+                    "return {{ {tag_entry}, {}: {} }};",
+                    naming::property_key(key),
+                    self.read_json(f, content, 0)
+                ),
+                (_, None, f) => writeln!(
+                    w,
+                    "return {{ {tag_entry}, value: {} }};",
+                    self.read_json(f, &untagged(content), 0)
+                ),
+            },
+            VariantFormat::Tuple(formats) => {
+                let items = self.read_tuple(formats, &untagged(content), 0);
+                if let Some(key) = adjacent {
+                    return writeln!(
+                        w,
+                        "return {{ {tag_entry}, {}: {items} }};",
+                        naming::property_key(key)
+                    );
+                }
+                with_block(w, Newlines::BOTH, |w| {
+                    writeln!(w, "const items = {items};")?;
+                    let fields: Vec<String> = (0..formats.len())
+                        .map(|i| format!("field{i}: items[{i}]"))
+                        .collect();
+                    writeln!(w, "return {{ {tag_entry}, {} }};", fields.join(", "))
+                })
+            }
+            VariantFormat::Struct(fields) => {
+                let write_return = |w: &mut dyn IndentWrite, obj: &str| -> io::Result<()> {
+                    writeln!(w, "return {{")?;
+                    w.indent();
+                    writeln!(w, "{tag_entry},")?;
+                    if let Some(key) = adjacent {
+                        writeln!(w, "{}: {{", naming::property_key(key))?;
+                        w.indent();
+                    }
+                    for field in fields {
+                        writeln!(
+                            w,
+                            "{}: {},",
+                            naming::property_key(&field.name),
+                            self.read_field(obj, field)
+                        )?;
+                    }
+                    if adjacent.is_some() {
+                        w.unindent();
+                        writeln!(w, "}},")?;
+                    }
+                    w.unindent();
+                    writeln!(w, "}};")
+                };
+                if internal.is_some() {
+                    return write_return(w, content);
+                }
+                with_block(w, Newlines::BOTH, |w| {
+                    writeln!(
+                        w,
+                        "const obj = {JSON}.readObject({content}, {});",
+                        literal(&format!("{enum_name}::{vname}"))
+                    )?;
+                    write_return(w, "obj")
+                })
+            }
+            VariantFormat::Variable(_) => panic!("unexpected variable in a variant"),
+        }
+    }
 }
 
-/// Write a deserialize statement for `format`.
-///
-/// When `field_name` is `Some`, emits `const <name> = <expr>;`.
-/// When `field_name` is `None`, emits `return <expr>;`.
-#[allow(clippy::too_many_lines)]
-fn write_deserialize(
-    w: &mut dyn IndentWrite,
-    field_name: Option<&str>,
-    format: &Format,
-    config: &CodeGeneratorConfig,
-) -> io::Result<()> {
-    match format {
-        // Primitive and named types — simple single-expression form.
-        f if is_primitive_or_named(f) => {
-            let expr = deserialize_primitive_expr(f, config);
-            if let Some(name) = field_name {
-                writeln!(w, "const {name} = {expr};")
-            } else {
-                writeln!(w, "return {expr};")
-            }
-        }
-
-        Format::Option(inner) => {
-            if let Some(name) = field_name {
-                write!(
-                    w,
-                    "const {name} = deserializeOption(deserializer, (deserializer) => "
-                )?;
-            } else {
-                write!(
-                    w,
-                    "return deserializeOption(deserializer, (deserializer) => "
-                )?;
-            }
-            with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-
-        Format::Seq(inner) => {
-            if let Some(name) = field_name {
-                write!(
-                    w,
-                    "const {name} = deserializeArray(deserializer, (deserializer) => "
-                )?;
-            } else {
-                write!(
-                    w,
-                    "return deserializeArray(deserializer, (deserializer) => "
-                )?;
-            }
-            with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-
-        Format::Set(inner) => {
-            if let Some(name) = field_name {
-                write!(
-                    w,
-                    "const {name} = deserializeSet(deserializer, (deserializer) => "
-                )?;
-            } else {
-                write!(w, "return deserializeSet(deserializer, (deserializer) => ")?;
-            }
-            with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
-            })?;
-            writeln!(w, ");")
-        }
-
-        Format::Map { key, value } => {
-            if let Some(name) = field_name {
-                write!(
-                    w,
-                    "const {name} = deserializeMap(deserializer, (deserializer) => "
-                )?;
-            } else {
-                write!(w, "return deserializeMap(deserializer, (deserializer) => ")?;
-            }
-            with_block(w, Newlines::OPEN, |w| {
-                if is_primitive_or_named(key) {
-                    writeln!(
-                        w,
-                        "const key = {};",
-                        deserialize_primitive_expr(key, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("key"), key, config)?;
-                }
-                if is_primitive_or_named(value) {
-                    writeln!(
-                        w,
-                        "const value = {};",
-                        deserialize_primitive_expr(value, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("value"), value, config)?;
-                }
-                writeln!(w, "return [key, value];")
-            })?;
-            writeln!(w, ");")
-        }
-
-        Format::Tuple(formats) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
-            }
-            let fields_joined = (0..formats.len())
-                .map(|i| format!("field{i}"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let type_str = formats
-                .iter()
-                .map(|f| render_type(f, config))
-                .collect::<Vec<_>>()
-                .join(", ");
-            if let Some(name) = field_name {
-                writeln!(w, "const {name} = [{fields_joined}] as [{type_str}];")
-            } else {
-                writeln!(w, "return [{fields_joined}] as [{type_str}];")
-            }
-        }
-
-        Format::TupleArray { content, size } => {
-            if let Some(name) = field_name {
-                write!(
-                    w,
-                    "const {name} = deserializeTupleArray(deserializer, {size}, (deserializer) => "
-                )?;
-            } else {
-                write!(
-                    w,
-                    "return deserializeTupleArray(deserializer, {size}, (deserializer) => "
-                )?;
-            }
-            with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, Some("item"), content, config)?;
-                writeln!(w, "return [item];")
-            })?;
-            writeln!(w, ");")
-        }
-
-        Format::Variable(_) => panic!("unexpected variable in write_deserialize"),
-        _ => unreachable!(),
+/// `return { "key": expr, … };`, on one line when every expression is.
+fn write_return_object(w: &mut dyn IndentWrite, entries: &[(&str, String)]) -> io::Result<()> {
+    let entries: Vec<String> = entries
+        .iter()
+        .map(|(key, expr)| format!("{}: {expr}", json_key(key)))
+        .collect();
+    if entries.iter().all(|entry| !entry.contains('\n')) {
+        return writeln!(w, "return {{ {} }};", entries.join(", "));
     }
+    writeln!(w, "return {{")?;
+    w.indent();
+    for entry in entries {
+        writeln!(w, "{entry},")?;
+    }
+    w.unindent();
+    writeln!(w, "}};")
 }
 
 // ---------------------------------------------------------------------------
@@ -845,12 +807,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::generation::{
-        CodeGeneratorConfig, Container, Feature,
-        indent::{IndentConfig, IndentedWriter},
-        plugin::EmitContext,
-    };
-    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, QualifiedTypeName};
+    use crate::generation::{Feature, indent::IndentConfig};
 
     fn make_config(features: &[Feature]) -> CodeGeneratorConfig {
         let mut cfg = CodeGeneratorConfig::new("test".to_string());
@@ -865,243 +822,77 @@ mod tests {
         String::from_utf8(buf).unwrap()
     }
 
-    // -------------------------------------------------------------------------
-    // module_helpers
-    // -------------------------------------------------------------------------
-
     #[test]
-    fn module_helpers_emit_list_of_t() {
-        let cfg = make_config(&[Feature::ListOfT]);
+    fn imports_the_runtime_under_a_name_nothing_generated_can_shadow() {
         let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-        let out = render(|w| plugin.module_helpers(w, &cfg));
-        assert!(
-            out.contains("serializeArray"),
-            "missing serializeArray:\n{out}"
-        );
-        assert!(
-            out.contains("deserializeArray"),
-            "missing deserializeArray:\n{out}"
+        assert_eq!(
+            plugin.imports(&make_config(&[])),
+            [r#"import * as $json from "./serde/json";"#]
         );
     }
 
     #[test]
-    fn module_helpers_emit_option_of_t() {
-        let cfg = make_config(&[Feature::OptionOfT]);
+    fn installs_only_the_json_runtime() {
         let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-        let out = render(|w| plugin.module_helpers(w, &cfg));
-        assert!(
-            out.contains("serializeOption"),
-            "missing serializeOption:\n{out}"
-        );
-        assert!(
-            out.contains("deserializeOption"),
-            "missing deserializeOption:\n{out}"
+        let paths: Vec<_> = plugin
+            .runtime_files()
+            .into_iter()
+            .map(|f| f.relative_path)
+            .collect();
+        assert_eq!(paths, ["serde/json.ts"]);
+    }
+
+    /// The emitter declares the `Uuid` alias (#191), so the plugin has no
+    /// module helpers.
+    #[test]
+    fn module_helpers_emit_nothing() {
+        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
+        let all = make_config(&[
+            Feature::ListOfT,
+            Feature::OptionOfT,
+            Feature::SetOfT,
+            Feature::MapOfT,
+            Feature::TupleArray,
+            Feature::BigInt,
+            Feature::Bytes,
+            Feature::Uuid,
+        ]);
+        assert_eq!(render(|w| plugin.module_helpers(w, &all)), "");
+    }
+
+    #[test]
+    fn map_keys_are_written_as_strings() {
+        let config = make_config(&[]);
+        let codec = Codec { config: &config };
+        assert_eq!(codec.write_key(&Format::Str, "k", 0), "k");
+        assert_eq!(codec.write_key(&Format::U128, "k", 0), "`${k}`");
+        assert_eq!(codec.write_key(&Format::Bool, "k", 0), "`${k}`");
+        let name = Format::TypeName(QualifiedTypeName::root("Key".to_string()));
+        assert_eq!(
+            codec.write_key(&name, "k", 0),
+            "$json.writeKey(Key.toJson(k))"
         );
     }
 
     #[test]
-    fn module_helpers_emit_only_requested_features() {
-        let cfg = make_config(&[Feature::ListOfT]);
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-        let out = render(|w| plugin.module_helpers(w, &cfg));
-        assert!(
-            !out.contains("serializeSet"),
-            "unexpected serializeSet:\n{out}"
+    fn map_keys_are_read_from_strings() {
+        let config = make_config(&[]);
+        let codec = Codec { config: &config };
+        assert_eq!(codec.read_key(&Format::Str, "k", 0), "k");
+        assert_eq!(
+            codec.read_key(&Format::I64, "k", 0),
+            "$json.readI64($json.keyLiteral(k))"
         );
-        assert!(
-            !out.contains("serializeMap"),
-            "unexpected serializeMap:\n{out}"
-        );
-        assert!(
-            !out.contains("serializeOption"),
-            "unexpected serializeOption:\n{out}"
-        );
-        assert!(
-            !out.contains("serializeTupleArray"),
-            "unexpected serializeTupleArray:\n{out}"
+        let name = Format::TypeName(QualifiedTypeName::root("Key".to_string()));
+        assert_eq!(
+            codec.read_key(&name, "k", 0),
+            "$json.readKey(k, Key.fromJson)"
         );
     }
 
     #[test]
-    fn module_helpers_no_features_emits_nothing() {
-        let cfg = make_config(&[]);
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-        let out = render(|w| plugin.module_helpers(w, &cfg));
-        assert!(out.is_empty(), "expected empty output, got:\n{out}");
-    }
-
-    // -------------------------------------------------------------------------
-    // has_type_body
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn has_type_body_always_true() {
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let name = QualifiedTypeName::root("Foo".to_string());
-        let format = ContainerFormat::Struct(vec![], Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        assert!(plugin.has_type_body(&ctx));
-    }
-
-    // -------------------------------------------------------------------------
-    // type_body — struct shapes
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn type_body_unit_struct() {
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let name = QualifiedTypeName::root("Foo".to_string());
-        let format = ContainerFormat::UnitStruct(Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        let out = render(|w| plugin.type_body(w, &ctx));
-        assert!(
-            out.contains("public serialize(serializer: Serializer): void"),
-            "{out}"
-        );
-        assert!(
-            out.contains("static deserialize(deserializer: Deserializer): Foo"),
-            "{out}"
-        );
-        assert!(out.contains("return new Foo();"), "{out}");
-    }
-
-    #[test]
-    fn type_body_struct_with_fields() {
-        use crate::reflection::format::Format;
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let name = QualifiedTypeName::root("MyStruct".to_string());
-        let fields = vec![
-            Named::new(&Format::Str, "label".to_string()),
-            Named::new(&Format::I32, "count".to_string()),
-        ];
-        let format = ContainerFormat::Struct(fields, Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        let out = render(|w| plugin.type_body(w, &ctx));
-        assert!(
-            out.contains("serializer.serializeStr(this.label);"),
-            "{out}"
-        );
-        assert!(
-            out.contains("serializer.serializeI32(this.count);"),
-            "{out}"
-        );
-        assert!(
-            out.contains("const label = deserializer.deserializeStr();"),
-            "{out}"
-        );
-        assert!(
-            out.contains("const count = deserializer.deserializeI32();"),
-            "{out}"
-        );
-        assert!(out.contains("return new MyStruct(label,count);"), "{out}");
-    }
-
-    // -------------------------------------------------------------------------
-    // type_body + after_type — enum shapes
-    // -------------------------------------------------------------------------
-
-    #[test]
-    fn type_body_enum_emits_nothing() {
-        use crate::reflection::format::VariantFormat;
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let mut variants = BTreeMap::new();
-        variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
-        variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
-
-        let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        let out = render(|w| plugin.type_body(w, &ctx));
-        assert!(
-            out.is_empty(),
-            "type_body for enum should emit nothing, got:\n{out}"
-        );
-    }
-
-    #[test]
-    fn after_type_enum_emits_standalone_functions() {
-        use crate::reflection::format::VariantFormat;
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let mut variants = BTreeMap::new();
-        variants.insert(0u32, Named::new(&VariantFormat::Unit, "Alpha".to_string()));
-        variants.insert(1u32, Named::new(&VariantFormat::Unit, "Beta".to_string()));
-
-        let name = QualifiedTypeName::root("MyEnum".to_string());
-        let format = ContainerFormat::Enum(variants, EnumTagging::External, Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        let out = render(|w| plugin.after_type(w, &ctx));
-        assert!(
-            out.contains(
-                "export function serializeMyEnum(value: MyEnum, serializer: Serializer): void"
-            ),
-            "{out}"
-        );
-        assert!(
-            out.contains("export function deserializeMyEnum(deserializer: Deserializer): MyEnum"),
-            "{out}"
-        );
-        assert!(out.contains(r#"case "Alpha":"#), "{out}");
-        assert!(out.contains(r#"case "Beta":"#), "{out}");
-        assert!(
-            out.contains("deserializer.deserializeVariantIndex()"),
-            "{out}"
-        );
-        assert!(out.contains("case 0:"), "{out}");
-        assert!(out.contains("case 1:"), "{out}");
-    }
-
-    #[test]
-    fn after_type_struct_emits_nothing() {
-        let plugin = &JsonPlugin as &dyn EmitterPlugin<TypeScript>;
-
-        let name = QualifiedTypeName::root("Foo".to_string());
-        let format = ContainerFormat::Struct(vec![], Doc::default());
-        let container = Container {
-            name: &name,
-            format: &format,
-        };
-        let config = CodeGeneratorConfig::new("test".to_string());
-        let ctx = EmitContext::top_level(&container, &config);
-
-        let out = render(|w| plugin.after_type(w, &ctx));
-        assert!(
-            out.is_empty(),
-            "after_type for struct should emit nothing, got:\n{out}"
-        );
+    fn a_field_named_proto_is_an_own_property() {
+        assert_eq!(json_key("__proto__"), r#"["__proto__"]"#);
+        assert_eq!(json_key("with-dash"), r#""with-dash""#);
     }
 }

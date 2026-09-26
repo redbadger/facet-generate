@@ -35,7 +35,6 @@ use crate::{
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
         collision::{self, Fix, Origin, TypeName},
-        json::JsonPlugin,
         kotlin::{Kotlin, KotlinCodeGenerator},
         module::{self, Module},
         plugin::EmitterPlugin,
@@ -173,8 +172,13 @@ impl Installer {
     /// A namespace spelled like a ROOT type only in another case (`kv` beside
     /// `Kv`) is fine: Kotlin names are case-sensitive. Namespaces provided by
     /// external packages are not generated, so they are not checked.
+    ///
+    /// It also fails when the root package is named exactly like a namespace
+    /// that an external package provides, as that namespace's types would be
+    /// merged into the root module (see [`module::split`]).
     fn check_namespaces(&self, modules: &BTreeMap<Module, Registry>) -> Result<(), Error> {
         const LANGUAGE: &str = "Kotlin";
+        collision::check_root_package(LANGUAGE, &self.package_name, &self.external_packages)?;
 
         let generated: Vec<(CodeGeneratorConfig, &Registry)> = modules
             .iter()
@@ -270,18 +274,25 @@ impl Installer {
 
     /// Installs the serde Kotlin runtime sources into the output directory.
     ///
-    /// Delegates to `JsonPlugin::runtime_files` which embeds the serde
-    /// sources via `include_dir!`.  This method is provided for callers that
-    /// need fine-grained control; most callers should prefer [`generate`](Self::generate).
+    /// Delegates to `BincodePlugin::runtime_files`, writing only the
+    /// `com/novi/serde/` files, which embed the serde sources via
+    /// `include_dir!`. The JSON plugin's `JsonCoding.kt`, which needs
+    /// kotlinx.serialization, is not among them. This method is provided for
+    /// callers that need fine-grained control; most callers should prefer
+    /// [`generate`](Self::generate).
     ///
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
-        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(JsonPlugin));
+        let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));
         for plugin in lang.plugins() {
-            for file in plugin.runtime_files() {
+            for file in plugin
+                .runtime_files()
+                .into_iter()
+                .filter(|f| f.relative_path.starts_with("com/novi/serde/"))
+            {
                 let dest = self.install_dir.join(&file.relative_path);
                 if let Some(parent) = dest.parent() {
                     std::fs::create_dir_all(parent)?;
@@ -424,10 +435,13 @@ impl SourceInstaller for Installer {
         config: &CodeGeneratorConfig,
         registry: &Registry,
     ) -> std::result::Result<(), Error> {
-        // Extract the namespace from the module name to check if it's external
-        let module_parts: Vec<&str> = config.module_name().split('.').collect();
-        let namespace = module_parts.last().map_or("", |v| *v);
-        let skip_module = self.external_packages.contains_key(namespace);
+        // Decide from the module's namespace, not the last segment of its
+        // name: the root module's name is the package name, whose last
+        // segment can be spelled like an external namespace.
+        let skip_module = match &config.namespace {
+            Namespace::Root => false,
+            Namespace::Named(namespace) => self.external_packages.contains_key(namespace),
+        };
 
         if skip_module {
             return Ok(());

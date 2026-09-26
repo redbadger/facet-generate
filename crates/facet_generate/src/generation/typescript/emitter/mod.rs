@@ -21,7 +21,8 @@
 //! via type aliases — for example `I32` → `number` (via `type int32 = number`),
 //! `Str` → `string`, `Seq(T)` → `T[]` (via `type Seq<T> = T[]`),
 //! `Option(T)` → `Optional<T>` (i.e. `T | null`), `Map(K,V)` → `Map<K, V>`,
-//! tuples → `[A, B]` (via `Tuple<[…]>`), fixed-size arrays → `ListTuple<[T]>`.
+//! tuples → `[A, B]` (via `Tuple<[…]>`), and a fixed-size array `[T; N]` →
+//! `[T][]`, an array of one-element tuples (via `ListTuple<[T]>`).
 //!
 //! # Plugin-dependent output
 //!
@@ -34,9 +35,9 @@
 //!
 //! - [`BincodePlugin`](crate::generation::bincode::BincodePlugin) supplies
 //!   `serialize` / `deserialize` methods and the Bincode feature helpers.
-//! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies the same
-//!   interface for JSON (the TypeScript Serializer/Deserializer API is
-//!   identical for both encodings).
+//! - [`JsonPlugin`](crate::generation::json::JsonPlugin) supplies static
+//!   `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` methods
+//!   (functions beside an enum) that match `serde_json`.
 //! - With no plugins, only plain type declarations are emitted.
 
 #[cfg(test)]
@@ -130,7 +131,6 @@ impl Emitter<TypeScript> for Module {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
         let CodeGeneratorConfig {
             referenced_namespaces,
-            used_format_types,
             ..
         } = self.config();
 
@@ -151,18 +151,7 @@ impl Emitter<TypeScript> for Module {
         }
 
         // Write type aliases (e.g. `type bool = boolean;`)
-        let alias_map = BTreeMap::from(TYPE_ALIASES);
-        let aliases: Vec<String> = used_format_types
-            .iter()
-            .filter_map(|k| {
-                alias_map.get(k.as_str()).map(|s| {
-                    qualify_helper(s, naming::QUALIFIED, |name| {
-                        naming::shadows(name, self.config())
-                    })
-                    .into_owned()
-                })
-            })
-            .collect();
+        let aliases = type_aliases(self.config());
         if !aliases.is_empty() {
             writeln!(w, "{}", aliases.join("\n"))?;
         }
@@ -174,6 +163,53 @@ impl Emitter<TypeScript> for Module {
 
         Ok(())
     }
+}
+
+/// The type aliases a module declares, one for each format its types use
+/// that has one (e.g. `type bool = boolean;`).
+fn type_aliases(config: &CodeGeneratorConfig) -> Vec<String> {
+    let alias_map = BTreeMap::from(TYPE_ALIASES);
+    config
+        .used_format_types
+        .iter()
+        .filter_map(|k| {
+            alias_map.get(k.as_str()).map(|s| {
+                qualify_helper(s, naming::QUALIFIED, |name| naming::shadows(name, config))
+                    .into_owned()
+            })
+        })
+        .collect()
+}
+
+/// The names that a module's header adds to its scope besides its namespace
+/// imports: what its plugins import, its type aliases, and its plugins'
+/// module helpers. Each comes with the clause that says where it is from, for
+/// the file `file`.
+///
+/// Only a name a namespace import collides with is listed: an import of any
+/// kind (TS2300), an exported declaration (TS2395), or a value (TS2440). A
+/// local type (`type Seq<T>`) merges with a namespace import.
+///
+/// # Errors
+///
+/// Returns an error if a plugin fails to write its module helpers.
+pub(crate) fn module_scope(
+    config: &CodeGeneratorConfig,
+    plugins: &[Arc<dyn EmitterPlugin<TypeScript>>],
+    file: &str,
+) -> Result<Vec<(String, String)>> {
+    let mut helpers = Vec::new();
+    {
+        let mut w = IndentedWriter::new(&mut helpers, config.indent);
+        for plugin in plugins {
+            plugin.module_helpers(&mut w, config)?;
+        }
+    }
+    let imports = collect_from_plugins(plugins, |p| p.imports(config));
+    let declarations = type_aliases(config).join("\n") + "\n" + &String::from_utf8_lossy(&helpers);
+    Ok(naming::scope_names(&imports.join("\n"), file)
+        .chain(naming::scope_names(&declarations, file))
+        .collect())
 }
 
 impl Emitter<TypeScript> for Doc {
@@ -298,7 +334,7 @@ impl Emitter<TypeScript> for Format {
 
 impl Emitter<TypeScript> for Named<Format> {
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &TypeScript) -> Result<()> {
-        write!(w, "public {}: ", self.name)?;
+        write!(w, "public {}: ", naming::property_key(&self.name))?;
         self.value.write(w, lang)
     }
 }
@@ -392,7 +428,9 @@ pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
 /// or a `const` local derived from `name`.
 ///
 /// Reserved words are illegal as binding identifiers and cannot be quoted, so
-/// they are renamed with a trailing underscore (`default` → `default_`).
+/// they are renamed with a trailing underscore (`default` → `default_`), and
+/// each character a name that is no identifier at all cannot hold becomes an
+/// underscore (`with-dash` → `with_dash`).
 /// Property and wire names are *not* renamed — they stay identical to the
 /// Rust names — so a renamed binding is paired with an explicit
 /// `this.name = name_;` assignment or a `name: name_` object entry.
@@ -401,7 +439,23 @@ pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
 /// should route it through this so the result matches the emitter.
 #[must_use]
 pub fn param_name(name: &str) -> Cow<'_, str> {
-    naming::RULES.escape(name)
+    if naming::is_identifier(name) {
+        return naming::RULES.escape(name);
+    }
+    let mut binding: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '$' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    if !binding.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') {
+        binding.insert(0, '_');
+    }
+    Cow::Owned(binding)
 }
 
 /// Returns `true` if `name` is a TypeScript reserved word, and therefore
@@ -434,21 +488,22 @@ fn output_struct_or_variant<W: IndentWrite>(
     write!(w, "export class {name} ")?;
     let mut w = w.block(Newlines::BOTH)?;
 
-    // A field whose name is a reserved word cannot be a parameter property:
-    // the parameter is a binding identifier. When any field needs renaming the
+    // A field whose name is a reserved word, or no identifier at all, cannot
+    // be a parameter property: the parameter is a binding identifier. When
+    // any field needs renaming the
     // whole class switches to the explicit style — every field declared, every
     // parameter plain, every assignment written in the constructor body — so
     // that declaration order and property-insertion order still match the
     // registry. A class with no reserved field name keeps its parameter
     // properties and is emitted exactly as before.
-    let explicit = fields.iter().any(|f| is_reserved_word(&f.name));
+    let explicit = fields.iter().any(|f| param_name(&f.name) != f.name);
 
     if explicit {
         for field in fields {
             writeln!(
                 w,
                 "public {}: {};",
-                field.name,
+                naming::property_key(&field.name),
                 quote_type(&field.value, lang)
             )?;
         }
@@ -472,7 +527,12 @@ fn output_struct_or_variant<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         if explicit {
             for field in fields {
-                writeln!(w, "this.{} = {};", field.name, param_name(&field.name))?;
+                writeln!(
+                    w,
+                    "{} = {};",
+                    naming::member("this", &field.name),
+                    param_name(&field.name)
+                )?;
             }
         }
     }
@@ -540,13 +600,23 @@ fn write_variant_type_expr<W: std::io::Write>(
             if let Some(content) = content_field {
                 write!(w, r#"{{ {tag_field}: "{variant_name}"; {content}: {{ "#)?;
                 for field in fields {
-                    write!(w, "{}: {}; ", field.name, quote_type(&field.value, lang))?;
+                    write!(
+                        w,
+                        "{}: {}; ",
+                        naming::property_key(&field.name),
+                        quote_type(&field.value, lang)
+                    )?;
                 }
                 write!(w, "}} }}")?;
             } else {
                 write!(w, r#"{{ {tag_field}: "{variant_name}""#)?;
                 for field in fields {
-                    write!(w, "; {}: {}", field.name, quote_type(&field.value, lang))?;
+                    write!(
+                        w,
+                        "; {}: {}",
+                        naming::property_key(&field.name),
+                        quote_type(&field.value, lang)
+                    )?;
                 }
                 write!(w, " }}")?;
             }
@@ -620,10 +690,11 @@ fn write_variant_constructor<W: std::io::Write>(
             let field_names: Vec<String> = fields
                 .iter()
                 .map(|f| {
-                    if is_reserved_word(&f.name) {
-                        format!("{}: {}", f.name, param_name(&f.name))
-                    } else {
+                    let binding = param_name(&f.name);
+                    if binding == f.name {
                         f.name.clone()
+                    } else {
+                        format!("{}: {binding}", naming::property_key(&f.name))
                     }
                 })
                 .collect();
@@ -650,25 +721,6 @@ fn write_variant_constructor<W: std::io::Write>(
     Ok(())
 }
 
-fn is_js_identifier(s: &str) -> bool {
-    let mut chars = s.chars();
-    match chars.next() {
-        None => false,
-        Some(c) => {
-            (c.is_alphabetic() || c == '_' || c == '$')
-                && chars.all(|c| c.is_alphanumeric() || c == '_' || c == '$')
-        }
-    }
-}
-
-fn js_property_key(s: &str) -> String {
-    if is_js_identifier(s) {
-        s.to_string()
-    } else {
-        format!("\"{s}\"")
-    }
-}
-
 fn write_match_function<W: std::io::Write>(
     w: &mut W,
     name: &str,
@@ -678,7 +730,7 @@ fn write_match_function<W: std::io::Write>(
     writeln!(w, "export function match{name}<R>(value: {name}, cases: {{")?;
     for variant in variants.values() {
         let vname = &variant.name;
-        let key = js_property_key(vname);
+        let key = naming::property_key(vname);
         writeln!(
             w,
             r#"    {key}: (v: Extract<{name}, {{ {tag_field}: "{vname}" }}>) => R;"#
@@ -756,7 +808,7 @@ fn output_enum_container<W: IndentWrite>(
     Ok(())
 }
 
-const TYPE_ALIASES: [(&str, &str); 21] = [
+const TYPE_ALIASES: [(&str, &str); 22] = [
     ("unit", "type unit = null;"),
     ("bool", "type bool = boolean;"),
     ("int8", "type int8 = number;"),
@@ -777,9 +829,14 @@ const TYPE_ALIASES: [(&str, &str); 21] = [
     ("option", "type Optional<T> = T | null;"),
     ("seq", "type Seq<T> = T[];"),
     ("tuple", "type Tuple<T extends any[]> = T;"),
+    // Spelled out rather than through `Tuple`, which a module without a tuple
+    // does not declare (#190).
+    ("list_tuple", "type ListTuple<T extends any[]> = T[];"),
+    // Declared here rather than by each plugin, so that it is declared with
+    // no plugin, and once with several (#191).
     (
-        "list_tuple",
-        "type ListTuple<T extends any[]> = Tuple<T>[];",
+        "uuid",
+        "export type Uuid = string & { readonly __uuid: unique symbol };",
     ),
 ];
 

@@ -1,9 +1,10 @@
 #![cfg(feature = "kotlin")]
-//! Runtime tests for Kotlin bincode serialization.
+//! Runtime tests for Kotlin bincode and JSON serialization.
 //!
-//! These tests generate Kotlin code, serialize data in Rust with bincode, then
-//! compile and run the generated Kotlin code to deserialize, verify field
-//! values, and re-serialize — checking that the bytes round-trip correctly.
+//! These tests generate Kotlin code, serialize data in Rust with bincode or
+//! `serde_json`, then compile and run the generated Kotlin code to
+//! deserialize, verify field values, and re-serialize — checking that the
+//! bytes (for JSON, the values) round-trip correctly.
 //!
 //! # Toolchain requirement
 //!
@@ -11,6 +12,9 @@
 //! `.kt` sources (including the serde runtime) into a single JAR with
 //! `kotlinc -include-runtime`, then runs the JVM entry-point with
 //! `java -classpath`.
+//!
+//! The JSON test builds with `gradle` instead, since the generated code needs
+//! kotlinx.serialization's compiler plugin and runtime.
 //!
 //! Unlike the compilation-only test in `kotlin_generation.rs`, this test
 //! actually *executes* the generated serialization logic and verifies the
@@ -24,7 +28,7 @@ use std::{
     process::Command,
 };
 
-use facet_generate::generation::{bincode::BincodePlugin, kotlin};
+use facet_generate::generation::{bincode::BincodePlugin, json::JsonPlugin, kotlin};
 use tempfile::tempdir;
 
 pub mod common;
@@ -235,4 +239,623 @@ fun main() {{
     .unwrap();
 
     compile_and_run(&dir);
+}
+
+// ---------------------------------------------------------------------------
+// JSON
+// ---------------------------------------------------------------------------
+
+/// Types exercising every shape the JSON plugin encodes, whose JSON is
+/// `serde_json`'s: the Kotlin side must read it and write JSON that reads
+/// back to the same Rust value.
+#[allow(
+    clippy::unsafe_derive_deserialize,
+    clippy::struct_field_names,
+    clippy::zero_sized_map_values,
+    clippy::option_option
+)]
+mod json_fixture {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use facet::Facet;
+    use facet_generate as fg;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct JsonData {
+        pub big: Big,
+        pub floats: Floats,
+        pub text: Text,
+        #[facet(fg::bytes)]
+        pub bytes: Vec<u8>,
+        pub nested: Option<Option<u32>>,
+        pub maybe_chars: Vec<Option<char>>,
+        pub maps: Maps,
+        pub choices: Vec<Choice>,
+        pub levels: Vec<Level>,
+        pub modes: Vec<Mode>,
+        pub internal: Vec<Internal>,
+        pub adjacent: Vec<Adjacent>,
+        pub tree: Tree,
+        pub list: List,
+        pub renamed: Renamed,
+        pub unit: (),
+        pub units: Vec<()>,
+        pub unit_struct: UnitStruct,
+        pub newtype: NewType,
+        pub tuple_struct: TupleStruct,
+        pub pair: (u8, String),
+        pub tuple: (u32, char, Option<String>),
+        pub nested_tuples: Vec<(i8, (bool, String))>,
+        pub tuple_map: BTreeMap<String, (u8, u8)>,
+        pub unit_values: BTreeMap<String, ()>,
+        pub hollow: Vec<Hollow>,
+        pub array: [u16; 3],
+        pub set: BTreeSet<u32>,
+        pub id: uuid::Uuid,
+        pub ids: Vec<uuid::Uuid>,
+    }
+
+    /// Holds 128-bit integers, so it has its own serializer.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Big {
+        pub u128_max: u128,
+        pub i128_min: i128,
+        pub i128_max: i128,
+        pub u128_small: u128,
+        pub i128_negative: i128,
+        pub u64_max: u64,
+        pub i64_min: i64,
+        pub i64_max: i64,
+        pub by_big: BTreeMap<u128, u8>,
+        pub maybe_big: Option<i128>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct Floats {
+        pub tenth: f32,
+        pub pi: f64,
+        pub whole: f64,
+        pub tiny: f64,
+        pub negative: f32,
+        pub optional: Option<f64>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Text {
+        pub ascii: char,
+        pub accented: char,
+        pub crab: char,
+        pub escaped: String,
+        #[facet(rename = "$ref")]
+        #[serde(rename = "$ref")]
+        pub reference: String,
+    }
+
+    /// Every field is one kotlinx writes the way Rust does, so the compiler
+    /// plugin's serializer writes it.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Maps {
+        pub by_string: BTreeMap<String, u32>,
+        pub by_int: BTreeMap<u32, String>,
+        pub by_negative: BTreeMap<i64, bool>,
+        pub by_bool: BTreeMap<bool, u8>,
+        pub by_char: BTreeMap<char, Vec<Option<char>>>,
+        pub by_level: BTreeMap<Level, u8>,
+        pub by_uuid: BTreeMap<uuid::Uuid, u8>,
+        pub by_newtype: BTreeMap<NewType, u8>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Choice {
+        Unit,
+        NewType(String),
+        Char(char),
+        Tuple(u8, char),
+        Struct {
+            a: u32,
+            #[facet(rename = "bee")]
+            #[serde(rename = "bee")]
+            b: Option<String>,
+        },
+        #[facet(rename = "Other")]
+        #[serde(rename = "Other")]
+        Renamed(i16),
+        Nested(Box<Choice>),
+        Big(u128),
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[repr(C)]
+    pub enum Level {
+        Low,
+        #[facet(rename = "HIGH")]
+        #[serde(rename = "HIGH")]
+        High,
+    }
+
+    /// Unit variants only, but internally tagged, so not a bare string.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    #[facet(tag = "kind")]
+    #[serde(tag = "kind")]
+    pub enum Mode {
+        Fast,
+        Slow,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    #[facet(tag = "type")]
+    #[serde(tag = "type")]
+    pub enum Internal {
+        Unit,
+        Wrapped(Point),
+        Struct { x: i32, c: char },
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Point {
+        pub x: i32,
+        pub y: i32,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    #[facet(tag = "t", content = "c")]
+    #[serde(tag = "t", content = "c")]
+    pub enum Adjacent {
+        Unit,
+        NewType(Option<u8>),
+        Tuple(u8, String),
+        Struct { name: String },
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Tree {
+        pub value: u32,
+        pub left: Option<Box<Tree>>,
+        pub right: Option<Box<Tree>>,
+    }
+
+    /// Shadows Kotlin's `List`.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum List {
+        Nil,
+        Cons(u32, Box<List>),
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[facet(rename_all = "camelCase")]
+    #[serde(rename_all = "camelCase")]
+    pub struct Renamed {
+        pub snake_case_field: u8,
+        #[facet(rename = "explicit")]
+        #[serde(rename = "explicit")]
+        pub other_field: u8,
+        #[facet(rename = "with-dash")]
+        #[serde(rename = "with-dash")]
+        pub dashed: u8,
+        pub r#default: bool,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Hollow {
+        Empty(()),
+        Something(u8),
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct UnitStruct;
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    pub struct NewType(pub String);
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct TupleStruct(pub u8, pub i16);
+
+    pub const ID: uuid::Uuid = uuid::uuid!("550e8400-e29b-41d4-a716-446655440000");
+
+    fn tree(value: u32, left: Option<Tree>, right: Option<Tree>) -> Tree {
+        Tree {
+            value,
+            left: left.map(Box::new),
+            right: right.map(Box::new),
+        }
+    }
+
+    /// The value the Kotlin side also builds, field for field.
+    #[allow(clippy::too_many_lines)]
+    pub fn sample() -> JsonData {
+        JsonData {
+            big: Big {
+                u128_max: u128::MAX,
+                i128_min: i128::MIN,
+                i128_max: i128::MAX,
+                u128_small: 1000,
+                i128_negative: -42,
+                u64_max: u64::MAX,
+                i64_min: i64::MIN,
+                i64_max: i64::MAX,
+                by_big: BTreeMap::from([(u128::MAX, 1)]),
+                maybe_big: Some(i128::MIN),
+            },
+            floats: Floats {
+                tenth: 0.1,
+                pi: std::f64::consts::PI,
+                whole: 3.0,
+                tiny: 1e-300,
+                negative: -2.5,
+                optional: None,
+            },
+            text: Text {
+                ascii: 'a',
+                accented: 'é',
+                crab: '🦀',
+                escaped: "quote \" backslash \\ slash / tab \t newline \n dollar $x unicode ✓"
+                    .to_string(),
+                reference: "#/defs".to_string(),
+            },
+            bytes: vec![0, 1, 127, 128, 255],
+            nested: Some(Some(5)),
+            maybe_chars: vec![Some('x'), None],
+            maps: Maps {
+                by_string: BTreeMap::from([("one".to_string(), 1), ("two".to_string(), 2)]),
+                by_int: BTreeMap::from([(1, "one".to_string()), (20, "twenty".to_string())]),
+                by_negative: BTreeMap::from([(-5, true), (i64::MAX, false)]),
+                by_bool: BTreeMap::from([(false, 0), (true, 1)]),
+                by_char: BTreeMap::from([('k', vec![Some('v'), None])]),
+                by_level: BTreeMap::from([(Level::Low, 1), (Level::High, 2)]),
+                by_uuid: BTreeMap::from([(ID, 7)]),
+                by_newtype: BTreeMap::from([(NewType("key".to_string()), 3)]),
+            },
+            choices: vec![
+                Choice::Unit,
+                Choice::NewType("new".to_string()),
+                Choice::Char('c'),
+                Choice::Tuple(1, 't'),
+                Choice::Struct {
+                    a: 1,
+                    b: Some("b".to_string()),
+                },
+                Choice::Struct { a: 2, b: None },
+                Choice::Renamed(-1),
+                Choice::Nested(Box::new(Choice::Nested(Box::new(Choice::Unit)))),
+                Choice::Big(u128::MAX),
+            ],
+            levels: vec![Level::Low, Level::High],
+            modes: vec![Mode::Fast, Mode::Slow],
+            internal: vec![
+                Internal::Unit,
+                Internal::Wrapped(Point { x: 1, y: -1 }),
+                Internal::Struct { x: 3, c: 'z' },
+            ],
+            adjacent: vec![
+                Adjacent::Unit,
+                Adjacent::NewType(Some(9)),
+                Adjacent::NewType(None),
+                Adjacent::Tuple(4, "four".to_string()),
+                Adjacent::Struct {
+                    name: "adj".to_string(),
+                },
+            ],
+            tree: tree(
+                1,
+                Some(tree(2, None, None)),
+                Some(tree(3, Some(tree(4, None, None)), None)),
+            ),
+            list: List::Cons(1, Box::new(List::Cons(2, Box::new(List::Nil)))),
+            renamed: Renamed {
+                snake_case_field: 1,
+                other_field: 2,
+                dashed: 3,
+                r#default: true,
+            },
+            unit: (),
+            units: vec![(), ()],
+            unit_struct: UnitStruct,
+            newtype: NewType("wrapped".to_string()),
+            tuple_struct: TupleStruct(7, -7),
+            pair: (8, "eight".to_string()),
+            tuple: (1, 'q', None),
+            nested_tuples: vec![(-1, (true, "yes".to_string()))],
+            tuple_map: BTreeMap::from([("pair".to_string(), (1, 2))]),
+            unit_values: BTreeMap::from([("a".to_string(), ()), ("b".to_string(), ())]),
+            hollow: vec![Hollow::Empty(()), Hollow::Something(3)],
+            array: [1, 2, 3],
+            set: BTreeSet::from([1, 2, 3]),
+            id: ID,
+            ids: vec![ID],
+        }
+    }
+
+    /// The same value in Kotlin, as the generated types spell it.
+    pub const KOTLIN_SAMPLE: &str = r##"
+fun tree(value: UInt, left: Tree?, right: Tree?) = Tree(value, left, right)
+
+val id: java.util.UUID = java.util.UUID.fromString("550e8400-e29b-41d4-a716-446655440000")
+val u128Max = BigInteger("340282366920938463463374607431768211455")
+val i128Min = BigInteger("-170141183460469231731687303715884105728")
+
+val sample = JsonData(
+    big = Big(
+        u128Max = u128Max,
+        i128Min = i128Min,
+        i128Max = BigInteger("170141183460469231731687303715884105727"),
+        u128Small = BigInteger.valueOf(1000),
+        i128Negative = BigInteger.valueOf(-42),
+        u64Max = ULong.MAX_VALUE,
+        i64Min = Long.MIN_VALUE,
+        i64Max = Long.MAX_VALUE,
+        byBig = mapOf(u128Max to 1u),
+        maybeBig = i128Min,
+    ),
+    floats = Floats(tenth = 0.1f, pi = Math.PI, whole = 3.0, tiny = 1e-300, negative = -2.5f, optional = null),
+    text = Text(
+        ascii = "a",
+        accented = "é",
+        crab = "🦀",
+        escaped = "quote \" backslash \\ slash / tab \t newline \n dollar \$x unicode ✓",
+        ref = "#/defs",
+    ),
+    bytes = com.novi.serde.Bytes(byteArrayOf(0, 1, 127, -128, -1)),
+    nested = 5u,
+    maybeChars = listOf("x", null),
+    maps = Maps(
+        byString = mapOf("one" to 1u, "two" to 2u),
+        byInt = mapOf(1u to "one", 20u to "twenty"),
+        byNegative = mapOf(-5L to true, Long.MAX_VALUE to false),
+        byBool = mapOf(false to 0u, true to 1u),
+        byChar = mapOf("k" to listOf("v", null)),
+        byLevel = mapOf(Level.LOW to 1u, Level.HIGH to 2u),
+        byUuid = mapOf(id to 7u),
+        byNewtype = mapOf(NewType("key") to 3u),
+    ),
+    choices = listOf(
+        Choice.Unit,
+        Choice.NewType("new"),
+        Choice.Char("c"),
+        Choice.Tuple(1u, "t"),
+        Choice.Struct(a = 1u, bee = "b"),
+        Choice.Struct(a = 2u, bee = null),
+        Choice.Other(-1),
+        Choice.Nested(Choice.Nested(Choice.Unit)),
+        Choice.Big(u128Max),
+    ),
+    levels = listOf(Level.LOW, Level.HIGH),
+    modes = listOf(Mode.FAST, Mode.SLOW),
+    internal = listOf(Internal.Unit, Internal.Wrapped(Point(1, -1)), Internal.Struct(3, "z")),
+    adjacent = listOf(
+        Adjacent.Unit,
+        Adjacent.NewType(9u),
+        Adjacent.NewType(null),
+        Adjacent.Tuple(4u, "four"),
+        Adjacent.Struct("adj"),
+    ),
+    tree = tree(1u, tree(2u, null, null), tree(3u, tree(4u, null, null), null)),
+    list = com.example.List.Cons(1u, com.example.List.Cons(2u, com.example.List.Nil)),
+    renamed = Renamed(snakeCaseField = 1u, explicit = 2u, withDash = 3u, default = true),
+    unit = Unit,
+    units = listOf(Unit, Unit),
+    unitStruct = UnitStruct,
+    newtype = NewType("wrapped"),
+    tupleStruct = TupleStruct(7u, -7),
+    pair = Pair(8u, "eight"),
+    tuple = Triple(1u, "q", null),
+    nestedTuples = listOf(Pair(-1, Pair(true, "yes"))),
+    tupleMap = mapOf("pair" to Pair(1u, 2u)),
+    unitValues = mapOf("a" to Unit, "b" to Unit),
+    hollow = listOf(Hollow.Empty(Unit), Hollow.Something(3u)),
+    array = listOf(1u, 2u, 3u),
+    set = setOf(1u, 2u, 3u),
+    id = id,
+    ids = listOf(id),
+)
+"##;
+}
+
+/// Turns the Kotlin sources the installer generated in `dir` into a Gradle
+/// project whose `runMain` task runs `main_kt` with `input.json` beside it
+/// holding `input`, runs it, and returns what it printed on lines starting
+/// `JSON:`, without that prefix.
+///
+/// Gradle, not `kotlinc`, because the JSON plugin's code needs
+/// kotlinx.serialization's compiler plugin and runtime.
+fn run_kotlin_json_main(dir: &Path, main_kt: &str, input: &[u8]) -> Vec<String> {
+    let source_set = dir.join("src/main/kotlin");
+    fs::create_dir_all(&source_set).unwrap();
+    for entry in fs::read_dir(dir).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name();
+        if name == "src" || name == "build.gradle.kts" {
+            continue;
+        }
+        fs::rename(entry.path(), source_set.join(&name)).unwrap();
+    }
+    fs::write(source_set.join("Main.kt"), main_kt).unwrap();
+    fs::write(dir.join("input.json"), input).unwrap();
+
+    let manifest = dir.join("build.gradle.kts");
+    let mut contents = fs::read_to_string(&manifest).unwrap();
+    // Pin the JVM target, so the build does not fail with "Inconsistent
+    // JVM-target compatibility" on a JDK newer than Kotlin supports.
+    contents.push_str(
+        r#"
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        allWarningsAsErrors.set(true)
+    }
+}
+
+tasks.register<JavaExec>("runMain") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("MainKt")
+    workingDir = projectDir
+}
+"#,
+    );
+    fs::write(&manifest, contents).unwrap();
+
+    let output = Command::new("gradle")
+        .args(["--configuration-cache", "--quiet", "runMain"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "gradle runMain failed:\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter_map(|line| line.strip_prefix("JSON:").map(str::to_string))
+        .collect()
+}
+
+/// Round-trips JSON between `serde_json` and the generated Kotlin, both ways:
+/// Kotlin decodes what Rust wrote into the value it builds itself, and Rust
+/// decodes what Kotlin wrote — re-encoding the decoded value, and encoding the
+/// value it built — back into the original.
+///
+/// Kotlin's JSON is compared with Rust's by value, not byte for byte: the two
+/// spell some floats differently (`1.0E-300` for `1e-300`), and Kotlin writes
+/// a set in its own order.
+#[test]
+fn test_kotlin_json_runtime_round_trips_with_serde_json() {
+    use json_fixture::{JsonData, KOTLIN_SAMPLE, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    kotlin::Installer::new("com.example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&facet_generate::reflect!(JsonData).unwrap())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+
+    let outputs = run_kotlin_json_main(
+        &dir,
+        &format!(
+            r#"import com.example.*
+import java.io.File
+import java.math.BigInteger
+import kotlinx.serialization.json.Json
+{KOTLIN_SAMPLE}
+fun main() {{
+    val input = File("input.json").readText()
+    val value = Json.decodeFromString(JsonData.serializer(), input)
+
+    // `Bytes` wraps a `ByteArray`, which `==` compares by reference.
+    check(value.bytes.content.contentEquals(sample.bytes.content)) {{ "bytes mismatch: ${{value.bytes}}" }}
+    check(value.copy(bytes = sample.bytes) == sample) {{ "decoded mismatch:\n  $value\n  $sample" }}
+
+    // The registry records `struct EmptyStruct {{}}`, which Rust writes as
+    // `{{}}`, as a unit struct, so that reads too.
+    check(Json.decodeFromString(UnitStruct.serializer(), "{{}}") == UnitStruct) {{ "unit struct from {{}}" }}
+
+    println("JSON:" + Json.encodeToString(JsonData.serializer(), value))
+    println("JSON:" + Json.encodeToString(JsonData.serializer(), sample))
+
+    // Malformed and truncated input is rejected.
+    for (bad in listOf("", "{{}}", "[]", input.dropLast(1))) {{
+        val accepted = runCatching {{ Json.decodeFromString(JsonData.serializer(), bad) }}.isSuccess
+        check(!accepted) {{ "accepted bad input: $bad" }}
+    }}
+    // So is a variant the enum does not have, or one missing its payload.
+    for (bad in listOf("\"Missing\"", "\"NewType\"", "{{\"Unit\": null, \"Tuple\": [1, \"t\"]}}")) {{
+        val accepted = runCatching {{ Json.decodeFromString(Choice.serializer(), bad) }}.isSuccess
+        check(!accepted) {{ "accepted bad variant: $bad" }}
+    }}
+}}
+"#
+        ),
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    for output in &outputs {
+        let value: JsonData = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read Kotlin's JSON: {e}\n{output}"));
+        assert_eq!(value, sample(), "{output}");
+        // Rust ignores keys it does not know, so compare the JSON itself too.
+        let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+        assert_eq!(actual, expected, "{output}");
+    }
+}
+
+/// Round-trips an `App`, which holds a `kv::Entry`, which holds ROOT types,
+/// through JSON between `serde_json` and the generated Kotlin, whose modules
+/// name each other's types (and so their serializers) from the root package.
+#[test]
+fn test_kotlin_json_runtime_across_root_and_namespace() {
+    use common::across_namespaces::to_root::{App, Level, Outcome, Presence, Shared, kv};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&common::across_namespaces::to_root::get_registry())
+        .unwrap();
+
+    let app = App {
+        entry: kv::Entry {
+            shared: Shared { id: 7 },
+            level: Level::High,
+            outcome: Outcome::Score(42),
+            status: Presence::Offline,
+            local: kv::Presence { since: u64::MAX },
+        },
+        shared: Shared { id: 3 },
+    };
+    let reference = serde_json::to_vec(&app).unwrap();
+
+    let outputs = run_kotlin_json_main(
+        &dir,
+        r#"import com.example.testing.App
+import com.example.testing.Level
+import com.example.testing.Outcome
+import com.example.testing.Presence
+import com.example.testing.Shared
+import com.example.testing.kv.Entry
+import java.io.File
+import kotlinx.serialization.json.Json
+
+fun main() {
+    val expected = App(
+        Entry(
+            Shared(7u),
+            Level.HIGH,
+            Outcome.Score(42u),
+            Presence.OFFLINE,
+            com.example.testing.kv.Presence(ULong.MAX_VALUE),
+        ),
+        Shared(3u),
+    )
+    val app = Json.decodeFromString(App.serializer(), File("input.json").readText())
+    check(app == expected) { "app mismatch: $app" }
+    println("JSON:" + Json.encodeToString(App.serializer(), app))
+    println("JSON:" + Json.encodeToString(App.serializer(), expected))
+}
+"#,
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    for output in &outputs {
+        let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+        assert_eq!(actual, expected, "{output}");
+    }
 }
