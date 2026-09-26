@@ -398,6 +398,58 @@ fn test_that_swift_code_compiles_with_json() {
     assert!(status.success());
 }
 
+/// Types named like the JSON runtime's own build beside fields that use them,
+/// as the generated code qualifies those as `Serde.JsonKey` and so on (#205).
+#[test]
+fn test_that_swift_code_with_types_named_like_the_json_runtime_compiles() {
+    #[derive(Facet)]
+    #[facet(rename = "JsonKey")]
+    pub struct Key {
+        pub x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(rename = "JsonUnit")]
+    pub struct Unit {
+        pub x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(rename = "JsonChar")]
+    pub struct Char {
+        pub x: u32,
+    }
+
+    #[derive(Facet)]
+    #[facet(rename = "JsonUuid")]
+    pub struct Uuid {
+        pub x: u32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    pub enum Payload {
+        Empty {},
+        Renamed {
+            #[facet(rename = "a-char")]
+            c: char,
+        },
+    }
+
+    #[derive(Facet)]
+    pub struct App {
+        #[facet(rename = "a-unit")]
+        pub unit: (),
+        pub c: char,
+        pub id: uuid::Uuid,
+        pub map: BTreeMap<u32, char>,
+        pub payload: Payload,
+        pub types: (Key, Unit, Char, Uuid),
+    }
+
+    assert_installed_package_compiles(&reflect!(App).unwrap(), JsonPlugin);
+}
+
 // ---------------------------------------------------------------------------
 // Conformance compile-and-run tests
 //
