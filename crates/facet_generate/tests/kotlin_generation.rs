@@ -47,6 +47,8 @@ enum Encoding {
     Plain,
     Bincode,
     Json,
+    /// Bincode and JSON on one module.
+    Both,
 }
 
 /// The installer writes the package tree at the project root, but Gradle's
@@ -104,6 +106,7 @@ fn assert_generated_code_compiles_in(package: &str, registry: &Registry, encodin
     let installer = match encoding {
         Encoding::Bincode => installer.plugin(BincodePlugin),
         Encoding::Json => installer.plugin(JsonPlugin),
+        Encoding::Both => installer.plugin(BincodePlugin).plugin(JsonPlugin),
         Encoding::Plain => installer,
     };
     installer.generate(registry).unwrap();
@@ -165,11 +168,12 @@ fn test_that_kotlin_code_with_keyword_names_compiles() {
 /// qualified while the `data class Set` keeps its name.
 ///
 /// The fixture's `Set.value` is a `#[facet(fg::bytes)]` field, so this also
-/// covers `Bytes` being resolvable (and serializable) under both encodings.
+/// covers `Bytes` being resolvable (and serializable) under each encoding and
+/// both together, where Bincode's `Bytes` import hid JSON's alias (#204).
 #[test]
 fn test_that_kotlin_code_shadowing_builtin_names_compiles() {
     let registry = common::get_shadowing_registry();
-    for encoding in [Encoding::Bincode, Encoding::Json] {
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
         assert_generated_code_compiles(&registry, encoding);
     }
 }
@@ -212,4 +216,12 @@ fn test_that_kotlin_code_with_a_uuid_compiles() {
     for encoding in [Encoding::Plain, Encoding::Bincode, Encoding::Json] {
         assert_generated_code_compiles(&registry, encoding);
     }
+}
+
+/// A `Uuid` field compiles with Bincode and JSON on one module (#204).
+/// Bincode's `import java.util.UUID` hid JSON's annotated `UUID` alias:
+/// "Serializer has not been found for type 'UUID'."
+#[test]
+fn test_that_kotlin_code_with_a_uuid_compiles_with_both_plugins() {
+    assert_generated_code_compiles(&common::get_uuid_registry(), Encoding::Both);
 }

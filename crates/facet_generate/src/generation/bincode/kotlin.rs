@@ -831,12 +831,10 @@ impl EmitterPlugin<Kotlin> for BincodePlugin {
         // Feature-driven imports
         for feature in &config.features {
             match feature {
-                Feature::Bytes => {
+                // A UUID is written through `Bytes`; `import java.util.UUID`
+                // is the emitter's.
+                Feature::Bytes | Feature::Uuid => {
                     imports.push(format!("import {sp}.Bytes"));
-                }
-                Feature::Uuid => {
-                    imports.push(format!("import {sp}.Bytes"));
-                    imports.push("import java.util.UUID".to_string());
                 }
                 Feature::BigInt => {
                     // BigInteger is JVM-only; kept for backward compat.

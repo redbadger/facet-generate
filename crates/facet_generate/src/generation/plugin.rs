@@ -283,6 +283,16 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         Ok(())
     }
 
+    /// The type names [`module_helpers`](Self::module_helpers) declares at
+    /// module scope, such as a `typealias`.
+    ///
+    /// The Kotlin emitter leaves out any import of one of these names, from
+    /// itself or any plugin, since an explicit import would hide the
+    /// declaration.
+    fn module_declarations(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
+        vec![]
+    }
+
     // ----- type-level hooks -----
 
     /// Annotations to emit immediately before a type declaration.
