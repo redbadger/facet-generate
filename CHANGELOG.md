@@ -4,7 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [0.22.0] - 2026-09-27
 
-References **across namespaces** now generate code that compiles in every language: from the root namespace into a named one, from a named namespace back to the root, and between two named namespaces. Reflection now names every reference the way its type is registered, whatever wraps it, and rejects a reference to a type that isn't registered. Plugins get each generator's `requalify` and `requalify_format`, so they can name a type the way the emitter does, and can declare the types they name, so the module imports them. **JSON** now matches Rust: the `JsonPlugin` in Kotlin, C# and TypeScript reads and writes the JSON that Rust's `serde_json` does, and Swift JSON now builds and does the same. Generation checks namespaces before writing anything, and rejects one that collides with a type, the root package, another namespace or a builtin, where it used to write code that didn't compile. In Swift, the root target and a namespace that reference each other form a dependency cycle, which SwiftPM can't build, so generation now fails with an error naming the types involved. Kotlin tuples of four to twelve elements are now the runtime's `Tuple4` to `Tuple12`, and bincode writes a `char` as Rust does in C#, Swift and TypeScript. Some output that already compiled changes. Kotlin and C# JSON use the new wire format, so JSON stored in the old one won't decode. A C# `char` is now a `string`. Builtin shadowing in C# and Swift, and the namespace of a type held by a namespaced transparent wrapper, change slightly. A small tidy of the public API removes, renames or hides a few items. Reflection now rejects a field whose type it can't generate, which it used to leave out without a word, and an `#[facet(untagged)]` enum, which it generated as externally tagged. Generation likewise rejects a few shapes a language can't express, where it used to write code that didn't compile: a rename starting with a digit in Swift and C#, an `Option<Option<T>>` in C#, and a Swift external package at a URL with no version. See Breaking Changes for each. The enum fix below is also available for the 0.19 line as [0.19.1](#0191---2026-09-23). `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged at 0.18.0.
+This release makes generated code compile across namespaces, makes JSON match Rust's `serde_json`, and turns silently wrong output into errors. It comes with a [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs.
+
+- **References across namespaces compile in every language**: from the root namespace into a named one, from a named namespace back to the root, and between two named namespaces. Reflection names every reference the way its type is registered, whatever wraps it, and rejects a reference to a type that isn't registered.
+- **JSON matches Rust.** The `JsonPlugin` in Kotlin, C# and TypeScript reads and writes the JSON that Rust's `serde_json` does, and Swift JSON now builds and does the same.
+- **Errors instead of code that doesn't compile.** Generation checks namespaces before writing anything, and rejects one that collides with a type, the root package, another namespace or a builtin. Swift rejects a cycle between targets, which SwiftPM can't build. Reflection rejects a field whose type it can't generate, which it used to leave out, and an `#[facet(untagged)]` enum, which it generated as externally tagged. Generation also rejects a few shapes a language can't express: a rename starting with a digit in Swift and C#, an `Option<Option<T>>` in C#, and a Swift external package at a URL with no version.
+- **Plugins** get each generator's `requalify` and `requalify_format`, so they can name a type the way the emitter does, and can declare the types they name, so the module imports them.
+- **Kotlin** tuples of four to twelve elements are now the runtime's `Tuple4` to `Tuple12`, and **bincode** writes a `char` as Rust does in C#, Swift and TypeScript.
+
+Some output that already compiled changes:
+
+- Kotlin and C# JSON use the new wire format, so JSON stored in the old one won't decode.
+- A C# `char` is now a `string`.
+- Builtin shadowing in C# and Swift, and the namespace of a type held by a namespaced transparent wrapper, change slightly.
+- A small tidy of the public API removes, renames or hides a few items.
+
+See Breaking Changes for each. The enum fix below is also available for the 0.19 line as [0.19.1](#0191---2026-09-23). `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged at 0.18.0.
 
 Reported downstream as [redbadger/crux#603](https://github.com/redbadger/crux/issues/603).
 
