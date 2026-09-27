@@ -41,8 +41,8 @@ use indoc::formatdoc;
 use crate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, SERDE_NAMESPACE,
-        SourceInstaller,
+        CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
+        SERDE_NAMESPACE, SourceInstaller,
         collision::{self, Origin, TypeName},
         module::{self, Module},
         plugin::EmitterPlugin,
@@ -56,6 +56,68 @@ use crate::{
 
 /// Writes a complete Swift package — runtime sources, per-module generated
 /// code, and a `Package.swift` manifest — to the configured output directory.
+///
+/// # Sharing the runtime between packages
+///
+/// With a plugin, a generated package declares a `Serde` target for the
+/// runtime its code imports. So two such packages each declare one, and an
+/// app that depends on both fails to resolve, as `SwiftPM` refuses two targets
+/// with the same name in one graph.
+///
+/// Instead, generate the runtime on its own, as a package named `Serde` from
+/// an empty registry, and give each package an external package for the
+/// `serde` namespace that points at it. The installer then writes no runtime
+/// and no `Serde` target of its own, and each module's target depends on the
+/// `Serde` product of that package:
+///
+/// ```
+/// use facet::Facet;
+/// use facet_generate::{
+///     Registry,
+///     generation::{ExternalPackage, PackageLocation, bincode::BincodePlugin, swift},
+///     reflect,
+/// };
+///
+/// #[derive(Facet)]
+/// struct Order {
+///     id: u32,
+/// }
+///
+/// #[derive(Facet)]
+/// struct Invoice {
+///     total: u64,
+/// }
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// # let tmp = tempfile::tempdir()?;
+/// # let root = tmp.path();
+/// // The runtime alone, at `Serde/`.
+/// swift::Installer::new("Serde", root.join("Serde"))
+///     .plugin(BincodePlugin)
+///     .generate(&Registry::new())?;
+///
+/// // Each package names it as the `serde` namespace's package.
+/// let serde = ExternalPackage {
+///     for_namespace: "serde".to_string(),
+///     location: PackageLocation::Path("../Serde".to_string()),
+///     module_name: None,
+///     version: None,
+/// };
+/// swift::Installer::new("Orders", root.join("Orders"))
+///     .plugin(BincodePlugin)
+///     .external_packages(std::slice::from_ref(&serde))
+///     .generate(&reflect!(Order)?)?;
+/// swift::Installer::new("Invoices", root.join("Invoices"))
+///     .plugin(BincodePlugin)
+///     .external_packages(&[serde])
+///     .generate(&reflect!(Invoice)?)?;
+///
+/// let manifest = std::fs::read_to_string(root.join("Orders/Package.swift"))?;
+/// assert!(manifest.contains(r#"path: "../Serde""#));
+/// assert!(!root.join("Orders/Sources/Serde").exists());
+/// # Ok(())
+/// # }
+/// ```
 pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
@@ -149,15 +211,42 @@ impl Installer {
     ///
     /// # Errors
     ///
-    /// Returns an error if any file operation or code generation step fails,
-    /// and fails before writing anything when two modules would become the
-    /// same target, or when a module would refer to another by a name that
-    /// one of the types in scope there also has. Such output would not build,
-    /// or would lose a module; the error names the namespace and what it
+    /// Returns an error if any file operation or code generation step fails.
+    ///
+    /// Fails before writing anything when two modules would become the same
+    /// target, or when a module would refer to another by a name that one of
+    /// the types in scope there also has. Such output would not build, or
+    /// would lose a module; the error names the namespace and what it
     /// collides with.
+    ///
+    /// Also fails before writing anything when the targets would depend on
+    /// each other in a cycle, which `SwiftPM` rejects (the error names the
+    /// types along it), and when an external package at a
+    /// [`PackageLocation::Url`] has no [`version`](ExternalPackage::version),
+    /// which the manifest needs to give `SwiftPM` a requirement.
+    ///
+    /// Two packages generated with a plugin can't both be in one app, as each
+    /// declares a `Serde` target; see [sharing the runtime between
+    /// packages](Self#sharing-the-runtime-between-packages).
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
+        self.check_external_packages()?;
+
+        // Decide conformance over the whole registry, since a module's types
+        // can hold types from other modules.
+        self.conformance = Some(Arc::new(Conformance::of(registry, &self.external_packages)));
+
+        // Record every target's dependencies before writing anything, so that
+        // a cycle between them fails with the output directory untouched.
+        for (m, module_registry) in &modules {
+            if let Some((module_name, module_config)) =
+                self.plan_module(m.config(), module_registry)?
+            {
+                self.record_dependencies(&module_name, m.config(), &module_config);
+            }
+        }
+        self.check_acyclic()?;
 
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
@@ -188,10 +277,6 @@ impl Installer {
                 }
             }
         }
-
-        // Decide conformance over the whole registry, since a module's types
-        // can hold types from other modules.
-        self.conformance = Some(Arc::new(Conformance::of(registry, &self.external_packages)));
 
         // Install each namespace's module
         for (m, module_registry) in &modules {
@@ -443,6 +528,104 @@ impl Installer {
             updated_config.parent = Some(self.package_name.clone());
         }
         updated_config
+    }
+
+    /// The generator for a module whose config is `config`, with the
+    /// installer's plugins and, once decided, its conformance.
+    fn generator<'a>(&self, config: &'a CodeGeneratorConfig) -> SwiftCodeGenerator<'a> {
+        let mut generator = SwiftCodeGenerator::new(config).with_plugins(self.plugins.clone());
+        if let Some(conformance) = &self.conformance {
+            generator = generator.with_conformance(conformance.clone());
+        }
+        generator
+    }
+
+    /// The target name and generator config of the module split from the
+    /// registry as `config`, or `None` when an external package provides it.
+    fn plan_module(
+        &self,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+    ) -> Result<Option<(String, CodeGeneratorConfig)>, Error> {
+        if self.external_packages.contains_key(config.module_name()) {
+            return Ok(None);
+        }
+        let module_config = self
+            .generator(&self.module_config(config))
+            .module_config(registry)?;
+        Ok(Some((
+            config.module_name().to_upper_camel_case(),
+            module_config,
+        )))
+    }
+
+    /// Records the dependencies of the target `module_name`, split from the
+    /// registry as `config` and generated with `module_config`: the targets
+    /// whose types it references, the `Serde` runtime when there are plugins,
+    /// and the edges the plugins add.
+    fn record_dependencies(
+        &mut self,
+        module_name: &str,
+        config: &CodeGeneratorConfig,
+        module_config: &CodeGeneratorConfig,
+    ) {
+        let targets = self.targets.entry(module_name.to_string()).or_default();
+        let references = self
+            .target_references
+            .entry(module_name.to_string())
+            .or_default();
+        for (target, types) in &module_config.external_definitions {
+            targets.insert(target.to_upper_camel_case());
+            references
+                .entry(target.to_upper_camel_case())
+                .or_default()
+                .extend(types.iter().cloned());
+        }
+
+        // Depend on the Serde target when the installer has plugins
+        // (i.e. serialization code will be generated).
+        if !self.plugins.is_empty() {
+            targets.insert("Serde".to_string());
+        }
+
+        // Plugin-provided target edges (e.g. `.product(name: "Shared", …)`)
+        // belong to this module's target, not to the runtime targets.
+        let plugin_target_dependencies: Vec<String> = self
+            .plugins
+            .iter()
+            .flat_map(|p| p.target_dependencies(config))
+            .collect();
+        if !plugin_target_dependencies.is_empty() {
+            self.plugin_target_dependencies
+                .entry(module_name.to_string())
+                .or_default()
+                .extend(plugin_target_dependencies);
+        }
+    }
+
+    /// Fails when an external package at a URL has no
+    /// [`version`](ExternalPackage::version). `SwiftPM` needs a requirement
+    /// for a package it fetches, and the manifest gives it as
+    /// `from: "<version>"`.
+    fn check_external_packages(&self) -> Result<(), Error> {
+        for package in self.external_packages.values() {
+            if let PackageLocation::Url(url) = &package.location
+                && package.version.is_none()
+            {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "Swift: the external package for namespace `{}` at `{url}` has no \
+                         version, and SwiftPM needs one to fetch it. Set its `version`, which \
+                         the manifest writes as `from: \"<version>\"`, or give its location \
+                         as a `PackageLocation::Path`",
+                        package.for_namespace
+                    ),
+                )
+                .into());
+            }
+        }
+        Ok(())
     }
 
     /// Installs the Serde Swift runtime sources into the output directory and
@@ -822,45 +1005,12 @@ impl SourceInstaller for Installer {
         // The references the registry and the plugins make decide both the
         // module's imports and its target's dependencies, so the generator
         // works out its config once and the installer reads the edges from it.
-        let mut generator =
-            SwiftCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
-        if let Some(conformance) = &self.conformance {
-            generator = generator.with_conformance(conformance.clone());
-        }
+        let generator = self.generator(&updated_config);
         let module_config = generator.module_config(registry)?;
 
-        let targets = self.targets.entry(module_name.clone()).or_default();
-        let references = self
-            .target_references
-            .entry(module_name.clone())
-            .or_default();
-        for (target, types) in &module_config.external_definitions {
-            targets.insert(target.to_upper_camel_case());
-            references
-                .entry(target.to_upper_camel_case())
-                .or_default()
-                .extend(types.iter().cloned());
-        }
-
-        // Depend on the Serde target when the installer has plugins
-        // (i.e. serialization code will be generated).
-        if !self.plugins.is_empty() {
-            targets.insert("Serde".to_string());
-        }
-
-        // Plugin-provided target edges (e.g. `.product(name: "Shared", …)`)
-        // belong to this module's target, not to the runtime targets.
-        let plugin_target_dependencies: Vec<String> = self
-            .plugins
-            .iter()
-            .flat_map(|p| p.target_dependencies(config))
-            .collect();
-        if !plugin_target_dependencies.is_empty() {
-            self.plugin_target_dependencies
-                .entry(module_name.clone())
-                .or_default()
-                .extend(plugin_target_dependencies);
-        }
+        // `generate` has recorded these already, to check for a cycle before
+        // writing anything; recording them again changes nothing.
+        self.record_dependencies(&module_name, config, &module_config);
 
         let dir_path = self.install_dir.join("Sources").join(&module_name);
         std::fs::create_dir_all(&dir_path)?;
@@ -884,8 +1034,10 @@ impl SourceInstaller for Installer {
     /// # Errors
     ///
     /// Fails, without writing the manifest, when the targets' dependencies
-    /// form a cycle.
+    /// form a cycle, or when an external package at a URL has no version.
+    /// [`generate`](Installer::generate) checks both before writing anything.
     fn install_manifest(&self, package_name: &str) -> std::result::Result<(), Error> {
+        self.check_external_packages()?;
         self.check_acyclic()?;
 
         let manifest = self.make_manifest(package_name);

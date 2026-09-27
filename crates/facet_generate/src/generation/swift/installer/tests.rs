@@ -1083,8 +1083,19 @@ fn namespace_referencing_root_depends_on_the_root_target() {
     assert!(kv.contains("public var shared: Example.Shared\n"), "{kv}");
 }
 
+/// Fails when `dir` has anything in it: an installer that rejects its input
+/// does so before writing anything (#243).
+fn assert_nothing_written(dir: &std::path::Path) {
+    let written: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert!(written.is_empty(), "{written:?}");
+}
+
 /// ROOT and `kv` referencing each other would make their targets depend on
-/// each other, which `SwiftPM` rejects, so no manifest is written.
+/// each other, which `SwiftPM` rejects, so nothing is written, not even the
+/// runtime.
 #[test]
 fn root_and_namespace_referencing_each_other_is_rejected() {
     #[derive(Facet)]
@@ -1113,7 +1124,7 @@ fn root_and_namespace_referencing_each_other_is_rejected() {
          Move the types that one of these targets references into a namespace of their \
          own (`#[facet(fg::namespace = \"…\")]`), which the targets can both depend on"
     );
-    assert!(!install_dir.path().join("Package.swift").exists());
+    assert_nothing_written(install_dir.path());
 }
 
 /// The same for two named namespaces.
@@ -1140,7 +1151,8 @@ fn namespaces_referencing_each_other_are_rejected() {
 
     let registry = reflect!(Up).unwrap();
 
-    let error = Installer::new("Example", tempfile::tempdir().unwrap().path())
+    let install_dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("Example", install_dir.path())
         .generate(&registry)
         .unwrap_err()
         .to_string();
@@ -1149,6 +1161,40 @@ fn namespaces_referencing_each_other_are_rejected() {
         error.contains("`A` references `Down` in `B`; `B` references `Up` in `A`."),
         "{error}"
     );
+    assert_nothing_written(install_dir.path());
+}
+
+/// `SwiftPM` needs a version for a package at a URL, which would otherwise be
+/// written `from: ""`, so nothing is written (#243).
+#[test]
+fn an_external_package_at_a_url_with_no_version_is_rejected() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let install_dir = tempfile::tempdir().unwrap();
+    let error = Installer::new("MyPackage", install_dir.path())
+        .external_packages(&[ExternalPackage {
+            for_namespace: "kit".to_string(),
+            location: PackageLocation::Url("https://github.com/acme/kit".to_string()),
+            module_name: None,
+            version: None,
+        }])
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Swift: the external package for namespace `kit` at `https://github.com/acme/kit` \
+         has no version, and SwiftPM needs one to fetch it. Set its `version`, which the \
+         manifest writes as `from: \"<version>\"`, or give its location as a \
+         `PackageLocation::Path`"
+    );
+    assert_nothing_written(install_dir.path());
 }
 
 /// A plugin whose output, in the module `module`, names `types`.
@@ -1293,7 +1339,7 @@ fn a_plugin_s_reference_that_closes_a_cycle_is_rejected() {
          Move the types that one of these targets references into a namespace of their \
          own (`#[facet(fg::namespace = \"…\")]`), which the targets can both depend on"
     );
-    assert!(!install_dir.path().join("Package.swift").exists());
+    assert_nothing_written(install_dir.path());
 }
 
 /// A ROOT type a plugin names in a namespaced module makes it import, and
