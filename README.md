@@ -705,7 +705,7 @@ keep the compact parameter-property form. Kotlin soft keywords such as `value`, 
 `import` and `data` are ordinary identifiers and are left alone.
 
 Plugins that derive identifiers from field or variant names should use the same helpers the
-emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
+emitters use — `swift::field_name`, `swift::case_name`, `kotlin::field_name`,
 `kotlin::variant_class_name`, `kotlin::enum_constant_name`, `typescript::param_name` and
 `csharp::escape_identifier`, with `swift::escape_identifier`, `kotlin::escape_identifier` and
 `typescript::is_reserved_word` as the lower-level escapes — so their output agrees with the

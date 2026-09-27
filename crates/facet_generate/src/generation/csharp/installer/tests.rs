@@ -24,6 +24,7 @@ use crate::{
         plugin::{CompanionFile, EmitterPlugin},
     },
     reflect,
+    reflection::format::QualifiedTypeName,
 };
 
 #[test]
@@ -585,4 +586,56 @@ fn url_package_reference_name_and_version() {
     ] {
         assert_eq!(reference(url, module_name, version), expected, "{url}");
     }
+}
+
+/// A plugin whose output, in the module `module`, names `types`.
+#[derive(Debug)]
+struct ReferencesPlugin {
+    module: &'static str,
+    types: Vec<QualifiedTypeName>,
+}
+
+impl EmitterPlugin<CSharp> for ReferencesPlugin {
+    fn referenced_types(&self, config: &CodeGeneratorConfig) -> Vec<QualifiedTypeName> {
+        if config.module_name() == self.module {
+            self.types.clone()
+        } else {
+            vec![]
+        }
+    }
+}
+
+/// A plugin naming a type the registry does not have is a bug in the plugin,
+/// though C# writes the reference fully qualified and needs nothing from it.
+#[test]
+fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
+    #[derive(Facet)]
+    struct App {
+        id: u32,
+    }
+
+    let registry = reflect!(App).unwrap();
+    let error = Installer::new("Example.Types", tempfile::tempdir().unwrap().path())
+        .plugin(ReferencesPlugin {
+            module: "Example.Types",
+            types: vec![QualifiedTypeName::namespaced(
+                "kit".to_string(),
+                "Presence".to_string(),
+            )],
+        })
+        .generate(&registry)
+        .unwrap_err();
+
+    let crate::generation::Error::Io(error) = error else {
+        panic!("expected an I/O error, got {error:?}");
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    let error = error.to_string();
+    assert!(
+        error.ends_with(
+            "declares that module `Example.Types` references `kit::Presence`, which is not a \
+             type in the registry"
+        ),
+        "{error}"
+    );
 }

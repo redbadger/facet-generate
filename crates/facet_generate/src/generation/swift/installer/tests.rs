@@ -1335,9 +1335,13 @@ fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
             types: vec![kit_presence()],
         })
         .generate(&registry)
-        .unwrap_err()
-        .to_string();
+        .unwrap_err();
 
+    let crate::generation::Error::Io(error) = error else {
+        panic!("expected an I/O error, got {error:?}");
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    let error = error.to_string();
     assert!(
         error.ends_with(
             "declares that module `Example` references `kit::Presence`, which is not a \

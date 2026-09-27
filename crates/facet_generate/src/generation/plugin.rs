@@ -648,27 +648,6 @@ pub(crate) fn referenced_types<L>(
     Ok(names)
 }
 
-/// Invoke a writer-accepting plugin method across all plugins in order.
-///
-/// Returns the first error encountered, if any.
-///
-/// # Errors
-///
-/// Returns an error if any plugin fails to write.
-pub fn write_from_plugins<L, F>(
-    plugins: &[Arc<dyn EmitterPlugin<L>>],
-    w: &mut dyn IndentWrite,
-    f: F,
-) -> io::Result<()>
-where
-    F: Fn(&dyn EmitterPlugin<L>, &mut dyn IndentWrite) -> io::Result<()>,
-{
-    for plugin in plugins {
-        f(plugin.as_ref(), w)?;
-    }
-    Ok(())
-}
-
 /// Collect the companion files of every plugin, rendering each one's header
 /// with `write_header` (which receives the file's extra imports and returns the
 /// rendered module header).

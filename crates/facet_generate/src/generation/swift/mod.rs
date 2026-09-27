@@ -45,6 +45,6 @@ pub use installer::Installer;
 /// On Windows, replaces backslashes with forward slashes to avoid
 /// Swift interpreting them as escape sequences.
 #[must_use]
-pub fn normalize_path(path: &str) -> String {
+pub(crate) fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
 }

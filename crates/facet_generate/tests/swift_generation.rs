@@ -16,9 +16,7 @@ use facet_generate::{
         bincode::BincodePlugin,
         json::JsonPlugin,
         plugin::EmitterPlugin,
-        swift::{
-            Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator, normalize_path,
-        },
+        swift::{Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator},
     },
     reflect,
 };
@@ -203,7 +201,8 @@ let package = Package(
     ]
 )
 "#,
-            normalize_path(serde_package_path.to_str().unwrap())
+            // Swift reads a backslash in a string literal as an escape.
+            serde_package_path.to_str().unwrap().replace('\\', "/")
         )
         .unwrap();
     }

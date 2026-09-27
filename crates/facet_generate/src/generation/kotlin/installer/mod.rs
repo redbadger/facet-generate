@@ -287,6 +287,8 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
+    // Hidden: only the tests call this, and its shape differs by language.
+    #[doc(hidden)]
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));
@@ -315,6 +317,8 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
+    // Hidden: only the tests call this, and its shape differs by language.
+    #[doc(hidden)]
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));

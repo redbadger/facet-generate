@@ -16,7 +16,7 @@ use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::{Kotlin, naming, property_name},
+    kotlin::{Kotlin, field_name, naming},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
@@ -669,7 +669,7 @@ fn write_data_class_top_level<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         push_serializer(&mut w)?;
         for field in fields {
-            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
+            write_serialize(&mut w, &field_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -690,12 +690,7 @@ fn write_data_class_top_level<W: IndentWrite>(
             } else {
                 push_deserializer(&mut w)?;
                 for field in fields {
-                    write_deserialize(
-                        &mut w,
-                        Some(&property_name(&field.name)),
-                        &field.value,
-                        true,
-                    )?;
+                    write_deserialize(&mut w, Some(&field_name(&field.name)), &field.value, true)?;
                 }
                 pop_deserializer(&mut w)?;
                 write!(w, "return {name}(")?;
@@ -703,7 +698,7 @@ fn write_data_class_top_level<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", property_name(&field.name))?;
+                    write!(w, "{}", field_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
@@ -731,7 +726,7 @@ fn write_data_class_variant<W: IndentWrite>(
         push_serializer(&mut w)?;
         writeln!(w, "serializer.serialize_variant_index({variant_index})")?;
         for field in fields {
-            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
+            write_serialize(&mut w, &field_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -749,12 +744,7 @@ fn write_data_class_variant<W: IndentWrite>(
             } else {
                 push_deserializer(&mut w)?;
                 for field in fields {
-                    write_deserialize(
-                        &mut w,
-                        Some(&property_name(&field.name)),
-                        &field.value,
-                        true,
-                    )?;
+                    write_deserialize(&mut w, Some(&field_name(&field.name)), &field.value, true)?;
                 }
                 pop_deserializer(&mut w)?;
                 write!(w, "return {name}(")?;
@@ -762,7 +752,7 @@ fn write_data_class_variant<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", property_name(&field.name))?;
+                    write!(w, "{}", field_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }

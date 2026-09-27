@@ -336,7 +336,7 @@ fn write_property<W: IndentWrite>(
         write!(w, "{annotation} ")?;
     }
 
-    let name = &property_name(&field.name);
+    let name = &field_name(&field.name);
     write!(w, "val {name}: ")?;
 
     field.value.write(w, lang)?;
@@ -601,7 +601,7 @@ pub fn enum_constant_name(variant_name: &str) -> String {
 /// argument derived from a field name should route it through this so the
 /// result matches the emitter.
 #[must_use]
-pub fn property_name(name: &str) -> String {
+pub fn field_name(name: &str) -> String {
     escape_identifier(&name.to_lower_camel_case()).into_owned()
 }
 

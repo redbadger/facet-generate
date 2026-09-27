@@ -20,7 +20,7 @@ use crate::{
         indent::IndentedWriter,
         module::Module,
         naming::check_reserved_names,
-        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
+        plugin::{self, CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -68,17 +68,38 @@ impl<'a> CSharpCodeGenerator<'a> {
         self
     }
 
+    /// The config the module for `registry` is written with: this generator's
+    /// config, completed from the registry.
+    ///
+    /// Asks each plugin for its
+    /// [`referenced_types`](EmitterPlugin::referenced_types) only to check
+    /// them: C# writes every reference fully qualified, so a reference
+    /// adds no import.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a plugin declares a reference to a type that is not
+    /// in the registry.
+    fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
+        plugin::referenced_types(&self.plugins, &config)?;
+        Ok(config)
+    }
+
     /// Output type definitions for `registry`.
     ///
     /// # Errors
     ///
-    /// Returns an error if writing to `out` fails.
+    /// Returns an error if writing to `out` fails, or an
+    /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) one, before writing
+    /// anything, if the registry has a name the generated code cannot use or
+    /// a plugin declares a reference to a type that is not in the registry.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
+        let config = self.module_config(registry)?;
         check_reserved_names(registry, &naming::RULES)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
@@ -108,11 +129,10 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if rendering a header fails.
+    /// Returns an error if rendering a header fails, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
+        let config = self.module_config(registry)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
