@@ -17,9 +17,9 @@
 //! <!-- generated:swift:end -->
 //! ```
 //!
-//! Run `UPDATE_EXPECT=1 cargo test -p facet_generate --test readme` (or
-//! `just test`, which enables snapshot updates) to rewrite the README blocks
-//! from the real generator output.
+//! Run `UPDATE_EXPECT=1 cargo test -p facet_generate --test readme` (or set
+//! `UPDATE_README`) to rewrite the README blocks from the real generator
+//! output. `just test` doesn't set either, so it only checks them.
 
 #![cfg(all(
     feature = "swift",

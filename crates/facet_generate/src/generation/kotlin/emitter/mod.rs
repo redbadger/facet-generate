@@ -371,7 +371,6 @@ pub enum VariantContext {
 }
 
 impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
-    #[allow(clippy::too_many_lines)]
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let (
             Named {

@@ -133,6 +133,10 @@ pub struct CodeGeneratorConfig {
 pub enum Feature {
     BigInt,
     Bytes,
+    /// A `char`. The bincode plugins write it as its UTF-8 bytes, as Rust's
+    /// `bincode` does, through helpers a module holding one declares, and
+    /// C# and Swift JSON declare an adapter that reads and writes exactly one
+    /// Unicode scalar value.
     Char,
     ListOfT,
     MapOfT,

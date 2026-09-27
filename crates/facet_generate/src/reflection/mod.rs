@@ -200,15 +200,20 @@ struct NamespaceSource {
 }
 
 impl RegistryBuilder {
+    /// Creates an empty builder. Add types with [`add_type`](Self::add_type),
+    /// then call [`build`](Self::build).
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Builds the registry from the current state.
+    ///
     /// # Errors
-    /// Will return an error with a suitable error message if the registry is invalid,
-    /// usually due to incomplete reflection.
+    /// Will return an error if:
+    /// * the registry is invalid, usually due to incomplete reflection, or
+    /// * a type reference names no registered container
+    ///   ([`Error::DanglingTypeReference`]), which is a reflection bug.
     pub fn build(self) -> Result<Registry, Error> {
         for (type_name, format) in &self.registry {
             if let Err(err) = format.visit(&mut |_| Ok(())) {

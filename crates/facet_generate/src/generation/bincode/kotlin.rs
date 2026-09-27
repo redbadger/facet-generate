@@ -414,7 +414,7 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     write_serialize(&mut w, "value", value_format, level + 1)
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,

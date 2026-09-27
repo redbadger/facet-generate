@@ -7,9 +7,9 @@
 //! hand is tedious and error-prone; this crate automates it.
 //!
 //! Optionally, when a plugin such as [`BincodePlugin`](generation::bincode::BincodePlugin) or
-//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated types include
-//! `serialize` / `deserialize` methods and the appropriate runtime library is installed
-//! alongside the generated code.
+//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated code includes
+//! serialization for that format and the runtime library it needs is installed alongside the
+//! generated code.
 //!
 //! # Modules
 //!
@@ -148,7 +148,7 @@
 //! ## Compilation tests (`tests/<lang>_generation.rs`)
 //!
 //! Integration tests that generate code **and** a project scaffold into a temporary directory,
-//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `tsc`).
+//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `deno check`).
 //! They verify that the generated code is syntactically and type-correct in the target language.
 //! Each file is feature-gated (e.g. `#![cfg(feature = "kotlin")]`) so tests only run when the
 //! corresponding toolchain is available.
