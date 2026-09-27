@@ -22,7 +22,7 @@
 //!    etc.) are embedded as `include_bytes!` snippets and emitted as needed.
 //!
 //! 3. **installer** — Project scaffolding. [`Installer`](crate::generation::kotlin::Installer) implements
-//!    [`SourceInstaller`](crate::generation::SourceInstaller) to write a ready-to-build
+//!    [`SourceInstaller`](crate::generation::SourceInstaller) to write a
 //!    Kotlin project: it copies serde/bincode runtime sources, splits the
 //!    registry by namespace into per-module files, and generates a
 //!    `build.gradle.kts` manifest.

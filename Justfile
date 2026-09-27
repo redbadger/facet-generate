@@ -19,11 +19,12 @@ clean:
     cargo clean
     rm -rf crates/facet_generate/runtime/swift/.build
 
-# runs tests
+# runs tests (nextest doesn't run doctests, so they run separately)
 [unix]
 test:
     @echo '{{ style("command") }}test:{{ NORMAL }}'
     cargo nextest run --all-features
+    cargo test --doc --all-features
 
 # Windows runs Gradle around twelve times slower than Linux: the same Kotlin
 # compile test that takes 86s on a Linux runner does not finish inside ten
@@ -36,6 +37,7 @@ test:
 test:
     @echo '{{ style("command") }}test: (Kotlin toolchain tests skipped on Windows){{ NORMAL }}'
     cargo nextest run --all-features -E 'not binary(~kotlin)'
+    cargo test --doc --all-features
 
 # runs Swift runtime tests (macOS and Linux only)
 [unix]

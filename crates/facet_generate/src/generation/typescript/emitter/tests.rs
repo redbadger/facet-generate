@@ -5,7 +5,7 @@
 //! generated TypeScript source against an [`insta`] inline snapshot.
 //!
 //! Because no plugins are configured, the output contains only plain type declarations
-//! (`export class`, `export abstract class` + variant subclasses) with no
+//! (`export class` for structs, discriminated-union `export type` for enums) with no
 //! `serialize`/`deserialize` methods.
 //!
 //! # Coverage

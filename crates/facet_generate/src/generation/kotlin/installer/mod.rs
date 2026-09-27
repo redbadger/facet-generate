@@ -1,4 +1,7 @@
-//! Project scaffolding — writes a ready-to-build Kotlin project to disk.
+//! Project scaffolding — writes a Kotlin project to disk.
+//!
+//! The sources are written at the project root, not in `src/main/kotlin`, so
+//! the project does not build with `gradle build` until they are moved (#241).
 //!
 //! The [`Installer`] is the final stage of the Kotlin generation pipeline.
 //! While [`KotlinCodeGenerator`] produces the *contents* of a single source file,
@@ -345,7 +348,8 @@ impl Installer {
 
     /// Produces the contents of a `build.gradle.kts` file.
     ///
-    /// Includes `kotlinx-serialization-json` when not using bincode, and adds
+    /// Includes `kotlinx-serialization-json` when [`JsonPlugin`](crate::generation::json::JsonPlugin)
+    /// is configured, as that plugin's manifest dependency, and adds
     /// `implementation(files(…))` or `implementation("artifact:version")` for
     /// each configured external package.
     #[must_use]

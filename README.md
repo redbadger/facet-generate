@@ -2,11 +2,24 @@
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, TypeScript, and C#. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
+## Documentation
+
+The [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs covers the crate in more depth:
+
+- [Why `facet_generate`, and how it compares](https://docs.rs/facet_generate/latest/facet_generate/guide/motivation/index.html): the problem it solves, and how it differs from UniFFI, typeshare, serde-generate, ts-rs and specta.
+- [Supported types](https://docs.rs/facet_generate/latest/facet_generate/guide/supported_types/index.html): every Rust type the reflector accepts, what it becomes in each language, and what is rejected.
+- [Serialization](https://docs.rs/facet_generate/latest/facet_generate/guide/serialization/index.html): what the bincode and JSON plugins generate, and how their output lines up with Rust's `bincode` and `serde_json`.
+- [Swift](https://docs.rs/facet_generate/latest/facet_generate/guide/swift/index.html), [Kotlin](https://docs.rs/facet_generate/latest/facet_generate/guide/kotlin/index.html), [C#](https://docs.rs/facet_generate/latest/facet_generate/guide/csharp/index.html) and [TypeScript](https://docs.rs/facet_generate/latest/facet_generate/guide/typescript/index.html): the installer, the package it writes, runtimes, namespaces, external packages and toolchains.
+- [Writing a plugin](https://docs.rs/facet_generate/latest/facet_generate/guide/plugins/index.html): extending the generated code through `EmitterPlugin`.
+- [Contributing](https://docs.rs/facet_generate/latest/facet_generate/guide/contributing/index.html): how the crate's own tests are organised.
+
 ## Usage
 
 ```sh
-cargo add facet facet_generate
+cargo add facet facet_generate facet-generate-attrs
 ```
+
+The `#[facet(fg::…)]` attributes expand to paths in `facet_generate_attrs`, so a crate that uses them must depend on `facet-generate-attrs` directly.
 
 ```rust
 use facet::Facet;
@@ -753,7 +766,7 @@ accepted, while an enum with both a `Bytes` variant and a `#[facet(bytes)]` fiel
 
 ### Skipping struct fields or enum variants
 
-You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)]` to prevent Facet from recursing through).
+You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. `#[facet(opaque)]` also leaves a field out, without reflecting its type, which is useful for a type the generator doesn't support.
 
 ```rust
 #[derive(Facet)]
