@@ -169,6 +169,10 @@ pub mod error;
 pub mod generation;
 pub mod reflection;
 
+/// Re-exported for the `reflect!` macro, so that its callers don't need `anyhow` themselves.
+#[doc(hidden)]
+pub use anyhow as __anyhow;
+
 #[cfg(test)]
 mod tests;
 
@@ -222,7 +226,7 @@ macro_rules! emit {
         emit!($($ty),* as $language with)
     };
     ($($ty:ident),* as $language:ident with $($plugin:expr),* $(,)?) => {
-        || -> anyhow::Result<String> {
+        || -> $crate::__anyhow::Result<String> {
             use $crate::generation::{Container, Emitter as _, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
@@ -253,12 +257,12 @@ macro_rules! emit {
 #[macro_export]
 macro_rules! reflect {
     ($($ty:ident),*) => {
-        || -> anyhow::Result<std::collections::BTreeMap<$crate::reflection::format::QualifiedTypeName, $crate::reflection::format::ContainerFormat>> {
+        || -> $crate::__anyhow::Result<::std::collections::BTreeMap<$crate::reflection::format::QualifiedTypeName, $crate::reflection::format::ContainerFormat>> {
             let registry = $crate::reflection::RegistryBuilder::new()
-                $(.add_type::<$ty>().map_err(|e| anyhow::anyhow!("failed to add type {}: {}", stringify!($ty), e))?)*
+                $(.add_type::<$ty>().map_err(|e| $crate::__anyhow::anyhow!("failed to add type {}: {}", stringify!($ty), e))?)*
                 .build()
-                .map_err(|e| anyhow::anyhow!("failed to build registry: {e}"))?;
-            Ok(registry)
+                .map_err(|e| $crate::__anyhow::anyhow!("failed to build registry: {e}"))?;
+            ::core::result::Result::Ok(registry)
         }()
     };
 }

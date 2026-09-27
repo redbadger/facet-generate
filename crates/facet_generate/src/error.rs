@@ -10,6 +10,23 @@ pub enum Error {
         "unsupported generic type: {0}, the type may have already been used with different parameters"
     )]
     UnsupportedGenericType(String),
+    /// A field whose type, or a type within it, can't be generated, such as `Result` or
+    /// `std::time::Duration`. Mark the field `#[facet(skip)]` or `#[facet(opaque)]` to leave it
+    /// out of the generated type.
+    #[error(
+        "field `{field}` of `{container}` has type `{field_type}`, which can't be generated because `{unsupported}` is not supported. Mark the field `#[facet(skip)]` or `#[facet(opaque)]` to leave it out, or change its type"
+    )]
+    UnsupportedFieldType {
+        container: String,
+        field: String,
+        field_type: String,
+        unsupported: String,
+    },
+    /// An enum marked `#[facet(untagged)]`, which isn't supported.
+    #[error(
+        r#"enum `{0}` is `#[facet(untagged)]`, which is not supported. Use an externally, internally (`#[facet(tag = "...")]`) or adjacently (`#[facet(tag = "...", content = "...")]`) tagged representation"#
+    )]
+    UntaggedEnum(String),
     #[error("unsupported layout: {0}")]
     LayoutUnsized(String),
     #[error(

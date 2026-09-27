@@ -9,6 +9,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 derive_builder = "0.20"
 facet.workspace = true
 facet-generate-attrs.workspace = true
@@ -26,7 +27,6 @@ thiserror = "2.0"
 bincode = "=1"
 chrono = "0.4.45"
 difficient = "0.1.0"
-anyhow.workspace = true
 expect-test.workspace = true
 facet = { workspace = true, features = ["chrono", "url", "bytes", "uuid", "tuples-12"] }
 uuid = { version = "1", features = ["v4", "serde"] }

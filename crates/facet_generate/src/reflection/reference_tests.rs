@@ -569,10 +569,32 @@ fn std_user_structs_with_a_scalar_def_are_containers_everywhere() {
     );
 }
 
-/// A type reflection doesn't support, such as `Result`, is skipped where it always was, rather
-/// than panicking: here, as an element of a tuple struct or a tuple variant.
+/// The error from reflecting `T`, which must be an [`Error::UnsupportedFieldType`], as
+/// `[container, field, field type, unsupported type]`.
+fn unsupported_field<'a, T: Facet<'a>>() -> [String; 4] {
+    match RegistryBuilder::new().add_type::<T>() {
+        Err(Error::UnsupportedFieldType {
+            container,
+            field,
+            field_type,
+            unsupported,
+        }) => [container, field, field_type, unsupported],
+        Err(err) => panic!("unexpected error: {err:?}"),
+        Ok(_) => panic!("reflection unexpectedly succeeded"),
+    }
+}
+
+fn strings<const N: usize>(parts: [&str; N]) -> [String; N] {
+    parts.map(ToString::to_string)
+}
+
+/// A type reflection doesn't support, such as `Result`, is an error rather than being left out
+/// (#235): here, as an element of a newtype, a tuple struct or a tuple variant.
 #[test]
-fn an_unsupported_type_in_a_tuple_position_is_skipped() {
+fn an_unsupported_type_in_a_tuple_position_is_an_error() {
+    #[derive(Facet)]
+    pub struct Wrapper(pub std::time::Duration);
+
     #[derive(Facet)]
     pub struct Pair(pub u8, pub Result<u32, String>);
 
@@ -580,42 +602,54 @@ fn an_unsupported_type_in_a_tuple_position_is_skipped() {
     #[repr(C)]
     #[allow(dead_code)]
     pub enum Event {
-        Tuple(Result<u32, String>, u8),
+        Tuple(u8, Result<u32, String>),
     }
 
-    let registry = reflect!(Pair, Event).unwrap();
     assert_eq!(
-        registry[&QualifiedTypeName::root("Pair".to_string())],
-        ContainerFormat::TupleStruct(vec![Format::U8], Doc::default()),
+        unsupported_field::<Wrapper>(),
+        strings(["Wrapper", "0", "Duration", "Duration"]),
     );
-    let ContainerFormat::Enum(variants, _, _) =
-        &registry[&QualifiedTypeName::root("Event".to_string())]
-    else {
-        panic!("not an enum");
-    };
-    assert_eq!(variants[&0].value, VariantFormat::Tuple(vec![Format::U8]));
+    assert_eq!(
+        unsupported_field::<Pair>(),
+        strings(["Pair", "1", "Result<u32, String>", "Result<u32, String>"]),
+    );
+    assert_eq!(
+        unsupported_field::<Event>(),
+        strings([
+            "Event::Tuple",
+            "1",
+            "Result<u32, String>",
+            "Result<u32, String>"
+        ]),
+    );
 }
 
-/// An optional payload of an unsupported scalar is skipped, as a payload of the scalar itself is,
-/// making a unit variant.
+/// A payload of an unsupported scalar, optional or not, is an error rather than making a unit
+/// variant.
 #[test]
-fn an_optional_unsupported_scalar_payload_is_skipped() {
+fn an_unsupported_scalar_payload_is_an_error() {
     #[derive(Facet)]
     #[repr(C)]
     #[allow(dead_code)]
-    pub enum Event {
+    pub enum Wait {
         Wait(Option<std::time::Duration>),
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    pub enum Pause {
         Pause(std::time::Duration),
     }
 
-    let registry = reflect!(Event).unwrap();
-    let ContainerFormat::Enum(variants, _, _) =
-        &registry[&QualifiedTypeName::root("Event".to_string())]
-    else {
-        panic!("not an enum");
-    };
-    assert_eq!(variants[&0].value, VariantFormat::Unit);
-    assert_eq!(variants[&1].value, VariantFormat::Unit);
+    assert_eq!(
+        unsupported_field::<Wait>(),
+        strings(["Wait::Wait", "0", "Option<Duration>", "Duration"]),
+    );
+    assert_eq!(
+        unsupported_field::<Pause>(),
+        strings(["Pause::Pause", "0", "Duration", "Duration"]),
+    );
 }
 
 /// An array in a tuple position is one element, not the array followed by its element type.
@@ -642,44 +676,119 @@ fn an_array_in_a_tuple_position_is_one_element() {
     );
 }
 
-/// A field whose type contains an unsupported type such as `Result`, however it is wrapped, is
-/// skipped in every position, and no other field is lost with it.
+/// A field whose type contains an unsupported type such as `Result`, however it is wrapped, is an
+/// error, in a struct and in a struct variant, naming the container, the field, its type and the
+/// unsupported type within it.
 #[test]
-fn an_unsupported_type_anywhere_in_a_field_is_skipped() {
-    #[derive(Facet)]
-    pub struct Leaf {
-        pub id: u32,
+fn an_unsupported_type_anywhere_in_a_field_is_an_error() {
+    macro_rules! field_of_type {
+        ($($name:ident: $ty:ty => $field_type:literal, $unsupported:literal;)*) => {$(
+            #[derive(Facet)]
+            pub struct $name {
+                pub kept: u8,
+                pub field: $ty,
+            }
+            assert_eq!(
+                unsupported_field::<$name>(),
+                strings([stringify!($name), "field", $field_type, $unsupported]),
+            );
+        )*};
     }
 
-    #[derive(Facet)]
-    pub struct Holder {
-        pub seq: Vec<Result<u8, String>>,
-        pub option: Option<Result<u8, String>>,
-        pub tuple: (u8, Result<u8, String>),
-        pub kept: Leaf,
-    }
+    field_of_type!(
+        Seq: Vec<Result<u8, String>> => "Vec<Result<u8, String>>", "Result<u8, String>";
+        Opt: Option<Result<u8, String>> => "Option<Result<u8, String>>", "Result<u8, String>";
+        Tuple: (u8, Result<u8, String>) => "(u8, Result<u8, String>)", "Result<u8, String>";
+        Map: HashMap<String, std::time::Duration> => "HashMap<String, Duration>", "Duration";
+        Url: url::Url => "Url", "Url";
+        Date: chrono::NaiveDate => "NaiveDate", "NaiveDate";
+        Offset: chrono::DateTime<chrono::FixedOffset> => "DateTime<FixedOffset>", "DateTime<FixedOffset>";
+        Path: std::path::PathBuf => "PathBuf", "PathBuf";
+    );
 
     #[derive(Facet)]
     #[repr(C)]
     #[allow(dead_code)]
     pub enum Event {
-        Seq(Vec<Result<u8, String>>),
-        Option(Option<Result<u8, String>>),
         Struct {
-            seq: Vec<Result<u8, String>>,
-            option: Option<Result<u8, String>>,
             kept: u8,
+            seq: Vec<Result<u8, String>>,
         },
     }
 
-    let registry = reflect!(Holder, Event).unwrap();
+    assert_eq!(
+        unsupported_field::<Event>(),
+        strings([
+            "Event::Struct",
+            "seq",
+            "Vec<Result<u8, String>>",
+            "Result<u8, String>"
+        ]),
+    );
+}
+
+/// The error for an unsupported field says what to do about it.
+#[test]
+fn an_unsupported_field_error_message() {
+    #[derive(Facet)]
+    pub struct Timeout {
+        pub after: Option<std::time::Duration>,
+    }
+
+    let err = RegistryBuilder::new().add_type::<Timeout>().unwrap_err();
+    assert_eq!(
+        err.to_string(),
+        "field `after` of `Timeout` has type `Option<Duration>`, which can't be generated because \
+         `Duration` is not supported. Mark the field `#[facet(skip)]` or `#[facet(opaque)]` to \
+         leave it out, or change its type",
+    );
+}
+
+/// A field of an unsupported type is still left out, without an error, if it is marked
+/// `#[facet(skip)]` or `#[facet(opaque)]`, in a struct and in every kind of variant. A
+/// `PhantomData` field is not unsupported: it is a unit struct.
+#[test]
+fn a_skipped_or_opaque_field_of_an_unsupported_type_is_left_out() {
+    #[derive(Facet)]
+    pub struct Holder {
+        pub kept: u8,
+        #[facet(skip)]
+        pub skipped: std::time::Duration,
+        #[facet(opaque)]
+        pub opaque: Result<u8, String>,
+        pub phantom: std::marker::PhantomData<u8>,
+    }
+
+    #[derive(Facet)]
+    pub struct Pair(pub u8, #[facet(opaque)] pub std::time::Duration);
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    pub enum Event {
+        Newtype(#[facet(opaque)] std::time::Duration),
+        Tuple(u8, #[facet(opaque)] Result<u8, String>),
+        Struct {
+            kept: u8,
+            #[facet(skip)]
+            skipped: std::time::Duration,
+            #[facet(opaque)]
+            opaque: url::Url,
+        },
+    }
+
+    let registry = reflect!(Holder, Pair, Event).unwrap();
     let ContainerFormat::Struct(fields, _) =
         &registry[&QualifiedTypeName::root("Holder".to_string())]
     else {
         panic!("not a struct");
     };
     let names: Vec<_> = fields.iter().map(|field| field.name.as_str()).collect();
-    assert_eq!(names, ["kept"]);
+    assert_eq!(names, ["kept", "phantom"]);
+    assert_eq!(
+        registry[&QualifiedTypeName::root("Pair".to_string())],
+        ContainerFormat::TupleStruct(vec![Format::U8], Doc::default()),
+    );
 
     let ContainerFormat::Enum(variants, _, _) =
         &registry[&QualifiedTypeName::root("Event".to_string())]
@@ -687,7 +796,7 @@ fn an_unsupported_type_anywhere_in_a_field_is_skipped() {
         panic!("not an enum");
     };
     assert_eq!(variants[&0].value, VariantFormat::Unit);
-    assert_eq!(variants[&1].value, VariantFormat::Unit);
+    assert_eq!(variants[&1].value, VariantFormat::Tuple(vec![Format::U8]));
     let VariantFormat::Struct(fields) = &variants[&2].value else {
         panic!("not a struct variant");
     };
@@ -695,9 +804,38 @@ fn an_unsupported_type_anywhere_in_a_field_is_skipped() {
     assert_eq!(names, ["kept"]);
 }
 
-/// Only an unsupported type is skipped: any other error naming a field's type still fails.
+/// An untagged enum is rejected (#234), whether it is added itself or reached through a field,
+/// rather than generated as externally tagged.
 #[test]
-fn an_error_naming_a_field_type_is_not_skipped() {
+fn an_untagged_enum_is_an_error() {
+    #[derive(Facet)]
+    #[facet(untagged)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    pub enum Value {
+        Number(u32),
+        Text(String),
+    }
+
+    #[derive(Facet)]
+    pub struct Holder {
+        pub value: Vec<Value>,
+    }
+
+    let err = RegistryBuilder::new().add_type::<Value>().unwrap_err();
+    assert_eq!(err, Error::UntaggedEnum("Value".to_string()));
+    assert_eq!(
+        err.to_string(),
+        r#"enum `Value` is `#[facet(untagged)]`, which is not supported. Use an externally, internally (`#[facet(tag = "...")]`) or adjacently (`#[facet(tag = "...", content = "...")]`) tagged representation"#,
+    );
+
+    let err = RegistryBuilder::new().add_type::<Holder>().unwrap_err();
+    assert_eq!(err, Error::UntaggedEnum("Value".to_string()));
+}
+
+/// Any other error naming a field's type fails as itself, not as an unsupported field.
+#[test]
+fn an_error_naming_a_field_type_is_not_an_unsupported_field() {
     #[derive(Facet)]
     #[facet(fg::namespace = "one")]
     pub struct Holder {
