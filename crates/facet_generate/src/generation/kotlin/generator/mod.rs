@@ -15,7 +15,7 @@ use crate::{
         config::PackageLocation,
         indent::IndentedWriter,
         kotlin::{
-            emitter::{Kotlin, check_tuple_sizes, write_module_header},
+            emitter::{Kotlin, check_identifiers, check_tuple_sizes, write_module_header},
             naming,
         },
         module::Module,
@@ -103,6 +103,7 @@ impl<'a> KotlinCodeGenerator<'a> {
         let config = self.module_config(registry)?;
         check_reserved_names(registry, &naming::RULES)?;
         check_tuple_sizes(registry)?;
+        check_identifiers(registry)?;
 
         let mut lang = Kotlin::new(&config, registry);
         for p in &self.plugins {

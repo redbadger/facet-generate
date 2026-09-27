@@ -16,7 +16,7 @@ use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::{Kotlin, field_name, naming},
+    kotlin::{Kotlin, enum_constant_name, field_name, naming, variant_class_name},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
@@ -796,7 +796,7 @@ fn write_enum_class_body<W: IndentWrite>(
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 for (i, variant) in variants {
-                    let upper = variant.name.to_uppercase();
+                    let upper = enum_constant_name(&variant.name);
                     writeln!(w, "{i} -> {upper}")?;
                 }
                 writeln!(
@@ -832,7 +832,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 for (i, variant) in variants {
-                    let vname = &variant.name;
+                    let vname = variant_class_name(&variant.name);
                     writeln!(w, "{i} -> {vname}.deserialize(deserializer)")?;
                 }
                 writeln!(

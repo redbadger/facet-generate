@@ -35,7 +35,10 @@ use crate::{
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
         collision::{self, Fix, Origin, TypeName},
-        kotlin::{Kotlin, KotlinCodeGenerator, emitter::check_tuple_sizes},
+        kotlin::{
+            Kotlin, KotlinCodeGenerator,
+            emitter::{check_identifiers, check_tuple_sizes},
+        },
         module::{self, Module},
         plugin::EmitterPlugin,
         registry_references,
@@ -106,11 +109,13 @@ impl Installer {
     /// output would not compile, or would lose a module; the error names the
     /// namespace or package and what it collides with. It also fails before
     /// writing anything when a type holds a tuple of more than twelve
-    /// elements, for which the serde runtime has no type.
+    /// elements, for which the serde runtime has no type, or when two variants
+    /// of an enum or two fields of a struct would get the same identifier.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
         check_tuple_sizes(registry)?;
+        check_identifiers(registry)?;
 
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files.

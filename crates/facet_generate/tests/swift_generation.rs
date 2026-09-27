@@ -1175,3 +1175,12 @@ fn test_that_swift_code_with_nested_tuples_compiles() {
     assert_installed_package_compiles(&registry, BincodePlugin);
     assert_installed_package_compiles(&registry, JsonPlugin);
 }
+
+/// Variants and fields renamed with a hyphen or a space compile with each
+/// plugin (#233): the casing drops the hyphen and the space.
+#[test]
+fn test_that_swift_code_with_renames_that_are_not_identifiers_compiles() {
+    let registry = common::renames::get_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}

@@ -644,3 +644,32 @@ fn test_that_csharp_code_with_long_tuples_compiles() {
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// Variants and fields renamed with a hyphen or a space compile with each
+/// plugin and with both (#233): the casing drops the hyphen and the space.
+#[test]
+fn test_that_csharp_code_with_renames_that_are_not_identifiers_compiles() {
+    let registry = common::renames::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

@@ -1293,6 +1293,83 @@ let sample = SwiftPairs(
 }
 
 // ---------------------------------------------------------------------------
+// Renames that are not identifiers — shared by the compilation and runtime
+// tests (#233).
+//
+// A variant or field renamed with a character an identifier cannot hold keeps
+// that name on the wire, while the generated code writes a valid identifier.
+// ---------------------------------------------------------------------------
+
+pub mod renames {
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Status {
+        #[facet(rename = "on-hold")]
+        #[serde(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        WithSpace,
+        Done,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Event {
+        #[facet(rename = "on-hold")]
+        #[serde(rename = "on-hold")]
+        OnHold(u32),
+        #[facet(rename = "in review")]
+        #[serde(rename = "in review")]
+        InReview {
+            #[facet(rename = "reviewer-name")]
+            #[serde(rename = "reviewer-name")]
+            reviewer_name: String,
+        },
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        WithSpace,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Ticket {
+        #[facet(rename = "first-name")]
+        #[serde(rename = "first-name")]
+        pub first_name: String,
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        pub with_space: bool,
+        pub status: Status,
+        pub statuses: Vec<Status>,
+        pub events: Vec<Event>,
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Ticket).unwrap()
+    }
+
+    pub fn sample() -> Ticket {
+        Ticket {
+            first_name: "Ada".to_string(),
+            with_space: true,
+            status: Status::OnHold,
+            statuses: vec![Status::OnHold, Status::WithSpace, Status::Done],
+            events: vec![
+                Event::OnHold(7),
+                Event::InReview {
+                    reviewer_name: "Grace".to_string(),
+                },
+                Event::WithSpace,
+            ],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Cross-namespace fixtures — shared by the per-language compilation tests.
 //
 // Types that reference types in another namespace, where the generated code

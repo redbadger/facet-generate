@@ -253,3 +253,15 @@ fn test_that_kotlin_code_with_a_uuid_compiles() {
 fn test_that_kotlin_code_with_a_uuid_compiles_with_both_plugins() {
     assert_generated_code_compiles(&common::get_uuid_registry(), Encoding::Both);
 }
+
+/// Variants and fields renamed with a hyphen or a space compile with each
+/// plugin and with both (#233). The variant was written verbatim as a class
+/// or an uppercased constant: `ON-HOLD`, which kotlinc rejects with
+/// "Expecting ';' after the last enum entry".
+#[test]
+fn test_that_kotlin_code_with_renames_that_are_not_identifiers_compiles() {
+    let registry = common::renames::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}

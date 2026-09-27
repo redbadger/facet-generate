@@ -305,6 +305,96 @@ fn rejects_a_tuple_of_more_than_twelve_elements() {
     }
 }
 
+/// Two variants of an enum, or two fields of a struct, whose names differ
+/// only in what the Kotlin identifier rewrites would be declared twice, so
+/// they are rejected before anything is written (#233).
+#[test]
+fn rejects_two_names_with_the_same_identifier() {
+    use crate::generation::{Error, kotlin::KotlinCodeGenerator};
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "on_hold")]
+        OnHoldToo,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        #[facet(rename = "in review")]
+        InReview(u8),
+        #[facet(rename = "in-review")]
+        InReviewToo(u8),
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Change {
+        Edit {
+            #[facet(rename = "old-name")]
+            old: String,
+            old_name: String,
+        },
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Person {
+        #[facet(rename = "first-name")]
+        first: String,
+        first_name: String,
+    }
+
+    for (registry, message) in [
+        (
+            reflect!(Status).unwrap(),
+            "Kotlin: variants `on-hold` and `on_hold` of `Status` would both become `ON_HOLD`; \
+             rename one of them with #[facet(rename = \"...\")]",
+        ),
+        (
+            reflect!(Event).unwrap(),
+            "Kotlin: variants `in review` and `in-review` of `Event` would both become \
+             `in_review`; rename one of them with #[facet(rename = \"...\")]",
+        ),
+        (
+            reflect!(Change).unwrap(),
+            "Kotlin: fields `old-name` and `old_name` of `Change::Edit` would both become \
+             `oldName`; rename one of them with #[facet(rename = \"...\")]",
+        ),
+        (
+            reflect!(Person).unwrap(),
+            "Kotlin: fields `first-name` and `first_name` of `Person` would both become \
+             `firstName`; rename one of them with #[facet(rename = \"...\")]",
+        ),
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let installer = Installer::new("com.example", dir.path()).plugin(BincodePlugin);
+        let Error::Io(error) = installer.generate(&registry).unwrap_err() else {
+            panic!("expected an I/O error");
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), message);
+        assert!(
+            std::fs::read_dir(dir.path()).unwrap().next().is_none(),
+            "nothing is written"
+        );
+
+        let config = CodeGeneratorConfig::new("com.example".to_string());
+        let mut out = Vec::new();
+        let error = KotlinCodeGenerator::new(&config)
+            .output(&mut out, &registry)
+            .unwrap_err();
+        assert_eq!(error.to_string(), message);
+        assert!(out.is_empty(), "nothing is written");
+    }
+}
+
 /// A plugin whose output, in the module `module`, names `types`.
 #[derive(Debug)]
 struct ReferencesPlugin {

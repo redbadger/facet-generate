@@ -44,6 +44,10 @@ pub(crate) type FormatBoundNames = &'static [(&'static str, fn(&Format) -> bool)
 /// Keeping the rules in one struct per language means call sites do not have to
 /// know which list they need: Tier A escaping reads `reserved_words` /
 /// `escape_style`, and the Tier C pre-pass reads everything else.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is an independent fact about the target language"
+)]
 pub(crate) struct NamingRules {
     /// The language name as it appears at the start of a pre-pass error.
     pub language: &'static str,
@@ -79,6 +83,11 @@ pub(crate) struct NamingRules {
     /// Whether `component1`..`componentN` are generated for an N-field type
     /// (Kotlin data classes).
     pub numbered_components_forbidden: bool,
+    /// Whether a variant or field whose identifier would start with a digit,
+    /// such as one renamed `"2fa"`, is rejected: the generated code writes it
+    /// as an identifier, which cannot start with a digit. Kotlin rewrites such
+    /// a name instead (see [`sanitize_identifier`]) and TypeScript quotes it.
+    pub leading_digit_forbidden: bool,
 }
 
 /// The key under which the reason for a `componentN` clash is looked up in
@@ -317,6 +326,8 @@ fn check_variant(
     variant: &Named<VariantFormat>,
     rules: &NamingRules,
 ) -> io::Result<()> {
+    check_leading_digit("variant", &variant.name, enum_name, rules)?;
+
     if rules.variants_are_types {
         // A nested class is only visible inside the enum that declares it, so
         // it only shadows an import there.
@@ -372,6 +383,8 @@ fn check_member(
     field_count: usize,
     in_variant: bool,
 ) -> io::Result<()> {
+    check_leading_digit("field", rust_name, owner, rules)?;
+
     let ident = (rules.member_case)(rust_name);
 
     if let Some(reason) = rules.forbidden_member(&ident) {
@@ -411,6 +424,49 @@ fn check_member(
     Ok(())
 }
 
+/// Reject a variant or field `name` of `owner` whose identifier would start
+/// with a digit, where the language cannot write one (a `#[facet(rename)]`
+/// such as `"2fa"`: casing keeps the digit in front).
+fn check_leading_digit(what: &str, name: &str, owner: &str, rules: &NamingRules) -> io::Result<()> {
+    if !rules.leading_digit_forbidden {
+        return Ok(());
+    }
+    let ident = (rules.member_case)(name);
+    if ident.starts_with(|c: char| c.is_ascii_digit()) {
+        return Err(invalid(format!(
+            "{lang}: {what} `{name}` of `{owner}` would become `{ident}`, which is not a valid \
+             identifier because it starts with a digit; rename it with \
+             #[facet(rename = \"...\")] to a name that starts with a letter",
+            lang = rules.language,
+        )));
+    }
+    Ok(())
+}
+
+/// `name` with every character that cannot appear in an identifier replaced
+/// by `_`, and a `_` in front if it starts with a digit, so that a name
+/// renamed to `"on-hold"`, `"with space"` or `"2fa"` can be written as
+/// `on_hold`, `with_space` or `_2fa`. A name that is already an identifier is
+/// borrowed unchanged.
+///
+/// Only the identifier changes: the wire name is still the name itself.
+#[cfg_attr(not(feature = "kotlin"), allow(dead_code))]
+pub(crate) fn sanitize_identifier(name: &str) -> Cow<'_, str> {
+    let leading_digit = name.starts_with(|c: char| c.is_ascii_digit());
+    if !leading_digit && name.chars().all(is_identifier_char) {
+        return Cow::Borrowed(name);
+    }
+    let mut out = String::with_capacity(name.len() + 1);
+    if leading_digit {
+        out.push('_');
+    }
+    out.extend(
+        name.chars()
+            .map(|c| if is_identifier_char(c) { c } else { '_' }),
+    );
+    Cow::Owned(out)
+}
+
 fn invalid(message: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
@@ -438,6 +494,7 @@ mod tests {
             variants_are_types: false,
             member_equals_type_forbidden: false,
             numbered_components_forbidden: false,
+            leading_digit_forbidden: false,
         }
     }
 

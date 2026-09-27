@@ -535,6 +535,61 @@ fun main() {{
     compile_and_run(&dir);
 }
 
+/// Round-trips variants and fields renamed with a hyphen or a space through
+/// bincode between Rust and the generated Kotlin, which names them
+/// `ON_HOLD`, `on_hold` and `firstName` (#233).
+#[test]
+fn test_kotlin_bincode_runtime_on_renames_that_are_not_identifiers() {
+    if !kotlinc_available() {
+        return;
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&common::renames::get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&common::renames::sample()).unwrap();
+
+    fs::write(
+        dir.join("Main.kt"),
+        format!(
+            r#"import com.example.testing.Event
+import com.example.testing.Status
+import com.example.testing.Ticket
+
+fun main() {{
+    val input = {bytes}
+    val value = Ticket.bincodeDeserialize(input)
+
+    val expected = Ticket(
+        firstName = "Ada",
+        withSpace = true,
+        status = Status.ON_HOLD,
+        statuses = listOf(Status.ON_HOLD, Status.WITH_SPACE, Status.DONE),
+        events = listOf(Event.on_hold(7u), Event.in_review("Grace"), Event.with_space),
+    )
+    check(value == expected) {{ "mismatch: $value" }}
+
+    val output = value.bincodeSerialize()
+    check(input.contentEquals(output)) {{
+        "roundtrip failed:\n  input  = ${{input.toList()}}\n  output = ${{output.toList()}}"
+    }}
+
+    println("Renames roundtrip: PASSED")
+}}
+"#,
+            bytes = quote_bytes_kotlin(&reference),
+        ),
+    )
+    .unwrap();
+
+    compile_and_run(&dir);
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------
@@ -1211,4 +1266,55 @@ fun main() {
     assert_eq!(value, common::wide_tuples_sample(), "{output}");
     let actual: serde_json::Value = serde_json::from_str(output).unwrap();
     assert_eq!(actual, expected, "{output}");
+}
+
+/// Round-trips variants and fields renamed with a hyphen or a space through
+/// JSON between `serde_json` and the generated Kotlin, which keeps each
+/// rename as the wire name of its `ON_HOLD`, `on_hold` or `firstName` (#233).
+#[test]
+fn test_kotlin_json_runtime_on_renames_that_are_not_identifiers() {
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(JsonPlugin)
+        .generate(&common::renames::get_registry())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&common::renames::sample()).unwrap();
+
+    let outputs = run_kotlin_json_main(
+        &dir,
+        r#"import com.example.testing.Event
+import com.example.testing.Status
+import com.example.testing.Ticket
+import java.io.File
+import kotlinx.serialization.json.Json
+
+fun main() {
+    val expected = Ticket(
+        firstName = "Ada",
+        withSpace = true,
+        status = Status.ON_HOLD,
+        statuses = listOf(Status.ON_HOLD, Status.WITH_SPACE, Status.DONE),
+        events = listOf(Event.on_hold(7u), Event.in_review("Grace"), Event.with_space),
+    )
+    val value = Json.decodeFromString(Ticket.serializer(), File("input.json").readText())
+    check(value == expected) { "mismatch: $value" }
+    check(Status.ON_HOLD.serialName == "on-hold") { "serialName: ${Status.ON_HOLD.serialName}" }
+    println("JSON:" + Json.encodeToString(Ticket.serializer(), value))
+    println("JSON:" + Json.encodeToString(Ticket.serializer(), expected))
+}
+"#,
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 2, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    for output in &outputs {
+        let value: common::renames::Ticket = serde_json::from_str(output)
+            .unwrap_or_else(|e| panic!("Rust could not read Kotlin's JSON: {e}\n{output}"));
+        assert_eq!(value, common::renames::sample(), "{output}");
+        let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+        assert_eq!(actual, expected, "{output}");
+    }
 }

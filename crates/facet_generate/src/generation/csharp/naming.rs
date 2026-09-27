@@ -284,6 +284,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     variants_are_types: true,
     member_equals_type_forbidden: true,
     numbered_components_forbidden: false,
+    leading_digit_forbidden: true,
 };
 
 /// Returns `true` if a type whose `UpperCamelCase` name is `name` is in scope

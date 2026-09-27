@@ -640,6 +640,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     variants_are_types: false,
     member_equals_type_forbidden: false,
     numbered_components_forbidden: false,
+    leading_digit_forbidden: true,
 };
 
 /// Returns `true` if a type spelled `name` is in scope in the module: one it
