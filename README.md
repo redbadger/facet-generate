@@ -4,7 +4,7 @@ Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet
 
 ## Documentation
 
-The [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs covers the crate in more depth:
+The [API documentation](https://docs.rs/facet_generate) is on docs.rs, together with a [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) that covers the crate in more depth:
 
 - [Why `facet_generate`, and how it compares](https://docs.rs/facet_generate/latest/facet_generate/guide/motivation/index.html): the problem it solves, and how it differs from UniFFI, typeshare, serde-generate, ts-rs and specta.
 - [Supported types](https://docs.rs/facet_generate/latest/facet_generate/guide/supported_types/index.html): every Rust type the reflector accepts, what it becomes in each language, and what is rejected.
