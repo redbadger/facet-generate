@@ -301,7 +301,7 @@ fn struct_with_fields_of_primitive_types() {
             try serializer.serialize_u128(value: self.u128)
             try serializer.serialize_f32(value: self.f32)
             try serializer.serialize_f64(value: self.f64)
-            try serializer.serialize_char(value: self.char)
+            try serializer.serializeChar(value: self.char)
             try serializer.serialize_str(value: self.string)
             try serializer.decrease_container_depth()
         }
@@ -328,7 +328,7 @@ fn struct_with_fields_of_primitive_types() {
             let u128 = try deserializer.deserialize_u128()
             let f32 = try deserializer.deserialize_f32()
             let f64 = try deserializer.deserialize_f64()
-            let char = try deserializer.deserialize_char()
+            let char = try deserializer.deserializeChar()
             let string = try deserializer.deserialize_str()
             try deserializer.decrease_container_depth()
             return StructWithFields(unit: unit, bool: bool, i8: i8, i16: i16, i32: i32, i64: i64, i128: i128, u8: u8, u16: u16, u32: u32, u64: u64, u128: u128, f32: f32, f64: f64, char: char, string: string)

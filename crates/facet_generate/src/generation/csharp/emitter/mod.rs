@@ -665,7 +665,6 @@ pub(crate) fn is_value_type(format: &Format, config: &CodeGeneratorConfig) -> bo
             | Format::U128
             | Format::F32
             | Format::F64
-            | Format::Char
             | Format::Uuid
             | Format::Tuple(_)
     ) || matches!(format, Format::TypeName(name) if config.is_unit_enum(name))
@@ -701,8 +700,10 @@ fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[Strin
         Format::U128 => builtin("UInt128", config).into_owned(),
         Format::F32 => "float".to_string(),
         Format::F64 => "double".to_string(),
-        Format::Char => "char".to_string(),
-        Format::Str => "string".to_string(),
+        // A C# `char` is one UTF-16 code unit, which can't hold a Rust `char`
+        // outside the BMP, such as an emoji. A string can hold any Unicode
+        // scalar value, and the plugins check that it holds exactly one.
+        Format::Char | Format::Str => "string".to_string(),
         Format::Bytes => "byte[]".to_string(),
         Format::Uuid => builtin("Guid", config).into_owned(),
         Format::Option(inner) => format!("{}?", render(inner)),

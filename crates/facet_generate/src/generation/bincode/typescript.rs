@@ -17,7 +17,7 @@
 //! `Deserializer` interfaces, field by field in declaration order and an enum
 //! variant by its index, as bincode lays them out.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use heck::ToUpperCamelCase;
@@ -210,6 +210,72 @@ function deserializeUuid(deserializer: Deserializer): Uuid {
 }
 ";
 
+// Rust's `bincode` writes a `char` as its UTF-8 bytes with no length prefix,
+// the first byte giving the length, which these write and read a byte at a
+// time through the runtime's `u8` methods, so that an external serde package
+// needs nothing new. A string that isn't exactly one Unicode scalar value is
+// rejected. No enum's `serialize{Name}` function can be named like them, and
+// `globalThis.String` is the global whatever the module declares or imports.
+const FEATURE_CHAR: &str = r#"function writeChar(value: string, serializer: Serializer): void {
+    const code = value.codePointAt(0);
+    if (
+        code === undefined ||
+        value.length !== (code > 0xffff ? 2 : 1) ||
+        (code >= 0xd800 && code <= 0xdfff)
+    ) {
+        throw new Error("A char must be exactly one Unicode scalar value");
+    }
+    if (code < 0x80) {
+        serializer.serializeU8(code);
+    } else if (code < 0x800) {
+        serializer.serializeU8(0xc0 | (code >> 6));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    } else if (code < 0x10000) {
+        serializer.serializeU8(0xe0 | (code >> 12));
+        serializer.serializeU8(0x80 | ((code >> 6) & 0x3f));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    } else {
+        serializer.serializeU8(0xf0 | (code >> 18));
+        serializer.serializeU8(0x80 | ((code >> 12) & 0x3f));
+        serializer.serializeU8(0x80 | ((code >> 6) & 0x3f));
+        serializer.serializeU8(0x80 | (code & 0x3f));
+    }
+}
+
+function readChar(deserializer: Deserializer): string {
+    const first = deserializer.deserializeU8();
+    let width: number;
+    let code: number;
+    if (first <= 0x7f) {
+        width = 1;
+        code = first;
+    } else if (first >= 0xc2 && first <= 0xdf) {
+        width = 2;
+        code = first & 0x1f;
+    } else if (first >= 0xe0 && first <= 0xef) {
+        width = 3;
+        code = first & 0x0f;
+    } else if (first >= 0xf0 && first <= 0xf4) {
+        width = 4;
+        code = first & 0x07;
+    } else {
+        throw new Error("Invalid char encoding");
+    }
+    for (let i = 1; i < width; i++) {
+        const byte = deserializer.deserializeU8();
+        if ((byte & 0xc0) !== 0x80) {
+            throw new Error("Invalid char encoding");
+        }
+        code = (code << 6) | (byte & 0x3f);
+    }
+    const shortest = [0, 0, 0x80, 0x800, 0x10000][width];
+    if (code < shortest || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff)) {
+        throw new Error("Invalid char encoding");
+    }
+    return globalThis.String.fromCodePoint(code);
+}
+"#;
+
 // ---------------------------------------------------------------------------
 // EmitterPlugin implementation
 // ---------------------------------------------------------------------------
@@ -289,7 +355,11 @@ impl EmitterPlugin<TypeScript> for BincodePlugin {
                     writeln!(w)?;
                     write!(w, "{}", qualified(FEATURE_UUID, config))?;
                 }
-                Feature::BigInt | Feature::Bytes | Feature::Char | Feature::Tuple(_) => {}
+                Feature::Char => {
+                    writeln!(w)?;
+                    write!(w, "{}", qualified(FEATURE_CHAR, config))?;
+                }
+                Feature::BigInt | Feature::Bytes | Feature::Tuple(_) => {}
             }
         }
         Ok(())
@@ -338,8 +408,15 @@ fn write_struct_type_body(
     writeln!(w)?;
     write!(w, "static deserialize(deserializer: Deserializer): {name} ")?;
     with_block(w, Newlines::BOTH, |w| {
+        let mut locals = Locals::new(fields.iter().map(|f| param_name(&f.name).into_owned()));
         for field in fields {
-            write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+            write_deserialize(
+                w,
+                Some(&param_name(&field.name)),
+                &field.value,
+                &mut locals,
+                config,
+            )?;
         }
         writeln!(
             w,
@@ -497,24 +574,35 @@ fn write_deserialize_variant_return(
         EnumTagging::Internal { tag } | EnumTagging::Adjacent { tag, .. } => tag.as_str(),
     };
 
+    // Each variant is read in its own `case` block, with its own locals.
+    let mut locals = Locals::new(match variant {
+        VariantFormat::NewType(_) => vec!["inner".to_string(), "value".to_string()],
+        VariantFormat::Tuple(formats) => (0..formats.len()).map(|i| format!("field{i}")).collect(),
+        VariantFormat::Struct(fields) => fields
+            .iter()
+            .map(|f| param_name(&f.name).into_owned())
+            .collect(),
+        VariantFormat::Unit | VariantFormat::Variable(_) => vec![],
+    });
+
     match (tagging, variant) {
         (_, VariantFormat::Unit) => {
             writeln!(w, r#"return {{ {tag_field}: "{variant_name}" }};"#)
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("inner"), format, config)?;
+            write_deserialize(w, Some("inner"), format, &mut locals, config)?;
             writeln!(
                 w,
                 r#"return {{ {tag_field}: "{variant_name}", {content}: inner }};"#
             )
         }
         (_, VariantFormat::NewType(format)) => {
-            write_deserialize(w, Some("value"), format, config)?;
+            write_deserialize(w, Some("value"), format, &mut locals, config)?;
             writeln!(w, r#"return {{ {tag_field}: "{variant_name}", value }};"#)
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Tuple(formats)) => {
             for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+                write_deserialize(w, Some(&format!("field{i}")), f, &mut locals, config)?;
             }
             let fields_joined = (0..formats.len())
                 .map(|i| format!("field{i}"))
@@ -527,7 +615,7 @@ fn write_deserialize_variant_return(
         }
         (_, VariantFormat::Tuple(formats)) => {
             for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+                write_deserialize(w, Some(&format!("field{i}")), f, &mut locals, config)?;
             }
             let field_names: Vec<String> =
                 (0..formats.len()).map(|i| format!("field{i}")).collect();
@@ -539,7 +627,13 @@ fn write_deserialize_variant_return(
         }
         (EnumTagging::Adjacent { content, .. }, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+                write_deserialize(
+                    w,
+                    Some(&param_name(&field.name)),
+                    &field.value,
+                    &mut locals,
+                    config,
+                )?;
             }
             let struct_fields = fields
                 .iter()
@@ -553,7 +647,13 @@ fn write_deserialize_variant_return(
         }
         (_, VariantFormat::Struct(fields)) => {
             for field in fields {
-                write_deserialize(w, Some(&param_name(&field.name)), &field.value, config)?;
+                write_deserialize(
+                    w,
+                    Some(&param_name(&field.name)),
+                    &field.value,
+                    &mut locals,
+                    config,
+                )?;
             }
             let field_names: Vec<String> = fields.iter().map(object_entry).collect();
             let all_parts: Vec<String> =
@@ -632,7 +732,7 @@ fn write_serialize(
         Format::U128 => writeln!(w, "serializer.serializeU128({value_expr});"),
         Format::F32 => writeln!(w, "serializer.serializeF32({value_expr});"),
         Format::F64 => writeln!(w, "serializer.serializeF64({value_expr});"),
-        Format::Char => writeln!(w, "serializer.serializeChar({value_expr});"),
+        Format::Char => writeln!(w, "writeChar({value_expr}, serializer);"),
         Format::Str => writeln!(w, "serializer.serializeStr({value_expr});"),
         Format::Bytes => writeln!(w, "serializer.serializeBytes({value_expr});"),
         Format::Uuid => writeln!(w, "serializeUuid({value_expr}, serializer);"),
@@ -727,7 +827,7 @@ fn deserialize_primitive_expr(format: &Format, config: &CodeGeneratorConfig) -> 
         Format::U128 => "deserializer.deserializeU128()".to_string(),
         Format::F32 => "deserializer.deserializeF32()".to_string(),
         Format::F64 => "deserializer.deserializeF64()".to_string(),
-        Format::Char => "deserializer.deserializeChar()".to_string(),
+        Format::Char => "readChar(deserializer)".to_string(),
         Format::Str => "deserializer.deserializeStr()".to_string(),
         Format::Bytes => "deserializer.deserializeBytes()".to_string(),
         Format::Uuid => "deserializeUuid(deserializer)".to_string(),
@@ -761,15 +861,52 @@ const fn is_primitive_or_named(format: &Format) -> bool {
     )
 }
 
+/// The names bound by `const` in one scope of a generated `deserialize`, so
+/// that the locals holding a tuple's elements never collide with each other,
+/// with another tuple's, or with a field's.
+///
+/// A struct body, an enum variant's `case` block and each callback passed to
+/// a runtime helper is a scope of its own.
+#[derive(Default)]
+struct Locals {
+    taken: BTreeSet<String>,
+    next: usize,
+}
+
+impl Locals {
+    /// A scope in which the caller binds `names` itself.
+    fn new(names: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            taken: names.into_iter().collect(),
+            next: 0,
+        }
+    }
+
+    /// The first `field{n}` not yet bound in this scope, for a tuple element.
+    fn element(&mut self) -> String {
+        loop {
+            let name = format!("field{}", self.next);
+            self.next += 1;
+            if self.taken.insert(name.clone()) {
+                return name;
+            }
+        }
+    }
+}
+
 /// Write a deserialize statement for `format`.
 ///
 /// When `field_name` is `Some`, emits `const <name> = <expr>;`.
 /// When `field_name` is `None`, emits `return <expr>;`.
+///
+/// `locals` holds the names already bound in the current scope, `field_name`
+/// among them. A tuple's elements are bound as fresh locals in that scope.
 #[allow(clippy::too_many_lines)]
 fn write_deserialize(
     w: &mut dyn IndentWrite,
     field_name: Option<&str>,
     format: &Format,
+    locals: &mut Locals,
     config: &CodeGeneratorConfig,
 ) -> io::Result<()> {
     match format {
@@ -796,7 +933,7 @@ fn write_deserialize(
                 )?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -814,7 +951,7 @@ fn write_deserialize(
                 )?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -829,7 +966,7 @@ fn write_deserialize(
                 write!(w, "return deserializeSet(deserializer, (deserializer) => ")?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, None, inner, config)
+                write_deserialize(w, None, inner, &mut Locals::default(), config)
             })?;
             writeln!(w, ");")
         }
@@ -844,37 +981,22 @@ fn write_deserialize(
                 write!(w, "return deserializeMap(deserializer, (deserializer) => ")?;
             }
             with_block(w, Newlines::OPEN, |w| {
-                if is_primitive_or_named(key) {
-                    writeln!(
-                        w,
-                        "const key = {};",
-                        deserialize_primitive_expr(key, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("key"), key, config)?;
-                }
-                if is_primitive_or_named(value) {
-                    writeln!(
-                        w,
-                        "const value = {};",
-                        deserialize_primitive_expr(value, config)
-                    )?;
-                } else {
-                    write_deserialize(w, Some("value"), value, config)?;
-                }
+                let mut locals = Locals::new(["key".to_string(), "value".to_string()]);
+                write_deserialize(w, Some("key"), key, &mut locals, config)?;
+                write_deserialize(w, Some("value"), value, &mut locals, config)?;
                 writeln!(w, "return [key, value];")
             })?;
             writeln!(w, ");")
         }
 
         Format::Tuple(formats) => {
-            for (i, f) in formats.iter().enumerate() {
-                write_deserialize(w, Some(&format!("field{i}")), f, config)?;
+            // Every element is named before any is read, so a nested tuple's
+            // elements take the names after them.
+            let elements: Vec<String> = formats.iter().map(|_| locals.element()).collect();
+            for (element, f) in elements.iter().zip(formats) {
+                write_deserialize(w, Some(element), f, locals, config)?;
             }
-            let fields_joined = (0..formats.len())
-                .map(|i| format!("field{i}"))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let fields_joined = elements.join(", ");
             let type_str = formats
                 .iter()
                 .map(|f| render_type(f, config))
@@ -903,7 +1025,8 @@ fn write_deserialize(
             // inferred as.
             let item_type = render_type(content, config);
             with_block(w, Newlines::OPEN, |w| {
-                write_deserialize(w, Some("item"), content, config)?;
+                let mut locals = Locals::new(["item".to_string()]);
+                write_deserialize(w, Some("item"), content, &mut locals, config)?;
                 writeln!(w, "return [item] as [{item_type}];")
             })?;
             writeln!(w, ");")

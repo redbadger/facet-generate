@@ -258,7 +258,7 @@ fn struct_with_fields_of_primitive_types() {
         [ObservableProperty]
         private double _f64;
         [ObservableProperty]
-        private char _char;
+        private string _char;
         [ObservableProperty]
         private string _string;
 
@@ -279,7 +279,7 @@ fn struct_with_fields_of_primitive_types() {
             serializer.SerializeU128(U128);
             serializer.SerializeF32(F32);
             serializer.SerializeF64(F64);
-            serializer.SerializeChar(Char);
+            CharSerde.Serialize(Char, serializer);
             serializer.SerializeStr(String);
             serializer.DecreaseContainerDepth();
         }
@@ -301,7 +301,7 @@ fn struct_with_fields_of_primitive_types() {
             var u128 = deserializer.DeserializeU128();
             var f32 = deserializer.DeserializeF32();
             var f64 = deserializer.DeserializeF64();
-            var @char = deserializer.DeserializeChar();
+            var @char = CharSerde.Deserialize(deserializer);
             var @string = deserializer.DeserializeStr();
             deserializer.DecreaseContainerDepth();
             return new StructWithFields {

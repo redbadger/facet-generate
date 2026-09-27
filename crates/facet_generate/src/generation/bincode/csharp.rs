@@ -73,6 +73,59 @@ const FEATURE_UUID: &str = r#"internal static class UuidSerde
 }
 "#;
 
+/// C# `char` serialization helper class.
+///
+/// Emitted once per module (via `module_helpers`) when `Feature::Char` is
+/// active. A Rust `char` is one Unicode scalar value, which a C# `char` (one
+/// UTF-16 code unit) cannot hold outside the BMP, so the generated types
+/// declare it as a `string`. Rust's `bincode` writes it as its UTF-8 bytes
+/// with no length prefix, the first byte giving the length, which these write
+/// and read a byte at a time through the runtime's `u8` methods.
+const FEATURE_CHAR: &str = r#"internal static class CharSerde
+{
+    public static void Serialize(string value, ISerializer serializer)
+    {
+        if (value is null
+            || global::System.Text.Rune.DecodeFromUtf16(value, out var rune, out var length) != global::System.Buffers.OperationStatus.Done
+            || length != value.Length)
+        {
+            throw new SerializationError("A char must be exactly one Unicode scalar value");
+        }
+        var bytes = new byte[4];
+        var count = rune.EncodeToUtf8(bytes);
+        for (var i = 0; i < count; i++)
+        {
+            serializer.SerializeU8(bytes[i]);
+        }
+    }
+
+    public static string Deserialize(IDeserializer deserializer)
+    {
+        var first = deserializer.DeserializeU8();
+        var width = first switch
+        {
+            <= 0x7f => 1,
+            >= 0xc2 and <= 0xdf => 2,
+            >= 0xe0 and <= 0xef => 3,
+            >= 0xf0 and <= 0xf4 => 4,
+            _ => throw new DeserializationError("Invalid char encoding"),
+        };
+        var bytes = new byte[width];
+        bytes[0] = first;
+        for (var i = 1; i < width; i++)
+        {
+            bytes[i] = deserializer.DeserializeU8();
+        }
+        if (global::System.Text.Rune.DecodeFromUtf8(bytes, out var rune, out var length) != global::System.Buffers.OperationStatus.Done
+            || length != width)
+        {
+            throw new DeserializationError("Invalid char encoding");
+        }
+        return rune.ToString();
+    }
+}
+"#;
+
 impl EmitterPlugin<CSharp> for BincodePlugin {
     /// Returns the core, serde, and bincode C# runtime sources to be written
     /// into the output directory alongside the generated code.
@@ -152,24 +205,29 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
         imports
     }
 
-    /// Emits the `UuidSerde` helper class when `Feature::Uuid` is active.
+    /// Emits the `UuidSerde` helper class when `Feature::Uuid` is active, and
+    /// the `CharSerde` helper class when `Feature::Char` is.
     ///
     /// C# puts collection-type helpers (`FacetHelpers`) into a shared runtime
-    /// file, so only UUID needs a per-module snippet.
+    /// file, so only UUID and `char` need a per-module snippet. The `char`
+    /// helper is generated rather than in the runtime so that an external
+    /// serde package needs nothing new.
     fn module_helpers(
         &self,
         w: &mut dyn IndentWrite,
         config: &CodeGeneratorConfig,
     ) -> io::Result<()> {
-        if config.features.contains(&Feature::Uuid) {
-            write!(
-                w,
-                "{}",
-                qualify_helper(FEATURE_UUID, naming::QUALIFIED, |name| naming::shadows(
-                    name, config
-                ))
-            )?;
-            writeln!(w)?;
+        for (feature, helper) in [(Feature::Uuid, FEATURE_UUID), (Feature::Char, FEATURE_CHAR)] {
+            if config.features.contains(&feature) {
+                write!(
+                    w,
+                    "{}",
+                    qualify_helper(helper, naming::QUALIFIED, |name| naming::shadows(
+                        name, config
+                    ))
+                )?;
+                writeln!(w)?;
+            }
         }
         Ok(())
     }
@@ -376,6 +434,11 @@ impl<'a> Scope<'a> {
     /// `UuidSerde` is emitted into every module's own namespace.
     fn uuid_serde(&self) -> String {
         self.helper_target("UuidSerde", &namespace_name(&self.cfg.module_name))
+    }
+
+    /// `CharSerde` is emitted into every module's own namespace.
+    fn char_serde(&self) -> String {
+        self.helper_target("CharSerde", &namespace_name(&self.cfg.module_name))
     }
 }
 
@@ -808,7 +871,7 @@ fn write_serialize_expr(
         Format::U128 => write!(w, "{ser}.SerializeU128({val})"),
         Format::F32 => write!(w, "{ser}.SerializeF32({val})"),
         Format::F64 => write!(w, "{ser}.SerializeF64({val})"),
-        Format::Char => write!(w, "{ser}.SerializeChar({val})"),
+        Format::Char => write!(w, "{}.Serialize({val}, {ser})", scope.char_serde()),
         Format::Str => write!(w, "{ser}.SerializeStr({val})"),
         Format::Bytes => write!(w, "{ser}.SerializeBytes({val})"),
         Format::Uuid => write!(w, "{}.Serialize({val}, {ser})", scope.uuid_serde()),
@@ -879,7 +942,7 @@ fn write_deserialize_expr(
         Format::U128 => write!(w, "{de}.DeserializeU128()"),
         Format::F32 => write!(w, "{de}.DeserializeF32()"),
         Format::F64 => write!(w, "{de}.DeserializeF64()"),
-        Format::Char => write!(w, "{de}.DeserializeChar()"),
+        Format::Char => write!(w, "{}.Deserialize({de})", scope.char_serde()),
         Format::Str => write!(w, "{de}.DeserializeStr()"),
         Format::Bytes => write!(w, "{de}.DeserializeBytes()"),
         Format::Uuid => write!(w, "{}.Deserialize({de})", scope.uuid_serde()),

@@ -10,6 +10,7 @@
 //! | Extension point | What it provides |
 //! |---|---|
 //! | `imports` | `using Facet.Runtime.Json;`, `using System.Text.Json;` and `using System.Text.Json.Serialization;` |
+//! | `module_helpers` | `JsonCharConverter`, the converter of a `char`, which checks it is one Unicode scalar value |
 //! | `type_annotations` | `[JsonConverter(typeof({Type}JsonConverter))]` |
 //! | `field_annotations` | `[property: JsonPropertyName("…")]` with a struct field's wire name |
 //! | `has_type_body` | `true` for non-unit-enum types |
@@ -116,6 +117,19 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
         imports
     }
 
+    /// Emits the `JsonCharConverter` class when `Feature::Char` is active.
+    fn module_helpers(
+        &self,
+        w: &mut dyn IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> io::Result<()> {
+        if config.features.contains(&Feature::Char) {
+            write!(w, "{FEATURE_CHAR}")?;
+            writeln!(w)?;
+        }
+        Ok(())
+    }
+
     /// `[JsonConverter(typeof({Type}JsonConverter))]`, naming the converter
     /// [`after_type`](Self::after_type) writes.
     fn type_annotations(&self, ctx: &EmitContext) -> Vec<String> {
@@ -186,6 +200,42 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// The converter of a `char`, emitted once per module that has one.
+///
+/// A Rust `char` is one Unicode scalar value, which a C# `char` (one UTF-16
+/// code unit) cannot hold outside the BMP, so the generated types declare it
+/// as a `string`. `serde_json` writes it as a JSON string holding that one
+/// scalar, as a value and as an object key, and rejects any other string.
+/// The runtime's `FacetJson.Str` checks nothing, so this is generated rather
+/// than added to the runtime, and an external serde package needs nothing
+/// new. Every type is qualified, since a generated type could shadow it.
+const FEATURE_CHAR: &str = r#"internal sealed class JsonCharConverter : global::System.Text.Json.Serialization.JsonConverter<string>
+{
+    public override bool HandleNull => true;
+
+    public override string Read(ref global::System.Text.Json.Utf8JsonReader reader, global::System.Type typeToConvert, global::System.Text.Json.JsonSerializerOptions options) =>
+        reader.TokenType == global::System.Text.Json.JsonTokenType.String
+            ? Check(reader.GetString()!)
+            : throw new global::System.Text.Json.JsonException($"Expected a string for a char, found {reader.TokenType}");
+
+    public override void Write(global::System.Text.Json.Utf8JsonWriter writer, string value, global::System.Text.Json.JsonSerializerOptions options) =>
+        writer.WriteStringValue(Check(value));
+
+    public override string ReadAsPropertyName(ref global::System.Text.Json.Utf8JsonReader reader, global::System.Type typeToConvert, global::System.Text.Json.JsonSerializerOptions options) =>
+        Check(reader.GetString()!);
+
+    public override void WriteAsPropertyName(global::System.Text.Json.Utf8JsonWriter writer, string value, global::System.Text.Json.JsonSerializerOptions options) =>
+        writer.WritePropertyName(Check(value));
+
+    private static string Check(string value) =>
+        value is not null
+            && global::System.Text.Rune.DecodeFromUtf16(value, out _, out var length) == global::System.Buffers.OperationStatus.Done
+            && length == value.Length
+            ? value
+            : throw new global::System.Text.Json.JsonException("A char must be exactly one Unicode scalar value");
+}
+"#;
 
 /// The runtime class the JSON helpers call, in `Facet.Runtime.Json`.
 const JSON_SERDE: &str = "JsonSerde";
@@ -367,7 +417,7 @@ impl<'a> Converter<'a> {
             Format::U128 => builtin("U128"),
             Format::F32 => builtin("F32"),
             Format::F64 => builtin("F64"),
-            Format::Char => builtin("Char"),
+            Format::Char => "new JsonCharConverter()".to_string(),
             Format::Str => builtin("Str"),
             Format::Bytes => builtin("Bytes"),
             Format::Uuid => builtin("Uuid"),

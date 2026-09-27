@@ -224,6 +224,46 @@ fn test_that_typescript_code_shadowing_builtin_names_type_checks() {
     }
 }
 
+/// A type named `String` shadows the global one, which the Bincode plugin's
+/// `char` helper constructs a string with (#213).
+#[test]
+fn test_that_typescript_code_with_chars_beside_a_type_named_string_type_checks() {
+    #[derive(Facet)]
+    pub struct String {
+        pub letter: char,
+        pub letters: Vec<char>,
+        pub maybe: Option<char>,
+    }
+
+    let registry = facet_generate::reflect!(String).unwrap();
+    for plugin in [
+        Arc::new(BincodePlugin) as Arc<dyn EmitterPlugin<typescript::TypeScript>>,
+        Arc::new(JsonPlugin),
+    ] {
+        let dir = tempdir().unwrap();
+        let mut installer = typescript::Installer::new("testing", dir.path());
+        installer.install_serde_runtime().unwrap();
+        installer.install_bincode_runtime().unwrap();
+
+        let source_path = dir.path().join("testing.ts");
+        let mut source = File::create(&source_path).unwrap();
+        let config = CodeGeneratorConfig::new("testing".to_string());
+        let generator =
+            typescript::TypeScriptCodeGenerator::new(&config).with_plugins(vec![plugin]);
+        generator.output(&mut source, &registry).unwrap();
+        drop(source);
+
+        let status = Command::new("deno")
+            .current_dir(dir.path())
+            .arg("check")
+            .arg("--sloppy-imports")
+            .arg(&source_path)
+            .status()
+            .unwrap();
+        assert!(status.success(), "deno check failed");
+    }
+}
+
 /// Generate `registry` with the installer and `plugin`, then type-check every
 /// module it wrote.
 fn assert_installed_modules_type_check(
@@ -463,6 +503,21 @@ fn test_that_typescript_code_with_fixed_size_arrays_type_checks() {
             .unwrap();
         assert!(status.success(), "deno check failed");
     }
+}
+
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, type-check with
+/// Bincode and with JSON (#211). Bincode read each tuple's elements into
+/// `const field0`, `const field1`, … in the enclosing scope, so a second tuple
+/// declared them again (`TS2451 [ERROR]: Cannot redeclare block-scoped
+/// variable 'field0'.`), and an outer tuple was built from its inner tuple's
+/// elements (`TS2352 [ERROR]: Conversion of type '[number, boolean]' to type
+/// '[number, [string, boolean]]' may be a mistake`).
+#[test]
+fn test_that_typescript_code_with_nested_tuples_type_checks() {
+    let registry = common::tuples::get_registry();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+    assert_installed_modules_type_check(&registry, JsonPlugin);
 }
 
 /// A `Uuid` field type-checks with no plugin, with each plugin, and with both

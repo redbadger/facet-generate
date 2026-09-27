@@ -285,7 +285,7 @@ fn struct_with_fields_of_primitive_types() {
             self.u128 = try container.decode(UInt128.self, forKey: .u128)
             self.f32 = try container.decode(Float.self, forKey: .f32)
             self.f64 = try container.decode(Double.self, forKey: .f64)
-            self.char = try container.decode(Serde.JsonChar.self, forKey: .char).value
+            self.char = try container.decode(Serde.JsonChar.Scalar.self, forKey: .char).value
             self.string = try container.decode(String.self, forKey: .string)
         }
 
@@ -305,7 +305,7 @@ fn struct_with_fields_of_primitive_types() {
             try container.encode(self.u128, forKey: .u128)
             try container.encode(self.f32, forKey: .f32)
             try container.encode(self.f64, forKey: .f64)
-            try container.encode(Serde.JsonChar(self.char), forKey: .char)
+            try container.encode(Serde.JsonChar.Scalar(self.char), forKey: .char)
             try container.encode(self.string, forKey: .string)
         }
 
@@ -2118,7 +2118,7 @@ fn adjacently_tagged_enum() {
                 self = .newType(
                     try { () throws -> Character? in
                         guard container.contains(Serde.JsonKey("c")), try !container.decodeNil(forKey: Serde.JsonKey("c")) else { return nil }
-                        return try container.decode(Serde.JsonChar.self, forKey: Serde.JsonKey("c")).value
+                        return try container.decode(Serde.JsonChar.Scalar.self, forKey: Serde.JsonKey("c")).value
                     }()
                 )
             case "Tuple":
@@ -2146,7 +2146,7 @@ fn adjacently_tagged_enum() {
                 var container = encoder.container(keyedBy: Serde.JsonKey.self)
                 try container.encode("NewType", forKey: Serde.JsonKey("t"))
                 if let value0 = payload0 {
-                    try container.encode(Serde.JsonChar(value0), forKey: Serde.JsonKey("c"))
+                    try container.encode(Serde.JsonChar.Scalar(value0), forKey: Serde.JsonKey("c"))
                 } else {
                     try container.encodeNil(forKey: Serde.JsonKey("c"))
                 }
@@ -2220,14 +2220,14 @@ fn struct_with_values_swift_codes_differently() {
         public init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             self.unit = try container.decode(Serde.JsonUnit.self, forKey: .unit).value
-            self.letter = try container.decode(Serde.JsonChar.self, forKey: .letter).value
+            self.letter = try container.decode(Serde.JsonChar.Scalar.self, forKey: .letter).value
             self.pair = try { () throws -> (UInt8, Character?) in
                 var nested0 = try container.nestedUnkeyedContainer(forKey: .pair)
                 return (
                     try nested0.decode(UInt8.self),
                     try { () throws -> Character? in
                         guard try !nested0.decodeNil() else { return nil }
-                        return try nested0.decode(Serde.JsonChar.self).value
+                        return try nested0.decode(Serde.JsonChar.Scalar.self).value
                     }()
                 )
             }()
@@ -2254,12 +2254,12 @@ fn struct_with_values_swift_codes_differently() {
         public func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(Serde.JsonUnit(), forKey: .unit)
-            try container.encode(Serde.JsonChar(self.letter), forKey: .letter)
+            try container.encode(Serde.JsonChar.Scalar(self.letter), forKey: .letter)
             do {
                 var nested0 = container.nestedUnkeyedContainer(forKey: .pair)
                 try nested0.encode(self.pair.0)
                 if let value1 = self.pair.1 {
-                    try nested0.encode(Serde.JsonChar(value1))
+                    try nested0.encode(Serde.JsonChar.Scalar(value1))
                 } else {
                     try nested0.encodeNil()
                 }

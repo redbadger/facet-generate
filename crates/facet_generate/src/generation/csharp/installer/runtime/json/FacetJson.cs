@@ -141,6 +141,107 @@ public static partial class FacetJson
                  Element(c5, ref r, o, "a 7-tuple"), Element(c6, ref r, o, "a 7-tuple"),
                  Element(c7, ref r, o, "a 7-tuple")));
 
+    // Past seven elements, a `ValueTuple` holds the rest in a nested `TRest`,
+    // which the tuple syntax hides: its elements are still `Item8` onwards, and
+    // Rust writes them all in one flat array, up to the twelve facet reflects.
+    public static JsonConverter<(T1, T2, T3, T4, T5, T6, T7, T8)> Tuple<T1, T2, T3, T4, T5, T6, T7, T8>(
+        JsonConverter<T1> c1, JsonConverter<T2> c2, JsonConverter<T3> c3, JsonConverter<T4> c4,
+        JsonConverter<T5> c5, JsonConverter<T6> c6, JsonConverter<T7> c7, JsonConverter<T8> c8) =>
+        new TupleConverter<(T1, T2, T3, T4, T5, T6, T7, T8)>(
+            8,
+            (w, v, o) =>
+            {
+                c1.Write(w, v.Item1, o); c2.Write(w, v.Item2, o); c3.Write(w, v.Item3, o);
+                c4.Write(w, v.Item4, o); c5.Write(w, v.Item5, o); c6.Write(w, v.Item6, o);
+                c7.Write(w, v.Item7, o); c8.Write(w, v.Item8, o);
+            },
+            (ref Utf8JsonReader r, JsonSerializerOptions o) =>
+                (Element(c1, ref r, o, "an 8-tuple"), Element(c2, ref r, o, "an 8-tuple"),
+                 Element(c3, ref r, o, "an 8-tuple"), Element(c4, ref r, o, "an 8-tuple"),
+                 Element(c5, ref r, o, "an 8-tuple"), Element(c6, ref r, o, "an 8-tuple"),
+                 Element(c7, ref r, o, "an 8-tuple"), Element(c8, ref r, o, "an 8-tuple")));
+
+    public static JsonConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9)> Tuple<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
+        JsonConverter<T1> c1, JsonConverter<T2> c2, JsonConverter<T3> c3, JsonConverter<T4> c4,
+        JsonConverter<T5> c5, JsonConverter<T6> c6, JsonConverter<T7> c7, JsonConverter<T8> c8,
+        JsonConverter<T9> c9) =>
+        new TupleConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9)>(
+            9,
+            (w, v, o) =>
+            {
+                c1.Write(w, v.Item1, o); c2.Write(w, v.Item2, o); c3.Write(w, v.Item3, o);
+                c4.Write(w, v.Item4, o); c5.Write(w, v.Item5, o); c6.Write(w, v.Item6, o);
+                c7.Write(w, v.Item7, o); c8.Write(w, v.Item8, o); c9.Write(w, v.Item9, o);
+            },
+            (ref Utf8JsonReader r, JsonSerializerOptions o) =>
+                (Element(c1, ref r, o, "a 9-tuple"), Element(c2, ref r, o, "a 9-tuple"),
+                 Element(c3, ref r, o, "a 9-tuple"), Element(c4, ref r, o, "a 9-tuple"),
+                 Element(c5, ref r, o, "a 9-tuple"), Element(c6, ref r, o, "a 9-tuple"),
+                 Element(c7, ref r, o, "a 9-tuple"), Element(c8, ref r, o, "a 9-tuple"),
+                 Element(c9, ref r, o, "a 9-tuple")));
+
+    public static JsonConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)> Tuple<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
+        JsonConverter<T1> c1, JsonConverter<T2> c2, JsonConverter<T3> c3, JsonConverter<T4> c4,
+        JsonConverter<T5> c5, JsonConverter<T6> c6, JsonConverter<T7> c7, JsonConverter<T8> c8,
+        JsonConverter<T9> c9, JsonConverter<T10> c10) =>
+        new TupleConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10)>(
+            10,
+            (w, v, o) =>
+            {
+                c1.Write(w, v.Item1, o); c2.Write(w, v.Item2, o); c3.Write(w, v.Item3, o);
+                c4.Write(w, v.Item4, o); c5.Write(w, v.Item5, o); c6.Write(w, v.Item6, o);
+                c7.Write(w, v.Item7, o); c8.Write(w, v.Item8, o); c9.Write(w, v.Item9, o);
+                c10.Write(w, v.Item10, o);
+            },
+            (ref Utf8JsonReader r, JsonSerializerOptions o) =>
+                (Element(c1, ref r, o, "a 10-tuple"), Element(c2, ref r, o, "a 10-tuple"),
+                 Element(c3, ref r, o, "a 10-tuple"), Element(c4, ref r, o, "a 10-tuple"),
+                 Element(c5, ref r, o, "a 10-tuple"), Element(c6, ref r, o, "a 10-tuple"),
+                 Element(c7, ref r, o, "a 10-tuple"), Element(c8, ref r, o, "a 10-tuple"),
+                 Element(c9, ref r, o, "a 10-tuple"), Element(c10, ref r, o, "a 10-tuple")));
+
+    public static JsonConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)> Tuple<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11>(
+        JsonConverter<T1> c1, JsonConverter<T2> c2, JsonConverter<T3> c3, JsonConverter<T4> c4,
+        JsonConverter<T5> c5, JsonConverter<T6> c6, JsonConverter<T7> c7, JsonConverter<T8> c8,
+        JsonConverter<T9> c9, JsonConverter<T10> c10, JsonConverter<T11> c11) =>
+        new TupleConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11)>(
+            11,
+            (w, v, o) =>
+            {
+                c1.Write(w, v.Item1, o); c2.Write(w, v.Item2, o); c3.Write(w, v.Item3, o);
+                c4.Write(w, v.Item4, o); c5.Write(w, v.Item5, o); c6.Write(w, v.Item6, o);
+                c7.Write(w, v.Item7, o); c8.Write(w, v.Item8, o); c9.Write(w, v.Item9, o);
+                c10.Write(w, v.Item10, o); c11.Write(w, v.Item11, o);
+            },
+            (ref Utf8JsonReader r, JsonSerializerOptions o) =>
+                (Element(c1, ref r, o, "an 11-tuple"), Element(c2, ref r, o, "an 11-tuple"),
+                 Element(c3, ref r, o, "an 11-tuple"), Element(c4, ref r, o, "an 11-tuple"),
+                 Element(c5, ref r, o, "an 11-tuple"), Element(c6, ref r, o, "an 11-tuple"),
+                 Element(c7, ref r, o, "an 11-tuple"), Element(c8, ref r, o, "an 11-tuple"),
+                 Element(c9, ref r, o, "an 11-tuple"), Element(c10, ref r, o, "an 11-tuple"),
+                 Element(c11, ref r, o, "an 11-tuple")));
+
+    public static JsonConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)> Tuple<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12>(
+        JsonConverter<T1> c1, JsonConverter<T2> c2, JsonConverter<T3> c3, JsonConverter<T4> c4,
+        JsonConverter<T5> c5, JsonConverter<T6> c6, JsonConverter<T7> c7, JsonConverter<T8> c8,
+        JsonConverter<T9> c9, JsonConverter<T10> c10, JsonConverter<T11> c11, JsonConverter<T12> c12) =>
+        new TupleConverter<(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12)>(
+            12,
+            (w, v, o) =>
+            {
+                c1.Write(w, v.Item1, o); c2.Write(w, v.Item2, o); c3.Write(w, v.Item3, o);
+                c4.Write(w, v.Item4, o); c5.Write(w, v.Item5, o); c6.Write(w, v.Item6, o);
+                c7.Write(w, v.Item7, o); c8.Write(w, v.Item8, o); c9.Write(w, v.Item9, o);
+                c10.Write(w, v.Item10, o); c11.Write(w, v.Item11, o); c12.Write(w, v.Item12, o);
+            },
+            (ref Utf8JsonReader r, JsonSerializerOptions o) =>
+                (Element(c1, ref r, o, "a 12-tuple"), Element(c2, ref r, o, "a 12-tuple"),
+                 Element(c3, ref r, o, "a 12-tuple"), Element(c4, ref r, o, "a 12-tuple"),
+                 Element(c5, ref r, o, "a 12-tuple"), Element(c6, ref r, o, "a 12-tuple"),
+                 Element(c7, ref r, o, "a 12-tuple"), Element(c8, ref r, o, "a 12-tuple"),
+                 Element(c9, ref r, o, "a 12-tuple"), Element(c10, ref r, o, "a 12-tuple"),
+                 Element(c11, ref r, o, "a 12-tuple"), Element(c12, ref r, o, "a 12-tuple")));
+
     // -----------------------------------------------------------------------
     // Reading and writing values
     // -----------------------------------------------------------------------
@@ -824,7 +925,7 @@ public static partial class FacetJson
     {
         public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var type = $"a {size}-tuple";
+            var type = size is 8 or 11 ? $"an {size}-tuple" : $"a {size}-tuple";
             FacetJson.StartArray(ref reader, type);
             var value = read(ref reader, options);
             FacetJson.EndArray(ref reader, type);

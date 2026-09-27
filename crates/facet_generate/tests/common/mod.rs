@@ -937,6 +937,247 @@ pub mod fixed_arrays {
 );"#;
 }
 
+/// Tuples of eight to twelve elements (#212), past the seven a C# `ValueTuple`
+/// holds before it nests the rest in its `TRest`: bare, nested in each other
+/// across that boundary, and held by a list, an option, a map and an enum
+/// variant.
+#[allow(clippy::type_complexity)]
+pub mod long_tuples {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    pub type Eight = (u8, i16, u32, i64, bool, String, f64, Option<u16>);
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    pub struct LongTuples {
+        pub eight: Eight,
+        pub nine: (u8, u8, u8, u8, u8, u8, u8, u8, String),
+        pub twelve: (u8, u16, u32, u64, i8, i16, i32, i64, f32, f64, bool, String),
+        /// An 8-tuple as the eighth element, the first of the `TRest`.
+        pub nested: (u8, u8, u8, u8, u8, u8, u8, Eight, u8),
+        /// A 9-tuple as the twelfth.
+        pub nested_last: (
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            i8,
+            (String, u8, u8, u8, u8, u8, u8, u8, Vec<u8>),
+        ),
+        pub list: Vec<Eight>,
+        pub maybe: Option<(u8, u8, u8, u8, u8, u8, u8, u8, u8)>,
+        pub none: Option<(u8, u8, u8, u8, u8, u8, u8, u8, u8)>,
+        pub keyed: BTreeMap<String, (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8)>,
+        pub choices: Vec<LongChoice>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq)]
+    #[repr(C)]
+    pub enum LongChoice {
+        Short,
+        Wrapped(Eight),
+        Fields(u8, u8, u8, u8, u8, u8, u8, u8, u8),
+        Named {
+            twelve: (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, String),
+        },
+    }
+
+    /// Returns a registry containing only [`LongTuples`] and the types it
+    /// holds.
+    pub fn get_registry() -> Registry {
+        reflect!(LongTuples).unwrap()
+    }
+
+    fn eight(base: u8) -> Eight {
+        (
+            base,
+            -i16::from(base) - 1,
+            u32::from(base) + 2,
+            -i64::from(base) - 3,
+            base.is_multiple_of(2),
+            format!("s{base}"),
+            f64::from(base) + 0.5,
+            Some(u16::from(base) + 7),
+        )
+    }
+
+    /// A sample [`LongTuples`], with every element distinct from its
+    /// neighbours so that a transposition would show.
+    pub fn sample() -> LongTuples {
+        LongTuples {
+            eight: eight(1),
+            nine: (1, 2, 3, 4, 5, 6, 7, 8, "nine".to_string()),
+            twelve: (
+                1,
+                2,
+                3,
+                u64::MAX,
+                -5,
+                -6,
+                -7,
+                i64::MIN,
+                2.5,
+                -0.25,
+                true,
+                "twelve".to_string(),
+            ),
+            nested: (1, 2, 3, 4, 5, 6, 7, eight(8), 9),
+            nested_last: (
+                -1,
+                -2,
+                -3,
+                -4,
+                -5,
+                -6,
+                -7,
+                -8,
+                -9,
+                -10,
+                -11,
+                ("last".to_string(), 1, 2, 3, 4, 5, 6, 7, vec![8, 9]),
+            ),
+            list: vec![eight(2), eight(3)],
+            maybe: Some((9, 8, 7, 6, 5, 4, 3, 2, 1)),
+            none: None,
+            keyed: BTreeMap::from([("key".to_string(), (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))]),
+            choices: vec![
+                LongChoice::Short,
+                LongChoice::Wrapped(eight(4)),
+                LongChoice::Fields(1, 2, 3, 4, 5, 6, 7, 8, 9),
+                LongChoice::Named {
+                    twelve: (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, "x".to_string()),
+                },
+            ],
+        }
+    }
+
+    /// [`sample`] as the generated C# spells it.
+    pub const CSHARP_SAMPLE: &str = r#"
+static (byte, short, uint, long, bool, string, double, ushort?) Eight(byte b) =>
+    (b, (short)(-b - 1), (uint)(b + 2), -b - 3L, b % 2 == 0, $"s{b}", b + 0.5, (ushort)(b + 7));
+
+static LongTuples Sample() => new LongTuples
+{
+    Eight = Eight(1),
+    Nine = (1, 2, 3, 4, 5, 6, 7, 8, "nine"),
+    Twelve = (1, 2, 3, ulong.MaxValue, -5, -6, -7, long.MinValue, 2.5f, -0.25, true, "twelve"),
+    Nested = (1, 2, 3, 4, 5, 6, 7, Eight(8), 9),
+    NestedLast = (-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, ("last", 1, 2, 3, 4, 5, 6, 7, new ObservableCollection<byte> { 8, 9 })),
+    List = new ObservableCollection<(byte, short, uint, long, bool, string, double, ushort?)> { Eight(2), Eight(3) },
+    Maybe = (9, 8, 7, 6, 5, 4, 3, 2, 1),
+    None = null,
+    Keyed = new Dictionary<string, (byte, byte, byte, byte, byte, byte, byte, byte, byte, byte, byte, byte)>
+    {
+        ["key"] = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+    },
+    Choices = new ObservableCollection<LongChoice>
+    {
+        new LongChoice.Short(),
+        new LongChoice.Wrapped(Eight(4)),
+        new LongChoice.Fields(1, 2, 3, 4, 5, 6, 7, 8, 9),
+        new LongChoice.Named((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, "x")),
+    },
+};
+"#;
+}
+
+/// Tuples nested in tuples, beside each other in one type, and inside every
+/// other format, including a field named like a tuple element's local (#211).
+pub mod tuples {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Pairs {
+        pub nested: (u8, (String, bool)),
+        pub first: (u16, String),
+        pub second: (bool, u32),
+        pub deep: ((u8, (u8, u8)), u8),
+        pub field0: (u8, (u8, u8)),
+        pub list: Vec<(u8, (String, bool))>,
+        pub maybe: Option<(u8, (String, bool))>,
+        pub by_pair: BTreeMap<(u8, u16), (String, (bool, u8))>,
+        pub fixed: [(u8, (u8, bool)); 2],
+        pub pairings: Vec<Pairing>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Pairing {
+        Tuple((u8, (String, bool)), (u16, u8)),
+        Wrapped((u8, (String, bool))),
+        Struct {
+            first: (u8, bool),
+            second: (String, (u8, u8)),
+        },
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Pairs).unwrap()
+    }
+
+    /// A value holding every field. The map's keys are the same length, so
+    /// bincode's order for them (by encoding) is Rust's.
+    pub fn sample() -> Pairs {
+        Pairs {
+            nested: (1, ("one".to_string(), true)),
+            first: (515, "first".to_string()),
+            second: (false, 70000),
+            deep: ((2, (3, 4)), 5),
+            field0: (6, (7, 8)),
+            list: vec![
+                (9, ("a".to_string(), false)),
+                (10, ("bc".to_string(), true)),
+            ],
+            maybe: Some((11, ("maybe".to_string(), true))),
+            by_pair: BTreeMap::from([
+                ((1, 2), ("x".to_string(), (true, 3))),
+                ((4, 5), ("yz".to_string(), (false, 6))),
+            ]),
+            fixed: [(12, (13, true)), (14, (15, false))],
+            pairings: vec![
+                Pairing::Tuple((16, ("t".to_string(), false)), (17, 18)),
+                Pairing::Wrapped((19, ("w".to_string(), true))),
+                Pairing::Struct {
+                    first: (20, true),
+                    second: ("s".to_string(), (21, 22)),
+                },
+            ],
+        }
+    }
+
+    /// [`sample`] as the generated TypeScript spells it: a `[T; N]` is an
+    /// array of one-element tuples, `[T][]`.
+    pub const TYPESCRIPT_SAMPLE: &str = r#"const sample = new Pairs(
+    [1, ["one", true]],
+    [515, "first"],
+    [false, 70000],
+    [[2, [3, 4]], 5],
+    [6, [7, 8]],
+    [[9, ["a", false]], [10, ["bc", true]]],
+    [11, ["maybe", true]],
+    new Map([[[1, 2], ["x", [true, 3]]], [[4, 5], ["yz", [false, 6]]]]),
+    [[[12, [13, true]]], [[14, [15, false]]]],
+    [
+        pairingTuple([16, ["t", false]], [17, 18]),
+        pairingWrapped([19, ["w", true]]),
+        pairingStruct([20, true], ["s", [21, 22]]),
+    ],
+);"#;
+}
+
 // ---------------------------------------------------------------------------
 // Cross-namespace fixtures — shared by the per-language compilation tests.
 //

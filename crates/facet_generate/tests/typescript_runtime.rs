@@ -302,6 +302,35 @@ Deno.test("fixed-size arrays round-trip through bincode", () => {{
     project.run();
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, round-trip through
+/// bincode (#211).
+#[test]
+fn test_typescript_runtime_bincode_nested_tuples_roundtrip() {
+    use common::tuples::{TYPESCRIPT_SAMPLE, get_registry, sample};
+
+    let mut project = TsProject::new(&get_registry());
+    let bytes = to_byte_list(&bincode::serialize(&sample()).unwrap());
+
+    project.write_test(&format!(
+        r#"
+Deno.test("nested tuples round-trip through bincode", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  {TYPESCRIPT_SAMPLE}
+
+  const actual = Pairs.deserialize(new BincodeDeserializer(expectedBytes));
+  assertEquals(actual, sample);
+
+  const serializer = new BincodeSerializer();
+  sample.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes);
+}});
+"#
+    ));
+
+    project.run();
+}
+
 #[test]
 fn test_typescript_runtime_i64_i128_low_limb_high_bit_roundtrip() {
     const LARGE_I64: i64 = 1_785_688_513_662;
@@ -487,6 +516,124 @@ Deno.test("truncated input throws instead of yielding a short value", () => {
 });
 "#,
     );
+
+    project.run();
+}
+
+/// Round-trips `char`s of one to four UTF-8 bytes, in a sequence, an option
+/// and a map, between Rust's `bincode` and the generated TypeScript, which
+/// declares them as `string`: TypeScript decodes Rust's bytes into the value
+/// it builds itself and encodes it back into those bytes. A string that isn't
+/// exactly one Unicode scalar value isn't serialized, and bytes that aren't
+/// the UTF-8 encoding of one aren't deserialized (#213).
+#[test]
+fn test_typescript_runtime_bincode_chars_roundtrip() {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use serde::Serialize;
+
+    #[derive(Facet, Serialize)]
+    struct CharData {
+        ascii: char,
+        two_bytes: char,
+        three_bytes: char,
+        four_bytes: char,
+        chars: Vec<char>,
+        maybe_char: Option<char>,
+        no_char: Option<char>,
+        by_char: BTreeMap<char, char>,
+        letter: Letter,
+    }
+
+    /// Nothing but a `char`, so that a value that isn't one is rejected by
+    /// the `char` and not by what follows it.
+    #[derive(Facet, Serialize)]
+    struct Letter(char);
+
+    // Rust's `bincode` writes a `char` as its UTF-8 bytes, with no length.
+    assert_eq!(bincode::serialize(&'a').unwrap(), b"a");
+    assert_eq!(bincode::serialize(&'🦀').unwrap(), "🦀".as_bytes());
+
+    let mut project = TsProject::new(&facet_generate::reflect!(CharData).unwrap());
+    let bytes = to_byte_list(
+        &bincode::serialize(&CharData {
+            ascii: 'a',
+            two_bytes: 'é',
+            three_bytes: '€',
+            four_bytes: '🦀',
+            chars: vec!['z', 'ß', '✓', '😀'],
+            maybe_char: Some('🦀'),
+            no_char: None,
+            by_char: BTreeMap::from([('k', '🦀')]),
+            letter: Letter('Ω'),
+        })
+        .unwrap(),
+    );
+
+    project.write_test(&format!(
+        r#"
+Deno.test("chars round-trip through bincode", () => {{
+  const expectedBytes = new Uint8Array([{bytes}]);
+  const sample = new CharData(
+    "a",
+    "é",
+    "€",
+    "🦀",
+    ["z", "ß", "✓", "😀"],
+    "🦀",
+    null,
+    new Map([["k", "🦀"]]),
+    new Letter("Ω"),
+  );
+
+  const actual = CharData.deserialize(new BincodeDeserializer(expectedBytes));
+  assertEquals(actual, sample);
+
+  const serializer = new BincodeSerializer();
+  sample.serialize(serializer);
+  assertEquals(serializer.getBytes(), expectedBytes);
+
+  // Strings that aren't exactly one Unicode scalar value: none, two, a
+  // letter and a combining accent, and lone or reversed surrogates.
+  for (const bad of ["", "ab", "🦀🦀", "e\u0301", "\uD83E", "\uDD80", "\uD83Ea", "\uDD80\uD83E"]) {{
+    assertThrows(
+      () => new Letter(bad).serialize(new BincodeSerializer()),
+      Error,
+      "A char must be exactly one Unicode scalar value",
+    );
+  }}
+
+  // Bytes that aren't the UTF-8 encoding of one: a continuation byte first,
+  // a byte UTF-8 never uses, a lead byte followed by something other than a
+  // continuation, overlong encodings, a surrogate, and a code point past
+  // U+10FFFF.
+  for (const bad of [
+    [0x80],
+    [0xff],
+    [0xc3, 0x41],
+    [0xc0, 0x80],
+    [0xe0, 0x80, 0x80],
+    [0xf0, 0x80, 0x80, 0x80],
+    [0xed, 0xa0, 0x80],
+    [0xf4, 0x90, 0x80, 0x80],
+  ]) {{
+    assertThrows(
+      () => Letter.deserialize(new BincodeDeserializer(new Uint8Array(bad))),
+      Error,
+      "Invalid char encoding",
+    );
+  }}
+  // Nor are too few of them, which the runtime rejects as it does any
+  // truncated input.
+  assertThrows(
+    () => Letter.deserialize(new BincodeDeserializer(new Uint8Array([0xf0, 0x9f]))),
+    Error,
+    "Unexpected end of input",
+  );
+}});
+"#
+    ));
 
     project.run();
 }

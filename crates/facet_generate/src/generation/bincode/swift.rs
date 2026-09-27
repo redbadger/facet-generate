@@ -178,6 +178,62 @@ func deserializeUuid<D: Deserializer>(
 }
 "#;
 
+// Rust's `bincode` writes a `char` as its UTF-8 bytes with no length prefix,
+// the first byte giving the length, which these write and read a byte at a
+// time through the runtime's `u8` methods, so that an external serde package
+// needs nothing new. A Swift `Character` is a grapheme cluster, wider than a
+// Rust `char`, so one that isn't exactly one Unicode scalar value is
+// rejected. They extend the runtime's protocols, privately to the file, so
+// no generated type or property can hide them.
+const FEATURE_CHAR: &str = r#"private extension Serializer {
+    func serializeChar(value: Character) throws {
+        guard value.unicodeScalars.count == 1 else {
+            throw SerializationError.invalidValue(issue: "A char must be exactly one Unicode scalar value")
+        }
+        for byte in value.utf8 {
+            try serialize_u8(value: byte)
+        }
+    }
+}
+
+private extension Deserializer {
+    func deserializeChar() throws -> Character {
+        let first = try deserialize_u8()
+        let width: Int
+        var code: UInt32
+        switch first {
+        case 0x00...0x7f:
+            width = 1
+            code = UInt32(first)
+        case 0xc2...0xdf:
+            width = 2
+            code = UInt32(first & 0x1f)
+        case 0xe0...0xef:
+            width = 3
+            code = UInt32(first & 0x0f)
+        case 0xf0...0xf4:
+            width = 4
+            code = UInt32(first & 0x07)
+        default:
+            throw DeserializationError.invalidInput(issue: "Invalid char encoding")
+        }
+        for _ in 1..<width {
+            let byte = try deserialize_u8()
+            guard byte & 0xc0 == 0x80 else {
+                throw DeserializationError.invalidInput(issue: "Invalid char encoding")
+            }
+            code = code << 6 | UInt32(byte & 0x3f)
+        }
+        let shortest: UInt32 = [0, 0, 0x80, 0x800, 0x10000][width]
+        // `Unicode.Scalar` rejects a surrogate and a code point past U+10FFFF.
+        guard code >= shortest, let scalar = Swift.Unicode.Scalar(code) else {
+            throw DeserializationError.invalidInput(issue: "Invalid char encoding")
+        }
+        return Character(scalar)
+    }
+}
+"#;
+
 const FEATURE_TUPLE_ARRAY: &str = r"func serializeTupleArray<T, S: Serializer>(
     value: [T],
     serializer: S,
@@ -256,6 +312,10 @@ impl EmitterPlugin<Swift> for BincodePlugin {
                 Feature::Uuid => {
                     writeln!(w)?;
                     write!(w, "{}", qualified(FEATURE_UUID, config))?;
+                }
+                Feature::Char => {
+                    writeln!(w)?;
+                    write!(w, "{}", qualified(FEATURE_CHAR, config))?;
                 }
                 _ => {}
             }
@@ -660,6 +720,7 @@ fn write_format_serialize(
                 "try serializeUuid(value: {value_expr}, serializer: serializer)"
             )
         }
+        Format::Char => writeln!(w, "try serializer.serializeChar(value: {value_expr})"),
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
             writeln!(w, "try serializer.serialize_{t}(value: {value_expr})")
@@ -768,6 +829,7 @@ fn write_deserialize_expr(w: &mut dyn IndentWrite, format: &Format) -> io::Resul
             write!(w, "}}")
         }
         Format::Uuid => write!(w, "try deserializeUuid(deserializer: deserializer)"),
+        Format::Char => write!(w, "try deserializer.deserializeChar()"),
         primitive => {
             let t = format!("{primitive:?}").to_lowercase();
             write!(w, "try deserializer.deserialize_{t}()")

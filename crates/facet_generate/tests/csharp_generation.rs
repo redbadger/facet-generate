@@ -374,7 +374,8 @@ mod named_like_types {
         pub other: Presence,
     }
 
-    /// The helper classes: `MoodBincode`, `FacetHelpers` and `UuidSerde`.
+    /// The helper classes: `MoodBincode`, `FacetHelpers`, `UuidSerde` and
+    /// `CharSerde`.
     #[derive(Facet)]
     pub struct Tally {
         pub mood_bincode: u32,
@@ -382,6 +383,8 @@ mod named_like_types {
         pub facet_helpers: Vec<u32>,
         pub uuid_serde: u32,
         pub id: uuid::Uuid,
+        pub char_serde: u32,
+        pub letter: char,
     }
 
     /// A property of a variant's nested record hides a helper class in the
@@ -572,6 +575,38 @@ fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles(
 
     let dir = tempdir().unwrap();
     csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
+/// Tuples of eight to twelve elements, bare and nested in tuples, lists,
+/// options, maps and enum variants, compile with each plugin and with both
+/// (#212). The JSON converters named a `FacetJson.Tuple` overload the runtime
+/// stopped at seven elements for:
+/// `error CS1501: No overload for method 'Tuple' takes 12 arguments`.
+#[test]
+fn test_that_csharp_code_with_long_tuples_compiles() {
+    let registry = common::long_tuples::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
         .plugin(JsonPlugin)
         .generate(&registry)
         .unwrap();

@@ -253,6 +253,37 @@ fn test_that_swift_code_shadowing_builtin_names_compiles_with_bincode() {
     );
 }
 
+/// Types named `Character` and `Unicode` shadow the standard library's, which
+/// both plugins' `char` helpers name (#213).
+#[test]
+fn test_that_swift_code_with_chars_beside_types_named_like_builtins_compiles() {
+    #[derive(Facet)]
+    pub struct Character {
+        pub letter: char,
+    }
+
+    #[derive(Facet)]
+    pub struct Unicode {
+        pub letters: Vec<char>,
+        pub maybe: Option<char>,
+        pub by_letter: BTreeMap<char, char>,
+        pub other: Character,
+    }
+
+    let dir = tempdir().unwrap();
+    SwiftInstaller::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&reflect!(Unicode).unwrap())
+        .unwrap();
+    let status = Command::new("swift")
+        .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
 // ---------------------------------------------------------------------------
 // Error-case tests: non-Hashable types used as Set elements / Map keys
 // ---------------------------------------------------------------------------

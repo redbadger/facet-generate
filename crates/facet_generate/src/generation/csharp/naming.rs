@@ -155,6 +155,7 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
         "BincodeSerializer",
         "the runtime type `Facet.Runtime.Bincode.BincodeSerializer`",
     ),
+    ("CharSerde", "the generated `CharSerde` helper class"),
     (
         "DeserializationError",
         "the runtime type `Facet.Runtime.Serde.DeserializationError`",
@@ -180,6 +181,10 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     (
         "ISerializer",
         "the runtime interface `Facet.Runtime.Serde.ISerializer`",
+    ),
+    (
+        "JsonCharConverter",
+        "the generated `JsonCharConverter` converter",
     ),
     (
         "JsonConverter",
@@ -227,6 +232,17 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ),
 ];
 
+/// The entries of [`FORBIDDEN_TYPES`] that the generated code declares only
+/// for a field of a particular format: the helper classes of a `char`. A
+/// module with no such field doesn't declare them, so a type of that name
+/// only collides where one exists. Sorted by name.
+pub(crate) const FORMAT_BOUND_TYPES: FormatBoundNames =
+    &[("CharSerde", is_char), ("JsonCharConverter", is_char)];
+
+const fn is_char(format: &Format) -> bool {
+    matches!(format, Format::Char)
+}
+
 /// Property names the generated code cannot accommodate, with the clause
 /// explaining why. Sorted by name.
 pub(crate) const FORBIDDEN_MEMBERS: ForbiddenNames = &[
@@ -262,7 +278,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     escape_style: EscapeStyle::AtPrefix,
     forbidden_types: FORBIDDEN_TYPES,
     forbidden_members: FORBIDDEN_MEMBERS,
-    format_bound_types: &[],
+    format_bound_types: FORMAT_BOUND_TYPES,
     type_case,
     member_case,
     variants_are_types: true,
@@ -371,6 +387,22 @@ mod tests {
             FORBIDDEN_MEMBERS.windows(2).all(|w| w[0].0 < w[1].0),
             "FORBIDDEN_MEMBERS must be sorted by name"
         );
+        assert!(
+            FORMAT_BOUND_TYPES.windows(2).all(|w| w[0].0 < w[1].0),
+            "FORMAT_BOUND_TYPES must be sorted by name"
+        );
+    }
+
+    #[test]
+    fn every_format_bound_type_is_also_forbidden() {
+        for (name, _) in FORMAT_BOUND_TYPES {
+            assert!(
+                FORBIDDEN_TYPES
+                    .binary_search_by_key(name, |(n, _)| *n)
+                    .is_ok(),
+                "`{name}` is format-bound but not in FORBIDDEN_TYPES"
+            );
+        }
     }
 
     #[test]

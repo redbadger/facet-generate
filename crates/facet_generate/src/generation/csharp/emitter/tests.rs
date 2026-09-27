@@ -138,7 +138,7 @@ fn struct_with_fields_of_primitive_types() {
         [ObservableProperty]
         private double _f64;
         [ObservableProperty]
-        private char _char;
+        private string _char;
         [ObservableProperty]
         private string _string;
     }
