@@ -16,7 +16,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A new push to a PR supersedes its earlier run, so cancel that. Let every
+  # run on main finish: a cancelled run there shows as "failing" on the
+  # README's build badge.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   RUSTFLAGS: "-D warnings"
