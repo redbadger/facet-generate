@@ -1293,6 +1293,62 @@ let sample = SwiftPairs(
 }
 
 // ---------------------------------------------------------------------------
+// One-element tuples — shared by the compilation and runtime tests (#236).
+//
+// Swift, Kotlin and C# declare `(T,)` as `T`. Bincode writes it as the
+// element, and `serde_json` as a one-element array.
+// ---------------------------------------------------------------------------
+
+pub mod single_tuples {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Singles {
+        pub number: (u8,),
+        pub text: (String,),
+        pub list: Vec<(u8,)>,
+        pub maybe_text: Option<(String,)>,
+        pub maybe_number: Option<(u32,)>,
+        pub nested: ((u8,), u16),
+        pub by_key: BTreeMap<String, (u8,)>,
+        pub variants: Vec<Solo>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Solo {
+        Wrapped((u8,)),
+        Tuple((String,), u8),
+        Struct { one: (bool,) },
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Singles).unwrap()
+    }
+
+    pub fn sample() -> Singles {
+        Singles {
+            number: (5,),
+            text: ("five".to_string(),),
+            list: vec![(1,), (2,)],
+            maybe_text: Some(("maybe".to_string(),)),
+            maybe_number: None,
+            nested: ((3,), 515),
+            by_key: BTreeMap::from([("a".to_string(), (1,)), ("b".to_string(), (2,))]),
+            variants: vec![
+                Solo::Wrapped((6,)),
+                Solo::Tuple(("t".to_string(),), 7),
+                Solo::Struct { one: (true,) },
+            ],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Renames that are not identifiers — shared by the compilation and runtime
 // tests (#233).
 //

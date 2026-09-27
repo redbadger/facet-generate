@@ -639,3 +639,67 @@ fn a_plugin_s_reference_to_an_unregistered_type_is_rejected() {
         "{error}"
     );
 }
+
+/// An `Option<Option<T>>` would be declared `T??`, which C# rejects (CS1519),
+/// so it is rejected before anything is written, including one whose inner
+/// option is in a one-element tuple, which C# declares as its element (#236).
+#[test]
+fn rejects_an_option_of_an_option() {
+    use crate::generation::{Error, csharp::CSharpCodeGenerator};
+
+    #[derive(Facet)]
+    #[allow(dead_code, clippy::option_option)]
+    struct Nested {
+        value: Option<Option<u32>>,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct InTuple {
+        list: Vec<Option<(Option<String>,)>>,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Fine {
+        value: Option<(u32,)>,
+    }
+
+    for (registry, name) in [
+        (reflect!(Nested).unwrap(), "Nested"),
+        (reflect!(InTuple).unwrap(), "InTuple"),
+    ] {
+        let message = format!(
+            "C#: type `{name}` in the root namespace holds an `Option<Option<T>>`, which C# \
+             cannot declare (`T??`); wrap the inner option in a struct or an enum"
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let installer = Installer::new("Example", dir.path())
+            .plugin(BincodePlugin)
+            .plugin(JsonPlugin);
+        let Error::Io(error) = installer.generate(&registry).unwrap_err() else {
+            panic!("expected an I/O error");
+        };
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(error.to_string(), message);
+        assert!(
+            std::fs::read_dir(dir.path()).unwrap().next().is_none(),
+            "nothing is written"
+        );
+
+        let config = CodeGeneratorConfig::new("Example".to_string());
+        let mut out = Vec::new();
+        let error = CSharpCodeGenerator::new(&config)
+            .output(&mut out, &registry)
+            .unwrap_err();
+        assert_eq!(error.to_string(), message);
+        assert!(out.is_empty(), "nothing is written");
+    }
+
+    // An option of a one-element tuple of anything else is fine.
+    let dir = tempfile::tempdir().unwrap();
+    Installer::new("Example", dir.path())
+        .generate(&reflect!(Fine).unwrap())
+        .unwrap();
+}

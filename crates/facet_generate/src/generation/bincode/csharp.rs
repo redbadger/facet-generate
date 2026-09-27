@@ -30,7 +30,7 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
     CodeGeneratorConfig, Feature,
-    csharp::{CSharp, escape_identifier, naming},
+    csharp::{CSharp, escape_identifier, naming, unwrap_single},
     indent::{IndentWrite, Newlines, with_block},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
@@ -849,6 +849,7 @@ fn write_serialize_expr(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
@@ -917,6 +918,7 @@ fn write_deserialize_expr(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
@@ -1023,6 +1025,7 @@ fn write_serialize_statement(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
             write_serialize_statement(w, &format!("{value_expr}.Item{}", index + 1), inner, scope)?;
@@ -1059,6 +1062,7 @@ fn write_deserialize_locals(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
             let name = format!("{var_name}_item{}", index + 1);
@@ -1090,6 +1094,7 @@ fn write_serialize_lambda(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "(item, s) => s.SerializeUnit(item)")
@@ -1126,6 +1131,7 @@ fn write_deserialize_lambda(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "d => d.DeserializeUnit()")
@@ -1161,6 +1167,7 @@ fn write_serialize_tuple_stmts(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
             write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner, scope)?;

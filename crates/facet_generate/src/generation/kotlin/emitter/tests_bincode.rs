@@ -2890,3 +2890,86 @@ fn renamed_variants_that_are_not_identifiers() {
     }
     "#);
 }
+
+/// A one-element tuple is declared, and read, as its element (#236).
+#[test]
+fn one_element_tuples_are_their_element() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as Kotlin with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    data class Singles(
+        val number: UByte,
+        val text: String,
+        val list: List<UByte>,
+        val maybeText: String? = null,
+        val nested: Pair<UByte, UShort>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_u8(number)
+            serializer.serialize_str(text)
+            list.serialize(serializer) { level1 ->
+                serializer.serialize_u8(level1)
+            }
+            maybeText.serializeOptionOf(serializer) { level1 ->
+                serializer.serialize_str(level1)
+            }
+            serializer.serialize_u8(nested.first)
+            serializer.serialize_u16(nested.second)
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Singles {
+                deserializer.increase_container_depth()
+                val number = deserializer.deserialize_u8()
+                val text = deserializer.deserialize_str()
+                val list =
+                    deserializer.deserializeListOf {
+                        deserializer.deserialize_u8()
+                    }
+                val maybeText =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserialize_str()
+                    }
+                val nested = run {
+                    val first = deserializer.deserialize_u8()
+                    val second = deserializer.deserialize_u16()
+                    Pair(first, second)
+                }
+                deserializer.decrease_container_depth()
+                return Singles(number, text, list, maybeText, nested)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Singles {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}

@@ -441,7 +441,9 @@ impl<'a> Converter<'a> {
             ),
             Format::Tuple(formats) => match formats.as_slice() {
                 [] => builtin("Unit"),
-                [format] => self.converter(format),
+                // A one-element tuple is declared as its element, but
+                // `serde_json` writes it as a one-element array.
+                [format] => format!("{json}.Tuple({})", self.converter(format)),
                 _ => format!(
                     "{json}.Tuple({})",
                     formats

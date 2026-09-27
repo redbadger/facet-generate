@@ -1184,3 +1184,14 @@ fn test_that_swift_code_with_renames_that_are_not_identifiers_compiles() {
     assert_installed_package_compiles(&registry, BincodePlugin);
     assert_installed_package_compiles(&registry, JsonPlugin);
 }
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, compile with each plugin (#236). Bincode wrote one declared
+/// as its element as `self.number.0`: "value of type `UInt8` has no member
+/// `0`".
+#[test]
+fn test_that_swift_code_with_one_element_tuples_compiles() {
+    let registry = common::single_tuples::get_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}

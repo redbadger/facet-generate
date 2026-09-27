@@ -4169,3 +4169,122 @@ fn variants_with_a_property_named_like_the_variant_rename_it() {
     }
     "#);
 }
+
+/// A one-element tuple is declared as its element but written as a
+/// one-element array, as `serde_json` does (#236).
+#[test]
+fn one_element_tuples_are_one_element_arrays() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    [JsonConverter(typeof(SinglesJsonConverter))]
+    public partial class Singles : ObservableObject {
+        [property: JsonPropertyName("number")]
+        [ObservableProperty]
+        private byte _number;
+        [property: JsonPropertyName("text")]
+        [ObservableProperty]
+        private string _text;
+        [property: JsonPropertyName("list")]
+        [ObservableProperty]
+        private ObservableCollection<byte> _list;
+        [property: JsonPropertyName("maybe_text")]
+        [ObservableProperty]
+        private string? _maybeText;
+        [property: JsonPropertyName("nested")]
+        [ObservableProperty]
+        private (byte, ushort) _nested;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Singles JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Singles>(input);
+        }
+    }
+
+    public sealed class SinglesJsonConverter : JsonConverter<Singles> {
+        private static readonly JsonConverter<byte> _0 = FacetJson.Tuple(FacetJson.U8);
+        private static readonly JsonConverter<string> _1 = FacetJson.Tuple(FacetJson.Str);
+        private static readonly JsonConverter<ObservableCollection<byte>> _2 = FacetJson.List(FacetJson.Tuple(FacetJson.U8));
+        private static readonly JsonConverter<string?> _3 = FacetJson.OptionRef(FacetJson.Tuple(FacetJson.Str));
+        private static readonly JsonConverter<(byte, ushort)> _4 = FacetJson.Tuple(FacetJson.Tuple(FacetJson.U8), FacetJson.U16);
+
+        public override bool HandleNull => true;
+
+        public override Singles Read(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            FacetJson.StartObject(ref reader, "Singles");
+            byte f0 = default!;
+            var has0 = false;
+            string f1 = default!;
+            var has1 = false;
+            ObservableCollection<byte> f2 = default!;
+            var has2 = false;
+            string? f3 = default;
+            (byte, ushort) f4 = default!;
+            var has4 = false;
+            while (FacetJson.NextField(ref reader, out var key))
+            {
+                switch (key)
+                {
+                    case "number":
+                        f0 = FacetJson.Read(_0, ref reader, options);
+                        has0 = true;
+                        break;
+                    case "text":
+                        f1 = FacetJson.Read(_1, ref reader, options);
+                        has1 = true;
+                        break;
+                    case "list":
+                        f2 = FacetJson.Read(_2, ref reader, options);
+                        has2 = true;
+                        break;
+                    case "maybe_text":
+                        f3 = FacetJson.Read(_3, ref reader, options);
+                        break;
+                    case "nested":
+                        f4 = FacetJson.Read(_4, ref reader, options);
+                        has4 = true;
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
+            }
+            return new Singles
+            {
+                Number = FacetJson.Required(has0, f0, "number", "Singles"),
+                Text = FacetJson.Required(has1, f1, "text", "Singles"),
+                List = FacetJson.Required(has2, f2, "list", "Singles"),
+                MaybeText = f3,
+                Nested = FacetJson.Required(has4, f4, "nested", "Singles"),
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, Singles value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            FacetJson.WriteField(writer, "number", _0, value.Number, options);
+            FacetJson.WriteField(writer, "text", _1, value.Text, options);
+            FacetJson.WriteField(writer, "list", _2, value.List, options);
+            FacetJson.WriteField(writer, "maybe_text", _3, value.MaybeText, options);
+            FacetJson.WriteField(writer, "nested", _4, value.Nested, options);
+            writer.WriteEndObject();
+        }
+    }
+    "#);
+}

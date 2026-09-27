@@ -1872,3 +1872,132 @@ Console.WriteLine("JSON:" + sample.JsonSerialize());
         assert_eq!(actual, expected, "{output}");
     }
 }
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, round trip through bincode, which writes one as its element
+/// (#236). C# declares `(u8,)` as `byte`, as Swift and Kotlin do.
+#[test]
+fn test_csharp_bincode_runtime_on_one_element_tuples() {
+    use common::single_tuples::{get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] input = {bytes};
+var value = Singles.BincodeDeserialize(input);
+
+byte number = value.Number;
+Assert(number == 5, "number");
+Assert(value.Text == "five", "text");
+Assert(value.List.SequenceEqual(new byte[] {{ 1, 2 }}), "list");
+Assert(value.MaybeText == "maybe", "maybe text");
+Assert(value.MaybeNumber == null, "maybe number");
+Assert(value.Nested == (3, 515), "nested");
+Assert(value.ByKey["b"] == 2, "map");
+Assert(value.Variants[0] is Solo.Wrapped {{ Value: 6 }}, "newtype variant");
+Assert(value.Variants[1] is Solo.Tuple {{ Field0: "t", Field1: 7 }}, "tuple variant");
+Assert(value.Variants[2] is Solo.Struct {{ One: true }}, "struct variant");
+Assert(input.SequenceEqual(value.BincodeSerialize()), "decoded value did not roundtrip");
+
+Console.WriteLine("One-element tuples roundtrip: PASSED");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
+/// One-element tuples round trip through JSON, which writes one as a
+/// one-element array, as `serde_json` does (#236).
+#[test]
+fn test_csharp_json_runtime_on_one_element_tuples() {
+    use common::single_tuples::{Singles, get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().join("testing");
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = serde_json::to_vec(&sample()).unwrap();
+
+    let outputs = run_csharp_json_program(
+        &dir,
+        "Example",
+        r#"using System;
+using System.IO;
+using System.Linq;
+using Example;
+using Facet.Runtime.Json;
+
+static void Assert(bool condition, string message)
+{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}
+
+static bool Rejects<T>(string input)
+{
+    try
+    {
+        JsonSerde.Deserialize<T>(input);
+        return false;
+    }
+    catch (Exception)
+    {
+        return true;
+    }
+}
+
+var value = Singles.JsonDeserialize(File.ReadAllText("input.json"));
+
+Assert(value.Number == 5, "number");
+Assert(value.Text == "five", "text");
+Assert(value.List.SequenceEqual(new byte[] { 1, 2 }), "list");
+Assert(value.MaybeText == "maybe", "maybe text");
+Assert(value.MaybeNumber == null, "maybe number");
+Assert(value.Nested == (3, 515), "nested");
+Assert(value.ByKey["b"] == 2, "map");
+Assert(value.Variants[0] is Solo.Wrapped { Value: 6 }, "newtype variant");
+Assert(value.Variants[2] is Solo.Struct { One: true }, "struct variant");
+
+// A one-element tuple is an array of one, not the element itself.
+Assert(Rejects<Solo>("{\"Wrapped\": 6}"), "accepted a bare element");
+Assert(Rejects<Solo>("{\"Wrapped\": [6, 7]}"), "accepted two elements");
+
+Console.WriteLine("JSON:" + value.JsonSerialize());
+"#,
+        &reference,
+    );
+
+    assert_eq!(outputs.len(), 1, "{outputs:?}");
+    let expected: serde_json::Value = serde_json::from_slice(&reference).unwrap();
+    let output = &outputs[0];
+    let value: Singles = serde_json::from_str(output)
+        .unwrap_or_else(|e| panic!("Rust could not read C#'s JSON: {e}\n{output}"));
+    assert_eq!(value, sample(), "{output}");
+    let actual: serde_json::Value = serde_json::from_str(output).unwrap();
+    assert_eq!(actual, expected, "{output}");
+}

@@ -14,7 +14,7 @@ use crate::{
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         csharp::{
-            emitter::{CSharp, write_module_header},
+            emitter::{CSharp, check_nested_options, write_module_header},
             naming,
         },
         indent::IndentedWriter,
@@ -95,12 +95,14 @@ impl<'a> CSharpCodeGenerator<'a> {
     /// Returns an error if writing to `out` fails, or an
     /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) one, before writing
     /// anything, if the registry has a name the generated code cannot use or
-    /// a plugin declares a reference to a type that is not in the registry.
+    /// an `Option<Option<T>>`, or a plugin declares a reference to a type that
+    /// is not in the registry.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
         let config = self.module_config(registry)?;
         check_reserved_names(registry, &naming::RULES)?;
+        check_nested_options(registry)?;
 
         let updated_registry = Self::update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);

@@ -673,3 +673,35 @@ fn test_that_csharp_code_with_renames_that_are_not_identifiers_compiles() {
         .unwrap();
     dotnet_build(&dir);
 }
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, compile with each plugin and with both (#236). `(u8,)` was
+/// declared `(byte)`, which is not a tuple: "CS8124: Tuple must contain at
+/// least two elements." It is now declared as its element, as in Swift and
+/// Kotlin.
+#[test]
+fn test_that_csharp_code_with_one_element_tuples_compiles() {
+    let registry = common::single_tuples::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}

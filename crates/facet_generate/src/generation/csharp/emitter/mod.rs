@@ -68,12 +68,14 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter,
+        collision::TypeName,
         indent::{IndentWrite, Newlines},
         module::Module,
         plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder, Named, Namespace, QualifiedTypeName,
+        VariantFormat,
     },
 };
 
@@ -646,9 +648,60 @@ pub(crate) fn render_type_hiding(
     csharp_type_in(format, config, hidden)
 }
 
+/// The element of a one-element tuple, which C# declares as the element
+/// itself (a `ValueTuple` needs two elements, CS8124), as Swift and Kotlin
+/// do. Bincode writes it as the element, as Rust does, and JSON as a
+/// one-element array.
+pub(crate) fn unwrap_single(format: &Format) -> &Format {
+    match format {
+        Format::Tuple(formats) if formats.len() == 1 => unwrap_single(&formats[0]),
+        format => format,
+    }
+}
+
+/// Reject a registry holding an `Option<Option<T>>`, which C# cannot declare:
+/// `T??` is not a type (CS1519), and `Nullable<T>` cannot nest.
+///
+/// A wrapper type could keep bincode's `Some(None)` apart from `None`, but
+/// `serde_json` writes both as `null`, so no representation round-trips JSON
+/// with Rust either way. A one-element tuple is its element (see
+/// [`unwrap_single`]), so `Option<(Option<T>,)>` is rejected too.
+///
+/// Run before anything is written, so a failing registry produces no output.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::InvalidInput`](std::io::ErrorKind::InvalidInput)
+/// naming the first type that holds one.
+pub(crate) fn check_nested_options(registry: &Registry) -> Result<()> {
+    for (name, container) in registry {
+        let mut nested = false;
+        // The visitor only fails on an unresolved variable, which a finished
+        // registry never contains.
+        let _ = container.visit(&mut |format| {
+            if let Format::Option(inner) = format {
+                nested |= matches!(unwrap_single(inner), Format::Option(_));
+            }
+            Ok(())
+        });
+        if nested {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "C#: {type_name} holds an `Option<Option<T>>`, which C# cannot declare \
+                     (`T??`); wrap the inner option in a struct or an enum",
+                    type_name = TypeName(name),
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Whether the C# type of `format` is a value type — a primitive, `Guid`, a
 /// tuple, `Unit` or a C-style enum — so that its option is a `Nullable<T>`.
 pub(crate) fn is_value_type(format: &Format, config: &CodeGeneratorConfig) -> bool {
+    let format = unwrap_single(format);
     matches!(
         format,
         Format::Unit
@@ -722,8 +775,10 @@ fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[Strin
             )
         }
         Format::Tuple(formats) => {
-            if formats.is_empty() {
-                return builtin("Unit", config).into_owned();
+            match formats.as_slice() {
+                [] => return builtin("Unit", config).into_owned(),
+                [format] => return render(format),
+                _ => {}
             }
             let values = formats.iter().map(render).collect::<Vec<_>>().join(", ");
             format!("({values})")

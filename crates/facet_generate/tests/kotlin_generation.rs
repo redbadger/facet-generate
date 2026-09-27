@@ -265,3 +265,16 @@ fn test_that_kotlin_code_with_renames_that_are_not_identifiers_compiles() {
         assert_generated_code_compiles(&registry, encoding);
     }
 }
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, compile with each plugin and with both (#236). Bincode read
+/// one into a stray `val value` and assigned the property the result of
+/// `increase_container_depth()`: "Argument type mismatch: actual type is
+/// `Unit`, but `UByte` was expected."
+#[test]
+fn test_that_kotlin_code_with_one_element_tuples_compiles() {
+    let registry = common::single_tuples::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}

@@ -481,12 +481,9 @@ fn write_deserialize<W: IndentWrite>(
                     write!(w, "deserializer.deserialize_unit()")?;
                     return Ok(());
                 }
-                1 => {
-                    push_deserializer(w)?;
-                    write_deserialize(w, Some("value"), &formats[0], true)?;
-                    pop_deserializer(w)?;
-                    return Ok(());
-                }
+                // A one-element tuple is declared, and written, as its
+                // element.
+                1 => return write_deserialize(w, None, &formats[0], newline),
                 2 => {
                     write!(w, "run ")?;
                     let mut w = w.block(Newlines::BOTH)?;
