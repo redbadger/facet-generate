@@ -524,6 +524,54 @@ print("Chars roundtrip: PASSED")
     );
 }
 
+/// Round-trips a tuple nested in a tuple, alone and inside a list, an option,
+/// a map's value, a `[T; N]` and an enum variant, between Rust's `bincode` and
+/// the generated Swift: Swift decodes Rust's bytes and encodes them, and the
+/// value it builds itself, back into those bytes. A type holding a list of
+/// native tuples isn't `Equatable`, nor is a tuple of tuples, so the decoded
+/// value is checked an element at a time.
+#[test]
+fn test_swift_bincode_runtime_on_nested_tuples() {
+    use common::tuples::{SWIFT_SAMPLE, get_swift_registry, swift_sample};
+
+    let dir = tempfile::tempdir().unwrap();
+    swift::Installer::new("Example", dir.path())
+        .plugin(BincodePlugin)
+        .generate(&get_swift_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&swift_sample()).unwrap();
+
+    run_swift_main(
+        dir.path(),
+        &format!(
+            r#"
+import Serde
+import Example
+{SWIFT_SAMPLE}
+let input: [UInt8] = {input}
+let value = try SwiftPairs.bincodeDeserialize(input: input)
+precondition(value.nested.1.0 == "one", "tuple in a tuple: \(value.nested)")
+precondition(value.deep.0.1.1 == 4, "tuple in a tuple in a tuple: \(value.deep)")
+precondition(value.list[1].1.0 == "bc", "tuple in a tuple in a list: \(value.list)")
+precondition(value.layered[0].1[0].1.0 == "l", "list of tuples in a tuple in a list: \(value.layered)")
+precondition(value.maybe?.1.0 == "maybe", "tuple in a tuple in an option: \(String(describing: value.maybe))")
+precondition(value.byPair[5]?.1.1 == 6, "tuple in a tuple as a map value: \(value.byPair)")
+precondition(value.fixed[1].1.0 == 15, "tuple in a tuple in an array: \(value.fixed)")
+guard case let .tuple(field0, _) = value.pairings[0], field0.1.0 == "t" else {{
+    fatalError("tuple in a tuple in a variant: \(value.pairings)")
+}}
+for output in [try value.bincodeSerialize(), try sample.bincodeSerialize()] {{
+    precondition(output == input, "roundtrip failed:\n  \(input)\n  \(output)")
+}}
+
+print("Nested tuples roundtrip: PASSED")
+"#,
+            input = quote_bytes(&reference),
+        ),
+    );
+}
+
 /// Types exercising every shape the JSON plugin encodes, whose JSON is
 /// `serde_json`'s: the Swift side must read it and write JSON that reads
 /// back to the same Rust value.

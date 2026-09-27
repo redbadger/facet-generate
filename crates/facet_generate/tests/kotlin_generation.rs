@@ -224,6 +224,17 @@ fn test_that_kotlin_code_with_wide_tuples_compiles() {
     }
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, compile with each
+/// plugin and with both on one module.
+#[test]
+fn test_that_kotlin_code_with_nested_tuples_compiles() {
+    let registry = common::tuples::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}
+
 /// A `Uuid` field compiles with no plugin, as with each plugin (#191). Only
 /// the Bincode plugin imported `java.util.UUID`, so with none it was missing:
 /// "Unresolved reference 'UUID'."

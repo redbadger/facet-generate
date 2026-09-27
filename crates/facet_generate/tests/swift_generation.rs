@@ -1166,3 +1166,13 @@ fn test_that_swift_code_with_a_uuid_beside_a_module_named_like_an_sdk_module_com
         .unwrap();
     assert!(status.success());
 }
+
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map's value, a `[T; N]` and an enum variant, compile
+/// with each plugin.
+#[test]
+fn test_that_swift_code_with_nested_tuples_compiles() {
+    let registry = common::tuples::get_swift_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}

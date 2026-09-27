@@ -581,6 +581,38 @@ fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles(
     dotnet_build(&dir);
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, compile with each
+/// plugin and with both. Bincode read a tuple inside a list, an option, a map
+/// or an array in a lambda that expected its elements not to be tuples
+/// themselves, and panicked at generation on one that was.
+#[test]
+fn test_that_csharp_code_with_nested_tuples_compiles() {
+    let registry = common::tuples::get_registry();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
 /// Tuples of eight to twelve elements, bare and nested in tuples, lists,
 /// options, maps and enum variants, compile with each plugin and with both
 /// (#212). The JSON converters named a `FacetJson.Tuple` overload the runtime

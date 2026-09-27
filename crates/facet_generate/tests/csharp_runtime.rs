@@ -847,6 +847,62 @@ Console.WriteLine("Long tuples roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// A tuple nested in a tuple, alone and inside a list, an option, a map, a
+/// `[T; N]` and an enum variant, round trips. Bincode read a tuple inside a
+/// list, an option, a map or an array in a lambda that expected its elements
+/// not to be tuples themselves, and panicked at generation on one that was.
+#[test]
+fn test_csharp_bincode_runtime_on_nested_tuples() {
+    use common::tuples::{CSHARP_SAMPLE, get_registry, sample};
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&sample()).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+{CSHARP_SAMPLE}
+byte[] input = {bytes};
+var value = Pairs.BincodeDeserialize(input);
+
+Assert(value.Nested.Item2.Item1 == "one", "tuple in a tuple");
+Assert(value.List[1].Item2.Item1 == "bc", "tuple in a tuple in a list");
+Assert(value.Layered[0].Item2[0].Item2.Item1 == "l", "list of tuples in a tuple in a list");
+Assert(value.Maybe?.Item2.Item1 == "maybe", "tuple in a tuple in an option");
+Assert(value.ByPair[(4, 5)].Item2.Item2 == 6, "tuple in a tuple as a map value");
+Assert(value.Fixed[1].Item2.Item1 == 15, "tuple in a tuple in an array");
+Assert(value.Pairings[0] is Pairing.Tuple {{ Field0.Item2.Item1: "t" }}, "tuple in a tuple in a variant");
+Assert(input.SequenceEqual(value.BincodeSerialize()), "decoded value did not roundtrip");
+Assert(input.SequenceEqual(Sample().BincodeSerialize()), "sample did not serialize as Rust does");
+
+Console.WriteLine("Nested tuples roundtrip: PASSED");
+"#,
+            bytes = quote_bytes(&reference),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 #[test]
 #[ignore = "too slow for now, let's fix it later"]
 fn test_csharp_bincode_runtime_on_supported_types() {

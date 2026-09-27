@@ -483,6 +483,58 @@ fun main() {{
     compile_and_run(&dir);
 }
 
+/// Round-trips a tuple nested in a tuple, alone and inside a list, an option,
+/// a map, a `[T; N]` and an enum variant, through bincode between Rust and the
+/// generated Kotlin.
+#[test]
+fn test_kotlin_bincode_runtime_on_nested_tuples() {
+    if !kotlinc_available() {
+        return;
+    }
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    kotlin::Installer::new("com.example.testing", &dir)
+        .plugin(BincodePlugin)
+        .generate(&common::tuples::get_registry())
+        .unwrap();
+
+    let reference = bincode::serialize(&common::tuples::sample()).unwrap();
+
+    fs::write(
+        dir.join("Main.kt"),
+        format!(
+            r#"import com.example.testing.Pairing
+import com.example.testing.Pairs
+
+fun main() {{
+    val input = {bytes}
+    val value = Pairs.bincodeDeserialize(input)
+
+    check(value.nested == Pair(1.toUByte(), Pair("one", true))) {{ "nested mismatch: ${{value.nested}}" }}
+    check(value.layered[0].second[0].second.first == "l") {{ "layered mismatch: ${{value.layered}}" }}
+    check(value.maybe?.second?.first == "maybe") {{ "maybe mismatch: ${{value.maybe}}" }}
+    check(value.byPair[Pair(4.toUByte(), 5.toUShort())]?.second?.second == 6.toUByte()) {{ "map mismatch: ${{value.byPair}}" }}
+    val tuple = value.pairings[0] as Pairing.Tuple
+    check(tuple.field0.second.first == "t") {{ "variant mismatch: $tuple" }}
+
+    val output = value.bincodeSerialize()
+    check(input.contentEquals(output)) {{
+        "roundtrip failed:\n  input  = ${{input.toList()}}\n  output = ${{output.toList()}}"
+    }}
+
+    println("Nested tuples roundtrip: PASSED")
+}}
+"#,
+            bytes = quote_bytes_kotlin(&reference),
+        ),
+    )
+    .unwrap();
+
+    compile_and_run(&dir);
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------
