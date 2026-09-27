@@ -2357,3 +2357,92 @@ fn keyword_enum() {
     }
     "#);
 }
+
+/// A one-element tuple is declared, and written, as its element (#236).
+#[test]
+fn one_element_tuples_are_their_element() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as Swift with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public struct Singles: Equatable {
+        public var number: UInt8
+        public var text: String
+        public var list: [UInt8]
+        public var maybeText: String?
+        public var nested: (UInt8, UInt16)
+
+        public init(number: UInt8, text: String, list: [UInt8], maybeText: String?, nested: (UInt8, UInt16)) {
+            self.number = number
+            self.text = text
+            self.list = list
+            self.maybeText = maybeText
+            self.nested = nested
+        }
+
+        public func serialize<S: Serializer>(serializer: S) throws {
+            try serializer.increase_container_depth()
+            try serializer.serialize_u8(value: self.number)
+            try serializer.serialize_str(value: self.text)
+            try serializeArray(value: self.list, serializer: serializer) { item, serializer in
+                try serializer.serialize_u8(value: item)
+            }
+            try serializeOption(value: self.maybeText, serializer: serializer) { value, serializer in
+                try serializer.serialize_str(value: value)
+            }
+            try serializer.serialize_u8(value: self.nested.0)
+            try serializer.serialize_u16(value: self.nested.1)
+            try serializer.decrease_container_depth()
+        }
+
+        public func bincodeSerialize() throws -> [UInt8] {
+            let serializer = BincodeSerializer.init();
+            try self.serialize(serializer: serializer)
+            return serializer.get_bytes()
+        }
+
+        public static func deserialize<D: Deserializer>(deserializer: D) throws -> Singles {
+            try deserializer.increase_container_depth()
+            let number = try deserializer.deserialize_u8()
+            let text = try deserializer.deserialize_str()
+            let list = try deserializeArray(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_u8()
+            }
+            let maybeText = try deserializeOption(deserializer: deserializer) { deserializer in
+                try deserializer.deserialize_str()
+            }
+            let nestedField0 = try deserializer.deserialize_u8()
+            let nestedField1 = try deserializer.deserialize_u16()
+            let nested = (nestedField0, nestedField1)
+            try deserializer.decrease_container_depth()
+            return Singles(number: number, text: text, list: list, maybeText: maybeText, nested: nested)
+        }
+
+        public static func bincodeDeserialize(input: [UInt8]) throws -> Singles {
+            let deserializer = BincodeDeserializer.init(input: input);
+            let obj = try deserialize(deserializer: deserializer)
+            if deserializer.get_buffer_offset() < input.count {
+                throw DeserializationError.invalidInput(issue: "Some input bytes were not read")
+            }
+            return obj
+        }
+
+        public static func == (lhs: Singles, rhs: Singles) -> Bool {
+            return lhs.number == rhs.number
+                && lhs.text == rhs.text
+                && lhs.list == rhs.list
+                && lhs.maybeText == rhs.maybeText
+                && lhs.nested == rhs.nested
+        }
+    }
+    "#);
+}

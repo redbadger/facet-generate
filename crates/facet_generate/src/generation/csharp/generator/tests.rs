@@ -418,3 +418,50 @@ fn field_named_after_its_variant_is_accepted() {
         .output(&mut Vec::new(), &registry)
         .unwrap();
 }
+
+/// A variant or field renamed to a name that starts with a digit would be
+/// written as an identifier that does not compile, so it is rejected; a
+/// hyphen or a space is dropped by the casing (#233).
+#[test]
+fn rename_starting_with_a_digit_is_rejected() {
+    #[derive(facet::Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "2fa")]
+        TwoFactor,
+    }
+
+    #[derive(facet::Facet)]
+    #[allow(dead_code)]
+    struct Probe {
+        #[facet(rename = "with space")]
+        with_space: bool,
+        #[facet(rename = "2nd")]
+        second: u8,
+    }
+
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    for (registry, message) in [
+        (
+            crate::reflect!(Status).unwrap(),
+            "C#: variant `2fa` of `Status` would become `2fa`, which is not a valid identifier \
+             because it starts with a digit; rename it with #[facet(rename = \"...\")] to a name \
+             that starts with a letter",
+        ),
+        (
+            crate::reflect!(Probe).unwrap(),
+            "C#: field `2nd` of `Probe` would become `2nd`, which is not a valid identifier \
+             because it starts with a digit; rename it with #[facet(rename = \"...\")] to a name \
+             that starts with a letter",
+        ),
+    ] {
+        let err = CSharpCodeGenerator::new(&cfg)
+            .output(&mut Vec::new(), &registry)
+            .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(err.to_string(), message);
+    }
+}

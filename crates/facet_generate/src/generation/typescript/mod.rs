@@ -14,9 +14,9 @@
 //!    [`Emitter<TypeScript>`](crate::generation::Emitter) for each AST node type
 //!    ([`Module`](crate::generation::module::Module), [`Container`](crate::generation::Container),
 //!    `Named<Format>`, `Format`, `Doc`). This is where the TypeScript language
-//!    mapping lives: type aliases, `export class` / `export abstract class` +
-//!    variant subclass selection, and `Serializer`/`Deserializer`
-//!    interface-based serialize/deserialize method generation. Feature helpers
+//!    mapping lives: type aliases, an `export class` per struct and a
+//!    discriminated-union `export type` per enum, and, through the plugins,
+//!    serialize/deserialize code. Feature helpers
 //!    (`ArrayOfT`, `SetOfT`, etc.) are embedded as `include_bytes!` snippets
 //!    and emitted as needed.
 //!

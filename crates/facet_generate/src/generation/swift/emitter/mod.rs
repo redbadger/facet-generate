@@ -85,15 +85,15 @@ use crate::{
 
 /// Language tag for Swift code generation.
 ///
-/// Carries the active `Encoding` and the sets of type names that conform to
-/// `Hashable` and `Equatable` respectively, in the spelling the emitter sees.
-/// Both sets are decided by a preprocessing pass over the whole registry when
-/// the [`Installer`](crate::generation::swift::Installer) generates the
-/// module, and over the module's own registry otherwise.
+/// Carries the module's [`CodeGeneratorConfig`], the plugins that add
+/// serialization code, and the sets of type names that conform to `Hashable`
+/// and `Equatable` respectively, in the spelling the emitter sees. Both sets
+/// are decided by a preprocessing pass over the whole registry when the
+/// [`Installer`](crate::generation::swift::Installer) generates the module,
+/// and over the module's own registry otherwise.
 ///
-/// The plugin list is built in [`new`](Self::new) from the config encoding.
-/// Eventually, plugins will be supplied externally and `encoding` will be
-/// removed.
+/// [`new`](Self::new) starts with no plugins; the installer adds its own with
+/// [`with_plugin`](Self::with_plugin).
 #[derive(Debug, Clone)]
 pub struct Swift {
     /// The code-generator configuration for the current module.
@@ -112,8 +112,8 @@ pub struct Swift {
 
 impl Swift {
     /// Create a Swift language tag with computed type sets and an empty plugin
-    /// list. Plugins are added by the code generator (which holds the encoding)
-    /// or explicitly via [`with_plugin`](Self::with_plugin).
+    /// list. Plugins are added with [`with_plugin`](Self::with_plugin), as the
+    /// installer does for each plugin it was given.
     ///
     /// The `hashable_types` and `equatable_types` sets are computed from
     /// `registry` via fixed-point analysis and are unrelated to plugin

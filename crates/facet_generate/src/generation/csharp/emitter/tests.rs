@@ -918,3 +918,36 @@ fn declared_dictionary_qualifies_the_bcl_type() {
     }
     ");
 }
+
+/// A one-element tuple is declared as its element, as in Swift and Kotlin: a
+/// `ValueTuple` needs two elements (CS8124). An option of one holding a
+/// reference type is a reference-type option (#236).
+#[test]
+fn one_element_tuples_are_their_element() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    public partial class Singles : ObservableObject {
+        [ObservableProperty]
+        private byte _number;
+        [ObservableProperty]
+        private string _text;
+        [ObservableProperty]
+        private ObservableCollection<byte> _list;
+        [ObservableProperty]
+        private string? _maybeText;
+        [ObservableProperty]
+        private (byte, ushort) _nested;
+    }
+    ");
+}

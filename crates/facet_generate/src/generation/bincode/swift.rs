@@ -698,6 +698,10 @@ fn write_format_serialize(
                 write_format_serialize(w, value, "value")
             })
         }
+        // A one-element tuple is declared as its element.
+        Format::Tuple(formats) if formats.len() == 1 => {
+            write_format_serialize(w, &formats[0], value_expr)
+        }
         Format::Tuple(formats) => {
             for (i, fmt) in formats.iter().enumerate() {
                 write_format_serialize(w, fmt, &format!("{value_expr}.{i}"))?;

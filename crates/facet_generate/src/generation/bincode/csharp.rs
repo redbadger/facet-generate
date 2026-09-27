@@ -30,7 +30,7 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::generation::{
     CodeGeneratorConfig, Feature,
-    csharp::{CSharp, escape_identifier, naming},
+    csharp::{CSharp, escape_identifier, naming, unwrap_single},
     indent::{IndentWrite, Newlines, with_block},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
@@ -849,6 +849,7 @@ fn write_serialize_expr(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
@@ -917,6 +918,7 @@ fn write_deserialize_expr(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     let helpers = scope.facet_helpers();
     match format {
         Format::Variable(_) => unreachable!("placeholders should not get this far"),
@@ -1023,6 +1025,7 @@ fn write_serialize_statement(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
             write_serialize_statement(w, &format!("{value_expr}.Item{}", index + 1), inner, scope)?;
@@ -1044,27 +1047,41 @@ fn write_deserialize_binding(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    write_deserialize_locals(w, var_name, "deserializer", "\n", format, scope)
+}
+
+/// Writes `var {name} = expr;` followed by `end`, reading from `de`.
+///
+/// Tuples are expanded as in [`write_deserialize_binding`], at any depth, so a
+/// statement lambda can bind a tuple nested in its tuple under unique names.
+fn write_deserialize_locals(
+    w: &mut dyn IndentWrite,
+    var_name: &str,
+    de: &str,
+    end: &str,
+    format: &Format,
+    scope: &Scope<'_>,
+) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
-            write_deserialize_binding(w, &format!("{var_name}_item{}", index + 1), inner, scope)?;
+            let name = format!("{var_name}_item{}", index + 1);
+            write_deserialize_locals(w, &name, de, end, inner, scope)?;
         }
         if formats.is_empty() {
-            writeln!(
-                w,
-                "var {var_name} = new {}();",
-                naming::builtin("Unit", scope.cfg)
-            )
+            let unit = naming::builtin("Unit", scope.cfg);
+            write!(w, "var {var_name} = new {unit}();{end}")
         } else {
             let values = (0..formats.len())
                 .map(|i| format!("{var_name}_item{}", i + 1))
                 .collect::<Vec<_>>()
                 .join(", ");
-            writeln!(w, "var {var_name} = ({values});")
+            write!(w, "var {var_name} = ({values});{end}")
         }
     } else {
         write!(w, "var {var_name} = ")?;
-        write_deserialize_expr(w, "deserializer", format, scope)?;
-        writeln!(w, ";")
+        write_deserialize_expr(w, de, format, scope)?;
+        write!(w, ";{end}")
     }
 }
 
@@ -1077,6 +1094,7 @@ fn write_serialize_lambda(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "(item, s) => s.SerializeUnit(item)")
@@ -1105,11 +1123,15 @@ fn write_serialize_lambda(
 ///
 /// For tuples, emits a statement lambda:
 /// `d => { var item1 = d.DeserializeI32(); var item2 = ...; return (item1, item2); }`
+///
+/// A tuple nested in the tuple is bound element by element, as
+/// `var item2_item1 = ...; var item2 = (item2_item1, ...);`.
 fn write_deserialize_lambda(
     w: &mut dyn IndentWrite,
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     match format {
         Format::Tuple(formats) if formats.is_empty() => {
             write!(w, "d => d.DeserializeUnit()")
@@ -1117,9 +1139,8 @@ fn write_deserialize_lambda(
         Format::Tuple(formats) => {
             write!(w, "d => {{ ")?;
             for (index, inner) in formats.iter().enumerate() {
-                write!(w, "var item{} = ", index + 1)?;
-                write_deserialize_expr(w, "d", inner, scope)?;
-                write!(w, "; ")?;
+                let name = format!("item{}", index + 1);
+                write_deserialize_locals(w, &name, "d", " ", inner, scope)?;
             }
             let values = (0..formats.len())
                 .map(|i| format!("item{}", i + 1))
@@ -1146,6 +1167,7 @@ fn write_serialize_tuple_stmts(
     format: &Format,
     scope: &Scope<'_>,
 ) -> io::Result<()> {
+    let format = unwrap_single(format);
     if let Format::Tuple(formats) = format {
         for (index, inner) in formats.iter().enumerate() {
             write_serialize_tuple_stmts(w, &format!("{val}.Item{}", index + 1), ser, inner, scope)?;

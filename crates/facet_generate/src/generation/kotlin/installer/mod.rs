@@ -1,4 +1,7 @@
-//! Project scaffolding — writes a ready-to-build Kotlin project to disk.
+//! Project scaffolding — writes a Kotlin project to disk.
+//!
+//! The sources are written at the project root, not in `src/main/kotlin`, so
+//! the project does not build with `gradle build` until they are moved (#241).
 //!
 //! The [`Installer`] is the final stage of the Kotlin generation pipeline.
 //! While [`KotlinCodeGenerator`] produces the *contents* of a single source file,
@@ -35,7 +38,10 @@ use crate::{
         SERDE_NAMESPACE, SourceInstaller,
         bincode::BincodePlugin,
         collision::{self, Fix, Origin, TypeName},
-        kotlin::{Kotlin, KotlinCodeGenerator, emitter::check_tuple_sizes},
+        kotlin::{
+            Kotlin, KotlinCodeGenerator,
+            emitter::{check_identifiers, check_tuple_sizes},
+        },
         module::{self, Module},
         plugin::EmitterPlugin,
         registry_references,
@@ -106,11 +112,13 @@ impl Installer {
     /// output would not compile, or would lose a module; the error names the
     /// namespace or package and what it collides with. It also fails before
     /// writing anything when a type holds a tuple of more than twelve
-    /// elements, for which the serde runtime has no type.
+    /// elements, for which the serde runtime has no type, or when two variants
+    /// of an enum or two fields of a struct would get the same identifier.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
         check_tuple_sizes(registry)?;
+        check_identifiers(registry)?;
 
         // Build a lang tag to get the active plugins, then use them to install
         // runtime files.
@@ -287,6 +295,8 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
+    // Hidden: only the tests call this, and its shape differs by language.
+    #[doc(hidden)]
     pub fn install_serde_runtime(&mut self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));
@@ -315,6 +325,8 @@ impl Installer {
     /// # Errors
     ///
     /// Returns an error if any file I/O fails.
+    // Hidden: only the tests call this, and its shape differs by language.
+    #[doc(hidden)]
     pub fn install_bincode_runtime(&self) -> Result<(), Error> {
         let config = CodeGeneratorConfig::new(String::new());
         let lang = Kotlin::new(&config, &BTreeMap::default()).with_plugin(Arc::new(BincodePlugin));
@@ -336,7 +348,8 @@ impl Installer {
 
     /// Produces the contents of a `build.gradle.kts` file.
     ///
-    /// Includes `kotlinx-serialization-json` when not using bincode, and adds
+    /// Includes `kotlinx-serialization-json` when [`JsonPlugin`](crate::generation::json::JsonPlugin)
+    /// is configured, as that plugin's manifest dependency, and adds
     /// `implementation(files(…))` or `implementation("artifact:version")` for
     /// each configured external package.
     #[must_use]

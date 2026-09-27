@@ -1091,7 +1091,9 @@ static LongTuples Sample() => new LongTuples
 }
 
 /// Tuples nested in tuples, beside each other in one type, and inside every
-/// other format, including a field named like a tuple element's local (#211).
+/// other format, including a field named like a tuple element's local (#211),
+/// and a list of tuples inside a tuple inside a list.
+#[allow(clippy::type_complexity)]
 pub mod tuples {
     use std::collections::BTreeMap;
 
@@ -1107,6 +1109,7 @@ pub mod tuples {
         pub deep: ((u8, (u8, u8)), u8),
         pub field0: (u8, (u8, u8)),
         pub list: Vec<(u8, (String, bool))>,
+        pub layered: Vec<(u8, Vec<(u8, (String, bool))>)>,
         pub maybe: Option<(u8, (String, bool))>,
         pub by_pair: BTreeMap<(u8, u16), (String, (bool, u8))>,
         pub fixed: [(u8, (u8, bool)); 2],
@@ -1124,8 +1127,29 @@ pub mod tuples {
         },
     }
 
+    /// [`Pairs`] for Swift, whose native tuples are not `Hashable` and so
+    /// cannot key a `Dictionary`: `by_pair` is keyed by a `u16` instead.
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct SwiftPairs {
+        pub nested: (u8, (String, bool)),
+        pub first: (u16, String),
+        pub second: (bool, u32),
+        pub deep: ((u8, (u8, u8)), u8),
+        pub field0: (u8, (u8, u8)),
+        pub list: Vec<(u8, (String, bool))>,
+        pub layered: Vec<(u8, Vec<(u8, (String, bool))>)>,
+        pub maybe: Option<(u8, (String, bool))>,
+        pub by_pair: BTreeMap<u16, (String, (bool, u8))>,
+        pub fixed: [(u8, (u8, bool)); 2],
+        pub pairings: Vec<Pairing>,
+    }
+
     pub fn get_registry() -> Registry {
         reflect!(Pairs).unwrap()
+    }
+
+    pub fn get_swift_registry() -> Registry {
+        reflect!(SwiftPairs).unwrap()
     }
 
     /// A value holding every field. The map's keys are the same length, so
@@ -1141,6 +1165,7 @@ pub mod tuples {
                 (9, ("a".to_string(), false)),
                 (10, ("bc".to_string(), true)),
             ],
+            layered: vec![(23, vec![(24, ("l".to_string(), true))]), (25, vec![])],
             maybe: Some((11, ("maybe".to_string(), true))),
             by_pair: BTreeMap::from([
                 ((1, 2), ("x".to_string(), (true, 3))),
@@ -1158,6 +1183,94 @@ pub mod tuples {
         }
     }
 
+    /// [`sample`] as [`SwiftPairs`], its map holding only the last entry, keyed
+    /// by its key's second element: Swift writes a `Dictionary`'s entries in
+    /// no particular order, so bincode's for more than one isn't Rust's.
+    pub fn swift_sample() -> SwiftPairs {
+        let Pairs {
+            nested,
+            first,
+            second,
+            deep,
+            field0,
+            list,
+            layered,
+            maybe,
+            by_pair,
+            fixed,
+            pairings,
+        } = sample();
+        SwiftPairs {
+            nested,
+            first,
+            second,
+            deep,
+            field0,
+            list,
+            layered,
+            maybe,
+            by_pair: by_pair
+                .into_iter()
+                .map(|((_, k), v)| (k, v))
+                .skip(1)
+                .collect(),
+            fixed,
+            pairings,
+        }
+    }
+
+    /// [`sample`] as the generated C# spells it, built by `Sample()`.
+    pub const CSHARP_SAMPLE: &str = r#"
+static Pairs Sample() => new Pairs
+{
+    Nested = (1, ("one", true)),
+    First = (515, "first"),
+    Second = (false, 70000),
+    Deep = ((2, (3, 4)), 5),
+    Field0 = (6, (7, 8)),
+    List = new ObservableCollection<(byte, (string, bool))> { (9, ("a", false)), (10, ("bc", true)) },
+    Layered = new ObservableCollection<(byte, ObservableCollection<(byte, (string, bool))>)>
+    {
+        (23, new ObservableCollection<(byte, (string, bool))> { (24, ("l", true)) }),
+        (25, new ObservableCollection<(byte, (string, bool))>()),
+    },
+    Maybe = (11, ("maybe", true)),
+    ByPair = new Dictionary<(byte, ushort), (string, (bool, byte))>
+    {
+        [(1, 2)] = ("x", (true, 3)),
+        [(4, 5)] = ("yz", (false, 6)),
+    },
+    Fixed = new (byte, (byte, bool))[] { (12, (13, true)), (14, (15, false)) },
+    Pairings = new ObservableCollection<Pairing>
+    {
+        new Pairing.Tuple((16, ("t", false)), (17, 18)),
+        new Pairing.Wrapped((19, ("w", true))),
+        new Pairing.Struct((20, true), ("s", (21, 22))),
+    },
+};
+"#;
+
+    /// [`swift_sample`] as the generated Swift spells it, as `sample`.
+    pub const SWIFT_SAMPLE: &str = r#"
+let sample = SwiftPairs(
+    nested: (1, ("one", true)),
+    first: (515, "first"),
+    second: (false, 70000),
+    deep: ((2, (3, 4)), 5),
+    field0: (6, (7, 8)),
+    list: [(9, ("a", false)), (10, ("bc", true))],
+    layered: [(23, [(24, ("l", true))]), (25, [])],
+    maybe: (11, ("maybe", true)),
+    byPair: [5: ("yz", (false, 6))],
+    fixed: [(12, (13, true)), (14, (15, false))],
+    pairings: [
+        .tuple((16, ("t", false)), (17, 18)),
+        .wrapped((19, ("w", true))),
+        .struct(first: (20, true), second: ("s", (21, 22))),
+    ]
+)
+"#;
+
     /// [`sample`] as the generated TypeScript spells it: a `[T; N]` is an
     /// array of one-element tuples, `[T][]`.
     pub const TYPESCRIPT_SAMPLE: &str = r#"const sample = new Pairs(
@@ -1167,6 +1280,7 @@ pub mod tuples {
     [[2, [3, 4]], 5],
     [6, [7, 8]],
     [[9, ["a", false]], [10, ["bc", true]]],
+    [[23, [[24, ["l", true]]]], [25, []]],
     [11, ["maybe", true]],
     new Map([[[1, 2], ["x", [true, 3]]], [[4, 5], ["yz", [false, 6]]]]),
     [[[12, [13, true]]], [[14, [15, false]]]],
@@ -1176,6 +1290,139 @@ pub mod tuples {
         pairingStruct([20, true], ["s", [21, 22]]),
     ],
 );"#;
+}
+
+// ---------------------------------------------------------------------------
+// One-element tuples — shared by the compilation and runtime tests (#236).
+//
+// Swift, Kotlin and C# declare `(T,)` as `T`. Bincode writes it as the
+// element, and `serde_json` as a one-element array.
+// ---------------------------------------------------------------------------
+
+pub mod single_tuples {
+    use std::collections::BTreeMap;
+
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Singles {
+        pub number: (u8,),
+        pub text: (String,),
+        pub list: Vec<(u8,)>,
+        pub maybe_text: Option<(String,)>,
+        pub maybe_number: Option<(u32,)>,
+        pub nested: ((u8,), u16),
+        pub by_key: BTreeMap<String, (u8,)>,
+        pub variants: Vec<Solo>,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Solo {
+        Wrapped((u8,)),
+        Tuple((String,), u8),
+        Struct { one: (bool,) },
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Singles).unwrap()
+    }
+
+    pub fn sample() -> Singles {
+        Singles {
+            number: (5,),
+            text: ("five".to_string(),),
+            list: vec![(1,), (2,)],
+            maybe_text: Some(("maybe".to_string(),)),
+            maybe_number: None,
+            nested: ((3,), 515),
+            by_key: BTreeMap::from([("a".to_string(), (1,)), ("b".to_string(), (2,))]),
+            variants: vec![
+                Solo::Wrapped((6,)),
+                Solo::Tuple(("t".to_string(),), 7),
+                Solo::Struct { one: (true,) },
+            ],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Renames that are not identifiers — shared by the compilation and runtime
+// tests (#233).
+//
+// A variant or field renamed with a character an identifier cannot hold keeps
+// that name on the wire, while the generated code writes a valid identifier.
+// ---------------------------------------------------------------------------
+
+pub mod renames {
+    use facet::Facet;
+    use facet_generate::{Registry, reflect};
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Status {
+        #[facet(rename = "on-hold")]
+        #[serde(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        WithSpace,
+        Done,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[repr(C)]
+    pub enum Event {
+        #[facet(rename = "on-hold")]
+        #[serde(rename = "on-hold")]
+        OnHold(u32),
+        #[facet(rename = "in review")]
+        #[serde(rename = "in review")]
+        InReview {
+            #[facet(rename = "reviewer-name")]
+            #[serde(rename = "reviewer-name")]
+            reviewer_name: String,
+        },
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        WithSpace,
+    }
+
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Ticket {
+        #[facet(rename = "first-name")]
+        #[serde(rename = "first-name")]
+        pub first_name: String,
+        #[facet(rename = "with space")]
+        #[serde(rename = "with space")]
+        pub with_space: bool,
+        pub status: Status,
+        pub statuses: Vec<Status>,
+        pub events: Vec<Event>,
+    }
+
+    pub fn get_registry() -> Registry {
+        reflect!(Ticket).unwrap()
+    }
+
+    pub fn sample() -> Ticket {
+        Ticket {
+            first_name: "Ada".to_string(),
+            with_space: true,
+            status: Status::OnHold,
+            statuses: vec![Status::OnHold, Status::WithSpace, Status::Done],
+            events: vec![
+                Event::OnHold(7),
+                Event::InReview {
+                    reviewer_name: "Grace".to_string(),
+                },
+                Event::WithSpace,
+            ],
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

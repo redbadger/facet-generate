@@ -12,13 +12,11 @@ use facet_generate as fg;
 use facet_generate::{
     Registry,
     generation::{
-        CodeGeneratorConfig, SourceInstaller,
+        CodeGeneratorConfig, ExternalPackage, PackageLocation, SourceInstaller,
         bincode::BincodePlugin,
         json::JsonPlugin,
         plugin::EmitterPlugin,
-        swift::{
-            Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator, normalize_path,
-        },
+        swift::{Installer as SwiftInstaller, Swift as SwiftLang, SwiftCodeGenerator},
     },
     reflect,
 };
@@ -203,7 +201,8 @@ let package = Package(
     ]
 )
 "#,
-            normalize_path(serde_package_path.to_str().unwrap())
+            // Swift reads a backslash in a string literal as an escape.
+            serde_package_path.to_str().unwrap().replace('\\', "/")
         )
         .unwrap();
     }
@@ -1161,6 +1160,125 @@ fn test_that_swift_code_with_a_uuid_beside_a_module_named_like_an_sdk_module_com
         .unwrap();
     let status = Command::new("swift")
         .current_dir(dir.path())
+        .args(["build", "--disable-index-store"])
+        .status()
+        .unwrap();
+    assert!(status.success());
+}
+
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map's value, a `[T; N]` and an enum variant, compile
+/// with each plugin.
+#[test]
+fn test_that_swift_code_with_nested_tuples_compiles() {
+    let registry = common::tuples::get_swift_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}
+
+/// Variants and fields renamed with a hyphen or a space compile with each
+/// plugin (#233): the casing drops the hyphen and the space.
+#[test]
+fn test_that_swift_code_with_renames_that_are_not_identifiers_compiles() {
+    let registry = common::renames::get_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, compile with each plugin (#236). Bincode wrote one declared
+/// as its element as `self.number.0`: "value of type `UInt8` has no member
+/// `0`".
+#[test]
+fn test_that_swift_code_with_one_element_tuples_compiles() {
+    let registry = common::single_tuples::get_registry();
+    assert_installed_package_compiles(&registry, BincodePlugin);
+    assert_installed_package_compiles(&registry, JsonPlugin);
+}
+
+/// Two packages generated with a plugin share one runtime, generated on its
+/// own and named as their external `serde` package, so an app can depend on
+/// both: each would otherwise declare a `Serde` target, which `SwiftPM`
+/// refuses (#243).
+#[test]
+fn test_that_two_swift_packages_sharing_the_runtime_build_in_one_app() {
+    #[derive(Facet)]
+    struct Order {
+        id: u32,
+    }
+
+    #[derive(Facet)]
+    struct Invoice {
+        total: u64,
+    }
+
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+
+    SwiftInstaller::new("Serde", root.join("Serde"))
+        .plugin(BincodePlugin)
+        .generate(&Registry::new())
+        .unwrap();
+
+    let serde = ExternalPackage {
+        for_namespace: "serde".to_string(),
+        location: PackageLocation::Path("../Serde".to_string()),
+        module_name: None,
+        version: None,
+    };
+    SwiftInstaller::new("Orders", root.join("Orders"))
+        .plugin(BincodePlugin)
+        .external_packages(std::slice::from_ref(&serde))
+        .generate(&reflect!(Order).unwrap())
+        .unwrap();
+    SwiftInstaller::new("Invoices", root.join("Invoices"))
+        .plugin(BincodePlugin)
+        .external_packages(&[serde])
+        .generate(&reflect!(Invoice).unwrap())
+        .unwrap();
+
+    let app = root.join("App");
+    std::fs::create_dir_all(app.join("Sources/App")).unwrap();
+    std::fs::write(
+        app.join("Package.swift"),
+        indoc::indoc! {r#"
+            // swift-tools-version: 5.8
+            import PackageDescription
+
+            let package = Package(
+                name: "App",
+                dependencies: [
+                    .package(path: "../Orders"),
+                    .package(path: "../Invoices"),
+                ],
+                targets: [
+                    .executableTarget(
+                        name: "App",
+                        dependencies: [
+                            .product(name: "Orders", package: "Orders"),
+                            .product(name: "Invoices", package: "Invoices"),
+                        ]
+                    ),
+                ]
+            )
+        "#},
+    )
+    .unwrap();
+    std::fs::write(
+        app.join("Sources/App/main.swift"),
+        indoc::indoc! {r"
+            import Invoices
+            import Orders
+
+            let bytes = try Order(id: 1).bincodeSerialize()
+                + Invoice(total: 2).bincodeSerialize()
+            print(bytes)
+        "},
+    )
+    .unwrap();
+
+    let status = Command::new("swift")
+        .current_dir(&app)
         .args(["build", "--disable-index-store"])
         .status()
         .unwrap();

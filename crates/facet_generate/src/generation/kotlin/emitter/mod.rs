@@ -67,7 +67,7 @@ use crate::{
         collision::TypeName,
         indent::{IndentWrite, Newlines},
         module::Module,
-        naming::qualify_helper,
+        naming::{qualify_helper, sanitize_identifier},
         plugin::{EmitContext, EmitterPlugin, VariantInfo},
     },
     reflection::format::{
@@ -336,7 +336,7 @@ fn write_property<W: IndentWrite>(
         write!(w, "{annotation} ")?;
     }
 
-    let name = &property_name(&field.name);
+    let name = &field_name(&field.name);
     write!(w, "val {name}: ")?;
 
     field.value.write(w, lang)?;
@@ -371,7 +371,6 @@ pub enum VariantContext {
 }
 
 impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
-    #[allow(clippy::too_many_lines)]
     fn write<W: IndentWrite>(&self, w: &mut W, lang: &Kotlin) -> Result<()> {
         let (
             Named {
@@ -387,11 +386,12 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
                 unreachable!("placeholders should not get this far")
             }
             (VariantFormat::Unit, VariantContext::SealedInterface(interface_name, index)) => {
+                let name = &variant_class_name(name);
                 data_object(w, name, Site::variant(interface_name, *index), doc, lang)?;
             }
             (VariantFormat::Unit, VariantContext::EnumClass) => {
                 doc.write(w, lang)?;
-                let name_upper = name.to_uppercase();
+                let name_upper = enum_constant_name(name);
                 let prefix_parts: Vec<String> = lang
                     .plugins()
                     .iter()
@@ -410,7 +410,7 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
             ) => {
                 data_class(
                     w,
-                    name,
+                    &variant_class_name(name),
                     Site::variant(interface_name, *index),
                     &[Named::new(inner, "value".to_string())],
                     doc,
@@ -426,7 +426,7 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
             ) => {
                 data_class(
                     w,
-                    name,
+                    &variant_class_name(name),
                     Site::variant(interface_name, *index),
                     &named(formats),
                     doc,
@@ -442,7 +442,7 @@ impl Emitter<Kotlin> for (&Named<VariantFormat>, &VariantContext) {
             ) => {
                 data_class(
                     w,
-                    name,
+                    &variant_class_name(name),
                     Site::variant(interface_name, *index),
                     fields,
                     doc,
@@ -575,18 +575,25 @@ pub fn requalify_format(config: &CodeGeneratorConfig, format: &mut Format) {
 /// for a variant of a `sealed interface` (an enum with at least one variant
 /// that carries data).
 ///
-/// The variant name is used verbatim, so from outside the interface the class
-/// is referred to as `Parent.Variant`.
+/// The variant name is used as it is, so from outside the interface the class
+/// is referred to as `Parent.Variant`, except that a character an identifier
+/// cannot hold becomes `_`, a leading digit gets a `_` in front, and a Kotlin
+/// hard keyword is escaped with backticks: a variant renamed `"on-hold"` is
+/// the class `on_hold`, while its wire name stays `on-hold`.
 #[must_use]
 pub fn variant_class_name(variant_name: &str) -> String {
-    variant_name.to_string()
+    escape_identifier(&sanitize_identifier(variant_name)).into_owned()
 }
 
 /// The name of the constant the emitter generates for a variant of an
 /// `enum class` (an enum whose variants are all unit variants).
+///
+/// The variant name is uppercased, with a character an identifier cannot hold
+/// replaced by `_` and a `_` in front of a leading digit: a variant renamed
+/// `"on-hold"` is the constant `ON_HOLD`, while its wire name stays `on-hold`.
 #[must_use]
 pub fn enum_constant_name(variant_name: &str) -> String {
-    variant_name.to_uppercase()
+    sanitize_identifier(variant_name).to_uppercase()
 }
 
 /// The Kotlin property name the emitter gives to a struct field, a
@@ -595,14 +602,15 @@ pub fn enum_constant_name(variant_name: &str) -> String {
 /// Field names are lower-camel-cased (`not_found` → `notFound`) and Kotlin
 /// hard keywords are escaped with backticks (`in` → `` `in` ``). Soft
 /// keywords — including the synthetic member names `value` and `field0` — are
-/// left alone.
+/// left alone. A name renamed to one that starts with a digit gets a `_` in
+/// front (`2nd` → `_2nd`).
 ///
 /// Plugins that emit a property access, a local binding, or a constructor
 /// argument derived from a field name should route it through this so the
 /// result matches the emitter.
 #[must_use]
-pub fn property_name(name: &str) -> String {
-    escape_identifier(&name.to_lower_camel_case()).into_owned()
+pub fn field_name(name: &str) -> String {
+    escape_identifier(&sanitize_identifier(&name.to_lower_camel_case())).into_owned()
 }
 
 /// Escapes an identifier when it is a Kotlin hard keyword, by wrapping it in
@@ -655,6 +663,78 @@ pub(crate) fn check_tuple_sizes(registry: &Registry) -> Result<()> {
                     type_name = TypeName(name),
                 ),
             ));
+        }
+    }
+    Ok(())
+}
+
+/// Reject a registry in which two variants of one enum, or two fields of one
+/// struct or struct variant, would get the same Kotlin identifier.
+///
+/// That happens when names differ only in what the identifier rewrites: a
+/// variant renamed `"on-hold"` and one renamed `"on_hold"` are both the
+/// constant `ON_HOLD`, and `OnHold` and `ONHOLD` are both `ONHOLD`.
+///
+/// Run before anything is written, so a failing registry produces no output.
+///
+/// # Errors
+///
+/// Returns [`io::ErrorKind::InvalidInput`](std::io::ErrorKind::InvalidInput)
+/// naming the first two names that collide.
+pub(crate) fn check_identifiers(registry: &Registry) -> Result<()> {
+    fn check<'a>(
+        owner: &str,
+        what: &str,
+        names: impl IntoIterator<Item = &'a str>,
+        identifier: impl Fn(&str) -> String,
+    ) -> Result<()> {
+        let mut seen = BTreeMap::new();
+        for name in names {
+            let ident = identifier(name);
+            if let Some(first) = seen.insert(ident.clone(), name) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "Kotlin: {what}s `{first}` and `{name}` of `{owner}` would both become \
+                         `{ident}`; rename one of them with #[facet(rename = \"...\")]"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+    fn check_fields(owner: &str, fields: &[Named<Format>]) -> Result<()> {
+        check(
+            owner,
+            "field",
+            fields.iter().map(|f| f.name.as_str()),
+            field_name,
+        )
+    }
+
+    for (name, container) in registry {
+        let owner = &name.name;
+        match container {
+            ContainerFormat::Struct(fields, _) => check_fields(owner, fields)?,
+            ContainerFormat::Enum(variants, _, _) => {
+                let unit_enum = variants
+                    .values()
+                    .all(|v| matches!(v.value, VariantFormat::Unit));
+                let names = variants.values().map(|v| v.name.as_str());
+                if unit_enum {
+                    check(owner, "variant", names, enum_constant_name)?;
+                } else {
+                    check(owner, "variant", names, variant_class_name)?;
+                }
+                for variant in variants.values() {
+                    if let VariantFormat::Struct(fields) = &variant.value {
+                        check_fields(&format!("{owner}::{}", variant.name), fields)?;
+                    }
+                }
+            }
+            ContainerFormat::UnitStruct(_)
+            | ContainerFormat::NewTypeStruct(..)
+            | ContainerFormat::TupleStruct(..) => {}
         }
     }
     Ok(())

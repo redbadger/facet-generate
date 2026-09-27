@@ -87,6 +87,38 @@ fn rust_path(shape: &Shape) -> String {
         .map_or_else(|| shape.to_string(), |path| format!("{path}::{shape}"))
 }
 
+/// The container, or enum variant, that a field belongs to, for use in error messages.
+#[derive(Clone, Copy)]
+struct FieldOwner<'a> {
+    shape: &'a Shape,
+    variant: Option<&'a Variant>,
+}
+
+impl<'a> FieldOwner<'a> {
+    fn of(shape: &'a Shape) -> Self {
+        Self {
+            shape,
+            variant: None,
+        }
+    }
+
+    fn variant(shape: &'a Shape, variant: &'a Variant) -> Self {
+        Self {
+            shape,
+            variant: Some(variant),
+        }
+    }
+}
+
+impl std::fmt::Display for FieldOwner<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.variant {
+            Some(variant) => write!(f, "{}::{}", self.shape, variant.name),
+            None => write!(f, "{}", self.shape),
+        }
+    }
+}
+
 /// The type a shape is generated as.
 ///
 /// A transparent wrapper is generated as the type it wraps, under that type's name, so the two
@@ -200,15 +232,20 @@ struct NamespaceSource {
 }
 
 impl RegistryBuilder {
+    /// Creates an empty builder. Add types with [`add_type`](Self::add_type),
+    /// then call [`build`](Self::build).
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Builds the registry from the current state.
+    ///
     /// # Errors
-    /// Will return an error with a suitable error message if the registry is invalid,
-    /// usually due to incomplete reflection.
+    /// Will return an error if:
+    /// * the registry is invalid, usually due to incomplete reflection, or
+    /// * a type reference names no registered container
+    ///   ([`Error::DanglingTypeReference`]), which is a reflection bug.
     pub fn build(self) -> Result<Registry, Error> {
         for (type_name, format) in &self.registry {
             if let Err(err) = format.visit(&mut |_| Ok(())) {
@@ -478,7 +515,6 @@ impl RegistryBuilder {
             StructKind::TupleStruct => {
                 if struct_type.fields.len() == 1 {
                     let field = struct_type.fields[0];
-                    let field_shape = field.shape();
 
                     // A newtype struct; a transparent one never gets here, as it is registered as
                     // the type it wraps
@@ -487,7 +523,7 @@ impl RegistryBuilder {
 
                     // Process the inner field
                     if !self.try_handle_bytes_attribute(&field) {
-                        self.push_positional_field(field_shape)?;
+                        self.push_positional_field(FieldOwner::of(shape), &field)?;
                     }
                 } else {
                     // Handle tuple struct with multiple fields
@@ -499,7 +535,7 @@ impl RegistryBuilder {
                             continue;
                         }
                         if !self.try_handle_bytes_attribute(field) {
-                            self.push_positional_field(field.shape())?;
+                            self.push_positional_field(FieldOwner::of(shape), field)?;
                         }
                     }
                 }
@@ -513,7 +549,7 @@ impl RegistryBuilder {
                     if skip {
                         continue;
                     }
-                    self.handle_struct_field(field)?;
+                    self.handle_struct_field(shape, field)?;
                 }
 
                 // If all fields were skipped, convert to UnitStruct to avoid empty data class issues
@@ -537,10 +573,9 @@ impl RegistryBuilder {
 
     /// Gives the newtype or tuple struct being built its next field.
     ///
-    /// A field whose type cannot be reflected is left out, as it always has been: a newtype keeps
-    /// its unknown format, which `build` reports.
-    fn push_positional_field(&mut self, field_shape: &Shape) -> Result<(), Error> {
-        let Some(format) = self.field_format(field_shape)? else {
+    /// An opaque field is left out: a newtype keeps its unknown format, which `build` reports.
+    fn push_positional_field(&mut self, owner: FieldOwner, field: &Field) -> Result<(), Error> {
+        let Some(format) = self.field_format(owner, field)? else {
             return Ok(());
         };
         match self.get_mut() {
@@ -551,7 +586,7 @@ impl RegistryBuilder {
         Ok(())
     }
 
-    fn handle_struct_field(&mut self, field: &Field) -> Result<(), Error> {
+    fn handle_struct_field(&mut self, shape: &Shape, field: &Field) -> Result<(), Error> {
         if self.try_handle_bytes_attribute(field) {
             return Ok(());
         }
@@ -566,10 +601,11 @@ impl RegistryBuilder {
             }
             _ => matches!(field_shape.def, Def::Option(_)),
         };
+        let owner = FieldOwner::of(shape);
         let format = if ignores_field_namespace {
-            self.field_format(field_shape)?
+            self.field_format(owner, field)?
         } else {
-            self.named_field_format(field)?
+            self.named_field_format(owner, field)?
         };
 
         if let Some(value) = format
@@ -586,22 +622,42 @@ impl RegistryBuilder {
 
     /// The format of a named field, of a struct or a struct variant, made under the field's own
     /// `fg::namespace` if it has one. See [`Self::field_format`].
-    fn named_field_format(&mut self, field: &Field) -> Result<Option<Format>, Error> {
+    fn named_field_format(
+        &mut self,
+        owner: FieldOwner,
+        field: &Field,
+    ) -> Result<Option<Format>, Error> {
         let field_namespace = extract_namespace_from_field_attributes(field)?;
         self.push_namespace(field_namespace);
-        let format = self.field_format(field.shape());
+        let format = self.field_format(owner, field);
         self.pop_namespace();
         format
     }
 
-    /// The format of a field of type `field_shape`, once the containers it reaches are registered,
-    /// or `None` if the field is to be skipped (see [`Self::get_user_type_format`]).
+    /// The format of `field`, a field of `owner`, once the containers it reaches are registered,
+    /// or `None` if the field is opaque and so left out (see [`Self::get_user_type_format`]).
     ///
     /// The reference and the registration are made under the same namespace context, so they
     /// agree, and the registration can't touch the container being built.
-    fn field_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
-        let Some(format) = self.get_user_type_format(field_shape)? else {
-            return Ok(None);
+    ///
+    /// # Errors
+    /// [`Error::UnsupportedFieldType`] if the field's type can't be generated.
+    fn field_format(&mut self, owner: FieldOwner, field: &Field) -> Result<Option<Format>, Error> {
+        let field_shape = field.shape();
+        let format = match self.get_user_type_format(field_shape) {
+            Ok(Some(format)) => format,
+            Ok(None) => return Ok(None),
+            // `reference_format` reports an unsupported type, and nothing else, as a
+            // `ReflectionError`; naming a container fails with other errors, which propagate.
+            Err(Error::ReflectionError { type_name, .. }) => {
+                return Err(Error::UnsupportedFieldType {
+                    container: owner.to_string(),
+                    field: field.name.to_string(),
+                    field_type: field_shape.to_string(),
+                    unsupported: type_name,
+                });
+            }
+            Err(err) => return Err(err),
         };
         self.process_nested_types(field_shape)?;
         Ok(Some(format))
@@ -628,6 +684,12 @@ impl RegistryBuilder {
     }
 
     fn format_enum(&mut self, enum_type: &EnumType, shape: &Shape) -> Result<(), Error> {
+        // Untagged enums aren't supported: rather than generate code for a representation that
+        // doesn't match serde's, reject them.
+        if shape.is_untagged() {
+            return Err(Error::UntaggedEnum(shape.to_string()));
+        }
+
         let enum_name = self.get_name_with_mappings(shape)?;
 
         // Check if already processed using the full namespaced name
@@ -707,16 +769,20 @@ impl RegistryBuilder {
                 .all(|c| c.is_ascii_digit());
 
             if is_struct_variant {
-                self.process_struct_variant(variant)
+                self.process_struct_variant(variant, shape)
             } else {
-                self.process_newtype_variant(variant)
+                self.process_newtype_variant(variant, shape)
             }
         } else {
             self.process_multi_field_variant(variant, shape)
         }
     }
 
-    fn process_newtype_variant(&mut self, variant: &Variant) -> Result<VariantFormat, Error> {
+    fn process_newtype_variant(
+        &mut self,
+        variant: &Variant,
+        shape: &Shape,
+    ) -> Result<VariantFormat, Error> {
         let field = variant.data.fields[0];
         if let Some(value) = bytes_attribute_format(&field) {
             return Ok(VariantFormat::NewType(Box::new(value)));
@@ -725,8 +791,9 @@ impl RegistryBuilder {
             return Ok(VariantFormat::NewType(Box::new(Format::Unit)));
         }
 
-        // A payload that is skipped, as a struct field would be, makes this a unit variant.
-        Ok(match self.named_field_format(&field)? {
+        // An opaque payload, left out as a struct field would be, makes this a unit variant.
+        let owner = FieldOwner::variant(shape, variant);
+        Ok(match self.named_field_format(owner, &field)? {
             None | Some(Format::Unit) => VariantFormat::Unit,
             Some(format) => VariantFormat::NewType(Box::new(format)),
         })
@@ -742,13 +809,18 @@ impl RegistryBuilder {
         let is_struct_variant = !first_field.name.chars().all(|c| c.is_ascii_digit());
 
         if is_struct_variant {
-            self.process_struct_variant(variant)
+            self.process_struct_variant(variant, shape)
         } else {
             self.process_tuple_variant(variant, shape)
         }
     }
 
-    fn process_struct_variant(&mut self, variant: &Variant) -> Result<VariantFormat, Error> {
+    fn process_struct_variant(
+        &mut self,
+        variant: &Variant,
+        shape: &Shape,
+    ) -> Result<VariantFormat, Error> {
+        let owner = FieldOwner::variant(shape, variant);
         let mut fields = vec![];
         for field in variant.data.fields {
             if field.flags.contains(FieldFlags::SKIP) {
@@ -756,7 +828,7 @@ impl RegistryBuilder {
             }
             let format = match bytes_attribute_format(field) {
                 Some(value) => Some(value),
-                None => self.named_field_format(field)?,
+                None => self.named_field_format(owner, field)?,
             };
             if let Some(value) = format {
                 fields.push(Named {
@@ -782,6 +854,7 @@ impl RegistryBuilder {
     ) -> Result<VariantFormat, Error> {
         // Use the namespace context of the current enum for its variant fields
         let enum_namespace = extract_namespace_from_shape(shape)?;
+        let owner = FieldOwner::variant(shape, variant);
 
         let mut formats = vec![];
         for field in variant.data.fields {
@@ -793,7 +866,7 @@ impl RegistryBuilder {
                 continue;
             }
             self.push_namespace(enum_namespace.clone());
-            let format = self.field_format(field.shape());
+            let format = self.field_format(owner, field);
             self.pop_namespace();
             if let Some(format) = format? {
                 formats.push(format);
@@ -855,9 +928,12 @@ impl RegistryBuilder {
         })
     }
 
-    /// The format of a field of type `field_shape`, or `None` if the field is to be skipped
-    /// because its type cannot be reflected: an opaque type, or an unsupported type (such as
-    /// `Result`) anywhere within it.
+    /// The format of a field of type `field_shape`, or `None` if the field is `#[facet(opaque)]`
+    /// and so left out.
+    ///
+    /// # Errors
+    /// A [`Error::ReflectionError`] naming the unsupported type if there is one (such as `Result`)
+    /// anywhere within `field_shape`, or any error from naming a container it reaches.
     fn get_user_type_format(&mut self, field_shape: &Shape) -> Result<Option<Format>, Error> {
         let shape = generated_shape(field_shape);
         // `#[facet(opaque)]` fields use `Def::Undefined`, as user types and pointers also do.
@@ -870,13 +946,7 @@ impl RegistryBuilder {
         if opaque {
             return Ok(None);
         }
-        match self.reference_to(field_shape) {
-            Ok(format) => Ok(Some(format)),
-            // `reference_format` reports an unsupported type, and nothing else, as a
-            // `ReflectionError`; naming a container fails with other errors, which propagate.
-            Err(Error::ReflectionError { .. }) => Ok(None),
-            Err(err) => Err(err),
-        }
+        self.reference_to(field_shape).map(Some)
     }
 
     /// Registers every container that a reference to `shape` reaches, under the namespace
@@ -1452,8 +1522,8 @@ fn reference_format(
             Some(format) => format,
             None => {
                 return Err(Error::ReflectionError {
-                    type_name: shape.type_identifier.to_string(),
-                    message: "Scalar type is not supported and should be skipped".to_string(),
+                    type_name: shape.to_string(),
+                    message: "Scalar type is not supported".to_string(),
                 });
             }
         },
@@ -1516,8 +1586,8 @@ fn reference_format(
         _ => {
             // For example `Result`, which is not supported
             return Err(Error::ReflectionError {
-                type_name: shape.type_identifier.to_string(),
-                message: "Type is not supported and should be skipped".to_string(),
+                type_name: shape.to_string(),
+                message: "Type is not supported".to_string(),
             });
         }
     };

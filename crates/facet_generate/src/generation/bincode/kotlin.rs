@@ -16,7 +16,7 @@ use super::BincodePlugin;
 use crate::generation::{
     BINCODE_NAMESPACE, CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::{IndentWrite, IndentedWriter, Newlines},
-    kotlin::{Kotlin, naming, property_name},
+    kotlin::{Kotlin, enum_constant_name, field_name, naming, variant_class_name},
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
@@ -414,7 +414,7 @@ fn write_map_serialize_lambda<W: IndentWrite>(
     write_serialize(&mut w, "value", value_format, level + 1)
 }
 
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn write_deserialize<W: IndentWrite>(
     w: &mut W,
     field_name: Option<&str>,
@@ -481,12 +481,9 @@ fn write_deserialize<W: IndentWrite>(
                     write!(w, "deserializer.deserialize_unit()")?;
                     return Ok(());
                 }
-                1 => {
-                    push_deserializer(w)?;
-                    write_deserialize(w, Some("value"), &formats[0], true)?;
-                    pop_deserializer(w)?;
-                    return Ok(());
-                }
+                // A one-element tuple is declared, and written, as its
+                // element.
+                1 => return write_deserialize(w, None, &formats[0], newline),
                 2 => {
                     write!(w, "run ")?;
                     let mut w = w.block(Newlines::BOTH)?;
@@ -669,7 +666,7 @@ fn write_data_class_top_level<W: IndentWrite>(
         let mut w = w.block(Newlines::BOTH)?;
         push_serializer(&mut w)?;
         for field in fields {
-            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
+            write_serialize(&mut w, &field_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -690,12 +687,7 @@ fn write_data_class_top_level<W: IndentWrite>(
             } else {
                 push_deserializer(&mut w)?;
                 for field in fields {
-                    write_deserialize(
-                        &mut w,
-                        Some(&property_name(&field.name)),
-                        &field.value,
-                        true,
-                    )?;
+                    write_deserialize(&mut w, Some(&field_name(&field.name)), &field.value, true)?;
                 }
                 pop_deserializer(&mut w)?;
                 write!(w, "return {name}(")?;
@@ -703,7 +695,7 @@ fn write_data_class_top_level<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", property_name(&field.name))?;
+                    write!(w, "{}", field_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
@@ -731,7 +723,7 @@ fn write_data_class_variant<W: IndentWrite>(
         push_serializer(&mut w)?;
         writeln!(w, "serializer.serialize_variant_index({variant_index})")?;
         for field in fields {
-            write_serialize(&mut w, &property_name(&field.name), &field.value, 0)?;
+            write_serialize(&mut w, &field_name(&field.name), &field.value, 0)?;
         }
         pop_serializer(&mut w)?;
     }
@@ -749,12 +741,7 @@ fn write_data_class_variant<W: IndentWrite>(
             } else {
                 push_deserializer(&mut w)?;
                 for field in fields {
-                    write_deserialize(
-                        &mut w,
-                        Some(&property_name(&field.name)),
-                        &field.value,
-                        true,
-                    )?;
+                    write_deserialize(&mut w, Some(&field_name(&field.name)), &field.value, true)?;
                 }
                 pop_deserializer(&mut w)?;
                 write!(w, "return {name}(")?;
@@ -762,7 +749,7 @@ fn write_data_class_variant<W: IndentWrite>(
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    write!(w, "{}", property_name(&field.name))?;
+                    write!(w, "{}", field_name(&field.name))?;
                 }
                 writeln!(w, ")")?;
             }
@@ -806,7 +793,7 @@ fn write_enum_class_body<W: IndentWrite>(
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 for (i, variant) in variants {
-                    let upper = variant.name.to_uppercase();
+                    let upper = enum_constant_name(&variant.name);
                     writeln!(w, "{i} -> {upper}")?;
                 }
                 writeln!(
@@ -842,7 +829,7 @@ fn write_sealed_interface_body<W: IndentWrite>(
             {
                 let mut w = w.block(Newlines::BOTH)?;
                 for (i, variant) in variants {
-                    let vname = &variant.name;
+                    let vname = variant_class_name(&variant.name);
                     writeln!(w, "{i} -> {vname}.deserialize(deserializer)")?;
                 }
                 writeln!(

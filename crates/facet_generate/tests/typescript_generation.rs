@@ -550,3 +550,21 @@ fn test_that_typescript_code_with_a_uuid_type_checks() {
         assert!(status.success(), "deno check failed");
     }
 }
+
+/// Variants and fields renamed with a hyphen or a space type-check with each
+/// plugin (#233): TypeScript quotes such a name as a property key.
+#[test]
+fn test_that_typescript_code_with_renames_that_are_not_identifiers_type_checks() {
+    let registry = common::renames::get_registry();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+    assert_installed_modules_type_check(&registry, JsonPlugin);
+}
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, type-check with each plugin (#236).
+#[test]
+fn test_that_typescript_code_with_one_element_tuples_type_checks() {
+    let registry = common::single_tuples::get_registry();
+    assert_installed_modules_type_check(&registry, BincodePlugin);
+    assert_installed_modules_type_check(&registry, JsonPlugin);
+}

@@ -2,11 +2,24 @@
 
 Reflect types annotated with [`#[derive(Facet)]`](https://crates.io/crates/facet) into Swift, Kotlin, TypeScript, and C#. Optionally generates serialization and deserialization code for [Bincode](https://github.com/bincode-org/bincode) and JSON encodings.
 
+## Documentation
+
+The [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs covers the crate in more depth:
+
+- [Why `facet_generate`, and how it compares](https://docs.rs/facet_generate/latest/facet_generate/guide/motivation/index.html): the problem it solves, and how it differs from UniFFI, typeshare, serde-generate, ts-rs and specta.
+- [Supported types](https://docs.rs/facet_generate/latest/facet_generate/guide/supported_types/index.html): every Rust type the reflector accepts, what it becomes in each language, and what is rejected.
+- [Serialization](https://docs.rs/facet_generate/latest/facet_generate/guide/serialization/index.html): what the bincode and JSON plugins generate, and how their output lines up with Rust's `bincode` and `serde_json`.
+- [Swift](https://docs.rs/facet_generate/latest/facet_generate/guide/swift/index.html), [Kotlin](https://docs.rs/facet_generate/latest/facet_generate/guide/kotlin/index.html), [C#](https://docs.rs/facet_generate/latest/facet_generate/guide/csharp/index.html) and [TypeScript](https://docs.rs/facet_generate/latest/facet_generate/guide/typescript/index.html): the installer, the package it writes, runtimes, namespaces, external packages and toolchains.
+- [Writing a plugin](https://docs.rs/facet_generate/latest/facet_generate/guide/plugins/index.html): extending the generated code through `EmitterPlugin`.
+- [Contributing](https://docs.rs/facet_generate/latest/facet_generate/guide/contributing/index.html): how the crate's own tests are organised.
+
 ## Usage
 
 ```sh
-cargo add facet facet_generate
+cargo add facet facet_generate facet-generate-attrs
 ```
+
+The `#[facet(fg::…)]` attributes expand to paths in `facet_generate_attrs`, so a crate that uses them must depend on `facet-generate-attrs` directly.
 
 ```rust
 use facet::Facet;
@@ -31,7 +44,7 @@ let registry = RegistryBuilder::new()
     .build()?;
 ```
 
-To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` or `JsonPlugin` to include serialization code and install whatever runtime it needs; omit `.plugin(...)` for plain type definitions only. `BincodePlugin` adds `serialize`/`deserialize` methods in every language. `JsonPlugin` uses each platform's own JSON support where there is one: kotlinx.serialization in Kotlin, System.Text.Json in C#, and `Codable` in Swift, where it adds `jsonSerialize`/`jsonDeserialize`.
+To generate code from the registry, use a language-specific `Installer`, then call `generate()` — the installer splits by namespace, installs runtimes, generates each module, and writes the package manifest. Add a plugin such as `BincodePlugin` or `JsonPlugin` to include serialization code and install whatever runtime it needs; omit `.plugin(...)` for plain type definitions only. `BincodePlugin` adds `serialize`/`deserialize` methods in every language. `JsonPlugin` writes and reads the JSON that Rust's `serde_json` does for the same types, so JSON written on either side reads on the other. It uses each platform's own JSON support where there is one: kotlinx.serialization in Kotlin, System.Text.Json in C# (with a generated converter per type), and `Codable` in Swift. In TypeScript it generates `toJson`/`fromJson` and installs a small runtime, `serde/json.ts`. C#, Swift and TypeScript types also get `jsonSerialize`/`jsonDeserialize` helpers (`JsonSerialize`/`JsonDeserialize` in C#). serde ignores unknown keys; to do the same in Kotlin, configure your `Json` with `ignoreUnknownKeys = true`. TypeScript reads and writes 64- and 128-bit integers beyond 2^53 exactly through `JSON.rawJSON` and the `JSON.parse` reviver's `context.source`, which need Node 21+, Deno 1.37+, Chrome 114+, Safari 18.4+ or Firefox 135+; on an older engine, only such an integer throws.
 
 ```rust
 use facet_generate::generation::bincode::BincodePlugin;
@@ -550,6 +563,7 @@ Notes:
 * Namespaces are propagated through field level references, including via pointers and collections.
 * Any ambiguity (i.e. a type is reached via more than one path, each with a different implicit namespace) will cause the typegen to emit an error, detailing the type involved and the namespaces that clash. The fix is then to either explicitly set (or unset) the type's namespace, or to align the inherited namespaces.
 * Every generated name must belong to exactly one Rust type. If two different Rust types would generate the same name in the same namespace (`a::Delete` and `b::Delete` both in the root, say, or two types renamed to the same string), the builder returns an error naming both types by their Rust path, whether they were added directly or reached through a field. Rename one with `#[facet(rename = "...")]`, or give it its own namespace with `#[facet(fg::namespace = "...")]`. The same Rust type reached many times, including recursively, is fine.
+* Each installer checks the namespaces before it writes anything, and fails with an error naming both sides when generated code couldn't compile: a namespace that collides with a type, with the root package or with another namespace (after case conversion); a namespace that would shadow a builtin or runtime name the generated code uses, such as `Map` in TypeScript or `String` in Swift; a package name that is also an external package's namespace; and, in Swift, a cycle between targets, such as a root type holding a namespaced type that refers back to the root. Rename the type with `#[facet(rename = "...")]`, or move it to a different namespace. For a Swift cycle, move the shared types into a namespace of their own.
 
 
 ```rust
@@ -705,7 +719,7 @@ keep the compact parameter-property form. Kotlin soft keywords such as `value`, 
 `import` and `data` are ordinary identifiers and are left alone.
 
 Plugins that derive identifiers from field or variant names should use the same helpers the
-emitters use — `swift::field_name`, `swift::case_name`, `kotlin::property_name`,
+emitters use — `swift::field_name`, `swift::case_name`, `kotlin::field_name`,
 `kotlin::variant_class_name`, `kotlin::enum_constant_name`, `typescript::param_name` and
 `csharp::escape_identifier`, with `swift::escape_identifier`, `kotlin::escape_identifier` and
 `typescript::is_reserved_word` as the lower-level escapes — so their output agrees with the
@@ -752,7 +766,7 @@ accepted, while an enum with both a `Bytes` variant and a `#[facet(bytes)]` fiel
 
 ### Skipping struct fields or enum variants
 
-You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. (Note: you can also use `#[facet(opaque)]` to prevent Facet from recursing through).
+You can annotate fields or variants with `#[facet(skip)]` to prevent them from being emitted in the generated code. `#[facet(opaque)]` also leaves a field out, without reflecting its type, which is useful for a type the generator doesn't support.
 
 ```rust
 #[derive(Facet)]

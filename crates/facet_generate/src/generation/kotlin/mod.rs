@@ -22,7 +22,7 @@
 //!    etc.) are embedded as `include_bytes!` snippets and emitted as needed.
 //!
 //! 3. **installer** — Project scaffolding. [`Installer`](crate::generation::kotlin::Installer) implements
-//!    [`SourceInstaller`](crate::generation::SourceInstaller) to write a ready-to-build
+//!    [`SourceInstaller`](crate::generation::SourceInstaller) to write a
 //!    Kotlin project: it copies serde/bincode runtime sources, splits the
 //!    registry by namespace into per-module files, and generates a
 //!    `build.gradle.kts` manifest.
@@ -33,7 +33,7 @@ mod installer;
 pub(crate) mod naming;
 
 pub use emitter::{
-    Kotlin, enum_constant_name, escape_identifier, property_name, render_type, requalify,
+    Kotlin, enum_constant_name, escape_identifier, field_name, render_type, requalify,
     requalify_format, variant_class_name,
 };
 pub use generator::KotlinCodeGenerator;

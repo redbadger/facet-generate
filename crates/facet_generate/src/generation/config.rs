@@ -16,8 +16,10 @@
 //!
 //! There are two configuration levels:
 //!
-//! - [`Config`] / [`ConfigBuilder`] — the public API entry point (package
-//!   name, output directory, external packages).
+//! - [`Config`] / [`ConfigBuilder`] — a generation run's settings (package
+//!   name, output directory, external packages, Swift platforms) in one value,
+//!   for tools built on this crate. The installers take the same settings
+//!   through their own builders.
 //! - [`CodeGeneratorConfig`] — the internal, per-module config that generators
 //!   and [`Emitter`](super::Emitter) implementations receive.
 
@@ -133,6 +135,10 @@ pub struct CodeGeneratorConfig {
 pub enum Feature {
     BigInt,
     Bytes,
+    /// A `char`. The bincode plugins write it as its UTF-8 bytes, as Rust's
+    /// `bincode` does, through helpers a module holding one declares, and
+    /// C# and Swift JSON declare an adapter that reads and writes exactly one
+    /// Unicode scalar value.
     Char,
     ListOfT,
     MapOfT,
@@ -581,10 +587,15 @@ fn is_unit_only(format: &ContainerFormat) -> bool {
         if variants.values().all(|v| matches!(v.value, VariantFormat::Unit)))
 }
 
-/// Public API entry point for configuring a generation run.
+/// The settings of a generation run, in one value: the package name, the
+/// output directory, external packages and Swift platforms.
 ///
-/// Use [`Config::builder`] to create one, then pass it to a language-specific
-/// `generate` function.
+/// Nothing in this crate takes a `Config`. Each language's `Installer` takes
+/// the same settings through its own builder (`Installer::new`,
+/// `external_packages` and, for Swift, `platforms`). `Config` is for a tool
+/// built on this crate that configures several languages from one set of
+/// settings, as Crux's type generation does: build one with
+/// [`Config::builder`], then pass its fields to each installer.
 #[derive(Default, Builder)]
 #[builder(
     custom_constructor,

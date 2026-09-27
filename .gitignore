@@ -4,3 +4,9 @@ build/
 .gradle
 .kotlin
 TODO.md
+*.pending-snap
+*.snap.new
+bin/
+obj/
+node_modules/
+.DS_Store

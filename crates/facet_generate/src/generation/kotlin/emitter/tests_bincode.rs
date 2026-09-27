@@ -2725,3 +2725,251 @@ fn keyword_enum() {
     }
     "#);
 }
+
+/// A variant renamed to a name that is not a Kotlin identifier keeps that
+/// name on the wire, while its class or constant is an identifier (#233).
+#[test]
+fn renamed_variants_that_are_not_identifiers() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        Done,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        #[facet(rename = "on-hold")]
+        OnHold(u32),
+        #[facet(rename = "in review")]
+        InReview {
+            #[facet(rename = "reviewer-name")]
+            reviewer_name: String,
+        },
+        #[facet(rename = "with space")]
+        WithSpace,
+    }
+
+    let actual = emit!(Status, Event as Kotlin with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    sealed interface Event {
+        fun serialize(serializer: Serializer)
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        data class on_hold(
+            val value: UInt,
+        ) : Event {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(0)
+                serializer.serialize_u32(value)
+                serializer.decrease_container_depth()
+            }
+
+            companion object {
+                fun deserialize(deserializer: Deserializer): on_hold {
+                    deserializer.increase_container_depth()
+                    val value = deserializer.deserialize_u32()
+                    deserializer.decrease_container_depth()
+                    return on_hold(value)
+                }
+            }
+        }
+
+        data class in_review(
+            val reviewerName: String,
+        ) : Event {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(1)
+                serializer.serialize_str(reviewerName)
+                serializer.decrease_container_depth()
+            }
+
+            companion object {
+                fun deserialize(deserializer: Deserializer): in_review {
+                    deserializer.increase_container_depth()
+                    val reviewerName = deserializer.deserialize_str()
+                    deserializer.decrease_container_depth()
+                    return in_review(reviewerName)
+                }
+            }
+        }
+
+        data object with_space: Event {
+            override fun serialize(serializer: Serializer) {
+                serializer.increase_container_depth()
+                serializer.serialize_variant_index(2)
+                serializer.decrease_container_depth()
+            }
+
+            fun deserialize(deserializer: Deserializer): with_space {
+                return with_space
+            }
+        }
+
+        companion object {
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): Event {
+                val index = deserializer.deserialize_variant_index()
+                return when (index) {
+                    0 -> on_hold.deserialize(deserializer)
+                    1 -> in_review.deserialize(deserializer)
+                    2 -> with_space.deserialize(deserializer)
+                    else -> throw DeserializationError("Unknown variant index for Event: $index")
+                }
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Event {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+
+    enum class Status {
+        ON_HOLD,
+        DONE;
+
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_variant_index(ordinal)
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            @Throws(DeserializationError::class)
+            fun deserialize(deserializer: Deserializer): Status {
+                deserializer.increase_container_depth()
+                val index = deserializer.deserialize_variant_index()
+                deserializer.decrease_container_depth()
+                return when (index) {
+                    0 -> ON_HOLD
+                    1 -> DONE
+                    else -> throw DeserializationError("Unknown variant index for Status: $index")
+                }
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Status {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}
+
+/// A one-element tuple is declared, and read, as its element (#236).
+#[test]
+fn one_element_tuples_are_their_element() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as Kotlin with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    data class Singles(
+        val number: UByte,
+        val text: String,
+        val list: List<UByte>,
+        val maybeText: String? = null,
+        val nested: Pair<UByte, UShort>,
+    ) {
+        fun serialize(serializer: Serializer) {
+            serializer.increase_container_depth()
+            serializer.serialize_u8(number)
+            serializer.serialize_str(text)
+            list.serialize(serializer) { level1 ->
+                serializer.serialize_u8(level1)
+            }
+            maybeText.serializeOptionOf(serializer) { level1 ->
+                serializer.serialize_str(level1)
+            }
+            serializer.serialize_u8(nested.first)
+            serializer.serialize_u16(nested.second)
+            serializer.decrease_container_depth()
+        }
+
+        fun bincodeSerialize(): ByteArray {
+            val serializer = BincodeSerializer()
+            serialize(serializer)
+            return serializer.get_bytes()
+        }
+
+        companion object {
+            fun deserialize(deserializer: Deserializer): Singles {
+                deserializer.increase_container_depth()
+                val number = deserializer.deserialize_u8()
+                val text = deserializer.deserialize_str()
+                val list =
+                    deserializer.deserializeListOf {
+                        deserializer.deserialize_u8()
+                    }
+                val maybeText =
+                    deserializer.deserializeOptionOf {
+                        deserializer.deserialize_str()
+                    }
+                val nested = run {
+                    val first = deserializer.deserialize_u8()
+                    val second = deserializer.deserialize_u16()
+                    Pair(first, second)
+                }
+                deserializer.decrease_container_depth()
+                return Singles(number, text, list, maybeText, nested)
+            }
+
+            @Throws(DeserializationError::class)
+            fun bincodeDeserialize(input: ByteArray?): Singles {
+                if (input == null) {
+                    throw DeserializationError("Cannot deserialize null array")
+                }
+                val deserializer = BincodeDeserializer(input)
+                val value = deserialize(deserializer)
+                if (deserializer.get_buffer_offset() < input.size) {
+                    throw DeserializationError("Some input bytes were not read")
+                }
+                return value
+            }
+        }
+    }
+    "#);
+}

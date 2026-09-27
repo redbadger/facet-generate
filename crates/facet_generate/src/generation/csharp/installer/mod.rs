@@ -37,7 +37,7 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SourceInstaller,
         collision::{self, Fix, Origin, TypeName},
-        csharp::{CSharp, CSharpCodeGenerator, naming},
+        csharp::{CSharp, CSharpCodeGenerator, emitter::check_nested_options, naming},
         module::{self, Module},
         naming::mentions,
         plugin::EmitterPlugin,
@@ -106,10 +106,13 @@ impl Installer {
     /// type, a builtin or another namespace's source file, or when a name in
     /// scope hides the first segment of a qualified type reference. Such
     /// output would not build, or would lose a module; the error names the
-    /// namespace or package and what it collides with.
+    /// namespace or package and what it collides with. It also fails before
+    /// writing anything when a type holds an `Option<Option<T>>`, which C#
+    /// cannot declare.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
+        check_nested_options(registry)?;
 
         // Unit.cs is always required (even with no plugins) because Format::Unit
         // maps to the C# Unit struct in generated type declarations.

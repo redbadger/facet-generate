@@ -65,6 +65,14 @@ public static partial class FacetJson
         where K : notnull =>
         new MapConverter<K, V>(key, value);
 
+    // A one-element tuple is declared as its element, but `serde_json` writes
+    // it as a one-element array.
+    public static JsonConverter<T1> Tuple<T1>(JsonConverter<T1> c1) =>
+        new TupleConverter<T1>(
+            1,
+            (w, v, o) => c1.Write(w, v, o),
+            (ref Utf8JsonReader r, JsonSerializerOptions o) => Element(c1, ref r, o, "a 1-tuple"));
+
     public static JsonConverter<(T1, T2)> Tuple<T1, T2>(JsonConverter<T1> c1, JsonConverter<T2> c2) =>
         new TupleConverter<(T1, T2)>(
             2,

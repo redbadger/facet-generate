@@ -1053,3 +1053,50 @@ fn root_type_imported_into_a_namespaced_module_shadows_a_builtin() {
     let output = generate(&config, vec![], &registry);
     assert!(output.contains("public var ids: Set<UInt32>\n"), "{output}");
 }
+
+/// A variant or field renamed to a name that starts with a digit would be
+/// written as an identifier that does not compile, so it is rejected; a
+/// hyphen or a space is dropped by the casing (#233).
+#[test]
+fn rename_starting_with_a_digit_is_rejected() {
+    #[derive(facet::Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "2fa")]
+        TwoFactor,
+    }
+
+    #[derive(facet::Facet)]
+    #[allow(dead_code)]
+    struct Probe {
+        #[facet(rename = "with space")]
+        with_space: bool,
+        #[facet(rename = "2nd")]
+        second: u8,
+    }
+
+    let cfg = CodeGeneratorConfig::new("Testing".to_string());
+    for (registry, message) in [
+        (
+            crate::reflect!(Status).unwrap(),
+            "Swift: variant `2fa` of `Status` would become `2fa`, which is not a valid identifier \
+             because it starts with a digit; rename it with #[facet(rename = \"...\")] to a name \
+             that starts with a letter",
+        ),
+        (
+            crate::reflect!(Probe).unwrap(),
+            "Swift: field `2nd` of `Probe` would become `2nd`, which is not a valid identifier \
+             because it starts with a digit; rename it with #[facet(rename = \"...\")] to a name \
+             that starts with a letter",
+        ),
+    ] {
+        let err = SwiftCodeGenerator::new(&cfg)
+            .output(&mut Vec::new(), &registry)
+            .unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+        assert_eq!(err.to_string(), message);
+    }
+}

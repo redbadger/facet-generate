@@ -252,6 +252,7 @@ pub(crate) const RULES: NamingRules = NamingRules {
     variants_are_types: false,
     member_equals_type_forbidden: false,
     numbered_components_forbidden: false,
+    leading_digit_forbidden: false,
 };
 
 /// Returns `true` if the module declares a type whose `UpperCamelCase` name is

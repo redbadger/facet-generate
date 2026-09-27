@@ -901,7 +901,7 @@ impl Locals {
 ///
 /// `locals` holds the names already bound in the current scope, `field_name`
 /// among them. A tuple's elements are bound as fresh locals in that scope.
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn write_deserialize(
     w: &mut dyn IndentWrite,
     field_name: Option<&str>,

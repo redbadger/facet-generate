@@ -1355,3 +1355,89 @@ fn property_named_like_a_helper_class_qualifies_calls_on_it() {
     }
     "#);
 }
+
+/// A one-element tuple is written as its element, as Rust's bincode does
+/// (#236).
+#[test]
+fn one_element_tuples_are_their_element() {
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Singles {
+        number: (u8,),
+        text: (String,),
+        list: Vec<(u8,)>,
+        maybe_text: Option<(String,)>,
+        nested: ((u8,), u16),
+    }
+
+    let actual = emit!(Singles as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class Singles : ObservableObject, IFacetSerializable, IFacetDeserializable<Singles> {
+        [ObservableProperty]
+        private byte _number;
+        [ObservableProperty]
+        private string _text;
+        [ObservableProperty]
+        private ObservableCollection<byte> _list;
+        [ObservableProperty]
+        private string? _maybeText;
+        [ObservableProperty]
+        private (byte, ushort) _nested;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU8(Number);
+            serializer.SerializeStr(Text);
+            FacetHelpers.SerializeCollection(List, serializer, (item, s) => s.SerializeU8(item));
+            FacetHelpers.SerializeOptionRef(MaybeText, serializer, (item, s) => s.SerializeStr(item));
+            serializer.SerializeU8(Nested.Item1);
+            serializer.SerializeU16(Nested.Item2);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Singles Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var number = deserializer.DeserializeU8();
+            var text = deserializer.DeserializeStr();
+            var list = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeU8());
+            var maybeText = FacetHelpers.DeserializeOptionRef(deserializer, d => d.DeserializeStr());
+            var nested_item1 = deserializer.DeserializeU8();
+            var nested_item2 = deserializer.DeserializeU16();
+            var nested = (nested_item1, nested_item2);
+            deserializer.DecreaseContainerDepth();
+            return new Singles {
+                Number = number,
+                Text = text,
+                List = list,
+                MaybeText = maybeText,
+                Nested = nested,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Singles BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}

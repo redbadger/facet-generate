@@ -16,6 +16,8 @@ impl ExternalPackage {
                 )"#}
             }
             PackageLocation::Url(location) => {
+                // The installer rejects a URL package with no version before
+                // writing anything, as `from: ""` is no requirement.
                 let version = self.version.unwrap_or_default();
 
                 formatdoc! {r#"

@@ -15,12 +15,12 @@ use crate::{
         config::PackageLocation,
         indent::IndentedWriter,
         kotlin::{
-            emitter::{Kotlin, check_tuple_sizes, write_module_header},
+            emitter::{Kotlin, check_identifiers, check_tuple_sizes, write_module_header},
             naming,
         },
         module::Module,
         naming::check_reserved_names,
-        plugin::{CompanionFile, EmitterPlugin, render_companion_files},
+        plugin::{self, CompanionFile, EmitterPlugin, render_companion_files},
     },
     reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
 };
@@ -68,6 +68,26 @@ impl<'a> KotlinCodeGenerator<'a> {
         self
     }
 
+    /// The config the module for `registry` is written with: this generator's
+    /// config, completed from the registry.
+    ///
+    /// Asks each plugin for its
+    /// [`referenced_types`](EmitterPlugin::referenced_types) only to check
+    /// them: Kotlin writes every reference fully qualified, so a reference
+    /// adds no import.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a plugin declares a reference to a type that is not
+    /// in the registry.
+    fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+        let mut config = self.config.clone();
+        config.update_from(registry);
+        config.requalify_enums(registry, Self::requalify);
+        plugin::referenced_types(&self.plugins, &config)?;
+        Ok(config)
+    }
+
     /// Produce a complete Kotlin source file for the given `registry`.
     ///
     /// # Errors
@@ -75,15 +95,15 @@ impl<'a> KotlinCodeGenerator<'a> {
     /// Returns an error if the underlying writer fails, or an
     /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) one, before writing
     /// anything, if the registry has a name the generated code cannot use or
-    /// a tuple of more than twelve elements.
+    /// a tuple of more than twelve elements, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
+        let config = self.module_config(registry)?;
         check_reserved_names(registry, &naming::RULES)?;
         check_tuple_sizes(registry)?;
+        check_identifiers(registry)?;
 
         let mut lang = Kotlin::new(&config, registry);
         for p in &self.plugins {
@@ -114,11 +134,10 @@ impl<'a> KotlinCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if rendering a header fails.
+    /// Returns an error if rendering a header fails, or if a plugin declares a
+    /// reference to a type that is not in the registry.
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
-        let mut config = self.config.clone();
-        config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
+        let config = self.module_config(registry)?;
 
         let mut lang = Kotlin::new(&config, registry);
         for p in &self.plugins {

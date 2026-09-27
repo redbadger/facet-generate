@@ -224,6 +224,17 @@ fn test_that_kotlin_code_with_wide_tuples_compiles() {
     }
 }
 
+/// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
+/// list, an option, a map, a `[T; N]` and an enum variant, compile with each
+/// plugin and with both on one module.
+#[test]
+fn test_that_kotlin_code_with_nested_tuples_compiles() {
+    let registry = common::tuples::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}
+
 /// A `Uuid` field compiles with no plugin, as with each plugin (#191). Only
 /// the Bincode plugin imported `java.util.UUID`, so with none it was missing:
 /// "Unresolved reference 'UUID'."
@@ -241,4 +252,29 @@ fn test_that_kotlin_code_with_a_uuid_compiles() {
 #[test]
 fn test_that_kotlin_code_with_a_uuid_compiles_with_both_plugins() {
     assert_generated_code_compiles(&common::get_uuid_registry(), Encoding::Both);
+}
+
+/// Variants and fields renamed with a hyphen or a space compile with each
+/// plugin and with both (#233). The variant was written verbatim as a class
+/// or an uppercased constant: `ON-HOLD`, which kotlinc rejects with
+/// "Expecting ';' after the last enum entry".
+#[test]
+fn test_that_kotlin_code_with_renames_that_are_not_identifiers_compiles() {
+    let registry = common::renames::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
+}
+
+/// One-element tuples, bare and inside a list, an option, a tuple, a map and
+/// enum variants, compile with each plugin and with both (#236). Bincode read
+/// one into a stray `val value` and assigned the property the result of
+/// `increase_container_depth()`: "Argument type mismatch: actual type is
+/// `Unit`, but `UByte` was expected."
+#[test]
+fn test_that_kotlin_code_with_one_element_tuples_compiles() {
+    let registry = common::single_tuples::get_registry();
+    for encoding in [Encoding::Bincode, Encoding::Json, Encoding::Both] {
+        assert_generated_code_compiles(&registry, encoding);
+    }
 }

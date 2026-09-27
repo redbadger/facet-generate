@@ -878,6 +878,90 @@ fn render_type_matches_the_emitter() {
 fn variant_names_match_the_emitter() {
     assert_eq!(variant_class_name("NotFound"), "NotFound");
     assert_eq!(enum_constant_name("NotFound"), "NOTFOUND");
+
+    // A rename that is not an identifier is rewritten into one (#233).
+    assert_eq!(variant_class_name("on-hold"), "on_hold");
+    assert_eq!(enum_constant_name("on-hold"), "ON_HOLD");
+    assert_eq!(variant_class_name("with space"), "with_space");
+    assert_eq!(enum_constant_name("with space"), "WITH_SPACE");
+    assert_eq!(variant_class_name("2fa"), "_2fa");
+    assert_eq!(enum_constant_name("2fa"), "_2FA");
+    assert_eq!(variant_class_name("class"), "`class`");
+    assert_eq!(field_name("first-name"), "firstName");
+    assert_eq!(field_name("2nd"), "_2nd");
+}
+
+/// A variant or field renamed to a name that is not a Kotlin identifier is
+/// written as one: characters an identifier cannot hold become `_`, and a
+/// leading digit gets a `_` in front (#233).
+#[test]
+fn renames_that_are_not_identifiers() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        #[facet(rename = "with space")]
+        WithSpace,
+        #[facet(rename = "2fa")]
+        TwoFactor,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        #[facet(rename = "on-hold")]
+        OnHold(u32),
+        #[facet(rename = "in review")]
+        InReview {
+            #[facet(rename = "reviewer-name")]
+            reviewer_name: String,
+        },
+        #[facet(rename = "2fa")]
+        TwoFactor,
+    }
+
+    #[derive(Facet)]
+    #[allow(dead_code)]
+    struct Ticket {
+        #[facet(rename = "first-name")]
+        first_name: String,
+        #[facet(rename = "2nd")]
+        second: u8,
+        status: Status,
+        event: Event,
+    }
+
+    let actual = emit!(Ticket as Kotlin).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    sealed interface Event {
+        data class on_hold(
+            val value: UInt,
+        ) : Event
+
+        data class in_review(
+            val reviewerName: String,
+        ) : Event
+
+        data object _2fa: Event
+    }
+
+    enum class Status {
+        ON_HOLD,
+        WITH_SPACE,
+        _2FA;
+    }
+
+    data class Ticket(
+        val firstName: String,
+        val _2nd: UByte,
+        val status: Status,
+        val event: Event,
+    )
+    ");
 }
 
 /// A declaration named `String` shadows `kotlin.String` for the whole package,

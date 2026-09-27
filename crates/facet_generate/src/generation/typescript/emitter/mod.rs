@@ -9,11 +9,11 @@
 //! | AST node | TypeScript output |
 //! |---|---|
 //! | [`Module`] | `import` statements, type aliases, feature helpers |
-//! | [`Container`] | `export class` or `export abstract class` + variant subclasses |
+//! | [`Container`] | `export class` for a struct; for an enum, an `export type` discriminated union on `kind` (or the `#[facet(tag)]` name) |
 //! | [`Named<Format>`](Named) | `public` property declaration |
 //! | [`Format`] | Inline type expression (`number`, `string`, `Array<T>`, …) |
 //! | [`Doc`] | `///` doc comments |
-//! | `(Named<VariantFormat>, …)` | Enum variant subclass extending the abstract base |
+//! | `(Named<VariantFormat>, …)` | One member of an enum's union, such as `{ kind: "Circle"; radius: float64 }` |
 //!
 //! # TypeScript type mapping
 //!

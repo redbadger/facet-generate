@@ -7,9 +7,9 @@
 //! hand is tedious and error-prone; this crate automates it.
 //!
 //! Optionally, when a plugin such as [`BincodePlugin`](generation::bincode::BincodePlugin) or
-//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated types include
-//! `serialize` / `deserialize` methods and the appropriate runtime library is installed
-//! alongside the generated code.
+//! [`JsonPlugin`](generation::json::JsonPlugin) is configured, the generated code includes
+//! serialization for that format and the runtime library it needs is installed alongside the
+//! generated code.
 //!
 //! # Modules
 //!
@@ -27,15 +27,18 @@
 //! Add the crates to your project:
 //!
 //! ```sh
-//! cargo add facet facet_generate
+//! cargo add facet facet_generate facet-generate-attrs
 //! ```
+//!
+//! The `#[facet(fg::…)]` attributes expand to paths in `facet_generate_attrs`, so a crate that
+//! uses them must depend on `facet-generate-attrs` directly.
 //!
 //! ## 1. Annotate your types
 //!
 //! Derive [`facet::Facet`] on every type you want to share across language boundaries.
 //! Aliasing this crate as `fg` keeps attribute paths short:
 //!
-//! ```rust,ignore
+//! ```rust
 //! use facet::Facet;
 //! use facet_generate as fg;
 //!
@@ -59,18 +62,30 @@
 //!     name: String,
 //!     value: String,
 //! }
+//! # #[derive(Facet)]
+//! # struct HttpError {
+//! #     message: String,
+//! # }
 //! ```
 //!
 //! You only need to register **root types** — all referenced types are collected transitively.
 //!
 //! ## 2. Build a [`Registry`]
 //!
-//! ```rust,ignore
+//! ```rust
+//! # use facet::Facet;
+//! # #[derive(Facet)]
+//! # #[repr(C)]
+//! # enum HttpResult {
+//! #     Ok(String),
+//! #     Err(String),
+//! # }
 //! use facet_generate::reflection::RegistryBuilder;
 //!
 //! let registry = RegistryBuilder::new()
 //!     .add_type::<HttpResult>()?
 //!     .build()?;
+//! # Ok::<(), facet_generate::error::Error>(())
 //! ```
 //!
 //! ## 3. Generate code
@@ -78,28 +93,46 @@
 //! Pass the [`Registry`] to a language-specific installer, optionally add plugins for
 //! serialization support, and call `generate()`:
 //!
-//! ```rust,ignore
-//! use facet_generate::generation::{bincode::BincodePlugin, kotlin, swift, typescript};
+//! ```rust
+//! # use facet::Facet;
+//! # #[derive(Facet)]
+//! # struct HttpHeader {
+//! #     name: String,
+//! #     value: String,
+//! # }
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let registry = facet_generate::reflect!(HttpHeader)?;
+//! # let out_dir = std::env::temp_dir().join("facet_generate_getting_started");
+//! use facet_generate::generation::{bincode::BincodePlugin, csharp, kotlin, swift, typescript};
 //!
 //! // Swift package with Bincode serialization
-//! swift::Installer::new("MyPackage", &out_dir)
+//! swift::Installer::new("MyPackage", out_dir.join("swift"))
 //!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
 //! // Kotlin package with Bincode serialization
-//! kotlin::Installer::new("com.example", &out_dir)
+//! kotlin::Installer::new("com.example", out_dir.join("kotlin"))
+//!     .plugin(BincodePlugin)
+//!     .generate(&registry)?;
+//!
+//! // C# project with Bincode serialization
+//! csharp::Installer::new("Example", out_dir.join("csharp"))
 //!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
 //!
 //! // TypeScript with Bincode serialization
-//! typescript::Installer::new("my-package", &out_dir)
+//! typescript::Installer::new("my-package", out_dir.join("typescript"))
 //!     .plugin(BincodePlugin)
 //!     .generate(&registry)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
-//! Each installer writes a ready-to-build project to `out_dir` — type definitions plus,
-//! when a serialization plugin is configured, the appropriate runtime. Omit
-//! `.plugin(...)` to generate plain type definitions without any serialization code.
+//! Each installer writes a project to its directory — type definitions plus, when a
+//! serialization plugin is configured, the appropriate runtime. The Swift, C# and TypeScript
+//! projects build as they are written; the Kotlin sources need moving into `src/main/kotlin`
+//! first (see the [Kotlin guide](guide::kotlin)). Omit `.plugin(...)` to generate plain type
+//! definitions without any serialization code.
 //!
 //! ## Key attributes
 //!
@@ -111,54 +144,14 @@
 //! | `#[facet(rename = "Name")]` | Override the generated name of a type, field, or variant |
 //! | `#[facet(rename_all = "camelCase")]` | Apply a naming convention across all fields or variants. Options are `PascalCase`, `camelCase`, `snake_case`, `SCREAMING_SNAKE_CASE`, `kebab-case`, `SCREAMING-KEBAB-CASE` |
 //! | `#[facet(skip)]` | Exclude a field or variant from the generated output |
-//! | `#[facet(opaque)]` | Do not descend into the field's type |
+//! | `#[facet(opaque)]` | Exclude a field from the generated output without reflecting its type, as for a type that can't be generated |
 //! | `#[facet(transparent)]` | Unwrap a newtype wrapper in the generated output |
 //!
-//! # Testing
+//! # Guide
 //!
-//! Tests are organized in four layers, from fast and narrow to slow and broad:
-//!
-//! ## Unit tests (snapshot)
-//!
-//! Each language has snapshot-based tests that assert on generated **text** without touching the
-//! filesystem.
-//!
-//! | Layer | Location | What it covers |
-//! |-------|----------|----------------|
-//! | Emitter | `generation/<lang>/emitter/tests.rs` (+ `tests_bincode.rs`, `tests_json.rs`) | Output for individual types — no file headers, no imports. Uses the `emit` macro. |
-//! | Generator | `generation/<lang>/generator/tests.rs` | Full file output including package declarations, imports, and namespace-qualified names. |
-//! | Installer | `generation/<lang>/installer/tests.rs` | Generated manifest strings (`.csproj`, `build.gradle.kts`, `package.json`, `Package.swift`). Still pure string assertions — no files written. |
-//!
-//! All three use the [`insta`](https://docs.rs/insta) crate for snapshot assertions.
-//!
-//! ## Cross-language expect-file tests (`tests` module, `src/tests/`)
-//!
-//! Each sub-module defines one or more Rust types and invokes the `test!` macro, which reflects
-//! the types and runs the full [`CodeGenerator`](generation::CodeGenerator) pipeline for every listed language
-//! (e.g. `for kotlin, swift`). The output is compared against checked-in expect files
-//! (`output.kt`, `output.swift`, …) sitting alongside each `mod.rs`, using the
-//! [`expect_test`](https://docs.rs/expect_test) crate. These tests are fast (no compiler
-//! invocation) but exercise the complete generator path — including package declarations, imports,
-//! and multi-type ordering — across multiple languages in a single test case. Every test should
-//! support all languages, except for a few that exercise language-specific features like
-//! `#[facet(swift = "Equatable")]` or `#[facet(kotlin = "Parcelable")]`.
-//!
-//! Gated on `#[cfg(all(test, feature = "generate"))]`.
-//!
-//! ## Compilation tests (`tests/<lang>_generation.rs`)
-//!
-//! Integration tests that generate code **and** a project scaffold into a temporary directory,
-//! then invoke the real compiler (`dotnet build`, `gradle build`, `swift build`, `tsc`).
-//! They verify that the generated code is syntactically and type-correct in the target language.
-//! Each file is feature-gated (e.g. `#![cfg(feature = "kotlin")]`) so tests only run when the
-//! corresponding toolchain is available.
-//!
-//! ## Runtime tests (`tests/<lang>_runtime.rs`)
-//!
-//! End-to-end tests that go one step further: they serialize sample data in Rust (typically with
-//! bincode), generate target-language code that deserializes the same bytes, compile and **run**
-//! the resulting program, and assert that the round-trip is correct. These catch subtle encoding
-//! bugs that snapshot and compilation tests cannot.
+//! The [`guide`] module goes further than this page: why this crate exists and how it compares
+//! with other tools, the Rust types it supports in each language, a page per target language,
+//! the serialization formats, and writing your own plugin.
 
 // Re-export attribute macros from facet-generate-attrs.
 // This allows users to write e.g. `#[facet(facet_generate::bytes)]`
@@ -167,7 +160,12 @@ pub use facet_generate_attrs::*;
 
 pub mod error;
 pub mod generation;
+pub mod guide;
 pub mod reflection;
+
+/// Re-exported for the `reflect!` macro, so that its callers don't need `anyhow` themselves.
+#[doc(hidden)]
+pub use anyhow as __anyhow;
 
 #[cfg(test)]
 mod tests;
@@ -222,7 +220,7 @@ macro_rules! emit {
         emit!($($ty),* as $language with)
     };
     ($($ty:ident),* as $language:ident with $($plugin:expr),* $(,)?) => {
-        || -> anyhow::Result<String> {
+        || -> $crate::__anyhow::Result<String> {
             use $crate::generation::{Container, Emitter as _, CodeGeneratorConfig, indent::IndentedWriter};
             use std::io::Write as _;
             let mut out = Vec::new();
@@ -253,12 +251,12 @@ macro_rules! emit {
 #[macro_export]
 macro_rules! reflect {
     ($($ty:ident),*) => {
-        || -> anyhow::Result<std::collections::BTreeMap<$crate::reflection::format::QualifiedTypeName, $crate::reflection::format::ContainerFormat>> {
+        || -> $crate::__anyhow::Result<::std::collections::BTreeMap<$crate::reflection::format::QualifiedTypeName, $crate::reflection::format::ContainerFormat>> {
             let registry = $crate::reflection::RegistryBuilder::new()
-                $(.add_type::<$ty>().map_err(|e| anyhow::anyhow!("failed to add type {}: {}", stringify!($ty), e))?)*
+                $(.add_type::<$ty>().map_err(|e| $crate::__anyhow::anyhow!("failed to add type {}: {}", stringify!($ty), e))?)*
                 .build()
-                .map_err(|e| anyhow::anyhow!("failed to build registry: {e}"))?;
-            Ok(registry)
+                .map_err(|e| $crate::__anyhow::anyhow!("failed to build registry: {e}"))?;
+            ::core::result::Result::Ok(registry)
         }()
     };
 }

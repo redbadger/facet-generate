@@ -51,7 +51,7 @@ use std::io;
 use crate::generation::{
     CodeGeneratorConfig, Feature, PackageLocation, SERDE_NAMESPACE,
     indent::IndentWrite,
-    kotlin::{Kotlin, enum_constant_name, naming, property_name, render_type, variant_class_name},
+    kotlin::{Kotlin, enum_constant_name, field_name, naming, render_type, variant_class_name},
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
 use crate::reflection::format::{ContainerFormat, EnumTagging, Format, Named, VariantFormat};
@@ -642,7 +642,7 @@ fn encode_fields(fields: &[Named<Format>], value: &str, names: &Names) -> Vec<St
     fields
         .iter()
         .map(|field| {
-            let property = format!("{value}.{}", property_name(&field.name));
+            let property = format!("{value}.{}", field_name(&field.name));
             format!(
                 "{} to {}",
                 literal(&field.name),
@@ -666,7 +666,7 @@ fn decode_fields(fields: &[Named<Format>], names: &Names) -> Vec<String> {
             let element = format!("fields.{lookup}({})", literal(&field.name));
             format!(
                 "{} = {}",
-                property_name(&field.name),
+                field_name(&field.name),
                 decode(&field.value, &element, names)
             )
         })

@@ -1365,3 +1365,89 @@ fn enum_with_unit_variants_internally_tagged() {
     }
     "#);
 }
+
+/// A variant renamed to a name that is not a Kotlin identifier keeps that
+/// name on the wire, while its class or constant is an identifier (#233).
+#[test]
+fn renamed_variants_that_are_not_identifiers() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Status {
+        #[facet(rename = "on-hold")]
+        OnHold,
+        Done,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(dead_code)]
+    enum Event {
+        #[facet(rename = "on-hold")]
+        OnHold(u32),
+        #[facet(rename = "in review")]
+        InReview {
+            #[facet(rename = "reviewer-name")]
+            reviewer_name: String,
+        },
+        #[facet(rename = "with space")]
+        WithSpace,
+    }
+
+    let actual = emit!(Status, Event as Kotlin with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    @Serializable(with = Event.JsonSerializer::class)
+    sealed interface Event {
+        data class on_hold(
+            val value: UInt,
+        ) : Event
+
+        data class in_review(
+            val reviewerName: String,
+        ) : Event
+
+        data object with_space: Event
+
+        object JsonSerializer : JsonElementSerializer<Event>(
+            "Event",
+            toJson = { value ->
+                when (value) {
+                    is on_hold -> variant("on-hold", encode(UInt.serializer(), value.value))
+                    is in_review -> variant(
+                        "in review",
+                        obj(
+                            "reviewer-name" to encode(String.serializer(), value.reviewerName),
+                        ),
+                    )
+                    is with_space -> variant("with space")
+                }
+            },
+            fromJson = { element ->
+                val (tag, content) = variant(element)
+                when (tag) {
+                    "on-hold" -> on_hold(decode(UInt.serializer(), payload(content)))
+                    "in review" -> {
+                        val fields = fields(content)
+                        in_review(
+                            reviewerName = decode(String.serializer(), fields.required("reviewer-name")),
+                        )
+                    }
+                    "with space" -> with_space
+                    else -> unknownVariant(tag)
+                }
+            },
+        )
+    }
+
+    @Serializable
+    @SerialName("Status")
+    enum class Status {
+        @SerialName("on-hold") ON_HOLD,
+        @SerialName("Done") DONE;
+
+        val serialName: String
+            get() = javaClass.getDeclaredField(name).getAnnotation(SerialName::class.java)!!.value
+    }
+    "#);
+}

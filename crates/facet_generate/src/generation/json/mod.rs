@@ -8,14 +8,18 @@
 //!
 //! | Extension point | What it provides |
 //! |---|---|
-//! | `imports` | `kotlinx.serialization.*` and runtime serializer imports (Kotlin), `import Serde` (Swift), `System.Text.Json` usings (C#), `import * as $json` (TypeScript) |
-//! | `module_helpers` | `Bytes`, `UUID` and `BigInteger` JSON serializers (Kotlin) |
+//! | `imports` | `kotlinx.serialization.*` and runtime serializer imports (Kotlin), `import Serde` (Swift), `Facet.Runtime.Json` and `System.Text.Json` usings (C#), `import * as $json` (TypeScript) |
+//! | `module_helpers` | `Bytes`, `UUID` and `BigInteger` JSON serializers (Kotlin); the `JsonCharConverter` class for a `char` (C#); the `char` adapter (Swift) |
+//! | `module_declarations` | the `Bytes` and `UUID` aliases, so no import hides them (Kotlin) |
 //! | `type_annotations` | `@Serializable`, naming the type's own serializer where it has one (Kotlin); `[JsonConverter]` naming the type's converter (C#) |
+//! | `enum_variant_annotations` | `@SerialName("…")` with the variant's wire name (Kotlin) |
 //! | `field_annotations` | `@SerialName("…")` (Kotlin), `[property: JsonPropertyName("…")]` (C#), with the wire name |
 //! | `type_conformances` | `Codable` (Swift) |
 //! | `type_body` | `val serialName` accessor for enum classes, and a nested `JsonSerializer` where needed (Kotlin); `CodingKeys`, `init(from:)` / `encode(to:)` where needed, and `jsonSerialize` / `jsonDeserialize` wrappers (Swift); `JsonSerialize` / `JsonDeserialize` wrappers (C#); static `toJson` / `fromJson` and `jsonSerialize` / `jsonDeserialize` on a class (TypeScript) |
 //! | `has_type_body` | Where the type has a `JsonSerializer` (Kotlin); always `true` (Swift); all but unit enums (C#); always `true` (TypeScript) |
 //! | `after_type` | the type's `JsonConverter` (C#); an enum's `toJson{Enum}` / `fromJson{Enum}` and `jsonSerialize{Enum}` / `jsonDeserialize{Enum}` functions (TypeScript) |
+//! | `runtime_files` | the serde runtime and `JsonCoding.kt` (Kotlin); `Indirect`, `Int128`, `UInt128` and `JsonCoding.swift` from the Serde runtime (Swift); the core and serde runtime, `JsonSerde.cs` and `FacetJson.cs` (C#); `serde/json.ts` (TypeScript) |
+//! | `manifest_dependencies` | the `kotlinx-serialization-json` Gradle dependency (Kotlin) |
 //!
 
 #[cfg(feature = "kotlin")]
