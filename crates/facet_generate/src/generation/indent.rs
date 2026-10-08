@@ -457,7 +457,7 @@ mod test {
 
         // The parent's own buffer must be untouched – the child wrote to its
         // own separate buffer.
-        assert!(parent_buf.is_empty());
+        assert_eq!(parent_buf, Vec::<u8>::new());
 
         // The child used Space(3) inherited from the parent.
         insta::assert_snapshot!(String::from_utf8(child_buf).unwrap(), @"
