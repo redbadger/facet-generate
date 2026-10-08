@@ -10,6 +10,7 @@
 //! - JSON runtime installation (`JsonSerde.cs`)
 //! - No plugins skips serde/bincode runtimes
 //! - Core `Unit.cs` always present regardless of plugins
+//! - External serde skips plugin runtimes but preserves core and companion files
 //! - Plugin companion files written into the module's namespace directory
 
 use facet::Facet;
@@ -303,6 +304,49 @@ fn companion_file_is_written_in_the_namespace_directory() {
 
     public sealed class FfiBridge;
     ");
+}
+
+#[test]
+fn external_serde_skips_plugin_runtime_files_but_keeps_companions() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example.Types", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .plugin(FfiPlugin)
+        .external_packages(&[ExternalPackage {
+            for_namespace: "serde".to_string(),
+            module_name: None,
+            location: PackageLocation::Path("../Serde/Serde.csproj".to_string()),
+            version: None,
+        }])
+        .generate(&registry)
+        .unwrap();
+
+    let runtime = install_dir.path().join("Facet/Runtime");
+    assert!(!runtime.join("Bincode").exists());
+    assert!(!runtime.join("Json").exists());
+    let serde_files: Vec<_> = std::fs::read_dir(runtime.join("Serde"))
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    // Unit is core support, installed independently of the plugins.
+    assert_eq!(serde_files, [std::ffi::OsString::from("Unit.cs")]);
+
+    assert!(install_dir.path().join("Example/Types/Types.cs").exists());
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Example/Types/FfiBridge.cs")).unwrap();
+    assert!(companion.contains("namespace Example.Types;"));
+    assert!(companion.contains("public sealed class FfiBridge;"));
+
+    let manifest =
+        std::fs::read_to_string(install_dir.path().join("Example.Types.csproj")).unwrap();
+    assert!(manifest.contains(r#"<ProjectReference Include="../Serde/Serde.csproj" />"#));
 }
 
 /// Generates `App`, which holds `Ext` of namespace `shared`, as package
