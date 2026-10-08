@@ -8,6 +8,8 @@
 //!    `BincodeSerializer.cs`/`BincodeDeserializer.cs`/`IFacetSerializable.cs`/
 //!    `IFacetDeserializable.cs` (Bincode). All placed under `Facet/Runtime/`
 //!    subdirectories.
+//!    Plugin runtime files are skipped when serde comes from an external package;
+//!    `Unit.cs` is still installed as core support.
 //!
 //! 2. **Per-module source files** — splits the registry by namespace and writes
 //!    each to `<dotted-path>/<LeafName>.cs`. C# uses file-scoped `namespace`
@@ -35,7 +37,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SourceInstaller,
+        SERDE_NAMESPACE, SourceInstaller,
         collision::{self, Fix, Origin, TypeName},
         csharp::{CSharp, CSharpCodeGenerator, emitter::check_nested_options, naming},
         module::{self, Module},
@@ -121,8 +123,8 @@ impl Installer {
         let mut config = CodeGeneratorConfig::new(self.package_name.clone());
         config.update_from(registry);
 
-        // Install plugin runtime files.
-        if !self.plugins.is_empty() {
+        // An external serde package supplies the plugin runtime files.
+        if !self.plugins.is_empty() && !self.external_packages.contains_key(SERDE_NAMESPACE) {
             let lang = {
                 let mut base = CSharp::new(&config, registry);
                 for p in &self.plugins {
