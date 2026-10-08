@@ -1,4 +1,4 @@
-//! Indentation-aware writer used by [`Emitter`](crate::generation::Emitter)
+//! Indentation-aware writer used by [`Emitter`]
 //! implementations to produce correctly indented source code.
 //!
 //! Wrap any [`Write`] in an [`IndentedWriter`](crate::generation::indent::IndentedWriter) and use [`indent()`] /
