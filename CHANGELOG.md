@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1] - unreleased
+
+### 🚀 Features
+
+- **`EmitterPlugin::module_footer`**: a plugin can emit code after every type in a module, once per module and after every `after_type` output, in the order the plugins were registered. The default writes nothing. It is called for a namespaced module too, so a plugin picks its module from `config.generates(..)` or `config.namespace`. Use it for code that must follow the types it uses, such as a TypeScript class that can't be used before its declaration has run.
+
+### ⚙️ Miscellaneous Tasks
+
+- Fixed the new lints from clippy and rustdoc 1.99: `assert!(x.is_empty())` in tests is now an equality assertion, and intra-doc links no longer repeat a target their label already resolves to.
+
 ## [0.22.0] - 2026-09-27
 
 This release makes generated code compile across namespaces, makes JSON match Rust's `serde_json`, and turns silently wrong output into errors. It comes with a [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs.

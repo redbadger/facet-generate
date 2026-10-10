@@ -1292,3 +1292,102 @@ fn field_named_to_string_is_rejected() {
         "Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = \"...\")]"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `module_footer` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that marks `after_type` and `module_footer`, to pin down that the
+/// footer comes once, after every type and every `after_type` output.
+#[derive(Debug)]
+struct FooterProbe;
+
+impl crate::generation::plugin::EmitterPlugin<Kotlin> for FooterProbe {
+    fn after_type(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        ctx: &crate::generation::plugin::EmitContext,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// after_type: {}", ctx.name())
+    }
+
+    fn module_footer(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// module_footer: {}", config.module_name)
+    }
+}
+
+/// A plugin that overrides nothing.
+#[derive(Debug)]
+struct NoFooter;
+
+impl crate::generation::plugin::EmitterPlugin<Kotlin> for NoFooter {}
+
+fn two_struct_registry() -> Registry {
+    let mut registry = Registry::new();
+    for name in ["First", "Second"] {
+        registry.insert(
+            QualifiedTypeName::root(name.to_string()),
+            ContainerFormat::Struct(
+                vec![Named {
+                    name: "id".to_string(),
+                    doc: Doc::new(),
+                    value: Format::U32,
+                }],
+                Doc::new(),
+            ),
+        );
+    }
+    registry
+}
+
+fn render(
+    config: &CodeGeneratorConfig,
+    plugins: Vec<Arc<dyn crate::generation::plugin::EmitterPlugin<Kotlin>>>,
+    registry: &Registry,
+) -> String {
+    let mut out = Vec::new();
+    KotlinCodeGenerator::new(config)
+        .with_plugins(plugins)
+        .output(&mut out, registry)
+        .unwrap();
+    String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn module_footer_comes_once_after_every_type_and_after_type() {
+    let config = CodeGeneratorConfig::new("com.example".to_string());
+    let registry = two_struct_registry();
+    let output = render(&config, vec![Arc::new(FooterProbe)], &registry);
+
+    assert_eq!(
+        output.matches("// module_footer: com.example").count(),
+        1,
+        "{output}"
+    );
+    let footer = output.find("// module_footer: ").unwrap();
+    let last_after_type = output.find("// after_type: Second").unwrap();
+    assert!(
+        output.find("// after_type: First").unwrap() < last_after_type,
+        "{output}"
+    );
+    assert!(last_after_type < footer, "{output}");
+    assert!(output[..footer].ends_with('\n'), "{output}");
+    assert!(
+        output.trim_end().ends_with("// module_footer: com.example"),
+        "{output}"
+    );
+}
+
+#[test]
+fn module_footer_default_changes_nothing() {
+    let config = CodeGeneratorConfig::new("com.example".to_string());
+    let registry = two_struct_registry();
+    assert_eq!(
+        render(&config, vec![Arc::new(NoFooter)], &registry),
+        render(&config, vec![], &registry),
+    );
+}

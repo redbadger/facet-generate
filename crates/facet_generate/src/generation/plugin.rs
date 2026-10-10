@@ -28,6 +28,7 @@
 //! | `type_body` | Inside the type body, after fields | `fun patching(...)` |
 //! | `after_type` | After the closing brace of every top-level type | extension methods |
 //! | `module_helpers` | After imports, before types | feature helper snippets |
+//! | `module_footer` | After every type in the module | code that must follow the types |
 //! | `field_annotations` | Before a field declaration | `@SerialName("foo")` |
 //! | `runtime_files` | During installation | serde/bincode runtime `.kt` files |
 //! | `companion_files` | During installation | an extra source file beside the module |
@@ -276,6 +277,35 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     ///
     /// Returns an error if writing the helper code fails.
     fn module_helpers(
+        &self,
+        _w: &mut dyn IndentWrite,
+        _config: &CodeGeneratorConfig,
+    ) -> io::Result<()> {
+        Ok(())
+    }
+
+    /// Module-level code to emit after every type declaration in the module.
+    ///
+    /// Called once per module, including a namespaced one, after the last
+    /// type and after every [`after_type`](Self::after_type) output, in the
+    /// order the plugins were registered. A plugin decides whether to write
+    /// anything for the module from [`config`](CodeGeneratorConfig), for
+    /// example with [`generates`](CodeGeneratorConfig::generates) or
+    /// [`namespace`](CodeGeneratorConfig::namespace).
+    ///
+    /// Use this for code that must follow the types it uses, such as a
+    /// TypeScript class that can't be used before its declaration has run.
+    ///
+    /// The footer starts straight after the last type's closing line, with no
+    /// blank line between them, so write a leading newline if you want one.
+    /// Names the footer declares at module scope are not seen by the
+    /// collision checks (TypeScript's `module_scope`, Kotlin's
+    /// `module_declarations`), as with [`after_type`](Self::after_type).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if writing the footer fails.
+    fn module_footer(
         &self,
         _w: &mut dyn IndentWrite,
         _config: &CodeGeneratorConfig,
