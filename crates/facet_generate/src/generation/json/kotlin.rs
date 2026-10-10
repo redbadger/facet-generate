@@ -953,7 +953,7 @@ mod tests {
         }
 
         let output = String::from_utf8(buf).unwrap();
-        assert!(!output.is_empty());
+        assert_ne!(output, "");
     }
 
     #[test]
