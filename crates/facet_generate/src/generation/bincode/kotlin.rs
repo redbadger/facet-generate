@@ -1140,7 +1140,7 @@ mod tests {
         let output = String::from_utf8(buf).unwrap();
         // The ListOfT.kt snippet defines extension functions — just check
         // it's non-empty and contains a recognizable marker.
-        assert!(!output.is_empty());
+        assert_ne!(output, "");
     }
 
     #[test]
@@ -1235,7 +1235,7 @@ mod tests {
                 .unwrap();
         }
         let output = String::from_utf8(buf).unwrap();
-        assert!(output.is_empty());
+        assert_eq!(output, "");
     }
 
     #[test]
@@ -1341,7 +1341,7 @@ mod tests {
         let output = String::from_utf8(buf).unwrap();
         // Now that the emitter delegates to the plugin, top-level enums
         // produce their serialize/deserialize/companion-object body here.
-        assert!(!output.is_empty());
+        assert_ne!(output, "");
         assert!(output.contains("fun serialize(serializer: Serializer)"));
         assert!(output.contains("fun deserialize(deserializer: Deserializer)"));
     }

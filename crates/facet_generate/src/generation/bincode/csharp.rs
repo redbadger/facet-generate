@@ -1319,7 +1319,7 @@ mod tests {
         };
         let ctx = EmitContext::top_level(&container, &config);
 
-        assert!(plugin.type_conformances(&ctx).is_empty());
+        assert_eq!(plugin.type_conformances(&ctx), Vec::<String>::new());
     }
 
     // -------------------------------------------------------------------------

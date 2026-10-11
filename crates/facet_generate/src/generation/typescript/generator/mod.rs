@@ -110,6 +110,11 @@ impl<'a> TypeScriptCodeGenerator<'a> {
             container.write(w, &lang)?;
         }
 
+        // Plugin module footers, once after every type.
+        for plugin in lang.plugins() {
+            plugin.module_footer(w as &mut dyn crate::generation::IndentWrite, &config)?;
+        }
+
         Ok(())
     }
 

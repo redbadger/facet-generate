@@ -83,6 +83,7 @@ answer every time and have no side effects.
 | `type_body_preamble` | start of a sealed interface | | ✓ | | |
 | `type_body` | end of a type body | ✓ | ✓ | ✓ | ✓ |
 | `after_type` | after every top-level type | ✓ | ✓ | ✓ | ✓ |
+| `module_footer` | after every type, once per module | ✓ | ✓ | ✓ | ✓ |
 | `field_annotations` | above a field | | ✓ | ✓ | |
 | `enum_variant_annotations` | before an `enum class` constant | | ✓ | | |
 | `runtime_files` | installer | ✓ | ✓ | ✓ | ✓ |
@@ -130,6 +131,14 @@ the imports and before the first type: type aliases, helper functions, shared de
 Kotlin's companion to it: the names those helpers declare at module scope (a `typealias`, say),
 so the emitter leaves out any import of the same name, which would otherwise hide the
 declaration.
+
+[`module_footer`](crate::generation::plugin::EmitterPlugin::module_footer) is the counterpart at
+the other end: it is written once per module, after every `after_type` output, in the order the
+plugins were registered. It is called for a namespaced module too, so a plugin picks its module
+with `config.generates(..)` or `config.namespace`. The footer starts straight after the last
+type's closing line with no blank line, so write a leading newline if you want one. As with
+`after_type`, the names a footer declares at module scope are not seen by the collision checks
+(TypeScript's `module_scope`, Kotlin's `module_declarations`).
 
 [`referenced_types`](crate::generation::plugin::EmitterPlugin::referenced_types) lists the types
 your code names that the module does not otherwise reference; it has

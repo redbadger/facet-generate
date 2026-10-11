@@ -833,7 +833,7 @@ mod tests {
     #[test]
     fn config_builder_defaults_external_packages_to_empty() {
         let config = Config::builder("MyPackage", "/tmp/out").build();
-        assert!(config.external_packages.is_empty());
+        assert_eq!(config.external_packages, Vec::<ExternalPackage>::new());
     }
 
     #[test]
@@ -849,6 +849,6 @@ mod tests {
     #[test]
     fn config_builder_defaults_platforms_to_empty() {
         let config = Config::builder("MyPackage", "/tmp/out").build();
-        assert!(config.platforms.is_empty());
+        assert_eq!(config.platforms, Vec::<String>::new());
     }
 }
