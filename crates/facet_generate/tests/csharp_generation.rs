@@ -22,13 +22,18 @@ fn dotnet_build(dir: &TempDir) {
 
 /// Builds the project in `dir`, passing `args` to `dotnet build`.
 fn dotnet_build_with(dir: impl AsRef<Path>, args: &[&str]) {
+    // Turn off MSBuild node reuse and the shared compiler server, so that
+    // `dotnet` leaves no processes behind after the test. Leftover processes
+    // are a suspect in crashes of concurrent `swift` processes on the Linux runner.
     let status = Command::new("dotnet")
         .arg("build")
+        .args(["-nodeReuse:false", "-p:UseSharedCompilation=false"])
         .args(args)
         .current_dir(dir)
         .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
         .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
         .env("DOTNET_NOLOGO", "1")
+        .env("MSBUILDDISABLENODEREUSE", "1")
         .status()
         .unwrap();
     assert!(status.success(), "dotnet build failed");
