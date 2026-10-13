@@ -10,6 +10,7 @@
 //! - JSON runtime installation (`JsonSerde.cs`)
 //! - No plugins skips serde/bincode runtimes
 //! - Core `Unit.cs` always present regardless of plugins
+//! - External serde skips the whole runtime, `Unit.cs` included, but keeps companion files
 //! - Plugin companion files written into the module's namespace directory
 
 use facet::Facet;
@@ -303,6 +304,48 @@ fn companion_file_is_written_in_the_namespace_directory() {
 
     public sealed class FfiBridge;
     ");
+}
+
+#[test]
+fn external_serde_skips_the_runtime_but_keeps_companions() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+    let install_dir = tempfile::tempdir().unwrap();
+    Installer::new("Example.Types", install_dir.path())
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .plugin(FfiPlugin)
+        .external_packages(&[ExternalPackage {
+            for_namespace: "serde".to_string(),
+            module_name: None,
+            location: PackageLocation::Path("../Serde/Serde.csproj".to_string()),
+            version: None,
+        }])
+        .generate(&registry)
+        .unwrap();
+
+    // The external package supplies the whole runtime, `Unit.cs` included.
+    assert!(
+        !install_dir
+            .path()
+            .join("Facet/Runtime/Serde/Unit.cs")
+            .exists()
+    );
+    assert!(!install_dir.path().join("Facet").exists());
+
+    assert!(install_dir.path().join("Example/Types/Types.cs").exists());
+    let companion =
+        std::fs::read_to_string(install_dir.path().join("Example/Types/FfiBridge.cs")).unwrap();
+    assert!(companion.contains("namespace Example.Types;"));
+    assert!(companion.contains("public sealed class FfiBridge;"));
+
+    let manifest =
+        std::fs::read_to_string(install_dir.path().join("Example.Types.csproj")).unwrap();
+    assert!(manifest.contains(r#"<ProjectReference Include="../Serde/Serde.csproj" />"#));
 }
 
 /// Generates `App`, which holds `Ext` of namespace `shared`, as package

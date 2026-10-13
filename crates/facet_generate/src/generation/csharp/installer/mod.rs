@@ -2,12 +2,14 @@
 //!
 //! The [`Installer`] writes a complete, ready-to-build C# project:
 //!
-//! 1. **Runtime files** — always installs `Unit.cs` (core), then conditionally
+//! 1. **Runtime files** — installs `Unit.cs` (core), then conditionally
 //!    `ISerializer.cs`/`IDeserializer.cs`/error types (serde),
 //!    `JsonSerde.cs` + `FacetJson.cs` (JSON), or
 //!    `BincodeSerializer.cs`/`BincodeDeserializer.cs`/`IFacetSerializable.cs`/
 //!    `IFacetDeserializable.cs` (Bincode). All placed under `Facet/Runtime/`
 //!    subdirectories.
+//!    An external `serde` package supplies the whole runtime, including
+//!    `Unit.cs`, so none of these files are installed when one is configured.
 //!
 //! 2. **Per-module source files** — splits the registry by namespace and writes
 //!    each to `<dotted-path>/<LeafName>.cs`. C# uses file-scoped `namespace`
@@ -35,7 +37,7 @@ use crate::{
     Registry,
     generation::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
-        SourceInstaller,
+        SERDE_NAMESPACE, SourceInstaller,
         collision::{self, Fix, Origin, TypeName},
         csharp::{CSharp, CSharpCodeGenerator, emitter::check_nested_options, naming},
         module::{self, Module},
@@ -95,7 +97,9 @@ impl Installer {
     /// Generate all code for the given registry.
     ///
     /// This method:
-    /// 1. Installs the appropriate runtimes based on the active plugins
+    /// 1. Installs the core runtime and the runtimes of the active plugins,
+    ///    unless an external `serde` package is configured, which supplies
+    ///    the whole runtime
     /// 2. Splits the registry by namespace and installs each module
     /// 3. Writes the package manifest
     ///
@@ -114,15 +118,15 @@ impl Installer {
         self.check_namespaces(&modules)?;
         check_nested_options(registry)?;
 
-        // Unit.cs is always required (even with no plugins) because Format::Unit
-        // maps to the C# Unit struct in generated type declarations.
-        self.install_core_runtime()?;
+        // An external serde package supplies the whole runtime, Unit.cs
+        // included. Otherwise Unit.cs is required even with no plugins,
+        // because Format::Unit maps to the C# Unit struct in generated type
+        // declarations.
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            self.install_core_runtime()?;
 
-        let mut config = CodeGeneratorConfig::new(self.package_name.clone());
-        config.update_from(registry);
-
-        // Install plugin runtime files.
-        if !self.plugins.is_empty() {
+            let mut config = CodeGeneratorConfig::new(self.package_name.clone());
+            config.update_from(registry);
             let lang = {
                 let mut base = CSharp::new(&config, registry);
                 for p in &self.plugins {
@@ -131,9 +135,8 @@ impl Installer {
                 base
             };
 
-            // Unit.cs was already written above; skip it when iterating plugin files.
-            let mut written: BTreeSet<String> =
-                BTreeSet::from(["Facet/Runtime/Serde/Unit.cs".to_string()]);
+            // Plugins share the core and serde files, so each is written once.
+            let mut written: BTreeSet<String> = BTreeSet::new();
             for plugin in lang.plugins() {
                 for file in plugin.runtime_files() {
                     if written.insert(file.relative_path.clone()) {
@@ -141,8 +144,7 @@ impl Installer {
                         if let Some(parent) = dest.parent() {
                             std::fs::create_dir_all(parent)?;
                         }
-                        let mut f = std::fs::File::create(&dest)?;
-                        f.write_all(&file.contents)?;
+                        std::fs::write(&dest, &file.contents)?;
                     }
                 }
             }
