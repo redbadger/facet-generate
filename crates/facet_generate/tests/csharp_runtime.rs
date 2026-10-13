@@ -41,12 +41,17 @@ fn make_executable(dir: &std::path::Path, package_name: &str) {
 fn dotnet_run(dir: &std::path::Path) -> String {
     const TIMEOUT: Duration = Duration::from_secs(300);
 
+    // Turn off MSBuild node reuse and the shared compiler server, so that
+    // `dotnet` leaves no processes behind after the test. Leftover processes
+    // are a suspect in crashes of concurrent `swift` processes on the Linux runner.
     let mut child = Command::new("dotnet")
         .arg("run")
+        .args(["-nodeReuse:false", "-p:UseSharedCompilation=false"])
         .current_dir(dir)
         .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
         .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
         .env("DOTNET_NOLOGO", "1")
+        .env("MSBUILDDISABLENODEREUSE", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
