@@ -136,11 +136,15 @@ The runtime is written under `Facet/Runtime/`, in the namespaces
 | [`JsonPlugin`](crate::generation::json::JsonPlugin) | `Serde/` and `Json/` (`JsonSerde`, `FacetJson`) |
 | both | the union of the two |
 
-`Unit.cs` is written even without a plugin, since Rust's `()` becomes the
-`Unit` type it declares. The C# installer writes the runtime whatever external
-packages are configured; unlike the other languages, it does not take it from
-an external package for the namespace `serde`
-([#232](https://github.com/redbadger/facet-generate/issues/232)).
+`Unit.cs` is written even without a plugin, because Rust's `()` becomes the
+`Unit` type that it declares.
+
+When an external package provides the namespace `serde`, no runtime is
+written. The external package supplies the whole runtime (`Serde/`, `Bincode/`
+and `Json/`, `Unit.cs` included), and the `.csproj` references it with the
+entry's [`PackageLocation`](crate::generation::PackageLocation). The generated
+code uses the same `Facet.Runtime` namespaces, so a runtime generated on its
+own by the C# installer, as a project with no types, can be that package.
 
 ## Namespaces
 

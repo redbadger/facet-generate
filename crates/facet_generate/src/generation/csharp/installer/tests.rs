@@ -10,7 +10,7 @@
 //! - JSON runtime installation (`JsonSerde.cs`)
 //! - No plugins skips serde/bincode runtimes
 //! - Core `Unit.cs` always present regardless of plugins
-//! - External serde skips plugin runtimes but preserves core and companion files
+//! - External serde skips the whole runtime, `Unit.cs` included, but keeps companion files
 //! - Plugin companion files written into the module's namespace directory
 
 use facet::Facet;
@@ -307,7 +307,7 @@ fn companion_file_is_written_in_the_namespace_directory() {
 }
 
 #[test]
-fn external_serde_skips_plugin_runtime_files_but_keeps_companions() {
+fn external_serde_skips_the_runtime_but_keeps_companions() {
     #[derive(Facet)]
     struct MyStruct {
         id: u32,
@@ -328,15 +328,14 @@ fn external_serde_skips_plugin_runtime_files_but_keeps_companions() {
         .generate(&registry)
         .unwrap();
 
-    let runtime = install_dir.path().join("Facet/Runtime");
-    assert!(!runtime.join("Bincode").exists());
-    assert!(!runtime.join("Json").exists());
-    let serde_files: Vec<_> = std::fs::read_dir(runtime.join("Serde"))
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name())
-        .collect();
-    // Unit is core support, installed independently of the plugins.
-    assert_eq!(serde_files, [std::ffi::OsString::from("Unit.cs")]);
+    // The external package supplies the whole runtime, `Unit.cs` included.
+    assert!(
+        !install_dir
+            .path()
+            .join("Facet/Runtime/Serde/Unit.cs")
+            .exists()
+    );
+    assert!(!install_dir.path().join("Facet").exists());
 
     assert!(install_dir.path().join("Example/Types/Types.cs").exists());
     let companion =
