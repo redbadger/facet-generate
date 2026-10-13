@@ -1,11 +1,14 @@
 #![cfg(feature = "csharp")]
 
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 use facet::Facet;
 use facet_generate as fg;
 use facet_generate::{
-    generation::{bincode::BincodePlugin, csharp, json::JsonPlugin},
+    Registry,
+    generation::{
+        ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp, json::JsonPlugin,
+    },
     reflect,
 };
 use serde::{Deserialize, Serialize};
@@ -14,8 +17,14 @@ use tempfile::{TempDir, tempdir};
 pub mod common;
 
 fn dotnet_build(dir: &TempDir) {
+    dotnet_build_with(dir, &[]);
+}
+
+/// Builds the project in `dir`, passing `args` to `dotnet build`.
+fn dotnet_build_with(dir: impl AsRef<Path>, args: &[&str]) {
     let status = Command::new("dotnet")
         .arg("build")
+        .args(args)
         .current_dir(dir)
         .env("DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1")
         .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
@@ -704,4 +713,49 @@ fn test_that_csharp_code_with_one_element_tuples_compiles() {
         .generate(&registry)
         .unwrap();
     dotnet_build(&dir);
+}
+
+/// A project whose `serde` package is external takes the whole runtime from
+/// that package, so a `()` field binds to the external `Unit`, which the
+/// external serializers expect. A local `Unit.cs` would conflict with it
+/// (CS0436), and the generated code would pass the local `Unit` to
+/// `SerializeUnit` (#232).
+#[test]
+fn test_that_csharp_code_with_an_external_serde_package_compiles() {
+    #[derive(Facet)]
+    struct Order {
+        id: u32,
+        nothing: (),
+    }
+
+    let dir = tempdir().unwrap();
+    let root = dir.path();
+
+    csharp::Installer::new("Serde", root.join("Serde"))
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&Registry::new())
+        .unwrap();
+
+    let serde = ExternalPackage {
+        for_namespace: "serde".to_string(),
+        module_name: None,
+        location: PackageLocation::Path("../Serde/Serde.csproj".to_string()),
+        version: None,
+    };
+    let registry = reflect!(Order).unwrap();
+
+    csharp::Installer::new("Orders", root.join("Bincode"))
+        .plugin(BincodePlugin)
+        .external_packages(std::slice::from_ref(&serde))
+        .generate(&registry)
+        .unwrap();
+    dotnet_build_with(root.join("Bincode"), &["-warnaserror:CS0436"]);
+
+    csharp::Installer::new("Orders", root.join("Json"))
+        .plugin(JsonPlugin)
+        .external_packages(&[serde])
+        .generate(&registry)
+        .unwrap();
+    dotnet_build_with(root.join("Json"), &["-warnaserror:CS0436"]);
 }

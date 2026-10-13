@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Bug Fixes
+
+- **C#: an external `serde` package supplies the whole runtime.** The C# installer wrote the runtime whatever external packages were configured, unlike the other languages. A project with an external `serde` package now gets no `Facet/Runtime` files, `Unit.cs` included, and uses the runtime of that package. Before, a facet-generated runtime referenced as that package declared each runtime type a second time. A `()` field then bound to the local `Unit`, which the external serializers do not accept, so the project did not compile (CS0436, CS1503, CS0029) [#232](https://github.com/redbadger/facet-generate/issues/232), [#254](https://github.com/redbadger/facet-generate/pull/254)
+
 ## [facet-generate-attrs 0.18.1] - unreleased
 
 A patch release of `facet-generate-attrs` (0.18.1). It has no API change. `facet` stays pinned at `=0.46.5`.
