@@ -1,7 +1,7 @@
 [package]
 name = "facet-generate-attrs"
 description = "Extension attributes for facet-generate code generation"
-version = "0.18.0"
+version = "0.18.1"
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -9,4 +9,8 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-facet.workspace = true
+# This is not `workspace = true`, because the workspace entry enables facet's
+# default `std` features, and cargo ignores `default-features = false` on an
+# inherited dependency. facet-core 0.46.5 does not build without `alloc`.
+# Keep this version the same as the workspace pin.
+facet = { version = "=0.46.5", default-features = false, features = ["alloc"] }

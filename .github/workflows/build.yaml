@@ -61,6 +61,14 @@ jobs:
       - name: Docs
         run: just docs
 
+      # `facet-generate-attrs` builds for no_std, so a firmware crate can use
+      # `#[facet(fg::...)]`. If a facet update enables `std` again, or needs
+      # more than `alloc`, this step fails.
+      - name: Check no_std (facet-generate-attrs)
+        run: |
+          rustup target add thumbv7em-none-eabihf
+          cargo check -p facet-generate-attrs --target thumbv7em-none-eabihf
+
       - name: Build
         run: just build
 

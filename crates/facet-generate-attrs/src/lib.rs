@@ -1,17 +1,22 @@
 //! Extension attributes for [`facet_generate`] code generation.
 //!
-//! These attributes are used with the `#[facet(fg::...)]` syntax.
-//! For example: `#[facet(fg::namespace = "MyNs")]`, `#[facet(fg::bytes)]`.
+//! You write these attributes with the `#[facet(fg::...)]` syntax, for example
+//! `#[facet(fg::namespace = "MyNs")]` or `#[facet(fg::bytes)]`.
 //!
-//! This crate provides the attribute grammar definitions for `facet_generate`.
-//! It exists as a separate crate to work around Rust's restriction on
-//! accessing macro-expanded `#[macro_export]` macros by absolute paths
-//! within the same crate.
+//! This crate defines the attribute grammar for `facet_generate`. It is a separate crate
+//! because Rust does not let a crate use an absolute path to refer to a `#[macro_export]`
+//! macro that a macro expansion in the same crate defines.
 //!
-//! Users should depend on [`facet_generate`] directly,
+//! The attributes expand to paths in `facet_generate_attrs`. A crate that uses them must
+//! therefore depend on `facet-generate-attrs` directly, as well as on [`facet_generate`],
 //! which re-exports everything from this crate.
 //!
+//! This crate is `no_std` and needs only `alloc`, so a firmware crate can use the
+//! attributes.
+//!
 //! [`facet_generate`]: https://docs.rs/facet_generate
+
+#![no_std]
 
 facet::define_attr_grammar! {
     ns "fg";

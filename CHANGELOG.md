@@ -8,6 +8,18 @@ All notable changes to this project will be documented in this file.
 
 - **C#: an external `serde` package supplies the whole runtime.** The C# installer wrote the runtime whatever external packages were configured, unlike the other languages. A project with an external `serde` package now gets no `Facet/Runtime` files, `Unit.cs` included, and uses the runtime of that package. Before, a facet-generated runtime referenced as that package declared each runtime type a second time. A `()` field then bound to the local `Unit`, which the external serializers do not accept, so the project did not compile (CS0436, CS1503, CS0029) [#232](https://github.com/redbadger/facet-generate/issues/232), [#254](https://github.com/redbadger/facet-generate/pull/254)
 
+## [facet-generate-attrs 0.18.1] - unreleased
+
+A patch release of `facet-generate-attrs` (0.18.1). It has no API change. `facet` stays pinned at `=0.46.5`.
+
+### 🚀 Features
+
+- **`facet-generate-attrs` builds for no_std targets.** The crate is now `#![no_std]`. It depends on `facet` without the default features and with `alloc`, so it no longer enables `facet/std` for the whole build. A firmware crate can use `#[facet(fg::...)]` attributes, and it does not have to put each attribute behind a `std` feature. CI checks the crate for `thumbv7em-none-eabihf`
+
+### 📝 Documentation
+
+- **The `facet-generate-attrs` crate docs now say to depend on it directly.** They said that users should depend on `facet_generate` only. The README and the `facet_generate` docs say that a crate that uses the `#[facet(fg::…)]` attributes must depend on `facet-generate-attrs` directly, because the attributes expand to paths in `facet_generate_attrs`. The crate docs now say the same, and also say that the crate is `no_std`
+
 ## [0.22.1] - 2026-10-11
 
 This release adds a plugin hook for code that has to come after a module's types. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged at 0.18.0.
