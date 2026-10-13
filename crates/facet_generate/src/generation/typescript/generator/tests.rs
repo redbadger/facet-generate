@@ -741,3 +741,134 @@ fn field_named_serializer_is_rejected() {
         "TypeScript: field `serializer` of `Foo` would become `serializer`, which shadows the `serializer` parameter in the generated serialize method; rename it with #[facet(rename = \"...\")]"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `module_footer` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that marks `after_type` and `module_footer`, to pin down that the
+/// footer comes once, after every type and every `after_type` output.
+#[derive(Debug)]
+struct FooterProbe;
+
+impl crate::generation::plugin::EmitterPlugin<TypeScript> for FooterProbe {
+    fn after_type(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        ctx: &crate::generation::plugin::EmitContext,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// after_type: {}", ctx.name())
+    }
+
+    fn module_footer(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// module_footer: {}", config.module_name)
+    }
+}
+
+/// A plugin that overrides nothing.
+#[derive(Debug)]
+struct NoFooter;
+
+impl crate::generation::plugin::EmitterPlugin<TypeScript> for NoFooter {}
+
+fn two_struct_registry() -> Registry {
+    let mut registry = Registry::new();
+    for name in ["First", "Second"] {
+        registry.insert(
+            QualifiedTypeName::root(name.to_string()),
+            ContainerFormat::Struct(
+                vec![Named {
+                    name: "id".to_string(),
+                    doc: Doc::new(),
+                    value: Format::U32,
+                }],
+                Doc::new(),
+            ),
+        );
+    }
+    registry
+}
+
+#[test]
+fn module_footer_comes_once_after_every_type_and_after_type() {
+    let config = CodeGeneratorConfig::new("root".to_string());
+    let registry = two_struct_registry();
+    let output = render_output(&config, vec![Arc::new(FooterProbe)], &registry);
+
+    assert_eq!(
+        output.matches("// module_footer: root").count(),
+        1,
+        "{output}"
+    );
+    let footer = output.find("// module_footer: ").unwrap();
+    let last_after_type = output.find("// after_type: Second").unwrap();
+    assert!(
+        output.find("// after_type: First").unwrap() < last_after_type,
+        "{output}"
+    );
+    assert!(last_after_type < footer, "{output}");
+    assert!(output[..footer].ends_with('\n'), "{output}");
+    assert!(
+        output.trim_end().ends_with("// module_footer: root"),
+        "{output}"
+    );
+}
+
+/// Like [`FooterProbe`], with a tag so two of them can be told apart.
+#[derive(Debug)]
+struct TaggedProbe(&'static str);
+
+impl crate::generation::plugin::EmitterPlugin<TypeScript> for TaggedProbe {
+    fn after_type(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        ctx: &crate::generation::plugin::EmitContext,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// after_type {}: {}", self.0, ctx.name())
+    }
+
+    fn module_footer(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        _config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// module_footer {}", self.0)
+    }
+}
+
+#[test]
+fn module_footers_follow_every_after_type_in_registration_order() {
+    let config = CodeGeneratorConfig::new("root".to_string());
+    let registry = two_struct_registry();
+    let output = render_output(
+        &config,
+        vec![Arc::new(TaggedProbe("a")), Arc::new(TaggedProbe("b"))],
+        &registry,
+    );
+
+    let last_after_type = output.find("// after_type b: Second").unwrap();
+    let footer_a = output.find("// module_footer a").unwrap();
+    let footer_b = output.find("// module_footer b").unwrap();
+    assert!(last_after_type < footer_a, "{output}");
+    assert!(footer_a < footer_b, "{output}");
+
+    // Each footer starts on a fresh line, at column 0.
+    for footer in [footer_a, footer_b] {
+        assert!(output[..footer].ends_with('\n'), "{output}");
+    }
+    assert_eq!(output.matches("// module_footer").count(), 2, "{output}");
+}
+
+#[test]
+fn module_footer_default_changes_nothing() {
+    let config = CodeGeneratorConfig::new("root".to_string());
+    let registry = two_struct_registry();
+    assert_eq!(
+        render_output(&config, vec![Arc::new(NoFooter)], &registry),
+        render_output(&config, vec![], &registry),
+    );
+}

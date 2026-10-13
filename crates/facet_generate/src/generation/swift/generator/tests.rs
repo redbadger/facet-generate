@@ -1100,3 +1100,103 @@ fn rename_starting_with_a_digit_is_rejected() {
         assert_eq!(err.to_string(), message);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Plugin `module_footer` hook
+// ---------------------------------------------------------------------------
+
+/// A plugin that marks `after_type` and `module_footer`, to pin down that the
+/// footer comes once, after every type and every `after_type` output.
+#[derive(Debug)]
+struct FooterProbe;
+
+impl crate::generation::plugin::EmitterPlugin<Swift> for FooterProbe {
+    fn after_type(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        ctx: &crate::generation::plugin::EmitContext,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// after_type: {}", ctx.name())
+    }
+
+    fn module_footer(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        writeln!(w, "// module_footer: {}", config.module_name)
+    }
+}
+
+/// A plugin that overrides nothing.
+#[derive(Debug)]
+struct NoFooter;
+
+impl crate::generation::plugin::EmitterPlugin<Swift> for NoFooter {}
+
+fn two_struct_registry() -> Registry {
+    let mut registry = Registry::new();
+    for name in ["First", "Second"] {
+        registry.insert(
+            QualifiedTypeName::root(name.to_string()),
+            ContainerFormat::Struct(
+                vec![Named {
+                    name: "id".to_string(),
+                    doc: Doc::new(),
+                    value: Format::U32,
+                }],
+                Doc::new(),
+            ),
+        );
+    }
+    registry
+}
+
+#[test]
+fn module_footer_comes_once_after_every_type_and_after_type() {
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+    let registry = two_struct_registry();
+    let output = generate(&config, vec![Arc::new(FooterProbe)], &registry);
+
+    assert_eq!(
+        output.matches("// module_footer: MyPackage").count(),
+        1,
+        "{output}"
+    );
+    let footer = output.find("// module_footer: ").unwrap();
+    let last_after_type = output.find("// after_type: Second").unwrap();
+    assert!(
+        output.find("// after_type: First").unwrap() < last_after_type,
+        "{output}"
+    );
+    assert!(last_after_type < footer, "{output}");
+    assert!(output[..footer].ends_with('\n'), "{output}");
+    assert!(
+        output.trim_end().ends_with("// module_footer: MyPackage"),
+        "{output}"
+    );
+}
+
+#[test]
+fn module_footer_default_changes_nothing() {
+    // Any plugin makes Swift add `Hashable` conformances, so compare the
+    // plugin's output with the same output minus the probe's footer instead.
+    let config = CodeGeneratorConfig::new("MyPackage".to_string());
+    let registry = two_struct_registry();
+    let with_default = generate(&config, vec![Arc::new(NoFooter)], &registry);
+    let with_footer = generate(
+        &config,
+        vec![Arc::new(NoFooter), Arc::new(FooterProbe)],
+        &registry,
+    );
+    let footer = "// module_footer: MyPackage\n";
+    assert!(with_footer.ends_with(footer), "{with_footer}");
+    assert!(!with_default.contains("module_footer"), "{with_default}");
+    assert_eq!(
+        with_footer
+            .replace(footer, "")
+            .replace("// after_type: First\n", "")
+            .replace("// after_type: Second\n", ""),
+        with_default,
+    );
+}

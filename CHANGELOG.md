@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.1] - 2026-10-11
+
+This release adds a plugin hook for code that has to come after a module's types. `facet` stays pinned at `=0.46.5`, and `facet-generate-attrs` is unchanged at 0.18.0.
+
+### 🚀 Features
+
+- **`EmitterPlugin::module_footer`** lets a plugin write code at the end of a module, after every type and every `after_type` output. It runs once per module, in the order the plugins were registered, and the default writes nothing. Use it for code that must come after the types it uses, such as a TypeScript class, which can't be used before its declaration has run. It runs for namespaced modules too, so a plugin that wants only one module checks `config.generates(..)` or `config.namespace` [#255](https://github.com/redbadger/facet-generate/pull/255)
+
+### ⚙️ Miscellaneous Tasks
+
+- Fixed the new lints from clippy and rustdoc 1.99: `assert!(x.is_empty())` in tests is now an equality assertion, and intra-doc links no longer repeat a target their label already resolves to [#255](https://github.com/redbadger/facet-generate/pull/255)
+
 ## [0.22.0] - 2026-09-27
 
 This release makes generated code compile across namespaces, makes JSON match Rust's `serde_json`, and turns silently wrong output into errors. It comes with a [guide](https://docs.rs/facet_generate/latest/facet_generate/guide/index.html) on docs.rs.
