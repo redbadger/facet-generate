@@ -47,6 +47,10 @@ export class KeywordFields {
     public import: str;
     public type: str;
     public function: Optional<str>;
+    /**
+     * A tuple field: the Swift plugin derives `whereField0` / `whereField1`
+     * locals from this name, which must stay unescaped.
+     */
     public where: Tuple<[int32, str]>;
 
     constructor (default_: str, in_: int32, class_: bool, object: str, static_: bool, let_: str, when: int32, is: bool, fun: str, operator: str, import_: str, type: str, function_: Optional<str>, where: Tuple<[int32, str]>) {

@@ -1011,11 +1011,17 @@ fn doc_comments_on_enum_variants() {
         Struct {
             /// A field */ of a variant.
             field: bool,
+            other: i32,
+        },
+        Undocumented {
+            /// Two lines,
+            /// with `Option<T>` & more.
+            field: bool,
         },
     }
 
     let actual = emit!(DocumentedEnum as CSharp).unwrap();
-    insta::assert_snapshot!(actual, @"
+    insta::assert_snapshot!(actual, @r#"
 
     /// <summary>
     /// An enum.
@@ -1036,10 +1042,56 @@ fn doc_comments_on_enum_variants() {
         /// <summary>
         /// A struct variant.
         /// </summary>
-        public sealed record Struct(bool Field) : DocumentedEnum;
+        /// <param name="Field">A field */ of a variant.</param>
+        /// <param name="Other"></param>
+        public sealed record Struct(bool Field, int Other) : DocumentedEnum;
+
+        /// <param name="Field">
+        /// Two lines,
+        /// with `Option&lt;T&gt;` &amp; more.
+        /// </param>
+        public sealed record Undocumented(bool Field) : DocumentedEnum;
 
     }
-    ");
+    "#);
+}
+
+#[test]
+fn doc_comments_on_renamed_and_hiding_variant_fields() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Clash {
+        Unit,
+        Name {
+            /// Renamed, because it is named like its variant.
+            name: String,
+        },
+        Other {
+            /// Declared again, because it is named like another variant.
+            unit: bool,
+        },
+    }
+
+    let actual = emit!(Clash as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public abstract record Clash {
+        public sealed record Unit() : Clash;
+
+        /// <param name="Name_">Renamed, because it is named like its variant.</param>
+        public sealed record Name(string Name_) : Clash;
+
+        /// <param name="Unit">Declared again, because it is named like another variant.</param>
+        public sealed record Other(bool Unit) : Clash {
+            /// <summary>
+            /// Declared again, because it is named like another variant.
+            /// </summary>
+            public new bool Unit { get; init; } = Unit;
+        }
+
+    }
+    "#);
 }
 
 #[test]

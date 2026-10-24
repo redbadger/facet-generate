@@ -6,12 +6,16 @@
 export type Colors =
     | { kind: "Red" }
     | { kind: "Blue" }
-    | { kind: "Green" };
+    | {
+        /** Green is a cool color */
+        kind: "Green";
+    };
 
 export const colorsRed = (): Colors => ({ kind: "Red" });
 
 export const colorsBlue = (): Colors => ({ kind: "Blue" });
 
+/** Green is a cool color */
 export const colorsGreen = (): Colors => ({ kind: "Green" });
 
 export function matchColors<R>(value: Colors, cases: {

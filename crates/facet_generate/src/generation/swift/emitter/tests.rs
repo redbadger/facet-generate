@@ -1169,3 +1169,48 @@ fn declared_string_qualifies_the_swift_standard_library_type() {
     }
     ");
 }
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A struct variant.
+        Struct {
+            /// A field of a variant.
+            field: bool,
+            other: i32,
+            /// Two lines,
+            /// with a > b.
+            r#default: String,
+        },
+        Undocumented {
+            /// A field of an undocumented variant.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(DocumentedEnum as Swift).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// An enum.
+    indirect public enum DocumentedEnum {
+        /// A unit variant.
+        case unit
+        /// A struct variant.
+        ///
+        /// - Parameters:
+        ///   - field: A field of a variant.
+        ///   - default: Two lines,
+        ///     with a > b.
+        case `struct`(field: Bool, other: Int32, `default`: String)
+        /// - Parameters:
+        ///   - field: A field of an undocumented variant.
+        case undocumented(field: Bool)
+    }
+    ");
+}

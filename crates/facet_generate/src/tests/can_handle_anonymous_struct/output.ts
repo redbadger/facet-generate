@@ -3,11 +3,29 @@ type str = string;
 
 /** Enum keeping track of who autofilled a field */
 export type AutofilledBy =
-    | { type: "Us"; content: { uuid: str; } }
-    | { type: "SomethingElse"; content: { uuid: str; thing: int32; } };
+    | {
+        /** This field was autofilled by us */
+        type: "Us";
+        content: {
+            /** The UUID for the fill */
+            uuid: str;
+        };
+    }
+    | {
+        /** Something else autofilled this field */
+        type: "SomethingElse";
+        content: {
+            /** The UUID for the fill */
+            uuid: str;
+            /** Some other thing */
+            thing: int32;
+        };
+    };
 
+/** This field was autofilled by us */
 export const autofilledByUs = (uuid: str): AutofilledBy => ({ type: "Us", content: { uuid } });
 
+/** Something else autofilled this field */
 export const autofilledBySomethingElse = (uuid: str, thing: int32): AutofilledBy => ({ type: "SomethingElse", content: { uuid, thing } });
 
 export function matchAutofilledBy<R>(value: AutofilledBy, cases: {

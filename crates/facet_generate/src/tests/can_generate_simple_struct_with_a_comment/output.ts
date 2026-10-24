@@ -10,6 +10,13 @@ export class Location {
 
 /** This is a comment. */
 export class Person {
-    constructor (public name: str, public age: uint8, public info: Optional<str>, public emails: Seq<str>, public location: Location) {
+    constructor (
+        /** This is another comment */
+        public name: str,
+        public age: uint8,
+        public info: Optional<str>,
+        public emails: Seq<str>,
+        public location: Location,
+    ) {
     }
 }
