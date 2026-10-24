@@ -26,12 +26,14 @@
 //!    registry by namespace into per-module files, and generates a
 //!    `package.json` manifest.
 
+pub use doc::write_doc;
 pub use emitter::{
     TypeScript, is_reserved_word, param_name, render_type, requalify, requalify_format,
 };
 pub use generator::TypeScriptCodeGenerator;
 pub use installer::Installer;
 
+mod doc;
 mod emitter;
 mod generator;
 mod installer;

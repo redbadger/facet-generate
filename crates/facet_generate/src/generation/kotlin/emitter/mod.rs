@@ -12,7 +12,7 @@
 //! | [`Container`] | `data class`, `data object`, `sealed interface`, or `enum class` |
 //! | [`Named<Format>`](Named) | A single `val` property declaration |
 //! | [`Format`] | An inline type expression (`Int`, `List<String>`, `Pair<A, B>`, …) |
-//! | [`Doc`] | `KDoc` `/** ... */` comments |
+//! | [`Doc`] | `KDoc` `/** ... */` comments, written by [`write_doc`](crate::generation::kotlin::write_doc) |
 //! | `(Named<VariantFormat>, VariantContext)` | An enum/sealed-interface variant |
 //!
 //! # Kotlin type mapping
@@ -351,7 +351,7 @@ fn write_property<W: IndentWrite>(
 
 impl Emitter<Kotlin> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Kotlin) -> Result<()> {
-        crate::generation::doc_comment::write_block_doc(w, self.comments(), true)
+        crate::generation::kotlin::write_doc(w, self.comments())
     }
 }
 

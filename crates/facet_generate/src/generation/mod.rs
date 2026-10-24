@@ -62,9 +62,14 @@ mod config;
 /// language's reserved words.
 pub(crate) mod naming;
 
-/// Doc-comment rendering shared by the language emitters.
+/// Doc-comment text rules that every language module shares.
 #[cfg_attr(
-    not(any(feature = "typescript", feature = "kotlin", feature = "csharp")),
+    not(any(
+        feature = "swift",
+        feature = "typescript",
+        feature = "kotlin",
+        feature = "csharp"
+    )),
     allow(dead_code)
 )]
 pub(crate) mod doc_comment;

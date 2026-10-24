@@ -775,6 +775,49 @@ fn type_in_root_and_named_namespace() {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin doc comments
+// ---------------------------------------------------------------------------
+
+/// A plugin that adds a documented member to each type body with
+/// `kotlin::write_doc`, as a plugin outside this crate can.
+#[derive(Debug)]
+struct DocPlugin;
+
+impl EmitterPlugin<Kotlin> for DocPlugin {
+    fn has_type_body(&self, _ctx: &EmitContext) -> bool {
+        true
+    }
+
+    fn type_body(&self, w: &mut dyn IndentWrite, _ctx: &EmitContext) -> std::io::Result<()> {
+        crate::generation::kotlin::write_doc(w, &["Returns the name.", "", "Ends a */ comment."])?;
+        writeln!(w, "fun name(): String = \"point\"")
+    }
+}
+
+#[test]
+fn plugin_writes_a_doc_comment_at_the_body_indentation() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    let actual = emit!(Point as Kotlin with DocPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    data class Point(
+        val x: Int,
+    ) {
+        /**
+         * Returns the name.
+         *
+         * Ends a *\/ comment.
+         */
+        fun name(): String = "point"
+    }
+    "#);
+}
+
+// ---------------------------------------------------------------------------
 // Plugin `after_type` hook
 // ---------------------------------------------------------------------------
 

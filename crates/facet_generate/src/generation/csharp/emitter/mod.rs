@@ -12,7 +12,7 @@
 //! | [`Container`] | `sealed record`, `partial class : ObservableObject`, `public enum`, or `abstract record` + `sealed record` variant hierarchy |
 //! | [`Named<Format>`](Named) | `[ObservableProperty]` private field (+ `[JsonPropertyName]` for JSON) |
 //! | [`Format`] | Inline type expression (`int`, `string`, `ObservableCollection<T>`, …) |
-//! | [`Doc`] | `///` XML doc comments with a `<summary>` element, and a `<param>` element for each field of a struct variant |
+//! | [`Doc`] | `///` XML doc comments with a `<summary>` element, written by [`write_doc`](crate::generation::csharp::write_doc), and a `<param>` element for each field of a struct variant |
 //!
 //! # C# type mapping
 //!
@@ -69,7 +69,6 @@ use crate::{
     generation::{
         CodeGeneratorConfig, Container, Emitter,
         collision::TypeName,
-        doc_comment,
         indent::{IndentWrite, Newlines},
         module::Module,
         plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
@@ -272,7 +271,7 @@ fn write_field<W: IndentWrite>(
 
 impl Emitter<CSharp> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &CSharp) -> Result<()> {
-        doc_comment::write_xml_doc(w, self.comments())
+        super::doc::write_doc(w, self.comments())
     }
 }
 
@@ -504,7 +503,7 @@ fn write_variant_records<W: IndentWrite>(
                 .collect(),
             _ => vec![],
         };
-        doc_comment::write_xml_doc_with_params(w, variant.doc.comments(), &params)?;
+        super::doc::write_doc_with_params(w, variant.doc.comments(), &params)?;
         let parameters = properties
             .iter()
             .map(|(ty, name)| format!("{ty} {name}"))
@@ -527,7 +526,7 @@ fn write_variant_records<W: IndentWrite>(
             for (ty, name) in hiding {
                 // An explicit property does not take the doc of its `<param>`.
                 if let Some((_, comments)) = params.iter().find(|(param, _)| param == name) {
-                    doc_comment::write_xml_doc(&mut w, comments)?;
+                    super::doc::write_doc(&mut w, comments)?;
                 }
                 writeln!(w, "public new {ty} {name} {{ get; init; }} = {name};")?;
             }

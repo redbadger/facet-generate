@@ -1214,3 +1214,31 @@ fn doc_comments_on_enum_variants() {
     }
     ");
 }
+
+#[test]
+fn doc_comments_drop_outer_blank_lines() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Trailing {
+        ///
+        /// A struct variant.
+        ///
+        Struct {
+            /// A field.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(Trailing as Swift).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    indirect public enum Trailing {
+        /// A struct variant.
+        ///
+        /// - Parameters:
+        ///   - field: A field.
+        case `struct`(field: Bool)
+    }
+    ");
+}

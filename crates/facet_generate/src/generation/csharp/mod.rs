@@ -33,11 +33,13 @@
 //!    generates a `.csproj` manifest with NuGet `PackageReference` and
 //!    `ProjectReference` entries.
 
+mod doc;
 mod emitter;
 mod generator;
 mod installer;
 pub(crate) mod naming;
 
+pub use doc::write_doc;
 pub use emitter::{CSharp, escape_identifier, render_type, requalify, requalify_format};
 pub(crate) use emitter::{is_value_type, render_type_hiding, unwrap_single};
 pub use generator::CSharpCodeGenerator;

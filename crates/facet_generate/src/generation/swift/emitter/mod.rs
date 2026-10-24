@@ -12,7 +12,7 @@
 //! | [`Container`] | `public struct` or `indirect public enum` |
 //! | [`Named<Format>`](Named) | `public var` property / `case` declaration |
 //! | [`Format`] | Inline type expression (`Int32`, `[String]`, `Set<T>`, …) |
-//! | [`Doc`] | `///` doc comments; the docs of a struct variant's fields go in a `- Parameters:` list on its case |
+//! | [`Doc`] | `///` doc comments, written by [`write_doc`](crate::generation::swift::write_doc); the docs of a struct variant's fields go in a `- Parameters:` list on its case |
 //! | `(Named<VariantFormat>, Usage)` | An enum case declaration |
 //!
 //! # Swift type mapping
@@ -635,7 +635,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
                 .map(|(name, field)| (name.as_str(), field.doc.comments()))
                 .collect();
             let separate = !doc_comment::is_blank(doc.comments());
-            doc_comment::write_swift_parameters(w, &params, separate)?;
+            super::doc::write_parameters(w, &params, separate)?;
         }
 
         match usage {
@@ -684,10 +684,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
 
 impl Emitter<Swift> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-        Ok(())
+        super::doc::write_doc(w, self.comments())
     }
 }
 

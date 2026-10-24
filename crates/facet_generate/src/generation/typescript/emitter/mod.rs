@@ -12,7 +12,7 @@
 //! | [`Container`] | `export class` for a struct; for an enum, an `export type` discriminated union on `kind` (or the `#[facet(tag)]` name) |
 //! | [`Named<Format>`](Named) | `public` property declaration |
 //! | [`Format`] | Inline type expression (`number`, `string`, `Array<T>`, …) |
-//! | [`Doc`] | `TSDoc` `/** ... */` comments, with a variant's doc on the tag property of its union member and on its constructor function |
+//! | [`Doc`] | `TSDoc` `/** ... */` comments, written by [`write_doc`](crate::generation::typescript::write_doc), with a variant's doc on the tag property of its union member and on its constructor function |
 //! | `(Named<VariantFormat>, …)` | One member of an enum's union, such as `{ kind: "Circle"; radius: float64 }` |
 //!
 //! # TypeScript type mapping
@@ -214,7 +214,7 @@ pub(crate) fn module_scope(
 
 impl Emitter<TypeScript> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &TypeScript) -> Result<()> {
-        doc_comment::write_block_doc(w, self.comments(), false)
+        super::write_doc(w, self.comments())
     }
 }
 
@@ -692,7 +692,7 @@ fn write_documented_variant_type_expr<W: IndentWrite>(
             VariantFormat::Struct(fields) => {
                 let write_fields = |w: &mut dyn IndentWrite| -> Result<()> {
                     for field in fields {
-                        doc_comment::write_block_doc(w, field.doc.comments(), false)?;
+                        super::write_doc(w, field.doc.comments())?;
                         writeln!(
                             w,
                             "{}: {};",

@@ -28,6 +28,7 @@
 //!    with SPM targets.
 
 mod conformance;
+mod doc;
 pub(crate) mod emitter;
 mod foundation_types;
 mod generator;
@@ -35,6 +36,7 @@ mod installer;
 pub(crate) mod naming;
 mod package;
 
+pub use doc::write_doc;
 pub use emitter::{
     Swift, case_name, escape_identifier, field_name, render_type, requalify, requalify_format,
 };
