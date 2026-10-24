@@ -48,8 +48,10 @@ fn unit_struct() {
     let actual = emit!(UnitStruct as CSharp with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     public sealed record UnitStruct : IFacetSerializable, IFacetDeserializable<UnitStruct> {
         public void Serialize(ISerializer serializer)
         {

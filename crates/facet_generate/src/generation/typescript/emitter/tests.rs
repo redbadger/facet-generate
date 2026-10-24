@@ -96,8 +96,10 @@ fn unit_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class UnitStruct {
         constructor () {
         }
@@ -116,8 +118,10 @@ fn unit_struct_empty_body() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class UnitStruct {
         constructor () {
         }
@@ -136,8 +140,10 @@ fn newtype_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class NewType {
         constructor (public value: str) {
         }
@@ -156,8 +162,10 @@ fn tuple_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class TupleStruct {
         constructor (public field0: str, public field1: int32) {
         }
@@ -193,8 +201,10 @@ fn struct_with_fields_of_primitive_types() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class StructWithFields {
         constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
         }
@@ -325,17 +335,31 @@ fn enum_with_unit_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    /// line one
-    /// line two
+    /**
+     * line one
+     * line two
+     */
     export type EnumWithUnitVariants =
-        | { kind: "Variant1" }
-        | { kind: "Variant2" }
-        | { kind: "Variant3" };
+        | {
+            /** variant one */
+            kind: "Variant1";
+        }
+        | {
+            /** variant two */
+            kind: "Variant2";
+        }
+        | {
+            /** variant three */
+            kind: "Variant3";
+        };
 
+    /** variant one */
     export const enumWithUnitVariantsVariant1 = (): EnumWithUnitVariants => ({ kind: "Variant1" });
 
+    /** variant two */
     export const enumWithUnitVariantsVariant2 = (): EnumWithUnitVariants => ({ kind: "Variant2" });
 
+    /** variant three */
     export const enumWithUnitVariantsVariant3 = (): EnumWithUnitVariants => ({ kind: "Variant3" });
 
     export function matchEnumWithUnitVariants<R>(value: EnumWithUnitVariants, cases: {
@@ -1070,6 +1094,265 @@ fn fixed_size_arrays_module() {
     export class Grid {
         constructor (public cells: ListTuple<[uint8]>, public maybe: Optional<ListTuple<[uint16]>>, public rows: Seq<ListTuple<[int32]>>, public by_name: Map<str,ListTuple<[bool]>>, public nested: ListTuple<[ListTuple<[uint8]>]>, public cell: Cell) {
         }
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments() {
+    /// First line.
+    ///
+    /// More text, with `Option<String>` & a /* nested */ comment.
+    #[derive(Facet)]
+    struct Documented {
+        /// Single line, with */ in it.
+        one: String,
+        /// Two lines,
+        /// with a > b.
+        two: i32,
+    }
+
+    let actual = emit!(Documented as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r"
+
+
+    /**
+     * First line.
+     *
+     * More text, with `Option<String>` & a /* nested *\/ comment.
+     */
+    export class Documented {
+        constructor (
+            /** Single line, with *\/ in it. */
+            public one: str,
+            /**
+             * Two lines,
+             * with a > b.
+             */
+            public two: int32,
+        ) {
+        }
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// A field */ of a variant.
+            field: bool,
+            other: i32,
+        },
+        /// A tuple variant.
+        Tuple(i32, bool),
+        Plain(bool),
+    }
+
+    let actual = emit!(DocumentedEnum as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    /** An enum. */
+    export type DocumentedEnum =
+        | {
+            /** A unit variant. */
+            kind: "Unit";
+        }
+        | {
+            /**
+             * A newtype variant.
+             *
+             * It holds a string.
+             */
+            kind: "NewType";
+            value: str;
+        }
+        | {
+            /** A struct variant. */
+            kind: "Struct";
+            /** A field *\/ of a variant. */
+            field: bool;
+            other: int32;
+        }
+        | {
+            /** A tuple variant. */
+            kind: "Tuple";
+            field0: int32;
+            field1: bool;
+        }
+        | { kind: "Plain"; value: bool };
+
+    /** A unit variant. */
+    export const documentedEnumUnit = (): DocumentedEnum => ({ kind: "Unit" });
+
+    /**
+     * A newtype variant.
+     *
+     * It holds a string.
+     */
+    export const documentedEnumNewType = (value: str): DocumentedEnum => ({ kind: "NewType", value });
+
+    /** A struct variant. */
+    export const documentedEnumStruct = (field: bool, other: int32): DocumentedEnum => ({ kind: "Struct", field, other });
+
+    /** A tuple variant. */
+    export const documentedEnumTuple = (field0: int32, field1: bool): DocumentedEnum => ({ kind: "Tuple", field0, field1 });
+
+    export const documentedEnumPlain = (value: bool): DocumentedEnum => ({ kind: "Plain", value });
+
+    export function matchDocumentedEnum<R>(value: DocumentedEnum, cases: {
+        Unit: (v: Extract<DocumentedEnum, { kind: "Unit" }>) => R;
+        NewType: (v: Extract<DocumentedEnum, { kind: "NewType" }>) => R;
+        Struct: (v: Extract<DocumentedEnum, { kind: "Struct" }>) => R;
+        Tuple: (v: Extract<DocumentedEnum, { kind: "Tuple" }>) => R;
+        Plain: (v: Extract<DocumentedEnum, { kind: "Plain" }>) => R;
+    }): R {
+        return cases[value.kind as DocumentedEnum["kind"]](value as never);
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments_on_fields_with_reserved_names() {
+    #[derive(Facet)]
+    struct Reserved {
+        /// A field named like a keyword.
+        default: String,
+        other: i32,
+    }
+
+    let actual = emit!(Reserved as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+
+    export class Reserved {
+        /** A field named like a keyword. */
+        public default: str;
+        public other: int32;
+
+        constructor (default_: str, other: int32) {
+            this.default = default_;
+            this.other = other;
+        }
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_internally_tagged_enum_variants() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(tag = "type")]
+    #[allow(unused)]
+    enum Internal {
+        /// A wrapped struct.
+        Wrapped(Point),
+        Struct {
+            /// The first field.
+            x: i32,
+        },
+    }
+
+    let actual = emit!(Internal as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Internal =
+        | {
+            /** A wrapped struct. */
+            type: "Wrapped";
+        } & Point
+        | {
+            type: "Struct";
+            /** The first field. */
+            x: int32;
+        };
+
+    /** A wrapped struct. */
+    export const internalWrapped = (value: Point): Internal => ({ type: "Wrapped", ...value });
+
+    export const internalStruct = (x: int32): Internal => ({ type: "Struct", x });
+
+    export function matchInternal<R>(value: Internal, cases: {
+        Wrapped: (v: Extract<Internal, { type: "Wrapped" }>) => R;
+        Struct: (v: Extract<Internal, { type: "Struct" }>) => R;
+    }): R {
+        return cases[value.type as Internal["type"]](value as never);
+    }
+
+
+    export class Point {
+        constructor (public x: int32) {
+        }
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments_on_adjacently_tagged_enum_variants() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[facet(tag = "t", content = "c")]
+    #[allow(unused)]
+    enum Adjacent {
+        /// A newtype variant.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// The first field.
+            x: i32,
+            y: bool,
+        },
+    }
+
+    let actual = emit!(Adjacent as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    export type Adjacent =
+        | {
+            /** A newtype variant. */
+            t: "NewType";
+            c: str;
+        }
+        | {
+            /** A struct variant. */
+            t: "Struct";
+            c: {
+                /** The first field. */
+                x: int32;
+                y: bool;
+            };
+        };
+
+    /** A newtype variant. */
+    export const adjacentNewType = (value: str): Adjacent => ({ t: "NewType", c: value });
+
+    /** A struct variant. */
+    export const adjacentStruct = (x: int32, y: bool): Adjacent => ({ t: "Struct", c: { x, y } });
+
+    export function matchAdjacent<R>(value: Adjacent, cases: {
+        NewType: (v: Extract<Adjacent, { t: "NewType" }>) => R;
+        Struct: (v: Extract<Adjacent, { t: "Struct" }>) => R;
+    }): R {
+        return cases[value.t as Adjacent["t"]](value as never);
     }
     "#);
 }

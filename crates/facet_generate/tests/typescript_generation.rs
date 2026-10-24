@@ -70,7 +70,7 @@ fn test_typescript_code_generates_with_comments() {
 
     let content = std::fs::read_to_string(&source_file).unwrap();
     assert!(
-        content.contains("/// Some\n/// comments\n"),
+        content.contains("/**\n * Some\n * comments\n */\n"),
         "Doc comments should be present in output:\n{content}"
     );
 }

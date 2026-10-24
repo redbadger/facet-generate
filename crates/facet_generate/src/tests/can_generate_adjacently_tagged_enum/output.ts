@@ -3,18 +3,27 @@ type Seq<T> = T[];
 type str = string;
 type uint32 = number;
 
-/// Enum comment
+/** Enum comment */
 export type AdvancedColors =
     | { type: "Unit" }
-    | { type: "Str"; content: str }
+    | {
+        /** This is a case comment */
+        type: "Str";
+        content: str;
+    }
     | { type: "Number"; content: int32 }
     | { type: "UnsignedNumber"; content: uint32 }
     | { type: "NumberArray"; content: Seq<int32> }
     | { type: "TestWithAnonymousStruct"; content: { a: uint32; b: uint32; } }
-    | { type: "TestWithExplicitlyNamedStruct"; content: ExplicitlyNamedStruct };
+    | {
+        /** Comment on the last element */
+        type: "TestWithExplicitlyNamedStruct";
+        content: ExplicitlyNamedStruct;
+    };
 
 export const advancedColorsUnit = (): AdvancedColors => ({ type: "Unit" });
 
+/** This is a case comment */
 export const advancedColorsStr = (value: str): AdvancedColors => ({ type: "Str", content: value });
 
 export const advancedColorsNumber = (value: int32): AdvancedColors => ({ type: "Number", content: value });
@@ -25,6 +34,7 @@ export const advancedColorsNumberArray = (value: Seq<int32>): AdvancedColors => 
 
 export const advancedColorsTestWithAnonymousStruct = (a: uint32, b: uint32): AdvancedColors => ({ type: "TestWithAnonymousStruct", content: { a, b } });
 
+/** Comment on the last element */
 export const advancedColorsTestWithExplicitlyNamedStruct = (value: ExplicitlyNamedStruct): AdvancedColors => ({ type: "TestWithExplicitlyNamedStruct", content: value });
 
 export function matchAdvancedColors<R>(value: AdvancedColors, cases: {
@@ -40,17 +50,27 @@ export function matchAdvancedColors<R>(value: AdvancedColors, cases: {
 }
 
 export type AdvancedColors2 =
-    | { type: "str"; content: str }
+    | {
+        /** This is a case comment */
+        type: "str";
+        content: str;
+    }
     | { type: "number"; content: int32 }
     | { type: "number-array"; content: Seq<int32> }
-    | { type: "really-cool-type"; content: ExplicitlyNamedStruct };
+    | {
+        /** Comment on the last element */
+        type: "really-cool-type";
+        content: ExplicitlyNamedStruct;
+    };
 
+/** This is a case comment */
 export const advancedColors2Str = (value: str): AdvancedColors2 => ({ type: "str", content: value });
 
 export const advancedColors2Number = (value: int32): AdvancedColors2 => ({ type: "number", content: value });
 
 export const advancedColors2NumberArray = (value: Seq<int32>): AdvancedColors2 => ({ type: "number-array", content: value });
 
+/** Comment on the last element */
 export const advancedColors2ReallyCoolType = (value: ExplicitlyNamedStruct): AdvancedColors2 => ({ type: "really-cool-type", content: value });
 
 export function matchAdvancedColors2<R>(value: AdvancedColors2, cases: {
@@ -62,8 +82,12 @@ export function matchAdvancedColors2<R>(value: AdvancedColors2, cases: {
     return cases[value.type as AdvancedColors2["type"]](value as never);
 }
 
-/// Struct comment
+/** Struct comment */
 export class ExplicitlyNamedStruct {
-    constructor (public a: uint32, public b: uint32) {
+    constructor (
+        /** Field comment */
+        public a: uint32,
+        public b: uint32,
+    ) {
     }
 }

@@ -12,7 +12,7 @@
 //! | [`Container`] | `export class` for a struct; for an enum, an `export type` discriminated union on `kind` (or the `#[facet(tag)]` name) |
 //! | [`Named<Format>`](Named) | `public` property declaration |
 //! | [`Format`] | Inline type expression (`number`, `string`, `Array<T>`, …) |
-//! | [`Doc`] | `///` doc comments |
+//! | [`Doc`] | `TSDoc` `/** ... */` comments, written by [`write_doc`](crate::generation::typescript::write_doc), with a variant's doc on the tag property of its union member and on its constructor function |
 //! | `(Named<VariantFormat>, …)` | One member of an enum's union, such as `{ kind: "Circle"; radius: float64 }` |
 //!
 //! # TypeScript type mapping
@@ -54,7 +54,7 @@ use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use super::naming::{self, builtin};
 use crate::{
     generation::{
-        CodeGeneratorConfig, Container, Emitter, PackageLocation,
+        CodeGeneratorConfig, Container, Emitter, PackageLocation, doc_comment,
         indent::{IndentConfig, IndentWrite, IndentedWriter, Newlines},
         module::Module,
         naming::qualify_helper,
@@ -214,11 +214,7 @@ pub(crate) fn module_scope(
 
 impl Emitter<TypeScript> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &TypeScript) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-
-        Ok(())
+        super::write_doc(w, self.comments())
     }
 }
 
@@ -500,6 +496,7 @@ fn output_struct_or_variant<W: IndentWrite>(
 
     if explicit {
         for field in fields {
+            field.doc.write(&mut w, lang)?;
             writeln!(
                 w,
                 "public {}: {};",
@@ -521,8 +518,23 @@ fn output_struct_or_variant<W: IndentWrite>(
             }
         })
         .collect();
-    let args = args.join(", ");
-    write!(w, "constructor ({args}) ")?;
+    // A doc on its own line before a parameter property documents the
+    // property. A doc on the same line as the property after another one
+    // does not, so a documented constructor puts each parameter on its own
+    // line.
+    let documented = !explicit && fields.iter().any(|f| has_doc(&f.doc));
+    if documented {
+        writeln!(w, "constructor (")?;
+        w.indent();
+        for (field, arg) in fields.iter().zip(&args) {
+            field.doc.write(&mut w, lang)?;
+            writeln!(w, "{arg},")?;
+        }
+        w.unindent();
+        write!(w, ") ")?;
+    } else {
+        write!(w, "constructor ({}) ", args.join(", "))?;
+    }
     {
         let mut w = w.block(Newlines::BOTH)?;
         if explicit {
@@ -622,6 +634,90 @@ fn write_variant_type_expr<W: std::io::Write>(
             }
         }
         VariantFormat::Variable(_) => panic!("unexpected variable format"),
+    }
+    Ok(())
+}
+
+fn has_doc(doc: &Doc) -> bool {
+    !doc_comment::is_blank(doc.comments())
+}
+
+/// Returns true if the variant, or a field of it, has a doc.
+fn variant_has_doc(variant: &Named<VariantFormat>) -> bool {
+    has_doc(&variant.doc)
+        || matches!(&variant.value, VariantFormat::Struct(fields) if fields.iter().any(|f| has_doc(&f.doc)))
+}
+
+/// Writes the union member of a variant that has a doc, or a field with a
+/// doc, with each property on its own line.
+///
+/// Editors show the doc of a property, but not a doc before a union member.
+/// So the doc of the variant goes on its tag property, and the doc of each
+/// field on the property of the field.
+fn write_documented_variant_type_expr<W: IndentWrite>(
+    w: &mut W,
+    variant: &Named<VariantFormat>,
+    tag_field: &str,
+    content_field: Option<&str>,
+    is_internal: bool,
+    lang: &TypeScript,
+) -> Result<()> {
+    let mut intersection = None;
+    {
+        let mut w = w.block(Newlines::OPEN)?;
+        variant.doc.write(&mut w, lang)?;
+        writeln!(w, r#"{tag_field}: "{}";"#, variant.name)?;
+        match &variant.value {
+            VariantFormat::Unit => {}
+            VariantFormat::NewType(inner) => {
+                let type_str = quote_type(inner, lang);
+                if let Some(content) = content_field {
+                    writeln!(w, "{content}: {type_str};")?;
+                } else if is_internal && matches!(inner.as_ref(), Format::TypeName(_)) {
+                    intersection = Some(type_str);
+                } else {
+                    writeln!(w, "value: {type_str};")?;
+                }
+            }
+            VariantFormat::Tuple(formats) => {
+                if let Some(content) = content_field {
+                    let types: Vec<String> = formats.iter().map(|f| quote_type(f, lang)).collect();
+                    writeln!(w, "{content}: [{}];", types.join(", "))?;
+                } else {
+                    for (i, f) in formats.iter().enumerate() {
+                        writeln!(w, "field{i}: {};", quote_type(f, lang))?;
+                    }
+                }
+            }
+            VariantFormat::Struct(fields) => {
+                let write_fields = |w: &mut dyn IndentWrite| -> Result<()> {
+                    for field in fields {
+                        super::write_doc(w, field.doc.comments())?;
+                        writeln!(
+                            w,
+                            "{}: {};",
+                            naming::property_key(&field.name),
+                            quote_type(&field.value, lang)
+                        )?;
+                    }
+                    Ok(())
+                };
+                if let Some(content) = content_field {
+                    write!(w, "{content}: ")?;
+                    {
+                        let mut w = w.block(Newlines::OPEN)?;
+                        write_fields(&mut w)?;
+                    }
+                    writeln!(w, ";")?;
+                } else {
+                    write_fields(&mut w)?;
+                }
+            }
+            VariantFormat::Variable(_) => panic!("unexpected variable format"),
+        }
+    }
+    if let Some(type_str) = intersection {
+        write!(w, " & {type_str}")?;
     }
     Ok(())
 }
@@ -767,22 +863,37 @@ fn output_enum_container<W: IndentWrite>(
     write!(w, "export type {name} =")?;
     for variant in variants.values() {
         writeln!(w)?;
-        write!(w, "    | ")?;
-        write_variant_type_expr(
-            w,
-            &variant.name,
-            &variant.value,
-            tag_field,
-            content_field,
-            is_internal,
-            lang,
-        )?;
+        if variant_has_doc(variant) {
+            w.indent();
+            write!(w, "| ")?;
+            write_documented_variant_type_expr(
+                w,
+                variant,
+                tag_field,
+                content_field,
+                is_internal,
+                lang,
+            )?;
+            w.unindent();
+        } else {
+            write!(w, "    | ")?;
+            write_variant_type_expr(
+                w,
+                &variant.name,
+                &variant.value,
+                tag_field,
+                content_field,
+                is_internal,
+                lang,
+            )?;
+        }
     }
     writeln!(w, ";")?;
 
     // 2. Constructor helpers
     for variant in variants.values() {
         writeln!(w)?;
+        variant.doc.write(w, lang)?;
         write_variant_constructor(
             w,
             name,

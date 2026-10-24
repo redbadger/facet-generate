@@ -12,7 +12,7 @@
 //! | [`Container`] | `sealed record`, `partial class : ObservableObject`, `public enum`, or `abstract record` + `sealed record` variant hierarchy |
 //! | [`Named<Format>`](Named) | `[ObservableProperty]` private field (+ `[JsonPropertyName]` for JSON) |
 //! | [`Format`] | Inline type expression (`int`, `string`, `ObservableCollection<T>`, …) |
-//! | [`Doc`] | `///` XML doc comments |
+//! | [`Doc`] | `///` XML doc comments with a `<summary>` element, written by [`write_doc`](crate::generation::csharp::write_doc), and a `<param>` element for each field of a struct variant |
 //!
 //! # C# type mapping
 //!
@@ -271,10 +271,7 @@ fn write_field<W: IndentWrite>(
 
 impl Emitter<CSharp> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &CSharp) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-        Ok(())
+        super::doc::write_doc(w, self.comments())
     }
 }
 
@@ -491,12 +488,22 @@ fn write_variant_records<W: IndentWrite>(
     let render = |format: &Format| csharp_type_in(format, &lang.config, &nested);
 
     for variant in variants {
-        variant.doc.write(w, lang)?;
         let variant_name = variant.name.to_upper_camel_case();
         let properties: Vec<(String, String)> = variant_properties(variant)
             .into_iter()
             .map(|(name, format)| (render(format), name))
             .collect();
+        // Only the fields of a struct variant have docs. A positional
+        // parameter takes its doc from a `<param>` element on the record.
+        let params: Vec<(&str, &[String])> = match &variant.value {
+            VariantFormat::Struct(fields) => properties
+                .iter()
+                .zip(fields)
+                .map(|((_, name), field)| (name.as_str(), field.doc.comments()))
+                .collect(),
+            _ => vec![],
+        };
+        super::doc::write_doc_with_params(w, variant.doc.comments(), &params)?;
         let parameters = properties
             .iter()
             .map(|(ty, name)| format!("{ty} {name}"))
@@ -517,6 +524,10 @@ fn write_variant_records<W: IndentWrite>(
             write!(w, " ")?;
             let mut w = w.block(Newlines::BOTH)?;
             for (ty, name) in hiding {
+                // An explicit property does not take the doc of its `<param>`.
+                if let Some((_, comments)) = params.iter().find(|(param, _)| param == name) {
+                    super::doc::write_doc(&mut w, comments)?;
+                }
                 writeln!(w, "public new {ty} {name} {{ get; init; }} = {name};")?;
             }
         }

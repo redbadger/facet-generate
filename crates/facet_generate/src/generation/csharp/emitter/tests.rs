@@ -40,8 +40,10 @@ fn unit_struct() {
     let actual = emit!(UnitStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     public sealed record UnitStruct;
     ");
 }
@@ -71,8 +73,10 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     public partial class TupleStruct : ObservableObject {
         [ObservableProperty]
         private string _field0;
@@ -948,6 +952,172 @@ fn one_element_tuples_are_their_element() {
         private string? _maybeText;
         [ObservableProperty]
         private (byte, ushort) _nested;
+    }
+    ");
+}
+
+#[test]
+fn doc_comments() {
+    /// First line.
+    ///
+    /// More text, with `Option<String>` & a /* nested */ comment.
+    #[derive(Facet)]
+    struct Documented {
+        /// Single line, with */ in it.
+        one: String,
+        /// Two lines,
+        /// with a > b.
+        two: i32,
+    }
+
+    let actual = emit!(Documented as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// <summary>
+    /// First line.
+    ///
+    /// More text, with `Option&lt;String&gt;` &amp; a /* nested */ comment.
+    /// </summary>
+    public partial class Documented : ObservableObject {
+        /// <summary>
+        /// Single line, with */ in it.
+        /// </summary>
+        [ObservableProperty]
+        private string _one;
+        /// <summary>
+        /// Two lines,
+        /// with a &gt; b.
+        /// </summary>
+        [ObservableProperty]
+        private int _two;
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// A field */ of a variant.
+            field: bool,
+            other: i32,
+        },
+        Undocumented {
+            /// Two lines,
+            /// with `Option<T>` & more.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(DocumentedEnum as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    /// <summary>
+    /// An enum.
+    /// </summary>
+    public abstract record DocumentedEnum {
+        /// <summary>
+        /// A unit variant.
+        /// </summary>
+        public sealed record Unit() : DocumentedEnum;
+
+        /// <summary>
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        /// </summary>
+        public sealed record NewType(string Value) : DocumentedEnum;
+
+        /// <summary>
+        /// A struct variant.
+        /// </summary>
+        /// <param name="Field">A field */ of a variant.</param>
+        /// <param name="Other"></param>
+        public sealed record Struct(bool Field, int Other) : DocumentedEnum;
+
+        /// <param name="Field">
+        /// Two lines,
+        /// with `Option&lt;T&gt;` &amp; more.
+        /// </param>
+        public sealed record Undocumented(bool Field) : DocumentedEnum;
+
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments_on_renamed_and_hiding_variant_fields() {
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Clash {
+        Unit,
+        Name {
+            /// Renamed, because it is named like its variant.
+            name: String,
+        },
+        Other {
+            /// Declared again, because it is named like another variant.
+            unit: bool,
+        },
+    }
+
+    let actual = emit!(Clash as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public abstract record Clash {
+        public sealed record Unit() : Clash;
+
+        /// <param name="Name_">Renamed, because it is named like its variant.</param>
+        public sealed record Name(string Name_) : Clash;
+
+        /// <param name="Unit">Declared again, because it is named like another variant.</param>
+        public sealed record Other(bool Unit) : Clash {
+            /// <summary>
+            /// Declared again, because it is named like another variant.
+            /// </summary>
+            public new bool Unit { get; init; } = Unit;
+        }
+
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments_on_unit_enum_variants() {
+    /// A C-style enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum UnitEnum {
+        /// The first case, for `Vec<u8>` & more.
+        First,
+        Second,
+    }
+
+    let actual = emit!(UnitEnum as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// <summary>
+    /// A C-style enum.
+    /// </summary>
+    public enum UnitEnum {
+        /// <summary>
+        /// The first case, for `Vec&lt;u8&gt;` &amp; more.
+        /// </summary>
+        First,
+        Second
     }
     ");
 }

@@ -1,6 +1,6 @@
 package com.example
 
-/// This is a comment.
+/** This is a comment. */
 data class Foo(
     val a: Byte,
     val b: Short,

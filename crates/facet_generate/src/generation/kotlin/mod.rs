@@ -27,11 +27,13 @@
 //!    registry by namespace into per-module files, and generates a
 //!    `build.gradle.kts` manifest.
 
+mod doc;
 mod emitter;
 mod generator;
 mod installer;
 pub(crate) mod naming;
 
+pub use doc::write_doc;
 pub use emitter::{
     Kotlin, enum_constant_name, escape_identifier, field_name, render_type, requalify,
     requalify_format, variant_class_name,

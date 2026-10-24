@@ -1,6 +1,6 @@
 package com.example
 
-/// This is a comment.
+/** This is a comment. */
 enum class Colors {
     RED,
     BLUE,

@@ -12,7 +12,7 @@
 //! | [`Container`] | `public struct` or `indirect public enum` |
 //! | [`Named<Format>`](Named) | `public var` property / `case` declaration |
 //! | [`Format`] | Inline type expression (`Int32`, `[String]`, `Set<T>`, …) |
-//! | [`Doc`] | `///` doc comments |
+//! | [`Doc`] | `///` doc comments, written by [`write_doc`](crate::generation::swift::write_doc); the docs of a struct variant's fields go in a `- Parameters:` list on its case |
 //! | `(Named<VariantFormat>, Usage)` | An enum case declaration |
 //!
 //! # Swift type mapping
@@ -69,7 +69,7 @@ use crate::generation::{CodeGeneratorConfig, Feature};
 use crate::{
     Registry,
     generation::{
-        Container, Emitter,
+        Container, Emitter, doc_comment,
         indent::{IndentWrite, Newlines},
         module::Module,
         plugin::{EmitContext, EmitterPlugin},
@@ -624,6 +624,19 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
         let name = case_name(name);
 
         doc.write(w, lang)?;
+        if let VariantFormat::Struct(fields) = format {
+            let names: Vec<String> = fields
+                .iter()
+                .map(|f| f.name.to_lower_camel_case())
+                .collect();
+            let params: Vec<(&str, &[String])> = names
+                .iter()
+                .zip(fields)
+                .map(|(name, field)| (name.as_str(), field.doc.comments()))
+                .collect();
+            let separate = !doc_comment::is_blank(doc.comments());
+            super::doc::write_parameters(w, &params, separate)?;
+        }
 
         match usage {
             Usage::IndirectField => {
@@ -671,10 +684,7 @@ impl Emitter<Swift> for (&Named<VariantFormat>, Usage) {
 
 impl Emitter<Swift> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &Swift) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-        Ok(())
+        super::doc::write_doc(w, self.comments())
     }
 }
 

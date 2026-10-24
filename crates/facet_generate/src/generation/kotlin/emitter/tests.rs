@@ -44,8 +44,10 @@ fn unit_struct_1() {
     let actual = emit!(UnitStruct as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data object UnitStruct
     ");
 }
@@ -60,8 +62,10 @@ fn unit_struct_2() {
     let actual = emit!(UnitStruct as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data object UnitStruct
     ");
 }
@@ -76,8 +80,10 @@ fn newtype_struct() {
     let actual = emit!(NewType as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class NewType(
         val value: String,
     )
@@ -94,8 +100,10 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class TupleStruct(
         val field0: String,
         val field1: Int,
@@ -132,12 +140,14 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class StructWithFields(
-        /// unit type
+        /** unit type */
         val unit: Unit,
-        /// boolean
+        /** boolean */
         val bool: Boolean,
         val i8: Byte,
         val i16: Short,
@@ -268,14 +278,16 @@ fn enum_with_unit_variants() {
     let actual = emit!(EnumWithUnitVariants as Kotlin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line one
-    /// line two
+    /**
+     * line one
+     * line two
+     */
     enum class EnumWithUnitVariants {
-        /// variant one
+        /** variant one */
         VARIANT1,
-        /// variant two
+        /** variant two */
         VARIANT2,
-        /// variant three
+        /** variant three */
         VARIANT3;
     }
     ");
@@ -763,6 +775,49 @@ fn type_in_root_and_named_namespace() {
 }
 
 // ---------------------------------------------------------------------------
+// Plugin doc comments
+// ---------------------------------------------------------------------------
+
+/// A plugin that adds a documented member to each type body with
+/// `kotlin::write_doc`, as a plugin outside this crate can.
+#[derive(Debug)]
+struct DocPlugin;
+
+impl EmitterPlugin<Kotlin> for DocPlugin {
+    fn has_type_body(&self, _ctx: &EmitContext) -> bool {
+        true
+    }
+
+    fn type_body(&self, w: &mut dyn IndentWrite, _ctx: &EmitContext) -> std::io::Result<()> {
+        crate::generation::kotlin::write_doc(w, &["Returns the name.", "", "Ends a */ comment."])?;
+        writeln!(w, "fun name(): String = \"point\"")
+    }
+}
+
+#[test]
+fn plugin_writes_a_doc_comment_at_the_body_indentation() {
+    #[derive(Facet)]
+    struct Point {
+        x: i32,
+    }
+
+    let actual = emit!(Point as Kotlin with DocPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    data class Point(
+        val x: Int,
+    ) {
+        /**
+         * Returns the name.
+         *
+         * Ends a *\/ comment.
+         */
+        fun name(): String = "point"
+    }
+    "#);
+}
+
+// ---------------------------------------------------------------------------
 // Plugin `after_type` hook
 // ---------------------------------------------------------------------------
 
@@ -991,5 +1046,85 @@ fn declared_string_qualifies_the_kotlin_prelude_type() {
     data class String(
         val text: kotlin.String,
     )
+    ");
+}
+
+#[test]
+fn doc_comments() {
+    /// First line.
+    ///
+    /// More text, with `Option<String>` & a /* nested */ comment.
+    #[derive(Facet)]
+    struct Documented {
+        /// Single line, with */ in it.
+        one: String,
+        /// Two lines,
+        /// with a > b.
+        two: i32,
+    }
+
+    let actual = emit!(Documented as Kotlin).unwrap();
+    insta::assert_snapshot!(actual, @r"
+
+    /**
+     * First line.
+     *
+     * More text, with `Option<String>` & a /\* nested *\/ comment.
+     */
+    data class Documented(
+        /** Single line, with *\/ in it. */
+        val one: String,
+        /**
+         * Two lines,
+         * with a > b.
+         */
+        val two: Int,
+    )
+    ");
+}
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// A field */ of a variant.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(DocumentedEnum as Kotlin).unwrap();
+    insta::assert_snapshot!(actual, @r"
+
+    /** An enum. */
+    sealed interface DocumentedEnum {
+        /** A unit variant. */
+        data object Unit: DocumentedEnum
+
+        /**
+         * A newtype variant.
+         *
+         * It holds a string.
+         */
+        data class NewType(
+            val value: String,
+        ) : DocumentedEnum
+
+        /** A struct variant. */
+        data class Struct(
+            /** A field *\/ of a variant. */
+            val field: Boolean,
+        ) : DocumentedEnum
+    }
     ");
 }

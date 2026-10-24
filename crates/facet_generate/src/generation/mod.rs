@@ -62,6 +62,18 @@ mod config;
 /// language's reserved words.
 pub(crate) mod naming;
 
+/// Doc-comment text rules that every language module shares.
+#[cfg_attr(
+    not(any(
+        feature = "swift",
+        feature = "typescript",
+        feature = "kotlin",
+        feature = "csharp"
+    )),
+    allow(dead_code)
+)]
+pub(crate) mod doc_comment;
+
 /// The error the installers report when a namespace's generated name collides
 /// with a type, the root package or another namespace.
 #[cfg_attr(
