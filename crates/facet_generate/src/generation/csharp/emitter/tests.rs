@@ -40,8 +40,10 @@ fn unit_struct() {
     let actual = emit!(UnitStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     public sealed record UnitStruct;
     ");
 }
@@ -71,8 +73,10 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as CSharp).unwrap();
     insta::assert_snapshot!(actual, @"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     public partial class TupleStruct : ObservableObject {
         [ObservableProperty]
         private string _field0;
@@ -948,6 +952,120 @@ fn one_element_tuples_are_their_element() {
         private string? _maybeText;
         [ObservableProperty]
         private (byte, ushort) _nested;
+    }
+    ");
+}
+
+#[test]
+fn doc_comments() {
+    /// First line.
+    ///
+    /// More text, with `Option<String>` & a /* nested */ comment.
+    #[derive(Facet)]
+    struct Documented {
+        /// Single line, with */ in it.
+        one: String,
+        /// Two lines,
+        /// with a > b.
+        two: i32,
+    }
+
+    let actual = emit!(Documented as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// <summary>
+    /// First line.
+    ///
+    /// More text, with `Option&lt;String&gt;` &amp; a /* nested */ comment.
+    /// </summary>
+    public partial class Documented : ObservableObject {
+        /// <summary>
+        /// Single line, with */ in it.
+        /// </summary>
+        [ObservableProperty]
+        private string _one;
+        /// <summary>
+        /// Two lines,
+        /// with a &gt; b.
+        /// </summary>
+        [ObservableProperty]
+        private int _two;
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// A field */ of a variant.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(DocumentedEnum as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// <summary>
+    /// An enum.
+    /// </summary>
+    public abstract record DocumentedEnum {
+        /// <summary>
+        /// A unit variant.
+        /// </summary>
+        public sealed record Unit() : DocumentedEnum;
+
+        /// <summary>
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        /// </summary>
+        public sealed record NewType(string Value) : DocumentedEnum;
+
+        /// <summary>
+        /// A struct variant.
+        /// </summary>
+        public sealed record Struct(bool Field) : DocumentedEnum;
+
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_unit_enum_variants() {
+    /// A C-style enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum UnitEnum {
+        /// The first case, for `Vec<u8>` & more.
+        First,
+        Second,
+    }
+
+    let actual = emit!(UnitEnum as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @"
+
+    /// <summary>
+    /// A C-style enum.
+    /// </summary>
+    public enum UnitEnum {
+        /// <summary>
+        /// The first case, for `Vec&lt;u8&gt;` &amp; more.
+        /// </summary>
+        First,
+        Second
     }
     ");
 }

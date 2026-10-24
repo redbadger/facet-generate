@@ -31,8 +31,10 @@ fn unit_struct_1() {
     let actual = emit!(UnitStruct as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     @Serializable(with = UnitStruct.JsonSerializer::class)
     data object UnitStruct {
         object JsonSerializer : JsonElementSerializer<UnitStruct>(
@@ -59,8 +61,10 @@ fn unit_struct_2() {
     let actual = emit!(UnitStruct as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     @Serializable(with = UnitStruct.JsonSerializer::class)
     data object UnitStruct {
         object JsonSerializer : JsonElementSerializer<UnitStruct>(
@@ -87,8 +91,10 @@ fn newtype_struct() {
     let actual = emit!(NewType as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     @Serializable(with = NewType.JsonSerializer::class)
     data class NewType(
         val value: String,
@@ -112,8 +118,10 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     @Serializable(with = TupleStruct.JsonSerializer::class)
     data class TupleStruct(
         val field0: String,
@@ -168,13 +176,15 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     @Serializable(with = StructWithFields.JsonSerializer::class)
     data class StructWithFields(
-        /// unit type
+        /** unit type */
         val unit: Unit,
-        /// boolean
+        /** boolean */
         val bool: Boolean,
         val i8: Byte,
         val i16: Short,
@@ -427,16 +437,18 @@ fn enum_with_unit_variants() {
     let actual = emit!(EnumWithUnitVariants as Kotlin with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line one
-    /// line two
+    /**
+     * line one
+     * line two
+     */
     @Serializable
     @SerialName("EnumWithUnitVariants")
     enum class EnumWithUnitVariants {
-        /// variant one
+        /** variant one */
         @SerialName("Variant1") VARIANT1,
-        /// variant two
+        /** variant two */
         @SerialName("Variant2") VARIANT2,
-        /// variant three
+        /** variant three */
         @SerialName("Variant3") VARIANT3;
 
         val serialName: String

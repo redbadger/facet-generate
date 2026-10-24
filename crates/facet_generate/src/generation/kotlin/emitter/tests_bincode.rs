@@ -33,8 +33,10 @@ fn unit_struct_1() {
     let actual = emit!(UnitStruct as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data object UnitStruct {
         fun serialize(serializer: Serializer) {}
 
@@ -74,8 +76,10 @@ fn unit_struct_2() {
     let actual = emit!(UnitStruct as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data object UnitStruct {
         fun serialize(serializer: Serializer) {}
 
@@ -115,8 +119,10 @@ fn newtype_struct() {
     let actual = emit!(NewType as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class NewType(
         val value: String,
     ) {
@@ -167,8 +173,10 @@ fn tuple_struct() {
     let actual = emit!(TupleStruct as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class TupleStruct(
         val field0: String,
         val field1: Int,
@@ -241,12 +249,14 @@ fn struct_with_fields_of_primitive_types() {
     let actual = emit!(StructWithFields as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     data class StructWithFields(
-        /// unit type
+        /** unit type */
         val unit: Unit,
-        /// boolean
+        /** boolean */
         val bool: Boolean,
         val i8: Byte,
         val i16: Short,
@@ -706,14 +716,16 @@ fn enum_with_unit_variants() {
     let actual = emit!(EnumWithUnitVariants as Kotlin with BincodePlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
-    /// line one
-    /// line two
+    /**
+     * line one
+     * line two
+     */
     enum class EnumWithUnitVariants {
-        /// variant one
+        /** variant one */
         VARIANT1,
-        /// variant two
+        /** variant two */
         VARIANT2,
-        /// variant three
+        /** variant three */
         VARIANT3;
 
         fun serialize(serializer: Serializer) {

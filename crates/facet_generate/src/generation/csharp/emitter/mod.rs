@@ -12,7 +12,7 @@
 //! | [`Container`] | `sealed record`, `partial class : ObservableObject`, `public enum`, or `abstract record` + `sealed record` variant hierarchy |
 //! | [`Named<Format>`](Named) | `[ObservableProperty]` private field (+ `[JsonPropertyName]` for JSON) |
 //! | [`Format`] | Inline type expression (`int`, `string`, `ObservableCollection<T>`, …) |
-//! | [`Doc`] | `///` XML doc comments |
+//! | [`Doc`] | `///` XML doc comments with a `<summary>` element |
 //!
 //! # C# type mapping
 //!
@@ -271,10 +271,7 @@ fn write_field<W: IndentWrite>(
 
 impl Emitter<CSharp> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &CSharp) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-        Ok(())
+        crate::generation::doc_comment::write_xml_doc(w, self.comments())
     }
 }
 

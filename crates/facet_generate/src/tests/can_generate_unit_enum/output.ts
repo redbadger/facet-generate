@@ -1,6 +1,8 @@
 
-/// This is a comment.
-/// Continued lovingly here
+/**
+ * This is a comment.
+ * Continued lovingly here
+ */
 export type Colors =
     | { kind: "Red" }
     | { kind: "Blue" }

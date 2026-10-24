@@ -18,10 +18,12 @@ public abstract record KeywordEnum {
 
 }
 
+/// <summary>
 /// A struct whose every field is a keyword in at least one target language.
 /// Each language escapes only its own reserved words: `import` is escaped in
 /// Swift and TypeScript but is a soft keyword in Kotlin, and `type` is
 /// contextual everywhere, so both come through bare where they are legal.
+/// </summary>
 public partial class KeywordFields : ObservableObject {
     [ObservableProperty]
     private string _default;
@@ -49,21 +51,27 @@ public partial class KeywordFields : ObservableObject {
     private string _type;
     [ObservableProperty]
     private string? _function;
+    /// <summary>
     /// A tuple field: the Swift plugin derives `whereField0` / `whereField1`
     /// locals from this name, which must stay unescaped.
+    /// </summary>
     [ObservableProperty]
     private (int, string) _where;
 }
 
+/// <summary>
 /// Newtype struct — its member is named `value`, a Kotlin soft keyword that
 /// must not be escaped.
+/// </summary>
 public partial class KeywordNewType : ObservableObject {
     [ObservableProperty]
     private string _value;
 }
 
+/// <summary>
 /// Tuple struct — its members are named `field0`, `field1`, which are never
 /// keywords.
+/// </summary>
 public partial class KeywordTuple : ObservableObject {
     [ObservableProperty]
     private string _field0;

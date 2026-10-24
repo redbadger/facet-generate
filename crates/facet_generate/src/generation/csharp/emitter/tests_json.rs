@@ -29,8 +29,10 @@ fn unit_struct() {
     let actual = emit!(UnitStruct as CSharp with JsonPlugin).unwrap();
     insta::assert_snapshot!(actual, @r#"
 
+    /// <summary>
     /// line 1
     /// line 2
+    /// </summary>
     [JsonConverter(typeof(UnitStructJsonConverter))]
     public sealed record UnitStruct {
         public string JsonSerialize()

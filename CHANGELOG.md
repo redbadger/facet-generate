@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - **C#: an external `serde` package supplies the whole runtime.** The C# installer wrote the runtime whatever external packages were configured, unlike the other languages. A project with an external `serde` package now gets no `Facet/Runtime` files, `Unit.cs` included, and uses the runtime of that package. Before, a facet-generated runtime referenced as that package declared each runtime type a second time. A `()` field then bound to the local `Unit`, which the external serializers do not accept, so the project did not compile (CS0436, CS1503, CS0029) [#232](https://github.com/redbadger/facet-generate/issues/232), [#254](https://github.com/redbadger/facet-generate/pull/254)
+- **Kotlin and TypeScript doc comments use `/** ... */`, and C# doc comments are XML doc comments.** The Kotlin and TypeScript generators wrote each Rust doc comment as `///` lines. KDoc, TSDoc and JSDoc ignore `///` lines, so Dokka, TypeDoc, IDE hover and `.d.ts` files did not show the text. These generators now write a `/** ... */` block, and a doc of one line becomes `/** Text. */`. Each `*/` in the text becomes `*\/` (and in Kotlin each `/*` becomes `/\*`), so the text cannot end the comment. The C# generator now puts the text in a `<summary>` element and escapes `&`, `<` and `>`. Before, a type such as `Option<String>` in a doc comment caused a CS1570 warning when documentation generation was on
 
 ## [facet-generate-attrs 0.18.1] - unreleased
 

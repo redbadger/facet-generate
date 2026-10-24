@@ -1,7 +1,7 @@
 type int32 = number;
 type str = string;
 
-/// Enum keeping track of who autofilled a field
+/** Enum keeping track of who autofilled a field */
 export type AutofilledBy =
     | { type: "Us"; content: { uuid: str; } }
     | { type: "SomethingElse"; content: { uuid: str; thing: int32; } };
@@ -17,7 +17,7 @@ export function matchAutofilledBy<R>(value: AutofilledBy, cases: {
     return cases[value.type as AutofilledBy["type"]](value as never);
 }
 
-/// This is a comment (yareek sameek wuz here)
+/** This is a comment (yareek sameek wuz here) */
 export type EnumWithManyVariants =
     | { type: "UnitVariant" }
     | { type: "TupleVariantString"; content: str }

@@ -12,7 +12,7 @@
 //! | [`Container`] | `export class` for a struct; for an enum, an `export type` discriminated union on `kind` (or the `#[facet(tag)]` name) |
 //! | [`Named<Format>`](Named) | `public` property declaration |
 //! | [`Format`] | Inline type expression (`number`, `string`, `Array<T>`, …) |
-//! | [`Doc`] | `///` doc comments |
+//! | [`Doc`] | `TSDoc` `/** ... */` comments |
 //! | `(Named<VariantFormat>, …)` | One member of an enum's union, such as `{ kind: "Circle"; radius: float64 }` |
 //!
 //! # TypeScript type mapping
@@ -214,11 +214,7 @@ pub(crate) fn module_scope(
 
 impl Emitter<TypeScript> for Doc {
     fn write<W: IndentWrite>(&self, w: &mut W, _lang: &TypeScript) -> Result<()> {
-        for comment in self.comments() {
-            writeln!(w, "/// {comment}")?;
-        }
-
-        Ok(())
+        crate::generation::doc_comment::write_block_doc(w, self.comments(), false)
     }
 }
 

@@ -1,5 +1,5 @@
 
-/// This is a comment.
+/** This is a comment. */
 export type Colors =
     | { kind: "Red" }
     | { kind: "Blue" }

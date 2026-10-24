@@ -3,7 +3,7 @@ type Seq<T> = T[];
 type str = string;
 type uint32 = number;
 
-/// Enum comment
+/** Enum comment */
 export type AdvancedColors =
     | { type: "Unit" }
     | { type: "Str"; content: str }
@@ -62,7 +62,7 @@ export function matchAdvancedColors2<R>(value: AdvancedColors2, cases: {
     return cases[value.type as AdvancedColors2["type"]](value as never);
 }
 
-/// Struct comment
+/** Struct comment */
 export class ExplicitlyNamedStruct {
     constructor (public a: uint32, public b: uint32) {
     }

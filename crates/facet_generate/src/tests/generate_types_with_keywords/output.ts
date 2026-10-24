@@ -27,10 +27,12 @@ export function matchKeywordEnum<R>(value: KeywordEnum, cases: {
     return cases[value.kind as KeywordEnum["kind"]](value as never);
 }
 
-/// A struct whose every field is a keyword in at least one target language.
-/// Each language escapes only its own reserved words: `import` is escaped in
-/// Swift and TypeScript but is a soft keyword in Kotlin, and `type` is
-/// contextual everywhere, so both come through bare where they are legal.
+/**
+ * A struct whose every field is a keyword in at least one target language.
+ * Each language escapes only its own reserved words: `import` is escaped in
+ * Swift and TypeScript but is a soft keyword in Kotlin, and `type` is
+ * contextual everywhere, so both come through bare where they are legal.
+ */
 export class KeywordFields {
     public default: str;
     public in: int32;
@@ -65,15 +67,19 @@ export class KeywordFields {
     }
 }
 
-/// Newtype struct — its member is named `value`, a Kotlin soft keyword that
-/// must not be escaped.
+/**
+ * Newtype struct — its member is named `value`, a Kotlin soft keyword that
+ * must not be escaped.
+ */
 export class KeywordNewType {
     constructor (public value: str) {
     }
 }
 
-/// Tuple struct — its members are named `field0`, `field1`, which are never
-/// keywords.
+/**
+ * Tuple struct — its members are named `field0`, `field1`, which are never
+ * keywords.
+ */
 export class KeywordTuple {
     constructor (public field0: str, public field1: int32) {
     }

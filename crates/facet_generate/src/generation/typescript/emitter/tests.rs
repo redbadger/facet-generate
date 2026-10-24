@@ -96,8 +96,10 @@ fn unit_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class UnitStruct {
         constructor () {
         }
@@ -116,8 +118,10 @@ fn unit_struct_empty_body() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class UnitStruct {
         constructor () {
         }
@@ -136,8 +140,10 @@ fn newtype_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class NewType {
         constructor (public value: str) {
         }
@@ -156,8 +162,10 @@ fn tuple_struct() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class TupleStruct {
         constructor (public field0: str, public field1: int32) {
         }
@@ -193,8 +201,10 @@ fn struct_with_fields_of_primitive_types() {
     insta::assert_snapshot!(actual, @"
 
 
-    /// line 1
-    /// line 2
+    /**
+     * line 1
+     * line 2
+     */
     export class StructWithFields {
         constructor (public unit: unit, public bool: bool, public i8: int8, public i16: int16, public i32: int32, public i64: int64, public i128: int128, public u8: uint8, public u16: uint16, public u32: uint32, public u64: uint64, public u128: uint128, public f32: float32, public f64: float64, public char: char, public string: str) {
         }
@@ -325,8 +335,10 @@ fn enum_with_unit_variants() {
     insta::assert_snapshot!(actual, @r#"
 
 
-    /// line one
-    /// line two
+    /**
+     * line one
+     * line two
+     */
     export type EnumWithUnitVariants =
         | { kind: "Variant1" }
         | { kind: "Variant2" }
@@ -1070,6 +1082,82 @@ fn fixed_size_arrays_module() {
     export class Grid {
         constructor (public cells: ListTuple<[uint8]>, public maybe: Optional<ListTuple<[uint16]>>, public rows: Seq<ListTuple<[int32]>>, public by_name: Map<str,ListTuple<[bool]>>, public nested: ListTuple<[ListTuple<[uint8]>]>, public cell: Cell) {
         }
+    }
+    "#);
+}
+
+#[test]
+fn doc_comments() {
+    /// First line.
+    ///
+    /// More text, with `Option<String>` & a /* nested */ comment.
+    #[derive(Facet)]
+    struct Documented {
+        /// Single line, with */ in it.
+        one: String,
+        /// Two lines,
+        /// with a > b.
+        two: i32,
+    }
+
+    let actual = emit!(Documented as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r"
+
+
+    /**
+     * First line.
+     *
+     * More text, with `Option<String>` & a /* nested *\/ comment.
+     */
+    export class Documented {
+        constructor (public one: str, public two: int32) {
+        }
+    }
+    ");
+}
+
+#[test]
+fn doc_comments_on_enum_variants() {
+    /// An enum.
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum DocumentedEnum {
+        /// A unit variant.
+        Unit,
+        /// A newtype variant.
+        ///
+        /// It holds a string.
+        NewType(String),
+        /// A struct variant.
+        Struct {
+            /// A field */ of a variant.
+            field: bool,
+        },
+    }
+
+    let actual = emit!(DocumentedEnum as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    /** An enum. */
+    export type DocumentedEnum =
+        | { kind: "Unit" }
+        | { kind: "NewType"; value: str }
+        | { kind: "Struct"; field: bool };
+
+    export const documentedEnumUnit = (): DocumentedEnum => ({ kind: "Unit" });
+
+    export const documentedEnumNewType = (value: str): DocumentedEnum => ({ kind: "NewType", value });
+
+    export const documentedEnumStruct = (field: bool): DocumentedEnum => ({ kind: "Struct", field });
+
+    export function matchDocumentedEnum<R>(value: DocumentedEnum, cases: {
+        Unit: (v: Extract<DocumentedEnum, { kind: "Unit" }>) => R;
+        NewType: (v: Extract<DocumentedEnum, { kind: "NewType" }>) => R;
+        Struct: (v: Extract<DocumentedEnum, { kind: "Struct" }>) => R;
+    }): R {
+        return cases[value.kind as DocumentedEnum["kind"]](value as never);
     }
     "#);
 }
