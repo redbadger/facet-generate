@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.22.2] - unreleased
+## [0.22.2] - 2026-10-24
 
 This release fixes the doc comments in generated Kotlin, TypeScript, C# and Swift code, and how the C# installer uses an external `serde` package. It also adds a public `write_doc` function to each language module, for plugins to use. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
 
@@ -16,7 +16,7 @@ This release fixes the doc comments in generated Kotlin, TypeScript, C# and Swif
 - **Kotlin and TypeScript doc comments use `/** ... */`, and C# doc comments are XML doc comments.** The Kotlin and TypeScript generators wrote each Rust doc comment as `///` lines. KDoc, TSDoc and JSDoc ignore `///` lines, so Dokka, TypeDoc, IDE hover and `.d.ts` files did not show the text. These generators now write a `/** ... */` block, and a doc of one line becomes `/** Text. */`. Each `*/` in the text becomes `*\/` (and in Kotlin each `/*` becomes `/\*`), so the text cannot end the comment. The C# generator now puts the text in a `<summary>` element and escapes `&`, `<` and `>`. Before, a type such as `Option<String>` in a doc comment caused a CS1570 warning when documentation generation was on [#259](https://github.com/redbadger/facet-generate/pull/259)
 - **Generated code keeps the doc comments of fields and variants.** Some generators did not write the doc comment of a field or a variant. The TypeScript generator now writes the doc of each struct field before its property. It writes the doc of each variant on the tag property of its union member, and on its constructor function (for example `colorsGreen`). TypeScript editors show the doc of a property, but they do not show a doc before a union member. The doc of each field of a struct variant goes on the property of that field. The C# generator now writes the docs of the fields of a struct variant as `<param>` elements on the record of the variant. If one field has a doc, each field gets a `<param>` element, so the compiler does not warn (CS1573). The Swift generator now writes the docs of the fields of a struct variant in a `- Parameters:` list on the `case` [#259](https://github.com/redbadger/facet-generate/pull/259)
 
-## [facet-generate-attrs 0.18.1] - unreleased
+## [facet-generate-attrs 0.18.1] - 2026-10-24
 
 A patch release of `facet-generate-attrs` (0.18.1). It has no API change. `facet` stays pinned at `=0.46.5`.
 
