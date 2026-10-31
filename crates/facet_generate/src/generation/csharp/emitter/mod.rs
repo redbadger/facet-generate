@@ -595,6 +595,10 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
 /// `Example.Shared.EventBincode.Serialize(Event, serializer);`.
 ///
 /// To requalify every type name inside a format, use [`requalify_format`].
+/// When using explicit external namespace mappings, share the generator's
+/// [`CSharpConfig`](super::CSharpConfig) with the plugin and use
+/// [`CSharpConfig::requalify`](super::CSharpConfig::requalify) instead.
+/// This helper uses the default root-package rules without external mappings.
 ///
 /// Apply it once, to a registry-spelled name: it is not idempotent. A second
 /// pass roots an already-rooted name at the root package again

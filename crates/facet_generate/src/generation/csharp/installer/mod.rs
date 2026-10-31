@@ -39,7 +39,9 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller,
         collision::{self, Fix, Origin, TypeName},
-        csharp::{CSharp, CSharpCodeGenerator, emitter::check_nested_options, naming},
+        csharp::{
+            CSharp, CSharpCodeGenerator, CSharpConfig, emitter::check_nested_options, naming,
+        },
         module::{self, Module},
         naming::mentions,
         plugin::EmitterPlugin,
@@ -55,7 +57,7 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
-    external_namespaces: BTreeMap<String, String>,
+    csharp_config: CSharpConfig,
     plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
@@ -71,7 +73,7 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
-            external_namespaces: BTreeMap::new(),
+            csharp_config: CSharpConfig::default(),
             plugins: vec![],
         }
     }
@@ -96,6 +98,14 @@ impl Installer {
         self
     }
 
+    /// Set C#-specific settings, which can also be shared with custom plugins.
+    /// Replaces any namespace mappings previously configured on this installer.
+    #[must_use]
+    pub fn with_csharp_config(mut self, config: CSharpConfig) -> Self {
+        self.csharp_config = config;
+        self
+    }
+
     /// Set the full CLR namespace supplied by an external package.
     ///
     /// `namespace` is the Rust namespace from `#[facet(fg::namespace = "...")]`
@@ -112,7 +122,8 @@ impl Installer {
     /// namespace, as in earlier releases.
     #[must_use]
     pub fn external_namespace(mut self, namespace: &str, clr_namespace: &str) -> Self {
-        self.external_namespaces
+        self.csharp_config
+            .external_namespaces
             .insert(namespace.to_string(), clr_namespace.to_string());
         self
     }
@@ -225,7 +236,6 @@ impl Installer {
             .map(|(m, registry)| {
                 let mut config = m.config().clone().with_parent(&self.package_name);
                 config.external_packages = self.external_packages.clone();
-                config.external_namespaces = self.external_namespaces.clone();
                 (config, registry)
             })
             .collect();
@@ -295,7 +305,7 @@ impl Installer {
         self.check_mapped_type_names(modules, &generated)?;
 
         for (config, registry) in &generated {
-            Self::check_qualified_references(config, registry, &root_types, &namespaces)?;
+            self.check_qualified_references(config, registry, &root_types, &namespaces)?;
         }
 
         Ok(())
@@ -309,7 +319,7 @@ impl Installer {
         modules: &BTreeMap<Module, Registry>,
         generated: &[(CodeGeneratorConfig, &Registry)],
     ) -> Result<(), Error> {
-        if self.external_namespaces.is_empty() {
+        if self.csharp_config.external_namespaces.is_empty() {
             return Ok(());
         }
         let declarations = self.generated_clr_types(generated)?;
@@ -324,7 +334,7 @@ impl Installer {
             let Namespace::Named(namespace) = &module.config().namespace else {
                 continue;
             };
-            let Some(mapped) = self.external_namespaces.get(namespace) else {
+            let Some(mapped) = self.csharp_config.external_namespaces.get(namespace) else {
                 continue;
             };
             // Verbatim identifiers (@Name) and ordinary identifiers (Name)
@@ -396,6 +406,7 @@ impl Installer {
                 );
             }
             let config = CSharpCodeGenerator::new(config)
+                .with_csharp_config(self.csharp_config.clone())
                 .with_plugins(self.plugins.clone())
                 .module_config(registry)?;
             for name in self
@@ -427,13 +438,14 @@ impl Installer {
     /// segment). C# resolves the first segment through ordinary lookup, so it
     /// would look the rest of the reference up in that type or namespace.
     fn check_qualified_references(
+        &self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
         root_types: &[&QualifiedTypeName],
         namespaces: &[(&str, String, String)],
     ) -> Result<(), Error> {
         for reference in registry_references(registry) {
-            let qualified = CSharpCodeGenerator::requalify(config, &reference);
+            let qualified = self.csharp_config.requalify(config, &reference);
             let Namespace::Named(path) = &qualified.namespace else {
                 continue;
             };
@@ -481,7 +493,7 @@ impl Installer {
 
     /// Reject incomplete mappings before writing any project files.
     fn check_external_namespaces(&self) -> Result<(), Error> {
-        for (namespace, clr_namespace) in &self.external_namespaces {
+        for (namespace, clr_namespace) in &self.csharp_config.external_namespaces {
             let problem = if !self.external_packages.contains_key(namespace) {
                 Some("requires an external package entry")
             } else if clr_namespace.split('.').any(str::is_empty) {
@@ -659,7 +671,6 @@ impl SourceInstaller for Installer {
 
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
-        updated_config.external_namespaces = self.external_namespaces.clone();
 
         let module_path = config.module_name().replace('.', "/");
         let module_dir = self.install_dir.join(module_path);
@@ -674,8 +685,9 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator =
-            CSharpCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let generator = CSharpCodeGenerator::new(&updated_config)
+            .with_csharp_config(self.csharp_config.clone())
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         // Companion files live in the module's namespace directory, beside its

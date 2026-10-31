@@ -283,6 +283,12 @@ that type (`Optional<Example.Event>`, `com.example.Event?`). The same applies to
 emitter spelling: a lookup with a registry-spelled name can miss, and the plugin then treats an
 enum as a class.
 
+For C# external namespace mappings, share a
+[`CSharpConfig`](crate::generation::csharp::CSharpConfig) between the generator
+(or installer) and the plugin. Use its `requalify` and `requalify_format` methods
+for independently reflected types; the free C# helpers use the default
+root-package rules. The shared `CodeGeneratorConfig` has no C# settings.
+
 Respell a name exactly once. `requalify` is not idempotent in C#, Kotlin and TypeScript: a
 second pass qualifies an already-qualified name again (`com.example.com.example.Event` in
 Kotlin), and in a TypeScript namespaced module it qualifies the module's own types, which the

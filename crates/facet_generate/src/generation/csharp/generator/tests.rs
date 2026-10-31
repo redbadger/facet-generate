@@ -73,7 +73,7 @@ fn update_qualified_names_strips_same_namespace() {
         "UserSummary".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -90,7 +90,7 @@ fn update_qualified_names_roots_external_namespace_under_module() {
         "Invoice".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -109,7 +109,7 @@ fn update_qualified_names_roots_root_namespace_for_dotted_module() {
         "User".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -196,22 +196,23 @@ fn requalify_leaves_a_same_namespace_reference_bare() {
 fn external_namespace_mapping_preserves_casing_and_escapes_keywords() {
     let point = QualifiedTypeName::namespaced("geometry".to_string(), "Point".to_string());
     for namespace in [None, Some("views")] {
-        let mut config = module_config("Example.App", namespace);
-        config
-            .external_namespaces
-            .insert("geometry".to_string(), "Vendor.API.event".to_string());
+        let config = module_config("Example.App", namespace);
+        let csharp_config =
+            CSharpConfig::default().external_namespace("geometry", "Vendor.API.event");
         let expected = QualifiedTypeName::namespaced(
             "global::Vendor.API.@event".to_string(),
             "Point".to_string(),
         );
-        assert_eq!(requalified(&config, &point), expected);
+        assert_eq!(csharp_config.requalify(&config, &point), expected);
 
         let registry = registry_with_struct_field(Format::TypeName(point.clone()));
-        let output = render_output(
-            &config,
-            vec![Arc::new(BincodePlugin), Arc::new(JsonPlugin)],
-            &registry,
-        );
+        let mut output = Vec::new();
+        CSharpCodeGenerator::new(&config)
+            .with_csharp_config(csharp_config)
+            .with_plugins(vec![Arc::new(BincodePlugin), Arc::new(JsonPlugin)])
+            .output(&mut output, &registry)
+            .unwrap();
+        let output = String::from_utf8(output).unwrap();
         assert!(
             output.contains("global::Vendor.API.@event.Point"),
             "{output}"
