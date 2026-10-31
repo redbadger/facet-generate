@@ -230,6 +230,25 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
         Ok(())
     }
 
+    fn module_declarations(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut names: Vec<_> = config
+            .registry_type_names
+            .iter()
+            .filter(|name| config.generates(name))
+            .filter(|name| {
+                config.is_unit_enum(name)
+                    || config.is_unit_enum(&crate::generation::csharp::requalify(config, name))
+            })
+            .map(|name| format!("{}Bincode", name.name.to_upper_camel_case()))
+            .collect();
+        for (feature, name) in [(Feature::Uuid, "UuidSerde"), (Feature::Char, "CharSerde")] {
+            if config.features.contains(&feature) {
+                names.push(name.to_string());
+            }
+        }
+        names
+    }
+
     /// Injects `IFacetSerializable` and `IFacetDeserializable<T>` conformances.
     ///
     /// All-unit enums are plain C# `enum` types that cannot implement interfaces, so
