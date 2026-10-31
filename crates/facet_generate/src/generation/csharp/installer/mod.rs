@@ -103,6 +103,8 @@ impl Installer {
     /// entry. `clr_namespace` names the external types' namespace exactly,
     /// including its root, for example `Company.Contracts.Geometry`.
     /// Its casing is preserved and C# keywords are escaped automatically.
+    /// Use plain CLR identifiers; source Unicode escapes, formatting
+    /// characters, comments and whitespace are not accepted.
     ///
     /// This does not change the `NuGet` package ID in
     /// [`ExternalPackage::module_name`], the project reference or runtime
@@ -375,6 +377,13 @@ impl Installer {
                 .iter()
                 .flat_map(|plugin| plugin.runtime_declarations())
             {
+                if !naming::plain_clr_type_name(&name) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("C#: runtime declaration {name:?} requires a plain CLR type name"),
+                    )
+                    .into());
+                }
                 declarations.insert(clr_identity(&name), format!("runtime declaration `{name}`"));
             }
         }
@@ -394,6 +403,15 @@ impl Installer {
                 .iter()
                 .flat_map(|plugin| plugin.module_declarations(&config))
             {
+                if !naming::plain_type_identifier(&name) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "C#: module declaration {name:?} requires a plain CLR type identifier"
+                        ),
+                    )
+                    .into());
+                }
                 declarations
                     .entry(clr_identity(&format!("{namespace}.{name}")))
                     .or_insert_with(|| format!("plugin declaration `{name}` in `{namespace}`"));
@@ -470,6 +488,10 @@ impl Installer {
                 Some("requires a nonempty dotted CLR namespace")
             } else if clr_namespace.contains("::") {
                 Some("must name a CLR namespace without an alias qualifier")
+            } else if !clr_namespace.split('.').all(naming::plain_identifier) {
+                Some(
+                    "requires plain CLR identifiers without source escapes, formatting characters or whitespace",
+                )
             } else {
                 None
             };

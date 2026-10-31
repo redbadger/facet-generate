@@ -215,6 +215,9 @@ to give its types their full CLR namespace, including the other project's root.
 The mapping preserves casing and writes references through `global::`, so a
 local type cannot hide the namespace. Without a mapping, references retain the
 earlier `<RootNamespace>.<Namespace>.Type` qualification.
+Mapping segments must be plain CLR identifiers. Unicode letters are supported;
+source Unicode escapes, invisible formatting characters, whitespace and comments
+are rejected. Keywords may use an `@` prefix or are escaped automatically.
 
 | [`PackageLocation`](crate::generation::PackageLocation) | Project file entry |
 |---|---|
