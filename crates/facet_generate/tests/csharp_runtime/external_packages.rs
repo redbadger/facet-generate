@@ -11,9 +11,15 @@ use facet_generate as fg;
 use facet_generate::{
     Registry,
     generation::{
-        ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp, json::JsonPlugin,
+        CodeGeneratorConfig, ExternalPackage, PackageLocation,
+        bincode::BincodePlugin,
+        csharp,
+        indent::IndentWrite,
+        json::JsonPlugin,
+        plugin::{CompanionFile, EmitterPlugin},
     },
     reflect,
+    reflection::format::{Format, QualifiedTypeName},
 };
 use serde::Serialize;
 
@@ -151,7 +157,9 @@ fn app_installer(
             serde.clone(),
             project("geometry", "../Contracts/Example.Contracts.csproj"),
         ])
-        .external_namespace("geometry", clr_namespace);
+        .with_csharp_config(
+            csharp::CSharpConfig::default().external_namespace("geometry", clr_namespace),
+        );
     if plugins.0 {
         installer = installer.plugin(BincodePlugin);
     }
@@ -207,8 +215,56 @@ if (!System.Text.Json.Nodes.JsonNode.DeepEquals(
     program
 }
 
-/// Distinct project roots work from root and child modules, with no plugins,
-/// each plugin separately, and both together. A consuming executable checks
+/// A custom plugin qualifies independently reflected types using the same
+/// C# settings as the generator, in both module helpers and companion files.
+#[derive(Debug)]
+struct ExternalEnumHelper(csharp::CSharpConfig);
+
+impl EmitterPlugin<csharp::CSharp> for ExternalEnumHelper {
+    fn module_declarations(&self, _: &CodeGeneratorConfig) -> Vec<String> {
+        vec![
+            "ExternalEnumHelper".to_string(),
+            "ExternalEnumCompanion".to_string(),
+        ]
+    }
+
+    fn module_helpers(
+        &self,
+        w: &mut dyn IndentWrite,
+        config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        let color = QualifiedTypeName::namespaced("geometry".to_string(), "Color".to_string());
+        let color = self.0.requalify(config, &color);
+        assert!(
+            config.is_unit_enum(&color),
+            "external enum metadata must use the mapped name"
+        );
+        let rendered = csharp::render_type(&Format::TypeName(color), config);
+        writeln!(
+            w,
+            "public static class ExternalEnumHelper {{ public static System.Type EnumType => typeof({rendered}); }}"
+        )
+    }
+
+    fn companion_files(&self, config: &CodeGeneratorConfig) -> Vec<CompanionFile> {
+        let mut color = Format::TypeName(QualifiedTypeName::namespaced(
+            "geometry".to_string(),
+            "Color".to_string(),
+        ));
+        self.0.requalify_format(config, &mut color);
+        let rendered = csharp::render_type(&color, config);
+        vec![CompanionFile {
+            file_name: "ExternalEnumCompanion.cs".to_string(),
+            imports: vec![],
+            contents: format!(
+                "public static class ExternalEnumCompanion {{ public static System.Type EnumType => typeof({rendered}); }}\n"
+            ),
+        }]
+    }
+}
+
+/// Distinct project roots work from root and child modules, with no serialization
+/// plugins, each codec separately, and both together. A consuming executable checks
 /// `NuGet`'s full dependency graph and C# round trips against Rust data.
 #[test]
 fn external_packages_with_distinct_namespaces() {
@@ -231,6 +287,8 @@ fn external_packages_with_distinct_namespaces() {
         ("Json", false, true),
         ("Both", true, true),
     ] {
+        let csharp_config =
+            csharp::CSharpConfig::default().external_namespace("geometry", "Vendor.API.Geometry");
         app_installer(
             root,
             name,
@@ -239,14 +297,26 @@ fn external_packages_with_distinct_namespaces() {
             "Vendor.API.Geometry",
             (bincode, json),
         )
+        .with_csharp_config(csharp_config.clone())
+        .plugin(ExternalEnumHelper(csharp_config))
         .generate(&reflect!(Envelope).unwrap())
         .unwrap();
-        let runner = write_runner(
-            root,
-            name,
-            "Example.App",
-            &runner_program(&sample, bincode, json),
+        let mut program = runner_program(&sample, bincode, json);
+        program.push_str(
+            r#"
+foreach (var enumType in new[] {
+    Example.App.ExternalEnumHelper.EnumType,
+    Example.App.Views.ExternalEnumHelper.EnumType,
+    Example.App.ExternalEnumCompanion.EnumType,
+    Example.App.Views.ExternalEnumCompanion.EnumType
+}) {
+    if (enumType != typeof(global::Vendor.API.Geometry.Color) ||
+        enumType.Assembly.GetName().Name != "Example.Contracts")
+        throw new Exception("Custom plugin used the wrong external enum");
+}
+"#,
         );
+        let runner = write_runner(root, name, "Example.App", &program);
         let output = dotnet_run(&runner);
         assert!(
             output.contains("External packages passed"),

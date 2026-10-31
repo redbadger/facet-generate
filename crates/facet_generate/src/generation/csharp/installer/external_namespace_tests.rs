@@ -1,65 +1,52 @@
 use super::*;
 use crate as fg;
+use crate::reflection::format::Format;
 use crate::{generation::bincode::BincodePlugin, reflect};
 use facet::Facet;
 
-#[test]
-fn invalid_external_namespace_mappings_fail_before_writing() {
-    for (with_package, namespace, message) in [
-        (false, "Vendor.Models", "requires an external package entry"),
-        (true, "", "requires a nonempty dotted CLR namespace"),
-        (
-            true,
-            "Vendor..Models",
-            "requires a nonempty dotted CLR namespace",
-        ),
-        (true, "global::Vendor.Models", "without an alias qualifier"),
-        (
-            true,
-            "Exa\u{200D}mple.App",
-            "requires plain CLR identifiers",
-        ),
-        (true, r"Ex\u0061mple.App", "requires plain CLR identifiers"),
-        (true, "Example .App", "requires plain CLR identifiers"),
-        (
-            true,
-            "Example/*comment*/.App",
-            "requires plain CLR identifiers",
-        ),
-        (true, "Example.\nApp", "requires plain CLR identifiers"),
-        (true, "Example.2Models", "requires plain CLR identifiers"),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        let mut installer =
-            Installer::new("Example.App", dir.path()).external_namespace("geometry", namespace);
-        if with_package {
-            installer = installer.external_packages(&[ExternalPackage {
-                for_namespace: "geometry".to_string(),
-                location: PackageLocation::Path("../Contracts/Contracts.csproj".to_string()),
-                module_name: None,
-                version: None,
-            }]);
-        }
-        let error = installer.generate(&Registry::new()).unwrap_err();
-        assert!(error.to_string().contains(message), "{error}");
-        assert!(dir.path().read_dir().unwrap().next().is_none());
+#[rstest::rstest]
+#[case::missing_package(false, "Vendor.Models", "requires an external package entry")]
+#[case::empty_namespace(true, "", "requires a nonempty dotted CLR namespace")]
+#[case::empty_segment(true, "Vendor..Models", "requires a nonempty dotted CLR namespace")]
+#[case::alias_qualifier(true, "global::Vendor.Models", "without an alias qualifier")]
+#[case::formatting_character(true, "Exa\u{200D}mple.App", "requires plain CLR identifiers")]
+#[case::unicode_escape(true, r"Ex\u0061mple.App", "requires plain CLR identifiers")]
+#[case::whitespace(true, "Example .App", "requires plain CLR identifiers")]
+#[case::comment(true, "Example/*comment*/.App", "requires plain CLR identifiers")]
+#[case::newline(true, "Example.\nApp", "requires plain CLR identifiers")]
+#[case::leading_digit(true, "Example.2Models", "requires plain CLR identifiers")]
+fn invalid_external_namespace_mappings_fail_before_writing(
+    #[case] with_package: bool,
+    #[case] namespace: &str,
+    #[case] message: &str,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let mut installer =
+        Installer::new("Example.App", dir.path()).external_namespace("geometry", namespace);
+    if with_package {
+        installer = installer.external_packages(&[ExternalPackage {
+            for_namespace: "geometry".to_string(),
+            location: PackageLocation::Path("../Contracts/Contracts.csproj".to_string()),
+            module_name: None,
+            version: None,
+        }]);
     }
+    let error = installer.generate(&Registry::new()).unwrap_err();
+    assert!(error.to_string().contains(message), "{error}");
+    assert!(dir.path().read_dir().unwrap().next().is_none());
 }
 
-#[test]
-fn plain_unicode_clr_namespaces_are_supported() {
-    for namespace in [
-        "例.模型",
-        "Δοκιμή.Μοντέλα",
-        "_Vendor.Models2",
-        "Ⅳ.Models",
-        "Vendor.@event",
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        external_geometry(dir.path(), namespace)
-            .generate(&collision_registry(None, "Local", "Point"))
-            .unwrap();
-    }
+#[rstest::rstest]
+#[case::chinese("例.模型")]
+#[case::greek("Δοκιμή.Μοντέλα")]
+#[case::underscore_and_digit("_Vendor.Models2")]
+#[case::letter_number("Ⅳ.Models")]
+#[case::escaped_keyword("Vendor.@event")]
+fn plain_unicode_clr_namespaces_are_supported(#[case] namespace: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    external_geometry(dir.path(), namespace)
+        .generate(&collision_registry(None, "Local", "Point"))
+        .unwrap();
 }
 
 #[test]
@@ -129,115 +116,114 @@ fn external_geometry(dir: &Path, mapped: &str) -> Installer {
         .external_namespace("geometry", mapped)
 }
 
-#[test]
-fn mapped_clr_collisions_fail_before_writing() {
-    for (namespace, local, external, mapped, diagnostic) in [
-        (
-            None,
-            "Point",
-            "Point",
-            "Example.App",
-            "conflicts with generated type `Point`",
-        ),
-        (
-            Some("views"),
-            "Point",
-            "Point",
-            "Example.App.Views",
-            "Example.App.Views.Point",
-        ),
-        (None, "Point", "Point", "@Example.@App", "Example.App.Point"),
-        (
-            None,
-            "Point",
-            "Row",
-            "Example.App.Point.Child",
-            "conflicts with generated type `Point`",
-        ),
-        (
-            Some("point"),
-            "Row",
-            "Point",
-            "Example.App",
-            "is a generated namespace",
-        ),
-        (
-            Some("deep.child"),
-            "Row",
-            "Deep",
-            "Example.App",
-            "is a generated namespace",
-        ),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        let registry = collision_registry(namespace, local, external);
-        let error = external_geometry(dir.path(), mapped)
-            .generate(&registry)
-            .unwrap_err();
-        let Error::Io(error) = error else {
-            panic!("expected an invalid-input error")
-        };
-        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
-        assert!(error.to_string().contains(diagnostic), "{mapped}: {error}");
-        assert!(
-            dir.path().read_dir().unwrap().next().is_none(),
-            "{mapped}: output was written"
-        );
-    }
-}
-
-#[test]
-fn mapped_clr_names_keep_case_and_segment_boundaries() {
-    for (mapped, external) in [
-        ("example.App", "Point"),
-        ("Example.App.Points", "Point"),
-        ("Example.App", "Other"),
-    ] {
-        let dir = tempfile::tempdir().unwrap();
-        external_geometry(dir.path(), mapped)
-            .generate(&collision_registry(None, "Point", external))
-            .unwrap();
-    }
-}
-
-#[test]
-fn mapped_types_cannot_bind_to_builtin_plugin_helpers() {
-    use crate::generation::json::JsonPlugin;
-    use crate::reflection::format::{
-        ContainerFormat, Doc, EnumTagging, Format, Named, VariantFormat,
+#[rstest::rstest]
+#[case::root_type(
+    None,
+    "Point",
+    "Point",
+    "Example.App",
+    "conflicts with generated type `Point`"
+)]
+#[case::child_type(
+    Some("views"),
+    "Point",
+    "Point",
+    "Example.App.Views",
+    "Example.App.Views.Point"
+)]
+#[case::verbatim_identifiers(None, "Point", "Point", "@Example.@App", "Example.App.Point")]
+#[case::type_namespace_prefix(
+    None,
+    "Point",
+    "Row",
+    "Example.App.Point.Child",
+    "conflicts with generated type `Point`"
+)]
+#[case::generated_namespace(
+    Some("point"),
+    "Row",
+    "Point",
+    "Example.App",
+    "is a generated namespace"
+)]
+#[case::implicit_parent_namespace(
+    Some("deep.child"),
+    "Row",
+    "Deep",
+    "Example.App",
+    "is a generated namespace"
+)]
+fn mapped_clr_collisions_fail_before_writing(
+    #[case] namespace: Option<&str>,
+    #[case] local: &str,
+    #[case] external: &str,
+    #[case] mapped: &str,
+    #[case] diagnostic: &str,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let registry = collision_registry(namespace, local, external);
+    let error = external_geometry(dir.path(), mapped)
+        .generate(&registry)
+        .unwrap_err();
+    let Error::Io(error) = error else {
+        panic!("expected an invalid-input error")
     };
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(error.to_string().contains(diagnostic), "{mapped}: {error}");
+    assert!(
+        dir.path().read_dir().unwrap().next().is_none(),
+        "{mapped}: output was written"
+    );
+}
 
-    for (external, field, json) in [
-        ("LocalBincode", None, false),
-        ("LocalJsonConverter", None, true),
-        ("CharSerde", Some(Format::Char), false),
-        ("UuidSerde", Some(Format::Uuid), false),
-        ("JsonCharConverter", Some(Format::Char), true),
-    ] {
-        let mut registry = collision_registry(None, "Local", external);
-        let local = match field {
-            Some(field) => {
-                ContainerFormat::Struct(vec![Named::new(&field, "value".to_string())], Doc::new())
-            }
-            None => ContainerFormat::Enum(
-                BTreeMap::from([(0, Named::new(&VariantFormat::Unit, "Value".to_string()))]),
-                EnumTagging::External,
-                Doc::new(),
-            ),
-        };
-        registry.insert(QualifiedTypeName::root("Local".to_string()), local);
-        let dir = tempfile::tempdir().unwrap();
-        let installer = external_geometry(dir.path(), "Example.App");
-        let installer = if json {
-            installer.plugin(JsonPlugin)
-        } else {
-            installer.plugin(BincodePlugin)
-        };
-        let error = installer.generate(&registry).unwrap_err();
-        assert!(error.to_string().contains("plugin declaration"), "{error}");
-        assert!(error.to_string().contains(external), "{error}");
-        assert!(dir.path().read_dir().unwrap().next().is_none());
-    }
+#[rstest::rstest]
+#[case::case_sensitive_namespace("example.App", "Point")]
+#[case::distinct_segment("Example.App.Points", "Point")]
+#[case::same_namespace_distinct_type("Example.App", "Other")]
+fn mapped_clr_names_keep_case_and_segment_boundaries(#[case] mapped: &str, #[case] external: &str) {
+    let dir = tempfile::tempdir().unwrap();
+    external_geometry(dir.path(), mapped)
+        .generate(&collision_registry(None, "Point", external))
+        .unwrap();
+}
+
+#[rstest::rstest]
+#[case::enum_bincode_helper("LocalBincode", None, RuntimeCodec::Bincode)]
+#[case::enum_json_converter("LocalJsonConverter", None, RuntimeCodec::Json)]
+#[case::char_bincode_helper("CharSerde", Some(Format::Char), RuntimeCodec::Bincode)]
+#[case::uuid_bincode_helper("UuidSerde", Some(Format::Uuid), RuntimeCodec::Bincode)]
+#[case::char_json_converter("JsonCharConverter", Some(Format::Char), RuntimeCodec::Json)]
+fn mapped_types_cannot_bind_to_builtin_plugin_helpers(
+    #[case] external: &str,
+    #[case] field: Option<Format>,
+    #[case] codec: RuntimeCodec,
+) {
+    use crate::generation::json::JsonPlugin;
+    use crate::reflection::format::{ContainerFormat, Doc, EnumTagging, Named, VariantFormat};
+
+    let mut registry = collision_registry(None, "Local", external);
+    let local = match field {
+        Some(field) => {
+            ContainerFormat::Struct(vec![Named::new(&field, "value".to_string())], Doc::new())
+        }
+        None => ContainerFormat::Enum(
+            BTreeMap::from([(0, Named::new(&VariantFormat::Unit, "Value".to_string()))]),
+            EnumTagging::External,
+            Doc::new(),
+        ),
+    };
+    registry.insert(QualifiedTypeName::root("Local".to_string()), local);
+    let dir = tempfile::tempdir().unwrap();
+    let installer = external_geometry(dir.path(), "Example.App");
+    let installer = match codec {
+        RuntimeCodec::Json => installer.plugin(JsonPlugin),
+        RuntimeCodec::Bincode => installer.plugin(BincodePlugin),
+        RuntimeCodec::Core => installer,
+    };
+    let error = installer.generate(&registry).unwrap_err();
+    assert!(error.to_string().contains("plugin declaration"), "{error}");
+    assert!(error.to_string().contains(external), "{error}");
+    assert!(dir.path().read_dir().unwrap().next().is_none());
 }
 
 #[derive(Debug)]
@@ -475,25 +461,26 @@ impl EmitterPlugin<CSharp> for SourceSpellingHelper {
     }
 }
 
-#[test]
-fn declaration_metadata_rejects_source_spelling_aliases() {
-    for name in ["Cust\u{200D}omHelper", r"Cust\u006FmHelper"] {
-        for runtime in [false, true] {
-            let dir = tempfile::tempdir().unwrap();
-            let namespace = if runtime {
-                "Vendor.Runtime"
-            } else {
-                "Example.App"
-            };
-            let error = external_geometry(dir.path(), namespace)
-                .plugin(SourceSpellingHelper { name, runtime })
-                .generate(&collision_registry(None, "Local", "CustomHelper"))
-                .unwrap_err();
-            assert!(
-                error.to_string().contains("requires a plain CLR type"),
-                "{error}"
-            );
-            assert!(dir.path().read_dir().unwrap().next().is_none());
-        }
-    }
+#[rstest::rstest]
+#[case::formatting_character("Cust\u{200D}omHelper")]
+#[case::unicode_escape(r"Cust\u006FmHelper")]
+fn declaration_metadata_rejects_source_spelling_aliases(
+    #[case] name: &'static str,
+    #[values(false, true)] runtime: bool,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let namespace = if runtime {
+        "Vendor.Runtime"
+    } else {
+        "Example.App"
+    };
+    let error = external_geometry(dir.path(), namespace)
+        .plugin(SourceSpellingHelper { name, runtime })
+        .generate(&collision_registry(None, "Local", "CustomHelper"))
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("requires a plain CLR type"),
+        "{error}"
+    );
+    assert!(dir.path().read_dir().unwrap().next().is_none());
 }
