@@ -54,7 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::{builtin, global_name, variant_properties};
+use super::naming::{builtin, format_qualified_type_name, global_name, variant_properties};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -74,8 +74,7 @@ use crate::{
         plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, FormatHolder, Named, Namespace, QualifiedTypeName,
-        VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat,
     },
 };
 
@@ -795,19 +794,6 @@ fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[Strin
             format!("({values})")
         }
         Format::TupleArray { content, size: _ } => format!("{}[]", render(content)),
-    }
-}
-
-fn format_qualified_type_name(qualified_type_name: &QualifiedTypeName) -> String {
-    match &qualified_type_name.namespace {
-        Namespace::Root => qualified_type_name.name.to_upper_camel_case(),
-        Namespace::Named(namespace) => {
-            format!(
-                "{}.{}",
-                namespace_name(namespace),
-                qualified_type_name.name.to_upper_camel_case()
-            )
-        }
     }
 }
 

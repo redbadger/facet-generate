@@ -161,7 +161,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.
     ///
-    /// Every namespace is declared under the *root package* (the parent the
+    /// Unmapped namespaces are declared under the *root package* (the parent the
     /// installer nested this module under, or the module itself when it has
     /// none), so references are rooted there rather than at `module_name()`,
     /// which for a namespaced module already ends in its own namespace.
@@ -183,6 +183,9 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///    `Named("Company.Models")`, and inside `Example.Users` (parent
     ///    `Example`) becomes `Named("Example")`, so that it cannot mean a
     ///    same-named type of the module's own.
+    /// 5. **Explicit external namespace** — uses its full CLR namespace with
+    ///    exact casing and a `global::` qualifier, independently of this
+    ///    module's root package.
     fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
         let mut updated_registry = registry.clone();
 
@@ -217,6 +220,17 @@ impl<'a> CSharpCodeGenerator<'a> {
     ) -> QualifiedTypeName {
         match &name.namespace {
             Namespace::Named(namespace) => {
+                if let Some(external) = config.external_namespaces.get(namespace) {
+                    let external = external
+                        .split('.')
+                        .map(|segment| naming::RULES.escape(segment))
+                        .collect::<Vec<_>>()
+                        .join(".");
+                    return QualifiedTypeName::namespaced(
+                        format!("global::{external}"),
+                        name.name.clone(),
+                    );
+                }
                 if config.is_own_namespace(namespace) {
                     QualifiedTypeName::root(name.name.clone())
                 } else {

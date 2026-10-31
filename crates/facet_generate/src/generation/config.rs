@@ -70,6 +70,14 @@ pub struct CodeGeneratorConfig {
     pub namespace: Namespace,
     pub external_definitions: ExternalDefinitions,
     pub external_packages: ExternalPackages,
+    /// Full CLR namespaces for externally supplied registry namespaces.
+    ///
+    /// C# only: populated by
+    /// `csharp::Installer::external_namespace`.
+    /// Entries preserve the external assembly's casing and are independent
+    /// of its project path or `NuGet` package ID. Unmapped namespaces keep
+    /// the generator's normal root-package qualification.
+    pub external_namespaces: BTreeMap<String, String>,
     pub comments: DocComments,
     pub package_manifest: bool,
     pub features: BTreeSet<Feature>,
@@ -210,6 +218,7 @@ impl CodeGeneratorConfig {
             namespace: Namespace::Root,
             external_definitions: BTreeMap::new(),
             external_packages: BTreeMap::new(),
+            external_namespaces: BTreeMap::new(),
             comments: BTreeMap::new(),
             package_manifest: true,
             features: BTreeSet::new(),

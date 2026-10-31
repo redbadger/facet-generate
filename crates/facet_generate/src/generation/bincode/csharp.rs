@@ -35,9 +35,7 @@ use crate::generation::{
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
-use crate::reflection::format::{
-    ContainerFormat, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
-};
+use crate::reflection::format::{ContainerFormat, Format, Named, QualifiedTypeName, VariantFormat};
 
 // ---------------------------------------------------------------------------
 // Feature helper snippets
@@ -407,7 +405,7 @@ impl<'a> Scope<'a> {
     fn type_target(&self, qualified_type_name: &QualifiedTypeName, suffix: &str) -> String {
         let name = format!(
             "{}{suffix}",
-            format_qualified_type_name(qualified_type_name)
+            naming::format_qualified_type_name(qualified_type_name)
         );
         let type_name = suffix.is_empty().then_some(qualified_type_name);
         if self.hides(&name, type_name) {
@@ -1210,20 +1208,6 @@ fn option_deserialize_helper(inner: &Format, cfg: &CodeGeneratorConfig) -> &'sta
 // ---------------------------------------------------------------------------
 // Type rendering helpers
 // ---------------------------------------------------------------------------
-
-/// Formats a [`QualifiedTypeName`] as a C# dotted name.
-fn format_qualified_type_name(qualified_type_name: &QualifiedTypeName) -> String {
-    match &qualified_type_name.namespace {
-        Namespace::Root => qualified_type_name.name.to_upper_camel_case(),
-        Namespace::Named(namespace) => {
-            format!(
-                "{}.{}",
-                namespace_name(namespace),
-                qualified_type_name.name.to_upper_camel_case()
-            )
-        }
-    }
-}
 
 /// Converts a dotted namespace string into `PascalCase` C# namespace segments.
 fn namespace_name(namespace: &str) -> String {

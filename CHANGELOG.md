@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 💥 Breaking Changes
+
+- `CodeGeneratorConfig` has a new `external_namespaces` map. Code using a struct literal to construct this per-module config must initialize that field. `CodeGeneratorConfig::new` initializes it to an empty map.
+
+### 🐛 Bug Fixes
+
+- **C#: external types can use a different project's CLR namespace.** `Installer::external_namespace` maps a Rust namespace to its full external CLR namespace, independently of the NuGet package ID. References in declarations, Bincode helpers and JSON converters preserve that namespace's casing and use `global::` to avoid shadowing. Generated projects can have distinct roots and project names while sharing one external Serde runtime. Unmapped namespaces keep their previous qualification. The forbidden-name diagnostics for Bincode runtime types now name `Facet.Runtime.Bincode` [#240](https://github.com/redbadger/facet-generate/issues/240)
+
 ## [0.22.3] - 2026-11-03
 
 This release fixes a crash in the Swift runtime on 32-bit Apple targets. It also makes the C# installer write the NuGet dependencies of plugins into the generated project file. It is a patch release with no API change. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
