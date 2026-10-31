@@ -322,6 +322,8 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// declaration.
     /// The C# installer checks these names when rejecting external CLR
     /// mappings that would bind to a local helper instead of an imported type.
+    /// Use plain CLR identifiers, with metadata arity for generic types;
+    /// source escapes and formatting characters are not supported.
     fn module_declarations(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![]
     }
@@ -476,6 +478,7 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// mappings that would bind to a local runtime type. Report each runtime
     /// type, including additional types sharing a file. Generic names use CLR
     /// metadata arity (for example, ``Vendor.Runtime.Reader`1``).
+    /// Names use plain CLR identifiers, not source escapes or formatting characters.
     /// The installer ignores these declarations when external `serde`
     /// suppresses runtime installation.
     fn runtime_declarations(&self) -> Vec<String> {

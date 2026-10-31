@@ -4,9 +4,10 @@
 //! are intentionally omitted: the generated identifiers that need escaping are
 //! method locals and parameters, where those words are valid unescaped.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
 use heck::ToUpperCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
@@ -108,6 +109,39 @@ pub(crate) const SERDE_RUNTIME_TYPES: &[&str] = &[
     "Facet.Runtime.Serde.SerializationError",
     CORE_UNIT,
 ];
+
+/// Plain identifier characters from C# specification section 6.4.3, excluding
+/// source escapes and formatting characters (which change identifier identity).
+/// See the [C# identifier rules](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/lexical-structure#643-identifiers).
+pub(crate) fn plain_identifier(name: &str) -> bool {
+    static IDENTIFIER: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\A@?[_\p{L}\p{Nl}][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}]*\z")
+            .expect("valid plain C# identifier pattern")
+    });
+    IDENTIFIER.is_match(name)
+}
+
+/// A plain CLR type identifier, optionally carrying generic metadata arity.
+pub(crate) fn plain_type_identifier(name: &str) -> bool {
+    match name.split_once('`') {
+        Some((name, arity)) => {
+            plain_identifier(name)
+                && arity
+                    .parse::<u32>()
+                    .is_ok_and(|count| count > 0 && count.to_string() == arity)
+        }
+        None => plain_identifier(name),
+    }
+}
+
+/// A full CLR name, including namespace, generic arity and nested types.
+pub(crate) fn plain_clr_type_name(name: &str) -> bool {
+    let (namespace, types) = name
+        .rsplit_once('.')
+        .map_or((None, name), |(namespace, types)| (Some(namespace), types));
+    namespace.is_none_or(|namespace| namespace.split('.').all(plain_identifier))
+        && types.split('+').all(plain_type_identifier)
+}
 
 /// Types the emitter writes bare through a `using` directive, and the fully
 /// qualified form to use instead when the module declares a type of the same
