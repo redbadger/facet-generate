@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 🚀 Features
+
+- C# plugins can report fully qualified runtime type names with `EmitterPlugin::runtime_declarations`. External namespace collision checks include installed runtime types and use the same prepared enum metadata as source emission when querying module declarations.
+
 ### 💥 Breaking Changes
 
 - `CodeGeneratorConfig` has a new `external_namespaces` map. Code using a struct literal to construct this per-module config must initialize that field. `CodeGeneratorConfig::new` initializes it to an empty map.

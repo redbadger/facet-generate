@@ -80,7 +80,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// Returns an error if a plugin declares a reference to a type that is not
     /// in the registry.
-    fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+    pub(super) fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
         let mut config = self.config.clone();
         config.update_from(registry);
         config.requalify_enums(registry, Self::requalify);

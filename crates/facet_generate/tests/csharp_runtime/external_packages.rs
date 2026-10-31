@@ -364,3 +364,73 @@ fn external_type_collisions_are_rejected() {
         );
     }
 }
+
+/// A provider's Unit must not silently bind to the installer's own Unit.cs.
+/// Reject that configuration, then prove a distinct external Unit namespace
+/// builds and preserves both assembly identities in a real consumer.
+#[test]
+fn external_types_cannot_bind_to_the_local_runtime() {
+    #[derive(Facet)]
+    #[facet(fg::namespace = "geometry", rename = "Unit")]
+    struct ExternalUnit {
+        x: u32,
+    }
+
+    #[derive(Facet)]
+    struct RuntimeCollision {
+        point: ExternalUnit,
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    fs::create_dir_all(root.join("Contracts")).unwrap();
+    fs::write(root.join("Contracts/Contracts.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>").unwrap();
+    let provider = root.join("Contracts/Unit.cs");
+    fs::write(
+        &provider,
+        "namespace Facet.Runtime.Serde; public struct Unit { public uint X { get; set; } }",
+    )
+    .unwrap();
+    let registry = reflect!(RuntimeCollision).unwrap();
+    let packages = [project("geometry", "../Contracts/Contracts.csproj")];
+    let error = csharp::Installer::new("Example.App", root.join("Unsafe"))
+        .external_packages(&packages)
+        .external_namespace("geometry", "Facet.Runtime.Serde")
+        .generate(&registry)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("runtime declaration `Facet.Runtime.Serde.Unit`"),
+        "{error}"
+    );
+    assert!(!root.join("Unsafe").exists());
+
+    fs::write(
+        &provider,
+        "namespace Vendor.Runtime; public struct Unit { public uint X { get; set; } }",
+    )
+    .unwrap();
+    csharp::Installer::new("Example.App", root.join("RuntimeSafe"))
+        .external_packages(&packages)
+        .external_namespace("geometry", "Vendor.Runtime")
+        .generate(&registry)
+        .unwrap();
+    let runner = write_runner(
+        root,
+        "RuntimeSafe",
+        "Example.App",
+        r#"
+var property = typeof(Example.App.RuntimeCollision).GetProperty("Point");
+if (property.PropertyType.Assembly.GetName().Name != "Contracts")
+    throw new Exception("External Unit bound to the local runtime");
+if (typeof(global::Facet.Runtime.Serde.Unit).Assembly.GetName().Name != "Example.App")
+    throw new Exception("Core Unit bound to the external provider");
+var value = new Example.App.RuntimeCollision { Point = new Vendor.Runtime.Unit { X = 42 } };
+if (value.Point.X != 42) throw new Exception("External Unit value lost");
+Console.WriteLine("Runtime type identities passed");
+"#,
+    );
+    assert!(dotnet_run(&runner).contains("Runtime type identities passed"));
+}

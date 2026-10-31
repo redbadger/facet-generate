@@ -310,15 +310,12 @@ impl Installer {
         if self.external_namespaces.is_empty() {
             return Ok(());
         }
-        let declarations = self.generated_clr_types(generated);
-        let namespaces: BTreeSet<_> = generated
-            .iter()
-            .flat_map(|(config, _)| {
-                let namespace = namespace_name(config.module_name());
-                namespace_prefixes(&namespace)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>()
-            })
+        let declarations = self.generated_clr_types(generated)?;
+        let namespaces: BTreeSet<_> = declarations
+            .keys()
+            .filter_map(|name| name.rsplit_once('.').map(|(namespace, _)| namespace))
+            .flat_map(namespace_prefixes)
+            .map(str::to_string)
             .collect();
 
         for (module, registry) in modules {
@@ -361,12 +358,26 @@ impl Installer {
         Ok(())
     }
 
-    /// Include plugin-declared module helpers as well as reflected types.
+    /// Inventory installed runtime types, reflected types and module helpers
+    /// using the same prepared config as actual source emission.
     fn generated_clr_types(
         &self,
         generated: &[(CodeGeneratorConfig, &Registry)],
-    ) -> BTreeMap<String, String> {
+    ) -> Result<BTreeMap<String, String>, Error> {
         let mut declarations = BTreeMap::new();
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            declarations.insert(
+                naming::CORE_UNIT.to_string(),
+                format!("runtime declaration `{}`", naming::CORE_UNIT),
+            );
+            for name in self
+                .plugins
+                .iter()
+                .flat_map(|plugin| plugin.runtime_declarations())
+            {
+                declarations.insert(clr_identity(&name), format!("runtime declaration `{name}`"));
+            }
+        }
         for (config, registry) in generated {
             let namespace = namespace_name(config.module_name());
             for name in registry.keys() {
@@ -375,8 +386,9 @@ impl Installer {
                     TypeName(name).to_string(),
                 );
             }
-            let mut config = config.clone();
-            config.update_from(registry);
+            let config = CSharpCodeGenerator::new(config)
+                .with_plugins(self.plugins.clone())
+                .module_config(registry)?;
             for name in self
                 .plugins
                 .iter()
@@ -387,7 +399,7 @@ impl Installer {
                     .or_insert_with(|| format!("plugin declaration `{name}` in `{namespace}`"));
             }
         }
-        declarations
+        Ok(declarations)
     }
 
     /// Fails when `registry`'s module writes a qualified type reference whose

@@ -271,6 +271,10 @@ types or namespaces before writing any files. `global::` prevents lexical
 shadowing, but cannot choose between two assemblies defining the same full
 type name. Choose a different app root or external mapping when those names
 would collide.
+Custom plugins report their helper and runtime type names through
+[`module_declarations`](crate::generation::plugin::EmitterPlugin::module_declarations)
+and [`runtime_declarations`](crate::generation::plugin::EmitterPlugin::runtime_declarations)
+so these checks include their declarations too.
 
 When projects use serialization plugins, configure them to take `serde` from
 one external runtime project as described in [Runtimes](#runtimes). This keeps

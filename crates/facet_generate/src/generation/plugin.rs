@@ -470,6 +470,18 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         vec![]
     }
 
+    /// Full CLR names of the types declared by [`runtime_files`](Self::runtime_files).
+    ///
+    /// C# only: the installer uses this metadata to reject external namespace
+    /// mappings that would bind to a local runtime type. Report each runtime
+    /// type, including additional types sharing a file. Generic names use CLR
+    /// metadata arity (for example, ``Vendor.Runtime.Reader`1``).
+    /// The installer ignores these declarations when external `serde`
+    /// suppresses runtime installation.
+    fn runtime_declarations(&self) -> Vec<String> {
+        vec![]
+    }
+
     /// Extra source files to write **beside the generated module file**.
     ///
     /// Unlike [`runtime_files`](Self::runtime_files) — which installers skip
