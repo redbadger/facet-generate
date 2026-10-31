@@ -329,55 +329,62 @@ fn declaration_metadata_uses_the_emission_enum_config() {
     assert!(dir.path().read_dir().unwrap().next().is_none());
 }
 
-#[test]
-fn installed_runtime_types_participate_in_collision_checks() {
+#[derive(Debug, Clone, Copy)]
+enum RuntimeCodec {
+    Core,
+    Bincode,
+    Json,
+}
+
+#[rstest::rstest]
+#[case::core_unit("Facet.Runtime.Serde", "Unit", RuntimeCodec::Core)]
+#[case::serde_interface("Facet.Runtime.Serde", "IDeserializer", RuntimeCodec::Bincode)]
+#[case::bincode_serializer("Facet.Runtime.Bincode", "BincodeSerializer", RuntimeCodec::Bincode)]
+#[case::json_serde("Facet.Runtime.Json", "JsonSerde", RuntimeCodec::Json)]
+#[case::json_enum("Facet.Runtime.Json", "JsonEnum", RuntimeCodec::Json)]
+#[case::runtime_namespace("Facet.Runtime", "Serde", RuntimeCodec::Core)]
+fn installed_runtime_types_participate_in_collision_checks(
+    #[case] namespace: &str,
+    #[case] name: &str,
+    #[case] codec: RuntimeCodec,
+    #[values(false, true)] external_serde: bool,
+) {
     use crate::generation::json::JsonPlugin;
 
-    for (namespace, name, codec) in [
-        ("Facet.Runtime.Serde", "Unit", "none"),
-        ("Facet.Runtime.Serde", "IDeserializer", "bincode"),
-        ("Facet.Runtime.Bincode", "BincodeSerializer", "bincode"),
-        ("Facet.Runtime.Json", "JsonSerde", "json"),
-        ("Facet.Runtime.Json", "JsonEnum", "json"),
-        ("Facet.Runtime", "Serde", "none"),
-    ] {
-        let registry = collision_registry(None, "Local", name);
-        for external_serde in [false, true] {
-            let dir = tempfile::tempdir().unwrap();
-            let mut packages = vec![ExternalPackage {
-                for_namespace: "geometry".to_string(),
-                location: PackageLocation::Path("../Contracts/Contracts.csproj".to_string()),
-                module_name: None,
-                version: None,
-            }];
-            if external_serde {
-                packages.push(ExternalPackage {
-                    for_namespace: "serde".to_string(),
-                    location: PackageLocation::Path("../Runtime/Runtime.csproj".to_string()),
-                    module_name: None,
-                    version: None,
-                });
-            }
-            let installer = external_geometry(dir.path(), namespace).external_packages(&packages);
-            let installer = match codec {
-                "bincode" => installer.plugin(BincodePlugin),
-                "json" => installer.plugin(JsonPlugin),
-                _ => installer,
-            };
-            let result = installer.generate(&registry);
-            if external_serde {
-                result.unwrap();
-                assert!(!dir.path().join("Facet").exists());
-            } else {
-                let error = result.unwrap_err();
-                assert!(
-                    error.to_string().contains("runtime declaration")
-                        || error.to_string().contains("generated namespace"),
-                    "{error}"
-                );
-                assert!(dir.path().read_dir().unwrap().next().is_none());
-            }
-        }
+    let registry = collision_registry(None, "Local", name);
+    let dir = tempfile::tempdir().unwrap();
+    let mut packages = vec![ExternalPackage {
+        for_namespace: "geometry".to_string(),
+        location: PackageLocation::Path("../Contracts/Contracts.csproj".to_string()),
+        module_name: None,
+        version: None,
+    }];
+    if external_serde {
+        packages.push(ExternalPackage {
+            for_namespace: "serde".to_string(),
+            location: PackageLocation::Path("../Runtime/Runtime.csproj".to_string()),
+            module_name: None,
+            version: None,
+        });
+    }
+    let installer = external_geometry(dir.path(), namespace).external_packages(&packages);
+    let installer = match codec {
+        RuntimeCodec::Bincode => installer.plugin(BincodePlugin),
+        RuntimeCodec::Json => installer.plugin(JsonPlugin),
+        RuntimeCodec::Core => installer,
+    };
+    let result = installer.generate(&registry);
+    if external_serde {
+        result.unwrap();
+        assert!(!dir.path().join("Facet").exists());
+    } else {
+        let error = result.unwrap_err();
+        assert!(
+            error.to_string().contains("runtime declaration")
+                || error.to_string().contains("generated namespace"),
+            "{error}"
+        );
+        assert!(dir.path().read_dir().unwrap().next().is_none());
     }
 }
 
