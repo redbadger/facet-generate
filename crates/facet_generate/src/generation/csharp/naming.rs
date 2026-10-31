@@ -13,7 +13,7 @@ use crate::{
         config::CodeGeneratorConfig,
         naming::{EscapeStyle, ForbiddenNames, FormatBoundNames, NamingRules, qualify},
     },
-    reflection::format::{Format, Named, Namespace, VariantFormat},
+    reflection::format::{Format, Named, Namespace, QualifiedTypeName, VariantFormat},
 };
 
 /// C# keywords, sorted.
@@ -164,7 +164,7 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("Facet", "the `Facet` root namespace"),
     (
         "FacetHelpers",
-        "the runtime type `Facet.Runtime.Serde.FacetHelpers`",
+        "the runtime type `Facet.Runtime.Bincode.FacetHelpers`",
     ),
     (
         "IDeserializer",
@@ -172,11 +172,11 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ),
     (
         "IFacetDeserializable",
-        "the runtime interface `Facet.Runtime.Serde.IFacetDeserializable`",
+        "the runtime interface `Facet.Runtime.Bincode.IFacetDeserializable`",
     ),
     (
         "IFacetSerializable",
-        "the runtime interface `Facet.Runtime.Serde.IFacetSerializable`",
+        "the runtime interface `Facet.Runtime.Bincode.IFacetSerializable`",
     ),
     (
         "ISerializer",
@@ -312,6 +312,9 @@ pub(crate) fn global_name(
     namespace: &Namespace,
     config: &CodeGeneratorConfig,
 ) -> String {
+    if name.starts_with("global::") {
+        return name.to_string();
+    }
     match namespace {
         Namespace::Root => {
             let module = config
@@ -364,6 +367,27 @@ pub(crate) fn struct_properties(owner: &str, fields: &[Named<Format>]) -> Vec<St
         .iter()
         .map(|field| property_name(owner, &field.name))
         .collect()
+}
+
+/// Render a requalified name, preserving the exact spelling of an explicit
+/// external CLR namespace. Other namespaces follow the generated casing.
+pub(crate) fn format_qualified_type_name(name: &QualifiedTypeName) -> String {
+    let type_name = name.name.to_upper_camel_case();
+    match &name.namespace {
+        Namespace::Root => type_name,
+        Namespace::Named(namespace) => {
+            let namespace = if namespace.starts_with("global::") {
+                namespace.clone()
+            } else {
+                namespace
+                    .split('.')
+                    .map(str::to_upper_camel_case)
+                    .collect::<Vec<_>>()
+                    .join(".")
+            };
+            format!("{namespace}.{type_name}")
+        }
+    }
 }
 
 /// The positional properties of the record for `variant`, each with its C#
