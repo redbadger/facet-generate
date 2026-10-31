@@ -73,7 +73,7 @@ fn update_qualified_names_strips_same_namespace() {
         "UserSummary".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -90,7 +90,7 @@ fn update_qualified_names_roots_external_namespace_under_module() {
         "Invoice".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -109,7 +109,7 @@ fn update_qualified_names_roots_root_namespace_for_dotted_module() {
         "User".to_string(),
     )));
 
-    let updated = CSharpCodeGenerator::update_qualified_names(&config, &registry);
+    let updated = CSharpCodeGenerator::new(&config).update_qualified_names(&config, &registry);
 
     let Format::TypeName(type_name) = first_field_type(&updated) else {
         panic!("expected type name");
@@ -188,6 +188,67 @@ fn requalify_leaves_a_same_namespace_reference_bare() {
         assert_eq!(
             requalified(&module_config(root_package, Some("kit")), &row),
             QualifiedTypeName::root("Row".to_string())
+        );
+    }
+}
+
+#[test]
+fn external_namespace_mapping_preserves_casing_and_escapes_keywords() {
+    let point = QualifiedTypeName::namespaced("geometry".to_string(), "Point".to_string());
+    for namespace in [None, Some("views")] {
+        let config = module_config("Example.App", namespace);
+        let csharp_config =
+            CSharpConfig::default().external_namespace("geometry", "Vendor.API.event");
+        let expected = QualifiedTypeName::namespaced(
+            "global::Vendor.API.@event".to_string(),
+            "Point".to_string(),
+        );
+        assert_eq!(csharp_config.requalify(&config, &point), expected);
+
+        let registry = registry_with_struct_field(Format::TypeName(point.clone()));
+        let mut output = Vec::new();
+        CSharpCodeGenerator::new(&config)
+            .with_csharp_config(csharp_config)
+            .with_plugins(vec![Arc::new(BincodePlugin), Arc::new(JsonPlugin)])
+            .output(&mut output, &registry)
+            .unwrap();
+        let output = String::from_utf8(output).unwrap();
+        assert!(
+            output.contains("global::Vendor.API.@event.Point"),
+            "{output}"
+        );
+        assert!(!output.contains("Example.App.Geometry"), "{output}");
+        assert!(
+            output.contains("global::Vendor.API.@event.Point.Deserialize(deserializer)"),
+            "{output}"
+        );
+        assert!(
+            output.contains("FacetJson.Of<global::Vendor.API.@event.Point>()"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn forbidden_bincode_names_report_the_runtime_namespace() {
+    for (name, kind) in [
+        ("FacetHelpers", "type"),
+        ("IFacetDeserializable", "interface"),
+        ("IFacetSerializable", "interface"),
+    ] {
+        let mut registry = Registry::new();
+        registry.insert(
+            QualifiedTypeName::root(name.to_string()),
+            ContainerFormat::UnitStruct(Doc::new()),
+        );
+        let error = CSharpCodeGenerator::new(&module_config("Example", None))
+            .output(&mut Vec::new(), &registry)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(&format!(
+                "the runtime {kind} `Facet.Runtime.Bincode.{name}`"
+            )),
+            "{error}"
         );
     }
 }

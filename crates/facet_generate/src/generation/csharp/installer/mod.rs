@@ -39,7 +39,9 @@ use crate::{
         CodeGeneratorConfig, Error, ExternalPackage, ExternalPackages, PackageLocation,
         SERDE_NAMESPACE, SourceInstaller,
         collision::{self, Fix, Origin, TypeName},
-        csharp::{CSharp, CSharpCodeGenerator, emitter::check_nested_options, naming},
+        csharp::{
+            CSharp, CSharpCodeGenerator, CSharpConfig, emitter::check_nested_options, naming,
+        },
         module::{self, Module},
         naming::mentions,
         plugin::EmitterPlugin,
@@ -55,6 +57,7 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
+    csharp_config: CSharpConfig,
     plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
@@ -70,6 +73,7 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
+            csharp_config: CSharpConfig::default(),
             plugins: vec![],
         }
     }
@@ -94,6 +98,36 @@ impl Installer {
         self
     }
 
+    /// Set C#-specific settings, which can also be shared with custom plugins.
+    /// Replaces any namespace mappings previously configured on this installer.
+    #[must_use]
+    pub fn with_csharp_config(mut self, config: CSharpConfig) -> Self {
+        self.csharp_config = config;
+        self
+    }
+
+    /// Set the full CLR namespace supplied by an external package.
+    ///
+    /// `namespace` is the Rust namespace from `#[facet(fg::namespace = "...")]`
+    /// and must also have an [`external_packages`](Self::external_packages)
+    /// entry. `clr_namespace` names the external types' namespace exactly,
+    /// including its root, for example `Company.Contracts.Geometry`.
+    /// Its casing is preserved and C# keywords are escaped automatically.
+    /// Use plain CLR identifiers; source Unicode escapes, formatting
+    /// characters, comments and whitespace are not accepted.
+    ///
+    /// This does not change the `NuGet` package ID in
+    /// [`ExternalPackage::module_name`], the project reference or runtime
+    /// namespaces. Without a mapping, references keep the installer's root
+    /// namespace, as in earlier releases.
+    #[must_use]
+    pub fn external_namespace(mut self, namespace: &str, clr_namespace: &str) -> Self {
+        self.csharp_config
+            .external_namespaces
+            .insert(namespace.to_string(), clr_namespace.to_string());
+        self
+    }
+
     /// Generate all code for the given registry.
     ///
     /// This method:
@@ -108,12 +142,14 @@ impl Installer {
     /// Returns an error if any file operation or code generation step fails,
     /// and fails before writing anything when a namespace collides with a
     /// type, a builtin or another namespace's source file, or when a name in
-    /// scope hides the first segment of a qualified type reference. Such
+    /// scope hides the first segment of a qualified type reference, or a
+    /// mapped external CLR type conflicts with a generated declaration. Such
     /// output would not build, or would lose a module; the error names the
     /// namespace or package and what it collides with. It also fails before
     /// writing anything when a type holds an `Option<Option<T>>`, which C#
     /// cannot declare.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        self.check_external_namespaces()?;
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
         check_nested_options(registry)?;
@@ -266,11 +302,133 @@ impl Installer {
             }),
         )?;
 
+        self.check_mapped_type_names(modules, &generated)?;
+
         for (config, registry) in &generated {
-            Self::check_qualified_references(config, registry, &root_types, &namespaces)?;
+            self.check_qualified_references(config, registry, &root_types, &namespaces)?;
         }
 
         Ok(())
+    }
+
+    /// An alias qualifier bypasses lexical shadowing, but cannot distinguish
+    /// a generated declaration from an imported type with the same CLR name.
+    /// Check exact names and type/namespace prefixes before writing anything.
+    fn check_mapped_type_names(
+        &self,
+        modules: &BTreeMap<Module, Registry>,
+        generated: &[(CodeGeneratorConfig, &Registry)],
+    ) -> Result<(), Error> {
+        if self.csharp_config.external_namespaces.is_empty() {
+            return Ok(());
+        }
+        let declarations = self.generated_clr_types(generated)?;
+        let namespaces: BTreeSet<_> = declarations
+            .keys()
+            .filter_map(|name| name.rsplit_once('.').map(|(namespace, _)| namespace))
+            .flat_map(namespace_prefixes)
+            .map(str::to_string)
+            .collect();
+
+        for (module, registry) in modules {
+            let Namespace::Named(namespace) = &module.config().namespace else {
+                continue;
+            };
+            let Some(mapped) = self.csharp_config.external_namespaces.get(namespace) else {
+                continue;
+            };
+            // Verbatim identifiers (@Name) and ordinary identifiers (Name)
+            // have the same CLR identity. Preserve casing when comparing.
+            let mapped = clr_identity(mapped);
+            for external in registry.keys() {
+                let path = format!("{mapped}.{}", external.name.to_upper_camel_case());
+                if let Some((local_path, local)) = namespace_prefixes(&path)
+                    .find_map(|prefix| declarations.get(prefix).map(|local| (prefix, local)))
+                {
+                    let message = format!(
+                        "C#: external {} maps to `{path}`, which conflicts with generated {local} (`{local_path}`). \
+                         Rename the generated type or choose a different external CLR namespace",
+                        TypeName(external),
+                    );
+                    return Err(
+                        std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into(),
+                    );
+                }
+                if namespaces.contains(&path) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "C#: external {} maps to `{path}`, which is a generated namespace. \
+                         Choose a different external CLR namespace",
+                            TypeName(external),
+                        ),
+                    )
+                    .into());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Inventory installed runtime types, reflected types and module helpers
+    /// using the same prepared config as actual source emission.
+    fn generated_clr_types(
+        &self,
+        generated: &[(CodeGeneratorConfig, &Registry)],
+    ) -> Result<BTreeMap<String, String>, Error> {
+        let mut declarations = BTreeMap::new();
+        if !self.external_packages.contains_key(SERDE_NAMESPACE) {
+            declarations.insert(
+                naming::CORE_UNIT.to_string(),
+                format!("runtime declaration `{}`", naming::CORE_UNIT),
+            );
+            for name in self
+                .plugins
+                .iter()
+                .flat_map(|plugin| plugin.runtime_declarations())
+            {
+                if !naming::plain_clr_type_name(&name) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("C#: runtime declaration {name:?} requires a plain CLR type name"),
+                    )
+                    .into());
+                }
+                declarations.insert(clr_identity(&name), format!("runtime declaration `{name}`"));
+            }
+        }
+        for (config, registry) in generated {
+            let namespace = namespace_name(config.module_name());
+            for name in registry.keys() {
+                declarations.insert(
+                    format!("{namespace}.{}", name.name.to_upper_camel_case()),
+                    TypeName(name).to_string(),
+                );
+            }
+            let config = CSharpCodeGenerator::new(config)
+                .with_csharp_config(self.csharp_config.clone())
+                .with_plugins(self.plugins.clone())
+                .module_config(registry)?;
+            for name in self
+                .plugins
+                .iter()
+                .flat_map(|plugin| plugin.module_declarations(&config))
+            {
+                if !naming::plain_type_identifier(&name) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "C#: module declaration {name:?} requires a plain CLR type identifier"
+                        ),
+                    )
+                    .into());
+                }
+                declarations
+                    .entry(clr_identity(&format!("{namespace}.{name}")))
+                    .or_insert_with(|| format!("plugin declaration `{name}` in `{namespace}`"));
+            }
+        }
+        Ok(declarations)
     }
 
     /// Fails when `registry`'s module writes a qualified type reference whose
@@ -280,16 +438,22 @@ impl Installer {
     /// segment). C# resolves the first segment through ordinary lookup, so it
     /// would look the rest of the reference up in that type or namespace.
     fn check_qualified_references(
+        &self,
         config: &CodeGeneratorConfig,
         registry: &Registry,
         root_types: &[&QualifiedTypeName],
         namespaces: &[(&str, String, String)],
     ) -> Result<(), Error> {
         for reference in registry_references(registry) {
-            let qualified = CSharpCodeGenerator::requalify(config, &reference);
+            let qualified = self.csharp_config.requalify(config, &reference);
             let Namespace::Named(path) = &qualified.namespace else {
                 continue;
             };
+            // Explicit external names bypass lexical shadowing. Full CLR
+            // name conflicts were checked by check_mapped_type_names.
+            if path.starts_with("global::") {
+                continue;
+            }
             let path = namespace_name(path);
             let first = path.split('.').next().unwrap_or(&path);
             let subject = format!(
@@ -324,6 +488,33 @@ impl Installer {
             }
         }
 
+        Ok(())
+    }
+
+    /// Reject incomplete mappings before writing any project files.
+    fn check_external_namespaces(&self) -> Result<(), Error> {
+        for (namespace, clr_namespace) in &self.csharp_config.external_namespaces {
+            let problem = if !self.external_packages.contains_key(namespace) {
+                Some("requires an external package entry")
+            } else if clr_namespace.split('.').any(str::is_empty) {
+                Some("requires a nonempty dotted CLR namespace")
+            } else if clr_namespace.contains("::") {
+                Some("must name a CLR namespace without an alias qualifier")
+            } else if !clr_namespace.split('.').all(naming::plain_identifier) {
+                Some(
+                    "requires plain CLR identifiers without source escapes, formatting characters or whitespace",
+                )
+            } else {
+                None
+            };
+            if let Some(problem) = problem {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("C#: external namespace mapping for \"{namespace}\" {problem}"),
+                )
+                .into());
+            }
+        }
         Ok(())
     }
 
@@ -494,8 +685,9 @@ impl SourceInstaller for Installer {
         let source_path = module_dir.join(format!("{file_name}.cs"));
         let mut file = std::fs::File::create(source_path)?;
 
-        let generator =
-            CSharpCodeGenerator::new(&updated_config).with_plugins(self.plugins.clone());
+        let generator = CSharpCodeGenerator::new(&updated_config)
+            .with_csharp_config(self.csharp_config.clone())
+            .with_plugins(self.plugins.clone());
         generator.output(&mut file, registry)?;
 
         // Companion files live in the module's namespace directory, beside its
@@ -637,9 +829,25 @@ fn namespace_name(name: &str) -> String {
         .join(".")
 }
 
+/// A CLR path and each of its namespace/type prefixes, at segment boundaries.
+fn namespace_prefixes(path: &str) -> impl Iterator<Item = &str> {
+    std::iter::once(path).chain(path.match_indices('.').map(|(index, _)| &path[..index]))
+}
+
+/// Verbatim-identifier markers are source syntax, not part of a CLR name.
+fn clr_identity(path: &str) -> String {
+    path.split('.')
+        .map(|part| part.strip_prefix('@').unwrap_or(part))
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
 #[path = "collision_tests.rs"]
 mod collision_tests;
+
+#[cfg(test)]
+mod external_namespace_tests;

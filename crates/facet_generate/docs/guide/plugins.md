@@ -75,7 +75,8 @@ answer every time and have no side effects.
 |---|---|:-:|:-:|:-:|:-:|
 | `imports` | module header | ✓ | ✓ | ✓ | ✓ |
 | `module_helpers` | after imports, before types | ✓ | ✓ | ✓ | ✓ |
-| `module_declarations` | module header | | ✓ | | |
+| `module_declarations` | module header / C# external mapping preflight | | ✓ | ✓ | |
+| `runtime_declarations` | C# external mapping preflight | | | ✓ | |
 | `referenced_types` | once per module, before the header | ✓ | ✓ | ✓ | ✓ |
 | `type_annotations` | above a type | | ✓ | ✓ | |
 | `type_conformances` | after the type name | ✓ | | ✓ | |
@@ -127,18 +128,34 @@ a bare module name in Swift (`"Serde"`), a whole line in Kotlin
 
 [`module_helpers`](crate::generation::plugin::EmitterPlugin::module_helpers) writes code after
 the imports and before the first type: type aliases, helper functions, shared declarations.
-[`module_declarations`](crate::generation::plugin::EmitterPlugin::module_declarations) is
-Kotlin's companion to it: the names those helpers declare at module scope (a `typealias`, say),
-so the emitter leaves out any import of the same name, which would otherwise hide the
-declaration.
+[`module_declarations`](crate::generation::plugin::EmitterPlugin::module_declarations)
+lists the type names a plugin declares at module scope (a `typealias` or a helper
+class, for example). Kotlin leaves out imports of those names, which would hide
+the declarations. C# uses them to reject external CLR mappings that would bind
+to a local plugin type. C# plugins should report types introduced by helpers,
+`after_type`, companion files and footers here.
+
+C# declaration preflight receives the same prepared configuration as emitted
+code, including requalified enum names. Plugins can use the normal
+`config.is_unit_enum(csharp::requalify(config, name))` query to select helpers.
+For C#, declaration metadata uses plain CLR identifiers (including metadata
+arity for generic types), without source escapes or formatting characters.
+
+[`runtime_declarations`](crate::generation::plugin::EmitterPlugin::runtime_declarations)
+reports full CLR names of types provided by a C# plugin's `runtime_files`,
+including multiple types sharing one file. Generic types use metadata arity,
+for example ``Vendor.Runtime.Reader`1``. The installer checks these names only
+when the runtime files are installed; an external `serde` package suppresses
+both the runtime files and their local declarations.
 
 [`module_footer`](crate::generation::plugin::EmitterPlugin::module_footer) is the counterpart at
 the other end: it is written once per module, after every `after_type` output, in the order the
 plugins were registered. It is called for a namespaced module too, so a plugin picks its module
 with `config.generates(..)` or `config.namespace`. The footer starts straight after the last
 type's closing line with no blank line, so write a leading newline if you want one. As with
-`after_type`, the names a footer declares at module scope are not seen by the collision checks
-(TypeScript's `module_scope`, Kotlin's `module_declarations`).
+`after_type`, a footer's names are not discovered automatically. Report C# type
+names through `module_declarations` for external mapping checks; TypeScript's
+`module_scope` and Kotlin's `module_declarations` do not inspect footer source.
 
 [`referenced_types`](crate::generation::plugin::EmitterPlugin::referenced_types) lists the types
 your code names that the module does not otherwise reference; it has
@@ -265,6 +282,12 @@ that type (`Optional<Example.Event>`, `com.example.Event?`). The same applies to
 [`is_unit_enum`](crate::generation::CodeGeneratorConfig::is_unit_enum), whose sets are keyed in
 emitter spelling: a lookup with a registry-spelled name can miss, and the plugin then treats an
 enum as a class.
+
+For C# external namespace mappings, share a
+[`CSharpConfig`](crate::generation::csharp::CSharpConfig) between the generator
+(or installer) and the plugin. Use its `requalify` and `requalify_format` methods
+for independently reflected types; the free C# helpers use the default
+root-package rules. The shared `CodeGeneratorConfig` has no C# settings.
 
 Respell a name exactly once. `requalify` is not idempotent in C#, Kotlin and TypeScript: a
 second pass qualifies an already-qualified name again (`com.example.com.example.Event` in

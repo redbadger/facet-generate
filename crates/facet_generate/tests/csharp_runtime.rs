@@ -98,6 +98,9 @@ fn quote_bytes(bytes: &[u8]) -> String {
     )
 }
 
+#[path = "csharp_runtime/external_packages.rs"]
+mod external_packages;
+
 #[test]
 fn test_csharp_bincode_runtime_with_keyword_fields() {
     #[derive(Facet, Serialize)]

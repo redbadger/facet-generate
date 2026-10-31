@@ -59,6 +59,19 @@ use super::JsonPlugin;
 // ---------------------------------------------------------------------------
 
 impl EmitterPlugin<CSharp> for JsonPlugin {
+    fn runtime_declarations(&self) -> Vec<String> {
+        naming::SERDE_RUNTIME_TYPES
+            .iter()
+            .copied()
+            .chain([
+                "Facet.Runtime.Json.FacetJson",
+                "Facet.Runtime.Json.JsonEnum",
+                "Facet.Runtime.Json.JsonSerde",
+            ])
+            .map(str::to_string)
+            .collect()
+    }
+
     /// Returns the core, serde, and JSON C# runtime sources to be written
     /// into the output directory alongside the generated code.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
@@ -128,6 +141,19 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
             writeln!(w)?;
         }
         Ok(())
+    }
+
+    fn module_declarations(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut names: Vec<_> = config
+            .registry_type_names
+            .iter()
+            .filter(|name| config.generates(name))
+            .map(|name| converter_name(&name.name))
+            .collect();
+        if config.features.contains(&Feature::Char) {
+            names.push("JsonCharConverter".to_string());
+        }
+        names
     }
 
     /// `[JsonConverter(typeof({Type}JsonConverter))]`, naming the converter

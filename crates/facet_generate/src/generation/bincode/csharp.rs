@@ -35,9 +35,7 @@ use crate::generation::{
     naming::qualify_helper,
     plugin::{EmitContext, EmitterPlugin, RuntimeFile},
 };
-use crate::reflection::format::{
-    ContainerFormat, Format, Named, Namespace, QualifiedTypeName, VariantFormat,
-};
+use crate::reflection::format::{ContainerFormat, Format, Named, QualifiedTypeName, VariantFormat};
 
 // ---------------------------------------------------------------------------
 // Feature helper snippets
@@ -127,6 +125,21 @@ const FEATURE_CHAR: &str = r#"internal static class CharSerde
 "#;
 
 impl EmitterPlugin<CSharp> for BincodePlugin {
+    fn runtime_declarations(&self) -> Vec<String> {
+        naming::SERDE_RUNTIME_TYPES
+            .iter()
+            .copied()
+            .chain([
+                "Facet.Runtime.Bincode.BincodeDeserializer",
+                "Facet.Runtime.Bincode.BincodeSerializer",
+                "Facet.Runtime.Bincode.FacetHelpers",
+                "Facet.Runtime.Bincode.IFacetDeserializable`1",
+                "Facet.Runtime.Bincode.IFacetSerializable",
+            ])
+            .map(str::to_string)
+            .collect()
+    }
+
     /// Returns the core, serde, and bincode C# runtime sources to be written
     /// into the output directory alongside the generated code.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
@@ -230,6 +243,25 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
             }
         }
         Ok(())
+    }
+
+    fn module_declarations(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut names: Vec<_> = config
+            .registry_type_names
+            .iter()
+            .filter(|name| config.generates(name))
+            .filter(|name| {
+                config.is_unit_enum(name)
+                    || config.is_unit_enum(&crate::generation::csharp::requalify(config, name))
+            })
+            .map(|name| format!("{}Bincode", name.name.to_upper_camel_case()))
+            .collect();
+        for (feature, name) in [(Feature::Uuid, "UuidSerde"), (Feature::Char, "CharSerde")] {
+            if config.features.contains(&feature) {
+                names.push(name.to_string());
+            }
+        }
+        names
     }
 
     /// Injects `IFacetSerializable` and `IFacetDeserializable<T>` conformances.
@@ -407,7 +439,7 @@ impl<'a> Scope<'a> {
     fn type_target(&self, qualified_type_name: &QualifiedTypeName, suffix: &str) -> String {
         let name = format!(
             "{}{suffix}",
-            format_qualified_type_name(qualified_type_name)
+            naming::format_qualified_type_name(qualified_type_name)
         );
         let type_name = suffix.is_empty().then_some(qualified_type_name);
         if self.hides(&name, type_name) {
@@ -1210,20 +1242,6 @@ fn option_deserialize_helper(inner: &Format, cfg: &CodeGeneratorConfig) -> &'sta
 // ---------------------------------------------------------------------------
 // Type rendering helpers
 // ---------------------------------------------------------------------------
-
-/// Formats a [`QualifiedTypeName`] as a C# dotted name.
-fn format_qualified_type_name(qualified_type_name: &QualifiedTypeName) -> String {
-    match &qualified_type_name.namespace {
-        Namespace::Root => qualified_type_name.name.to_upper_camel_case(),
-        Namespace::Named(namespace) => {
-            format!(
-                "{}.{}",
-                namespace_name(namespace),
-                qualified_type_name.name.to_upper_camel_case()
-            )
-        }
-    }
-}
 
 /// Converts a dotted namespace string into `PascalCase` C# namespace segments.
 fn namespace_name(namespace: &str) -> String {
