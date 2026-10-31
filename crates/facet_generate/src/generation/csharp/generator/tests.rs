@@ -192,6 +192,66 @@ fn requalify_leaves_a_same_namespace_reference_bare() {
     }
 }
 
+#[test]
+fn external_namespace_mapping_preserves_casing_and_escapes_keywords() {
+    let point = QualifiedTypeName::namespaced("geometry".to_string(), "Point".to_string());
+    for namespace in [None, Some("views")] {
+        let mut config = module_config("Example.App", namespace);
+        config
+            .external_namespaces
+            .insert("geometry".to_string(), "Vendor.API.event".to_string());
+        let expected = QualifiedTypeName::namespaced(
+            "global::Vendor.API.@event".to_string(),
+            "Point".to_string(),
+        );
+        assert_eq!(requalified(&config, &point), expected);
+
+        let registry = registry_with_struct_field(Format::TypeName(point.clone()));
+        let output = render_output(
+            &config,
+            vec![Arc::new(BincodePlugin), Arc::new(JsonPlugin)],
+            &registry,
+        );
+        assert!(
+            output.contains("global::Vendor.API.@event.Point"),
+            "{output}"
+        );
+        assert!(!output.contains("Example.App.Geometry"), "{output}");
+        assert!(
+            output.contains("global::Vendor.API.@event.Point.Deserialize(deserializer)"),
+            "{output}"
+        );
+        assert!(
+            output.contains("FacetJson.Of<global::Vendor.API.@event.Point>()"),
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn forbidden_bincode_names_report_the_runtime_namespace() {
+    for (name, kind) in [
+        ("FacetHelpers", "type"),
+        ("IFacetDeserializable", "interface"),
+        ("IFacetSerializable", "interface"),
+    ] {
+        let mut registry = Registry::new();
+        registry.insert(
+            QualifiedTypeName::root(name.to_string()),
+            ContainerFormat::UnitStruct(Doc::new()),
+        );
+        let error = CSharpCodeGenerator::new(&module_config("Example", None))
+            .output(&mut Vec::new(), &registry)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(&format!(
+                "the runtime {kind} `Facet.Runtime.Bincode.{name}`"
+            )),
+            "{error}"
+        );
+    }
+}
+
 /// The qualified paths match the `namespace` declaration each module writes,
 /// which upper-camel-cases every segment (`Company.Models.Kit`).
 #[test]

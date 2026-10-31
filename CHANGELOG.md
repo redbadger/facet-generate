@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 💥 Breaking Changes
+
+- `CodeGeneratorConfig` has a new `external_namespaces` map. Code using a struct literal to construct this per-module config must initialize that field. `CodeGeneratorConfig::new` initializes it to an empty map.
+
+### 🐛 Bug Fixes
+
+- **C#: external types can use a different project's CLR namespace.** `Installer::external_namespace` maps a Rust namespace to its full external CLR namespace, independently of the NuGet package ID. References in declarations, Bincode helpers and JSON converters preserve that namespace's casing and use `global::` to avoid shadowing. Generated projects can have distinct roots and project names while sharing one external Serde runtime. Unmapped namespaces keep their previous qualification. The forbidden-name diagnostics for Bincode runtime types now name `Facet.Runtime.Bincode` [#240](https://github.com/redbadger/facet-generate/issues/240)
+
 ## [0.22.2] - 2026-10-24
 
 This release fixes the doc comments in generated Kotlin, TypeScript, C# and Swift code, and how the C# installer uses an external `serde` package. It also adds a public `write_doc` function to each language module, for plugins to use. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.

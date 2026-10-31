@@ -55,6 +55,7 @@ pub struct Installer {
     package_name: String,
     install_dir: PathBuf,
     external_packages: ExternalPackages,
+    external_namespaces: BTreeMap<String, String>,
     plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
 
@@ -70,6 +71,7 @@ impl Installer {
             package_name: package_name.to_string(),
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
+            external_namespaces: BTreeMap::new(),
             plugins: vec![],
         }
     }
@@ -94,6 +96,25 @@ impl Installer {
         self
     }
 
+    /// Set the full CLR namespace supplied by an external package.
+    ///
+    /// `namespace` is the Rust namespace from `#[facet(fg::namespace = "...")]`
+    /// and must also have an [`external_packages`](Self::external_packages)
+    /// entry. `clr_namespace` names the external types' namespace exactly,
+    /// including its root, for example `Company.Contracts.Geometry`.
+    /// Its casing is preserved and C# keywords are escaped automatically.
+    ///
+    /// This does not change the `NuGet` package ID in
+    /// [`ExternalPackage::module_name`], the project reference or runtime
+    /// namespaces. Without a mapping, references keep the installer's root
+    /// namespace, as in earlier releases.
+    #[must_use]
+    pub fn external_namespace(mut self, namespace: &str, clr_namespace: &str) -> Self {
+        self.external_namespaces
+            .insert(namespace.to_string(), clr_namespace.to_string());
+        self
+    }
+
     /// Generate all code for the given registry.
     ///
     /// This method:
@@ -114,6 +135,7 @@ impl Installer {
     /// writing anything when a type holds an `Option<Option<T>>`, which C#
     /// cannot declare.
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
+        self.check_external_namespaces()?;
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
         check_nested_options(registry)?;
@@ -200,6 +222,7 @@ impl Installer {
             .map(|(m, registry)| {
                 let mut config = m.config().clone().with_parent(&self.package_name);
                 config.external_packages = self.external_packages.clone();
+                config.external_namespaces = self.external_namespaces.clone();
                 (config, registry)
             })
             .collect();
@@ -290,6 +313,11 @@ impl Installer {
             let Namespace::Named(path) = &qualified.namespace else {
                 continue;
             };
+            // Explicit external names use global::, so declarations in this
+            // module or its parents cannot hide their first segment.
+            if path.starts_with("global::") {
+                continue;
+            }
             let path = namespace_name(path);
             let first = path.split('.').next().unwrap_or(&path);
             let subject = format!(
@@ -324,6 +352,29 @@ impl Installer {
             }
         }
 
+        Ok(())
+    }
+
+    /// Reject incomplete mappings before writing any project files.
+    fn check_external_namespaces(&self) -> Result<(), Error> {
+        for (namespace, clr_namespace) in &self.external_namespaces {
+            let problem = if !self.external_packages.contains_key(namespace) {
+                Some("requires an external package entry")
+            } else if clr_namespace.split('.').any(str::is_empty) {
+                Some("requires a nonempty dotted CLR namespace")
+            } else if clr_namespace.contains("::") {
+                Some("must name a CLR namespace without an alias qualifier")
+            } else {
+                None
+            };
+            if let Some(problem) = problem {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("C#: external namespace mapping for \"{namespace}\" {problem}"),
+                )
+                .into());
+            }
+        }
         Ok(())
     }
 
@@ -480,6 +531,7 @@ impl SourceInstaller for Installer {
 
         let mut updated_config = config.clone();
         updated_config.external_packages = self.external_packages.clone();
+        updated_config.external_namespaces = self.external_namespaces.clone();
 
         let module_path = config.module_name().replace('.', "/");
         let module_dir = self.install_dir.join(module_path);
@@ -643,3 +695,6 @@ mod tests;
 #[cfg(test)]
 #[path = "collision_tests.rs"]
 mod collision_tests;
+
+#[cfg(test)]
+mod external_namespace_tests;
