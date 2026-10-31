@@ -313,12 +313,15 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         Ok(())
     }
 
-    /// The type names [`module_helpers`](Self::module_helpers) declares at
-    /// module scope, such as a `typealias`.
+    /// The type names this plugin declares at module scope, such as a
+    /// `typealias` or a class from [`module_helpers`](Self::module_helpers),
+    /// [`after_type`](Self::after_type) or [`companion_files`](Self::companion_files).
     ///
     /// The Kotlin emitter leaves out any import of one of these names, from
     /// itself or any plugin, since an explicit import would hide the
     /// declaration.
+    /// The C# installer checks these names when rejecting external CLR
+    /// mappings that would bind to a local helper instead of an imported type.
     fn module_declarations(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![]
     }

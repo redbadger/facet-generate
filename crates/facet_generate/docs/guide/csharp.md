@@ -266,6 +266,12 @@ A Rust reference to `geometry::Point` is then written as
 The mapping changes type qualification; the project reference and NuGet package
 ID remain those of the `ExternalPackage` entry.
 
+The installer rejects mappings whose full CLR type names conflict with local
+types or namespaces before writing any files. `global::` prevents lexical
+shadowing, but cannot choose between two assemblies defining the same full
+type name. Choose a different app root or external mapping when those names
+would collide.
+
 When projects use serialization plugins, configure them to take `serde` from
 one external runtime project as described in [Runtimes](#runtimes). This keeps
 their serializer and `Unit` types in the same assembly and avoids duplicate

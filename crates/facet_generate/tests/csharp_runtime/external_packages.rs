@@ -62,6 +62,18 @@ struct Envelope {
     vendor: Vendor,
 }
 
+#[derive(Facet, Serialize)]
+#[facet(rename = "Point")]
+struct LocalPoint {
+    x: u64,
+}
+
+#[derive(Facet, Serialize)]
+struct Collision {
+    local: LocalPoint,
+    point: Point,
+}
+
 fn project(namespace: &str, path: &str) -> ExternalPackage {
     ExternalPackage {
         for_namespace: namespace.to_string(),
@@ -71,7 +83,7 @@ fn project(namespace: &str, path: &str) -> ExternalPackage {
     }
 }
 
-fn install_dependencies(root: &Path) -> ExternalPackage {
+fn install_dependencies(root: &Path, clr_namespace: &str) -> ExternalPackage {
     csharp::Installer::new("Runtime", root.join("Runtime"))
         .plugin(BincodePlugin)
         .plugin(JsonPlugin)
@@ -95,14 +107,14 @@ fn install_dependencies(root: &Path) -> ExternalPackage {
         source,
         contents.replace(
             "namespace Example.Contracts.Geometry;",
-            "namespace Vendor.API.Geometry;",
+            &format!("namespace {clr_namespace};"),
         ),
     )
     .unwrap();
     serde
 }
 
-fn write_runner(root: &Path, name: &str, program: &str) -> PathBuf {
+fn write_runner(root: &Path, name: &str, package_name: &str, program: &str) -> PathBuf {
     let runner = root.join(format!("Runner{name}"));
     fs::create_dir_all(&runner).unwrap();
     fs::write(
@@ -115,7 +127,7 @@ fn write_runner(root: &Path, name: &str, program: &str) -> PathBuf {
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../{name}/Example.App.csproj" />
+    <ProjectReference Include="../{name}/{package_name}.csproj" />
   </ItemGroup>
 </Project>
 "#
@@ -124,6 +136,29 @@ fn write_runner(root: &Path, name: &str, program: &str) -> PathBuf {
     .unwrap();
     fs::write(runner.join("Program.cs"), program).unwrap();
     runner
+}
+
+fn app_installer(
+    root: &Path,
+    name: &str,
+    package_name: &str,
+    serde: &ExternalPackage,
+    clr_namespace: &str,
+    plugins: (bool, bool),
+) -> csharp::Installer {
+    let mut installer = csharp::Installer::new(package_name, root.join(name))
+        .external_packages(&[
+            serde.clone(),
+            project("geometry", "../Contracts/Example.Contracts.csproj"),
+        ])
+        .external_namespace("geometry", clr_namespace);
+    if plugins.0 {
+        installer = installer.plugin(BincodePlugin);
+    }
+    if plugins.1 {
+        installer = installer.plugin(JsonPlugin);
+    }
+    installer
 }
 
 fn runner_program(sample: &Envelope, bincode: bool, json: bool) -> String {
@@ -189,30 +224,142 @@ fn external_packages_with_distinct_namespaces() {
     };
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    let serde = install_dependencies(root);
+    let serde = install_dependencies(root, "Vendor.API.Geometry");
     for (name, bincode, json) in [
         ("Plain", false, false),
         ("Bincode", true, false),
         ("Json", false, true),
         ("Both", true, true),
     ] {
-        let mut installer = csharp::Installer::new("Example.App", root.join(name))
-            .external_packages(&[
-                serde.clone(),
-                project("geometry", "../Contracts/Example.Contracts.csproj"),
-            ])
-            .external_namespace("geometry", "Vendor.API.Geometry");
-        if bincode {
-            installer = installer.plugin(BincodePlugin);
-        }
-        if json {
-            installer = installer.plugin(JsonPlugin);
-        }
-        installer.generate(&reflect!(Envelope).unwrap()).unwrap();
-        let runner = write_runner(root, name, &runner_program(&sample, bincode, json));
+        app_installer(
+            root,
+            name,
+            "Example.App",
+            &serde,
+            "Vendor.API.Geometry",
+            (bincode, json),
+        )
+        .generate(&reflect!(Envelope).unwrap())
+        .unwrap();
+        let runner = write_runner(
+            root,
+            name,
+            "Example.App",
+            &runner_program(&sample, bincode, json),
+        );
         let output = dotnet_run(&runner);
         assert!(
             output.contains("External packages passed"),
+            "{name}: {output}"
+        );
+    }
+}
+
+fn collision_runner_program(sample: &Collision, bincode: bool, json: bool) -> String {
+    let mut program = String::from(
+        r#"var type = typeof(Example.Safe.Collision);
+if (type.GetProperty("Point").PropertyType.Assembly.GetName().Name != "Example.Contracts")
+    throw new Exception("External Point bound to the local assembly");
+if (type.GetProperty("Local").PropertyType.Assembly.GetName().Name != "Example.Safe")
+    throw new Exception("Local Point bound to the external assembly");
+var sample = new Example.Safe.Collision {
+    Local = new Example.Safe.Point { X = 1099511627783UL },
+    Point = new global::Example.App.Point { X = 42 }
+};
+"#,
+    );
+    if bincode {
+        write!(
+            program,
+            r#"var bytes = {};
+var value = Example.Safe.Collision.BincodeDeserialize(bytes);
+if (value.Local.X != sample.Local.X || value.Point.X != 42 ||
+    !bytes.SequenceEqual(value.BincodeSerialize()) ||
+    !bytes.SequenceEqual(sample.BincodeSerialize()))
+    throw new Exception("Bincode used the wrong Point schema");
+"#,
+            quote_bytes(&bincode::serialize(sample).unwrap())
+        )
+        .unwrap();
+    }
+    if json {
+        let input = serde_json::to_string(sample).unwrap();
+        write!(
+            program,
+            r#"var input = {};
+var valueFromJson = Example.Safe.Collision.JsonDeserialize(input);
+if (valueFromJson.Local.X != sample.Local.X || valueFromJson.Point.X != 42 ||
+    !System.Text.Json.Nodes.JsonNode.DeepEquals(
+        System.Text.Json.Nodes.JsonNode.Parse(input),
+        System.Text.Json.Nodes.JsonNode.Parse(valueFromJson.JsonSerialize())))
+    throw new Exception("JSON used the wrong Point schema");
+"#,
+            serde_json::to_string(&input).unwrap()
+        )
+        .unwrap();
+    }
+    program.push_str("Console.WriteLine(\"Distinct Point assemblies passed\");\n");
+    program
+}
+
+/// Reproduce identical CLR names with different Rust schemas (u64/u32), reject
+/// that mapping before output, then compile and run a corrected mapping and
+/// verify that C# binds each property to the intended assembly in every mode.
+#[test]
+fn external_type_collisions_are_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let serde = install_dependencies(root, "Example.App");
+    let registry = reflect!(Collision).unwrap();
+    let sample = Collision {
+        local: LocalPoint {
+            x: (1_u64 << 40) + 7,
+        },
+        point: Point { x: 42 },
+    };
+    for (name, bincode, json) in [
+        ("Plain", false, false),
+        ("Bincode", true, false),
+        ("Json", false, true),
+        ("Both", true, true),
+    ] {
+        let unsafe_name = format!("Unsafe{name}");
+        let error = app_installer(
+            root,
+            &unsafe_name,
+            "Example.App",
+            &serde,
+            "Example.App",
+            (bincode, json),
+        )
+        .generate(&registry)
+        .expect_err("the external and local Point have the same CLR name");
+        assert!(error.to_string().contains("Example.App.Point"), "{error}");
+        assert!(
+            !root.join(&unsafe_name).exists(),
+            "rejection must precede file writes"
+        );
+
+        let safe_name = format!("Safe{name}");
+        app_installer(
+            root,
+            &safe_name,
+            "Example.Safe",
+            &serde,
+            "Example.App",
+            (bincode, json),
+        )
+        .generate(&registry)
+        .unwrap();
+        let runner = write_runner(
+            root,
+            &safe_name,
+            "Example.Safe",
+            &collision_runner_program(&sample, bincode, json),
+        );
+        let output = dotnet_run(&runner);
+        assert!(
+            output.contains("Distinct Point assemblies passed"),
             "{name}: {output}"
         );
     }

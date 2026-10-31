@@ -130,6 +130,19 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
         Ok(())
     }
 
+    fn module_declarations(&self, config: &CodeGeneratorConfig) -> Vec<String> {
+        let mut names: Vec<_> = config
+            .registry_type_names
+            .iter()
+            .filter(|name| config.generates(name))
+            .map(|name| converter_name(&name.name))
+            .collect();
+        if config.features.contains(&Feature::Char) {
+            names.push("JsonCharConverter".to_string());
+        }
+        names
+    }
+
     /// `[JsonConverter(typeof({Type}JsonConverter))]`, naming the converter
     /// [`after_type`](Self::after_type) writes.
     fn type_annotations(&self, ctx: &EmitContext) -> Vec<String> {

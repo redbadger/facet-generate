@@ -129,7 +129,8 @@ impl Installer {
     /// Returns an error if any file operation or code generation step fails,
     /// and fails before writing anything when a namespace collides with a
     /// type, a builtin or another namespace's source file, or when a name in
-    /// scope hides the first segment of a qualified type reference. Such
+    /// scope hides the first segment of a qualified type reference, or a
+    /// mapped external CLR type conflicts with a generated declaration. Such
     /// output would not build, or would lose a module; the error names the
     /// namespace or package and what it collides with. It also fails before
     /// writing anything when a type holds an `Option<Option<T>>`, which C#
@@ -289,11 +290,104 @@ impl Installer {
             }),
         )?;
 
+        self.check_mapped_type_names(modules, &generated)?;
+
         for (config, registry) in &generated {
             Self::check_qualified_references(config, registry, &root_types, &namespaces)?;
         }
 
         Ok(())
+    }
+
+    /// An alias qualifier bypasses lexical shadowing, but cannot distinguish
+    /// a generated declaration from an imported type with the same CLR name.
+    /// Check exact names and type/namespace prefixes before writing anything.
+    fn check_mapped_type_names(
+        &self,
+        modules: &BTreeMap<Module, Registry>,
+        generated: &[(CodeGeneratorConfig, &Registry)],
+    ) -> Result<(), Error> {
+        if self.external_namespaces.is_empty() {
+            return Ok(());
+        }
+        let declarations = self.generated_clr_types(generated);
+        let namespaces: BTreeSet<_> = generated
+            .iter()
+            .flat_map(|(config, _)| {
+                let namespace = namespace_name(config.module_name());
+                namespace_prefixes(&namespace)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        for (module, registry) in modules {
+            let Namespace::Named(namespace) = &module.config().namespace else {
+                continue;
+            };
+            let Some(mapped) = self.external_namespaces.get(namespace) else {
+                continue;
+            };
+            // Verbatim identifiers (@Name) and ordinary identifiers (Name)
+            // have the same CLR identity. Preserve casing when comparing.
+            let mapped = clr_identity(mapped);
+            for external in registry.keys() {
+                let path = format!("{mapped}.{}", external.name.to_upper_camel_case());
+                if let Some((local_path, local)) = namespace_prefixes(&path)
+                    .find_map(|prefix| declarations.get(prefix).map(|local| (prefix, local)))
+                {
+                    let message = format!(
+                        "C#: external {} maps to `{path}`, which conflicts with generated {local} (`{local_path}`). \
+                         Rename the generated type or choose a different external CLR namespace",
+                        TypeName(external),
+                    );
+                    return Err(
+                        std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into(),
+                    );
+                }
+                if namespaces.contains(&path) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!(
+                            "C#: external {} maps to `{path}`, which is a generated namespace. \
+                         Choose a different external CLR namespace",
+                            TypeName(external),
+                        ),
+                    )
+                    .into());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Include plugin-declared module helpers as well as reflected types.
+    fn generated_clr_types(
+        &self,
+        generated: &[(CodeGeneratorConfig, &Registry)],
+    ) -> BTreeMap<String, String> {
+        let mut declarations = BTreeMap::new();
+        for (config, registry) in generated {
+            let namespace = namespace_name(config.module_name());
+            for name in registry.keys() {
+                declarations.insert(
+                    format!("{namespace}.{}", name.name.to_upper_camel_case()),
+                    TypeName(name).to_string(),
+                );
+            }
+            let mut config = config.clone();
+            config.update_from(registry);
+            for name in self
+                .plugins
+                .iter()
+                .flat_map(|plugin| plugin.module_declarations(&config))
+            {
+                declarations
+                    .entry(clr_identity(&format!("{namespace}.{name}")))
+                    .or_insert_with(|| format!("plugin declaration `{name}` in `{namespace}`"));
+            }
+        }
+        declarations
     }
 
     /// Fails when `registry`'s module writes a qualified type reference whose
@@ -313,8 +407,8 @@ impl Installer {
             let Namespace::Named(path) = &qualified.namespace else {
                 continue;
             };
-            // Explicit external names use global::, so declarations in this
-            // module or its parents cannot hide their first segment.
+            // Explicit external names bypass lexical shadowing. Full CLR
+            // name conflicts were checked by check_mapped_type_names.
             if path.starts_with("global::") {
                 continue;
             }
@@ -685,6 +779,19 @@ fn is_version(s: &str) -> bool {
 fn namespace_name(name: &str) -> String {
     name.split('.')
         .map(str::to_upper_camel_case)
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+/// A CLR path and each of its namespace/type prefixes, at segment boundaries.
+fn namespace_prefixes(path: &str) -> impl Iterator<Item = &str> {
+    std::iter::once(path).chain(path.match_indices('.').map(|(index, _)| &path[..index]))
+}
+
+/// Verbatim-identifier markers are source syntax, not part of a CLR name.
+fn clr_identity(path: &str) -> String {
+    path.split('.')
+        .map(|part| part.strip_prefix('@').unwrap_or(part))
         .collect::<Vec<_>>()
         .join(".")
 }
