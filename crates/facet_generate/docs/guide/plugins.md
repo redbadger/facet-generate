@@ -76,6 +76,7 @@ answer every time and have no side effects.
 | `imports` | module header | ✓ | ✓ | ✓ | ✓ |
 | `module_helpers` | after imports, before types | ✓ | ✓ | ✓ | ✓ |
 | `module_declarations` | module header / C# external mapping preflight | | ✓ | ✓ | |
+| `runtime_declarations` | C# external mapping preflight | | | ✓ | |
 | `referenced_types` | once per module, before the header | ✓ | ✓ | ✓ | ✓ |
 | `type_annotations` | above a type | | ✓ | ✓ | |
 | `type_conformances` | after the type name | ✓ | | ✓ | |
@@ -133,6 +134,17 @@ class, for example). Kotlin leaves out imports of those names, which would hide
 the declarations. C# uses them to reject external CLR mappings that would bind
 to a local plugin type. C# plugins should report types introduced by helpers,
 `after_type`, companion files and footers here.
+
+C# declaration preflight receives the same prepared configuration as emitted
+code, including requalified enum names. Plugins can use the normal
+`config.is_unit_enum(csharp::requalify(config, name))` query to select helpers.
+
+[`runtime_declarations`](crate::generation::plugin::EmitterPlugin::runtime_declarations)
+reports full CLR names of types provided by a C# plugin's `runtime_files`,
+including multiple types sharing one file. Generic types use metadata arity,
+for example ``Vendor.Runtime.Reader`1``. The installer checks these names only
+when the runtime files are installed; an external `serde` package suppresses
+both the runtime files and their local declarations.
 
 [`module_footer`](crate::generation::plugin::EmitterPlugin::module_footer) is the counterpart at
 the other end: it is written once per module, after every `after_type` output, in the order the

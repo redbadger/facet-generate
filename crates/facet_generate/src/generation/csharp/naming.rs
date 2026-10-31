@@ -97,6 +97,18 @@ pub(crate) const KEYWORDS: &[&str] = &[
     "while",
 ];
 
+/// The runtime type installed even when no codec plugin is active.
+pub(crate) const CORE_UNIT: &str = "Facet.Runtime.Serde.Unit";
+
+/// CLR identities of the common C# runtime types supplied by codec plugins.
+pub(crate) const SERDE_RUNTIME_TYPES: &[&str] = &[
+    "Facet.Runtime.Serde.DeserializationError",
+    "Facet.Runtime.Serde.IDeserializer",
+    "Facet.Runtime.Serde.ISerializer",
+    "Facet.Runtime.Serde.SerializationError",
+    CORE_UNIT,
+];
+
 /// Types the emitter writes bare through a `using` directive, and the fully
 /// qualified form to use instead when the module declares a type of the same
 /// name. Sorted by the bare name.

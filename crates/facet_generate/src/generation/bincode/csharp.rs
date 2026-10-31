@@ -125,6 +125,21 @@ const FEATURE_CHAR: &str = r#"internal static class CharSerde
 "#;
 
 impl EmitterPlugin<CSharp> for BincodePlugin {
+    fn runtime_declarations(&self) -> Vec<String> {
+        naming::SERDE_RUNTIME_TYPES
+            .iter()
+            .copied()
+            .chain([
+                "Facet.Runtime.Bincode.BincodeDeserializer",
+                "Facet.Runtime.Bincode.BincodeSerializer",
+                "Facet.Runtime.Bincode.FacetHelpers",
+                "Facet.Runtime.Bincode.IFacetDeserializable`1",
+                "Facet.Runtime.Bincode.IFacetSerializable",
+            ])
+            .map(str::to_string)
+            .collect()
+    }
+
     /// Returns the core, serde, and bincode C# runtime sources to be written
     /// into the output directory alongside the generated code.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
