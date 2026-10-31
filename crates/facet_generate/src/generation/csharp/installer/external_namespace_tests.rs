@@ -14,6 +14,20 @@ fn invalid_external_namespace_mappings_fail_before_writing() {
             "requires a nonempty dotted CLR namespace",
         ),
         (true, "global::Vendor.Models", "without an alias qualifier"),
+        (
+            true,
+            "Exa\u{200D}mple.App",
+            "requires plain CLR identifiers",
+        ),
+        (true, r"Ex\u0061mple.App", "requires plain CLR identifiers"),
+        (true, "Example .App", "requires plain CLR identifiers"),
+        (
+            true,
+            "Example/*comment*/.App",
+            "requires plain CLR identifiers",
+        ),
+        (true, "Example.\nApp", "requires plain CLR identifiers"),
+        (true, "Example.2Models", "requires plain CLR identifiers"),
     ] {
         let dir = tempfile::tempdir().unwrap();
         let mut installer =
@@ -29,6 +43,22 @@ fn invalid_external_namespace_mappings_fail_before_writing() {
         let error = installer.generate(&Registry::new()).unwrap_err();
         assert!(error.to_string().contains(message), "{error}");
         assert!(dir.path().read_dir().unwrap().next().is_none());
+    }
+}
+
+#[test]
+fn plain_unicode_clr_namespaces_are_supported() {
+    for namespace in [
+        "例.模型",
+        "Δοκιμή.Μοντέλα",
+        "_Vendor.Models2",
+        "Ⅳ.Models",
+        "Vendor.@event",
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        external_geometry(dir.path(), namespace)
+            .generate(&collision_registry(None, "Local", "Point"))
+            .unwrap();
     }
 }
 
@@ -390,4 +420,73 @@ fn custom_runtime_metadata_is_included() {
         "{error}"
     );
     assert!(dir.path().read_dir().unwrap().next().is_none());
+}
+
+#[derive(Debug)]
+struct SourceSpellingHelper {
+    name: &'static str,
+    runtime: bool,
+}
+
+impl EmitterPlugin<CSharp> for SourceSpellingHelper {
+    fn module_declarations(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
+        if self.runtime {
+            vec![]
+        } else {
+            vec![self.name.to_string()]
+        }
+    }
+
+    fn module_helpers(
+        &self,
+        w: &mut dyn crate::generation::IndentWrite,
+        _config: &CodeGeneratorConfig,
+    ) -> std::io::Result<()> {
+        if !self.runtime {
+            writeln!(w, "public class {} {{}}", self.name)?;
+        }
+        Ok(())
+    }
+
+    fn runtime_declarations(&self) -> Vec<String> {
+        if self.runtime {
+            vec![format!("Vendor.Runtime.{}", self.name)]
+        } else {
+            vec![]
+        }
+    }
+
+    fn runtime_files(&self) -> Vec<crate::generation::plugin::RuntimeFile> {
+        if !self.runtime {
+            return vec![];
+        }
+        vec![crate::generation::plugin::RuntimeFile {
+            relative_path: "Vendor/Helper.cs".to_string(),
+            contents: format!("namespace Vendor.Runtime; public class {} {{}}", self.name)
+                .into_bytes(),
+        }]
+    }
+}
+
+#[test]
+fn declaration_metadata_rejects_source_spelling_aliases() {
+    for name in ["Cust\u{200D}omHelper", r"Cust\u006FmHelper"] {
+        for runtime in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let namespace = if runtime {
+                "Vendor.Runtime"
+            } else {
+                "Example.App"
+            };
+            let error = external_geometry(dir.path(), namespace)
+                .plugin(SourceSpellingHelper { name, runtime })
+                .generate(&collision_registry(None, "Local", "CustomHelper"))
+                .unwrap_err();
+            assert!(
+                error.to_string().contains("requires a plain CLR type"),
+                "{error}"
+            );
+            assert!(dir.path().read_dir().unwrap().next().is_none());
+        }
+    }
 }

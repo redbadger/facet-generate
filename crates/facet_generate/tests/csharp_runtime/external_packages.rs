@@ -434,3 +434,65 @@ Console.WriteLine("Runtime type identities passed");
     );
     assert!(dotnet_run(&runner).contains("Runtime type identities passed"));
 }
+
+/// Source-only identifier spellings must not bypass full CLR name checks.
+/// After rejecting them, a Unicode namespace is compiled and used by a real
+/// consumer to verify that validation still permits ordinary Unicode names.
+#[test]
+fn source_identifier_aliases_cannot_bypass_collision_checks() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let serde = install_dependencies(root, "Example.App");
+    let registry = reflect!(Collision).unwrap();
+    for (index, namespace) in [
+        "Exa\u{200D}mple.App",
+        r"Ex\u0061mple.App",
+        "Example .App",
+        "Example/*comment*/.App",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let name = format!("Alias{index}");
+        let error = app_installer(
+            root,
+            &name,
+            "Example.App",
+            &serde,
+            namespace,
+            (false, false),
+        )
+        .generate(&registry)
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("plain CLR identifiers"),
+            "{error}"
+        );
+        assert!(!root.join(name).exists());
+    }
+    let serde = install_dependencies(root, "例.模型");
+    app_installer(
+        root,
+        "Unicode",
+        "Example.App",
+        &serde,
+        "例.模型",
+        (false, false),
+    )
+    .generate(&registry)
+    .unwrap();
+    let runner = write_runner(
+        root,
+        "Unicode",
+        "Example.App",
+        r#"
+var property = typeof(Example.App.Collision).GetProperty("Point");
+if (property.PropertyType.Assembly.GetName().Name != "Example.Contracts")
+    throw new Exception("Unicode external type bound to the local assembly");
+var value = new Example.App.Collision { Point = new global::例.模型.Point { X = 42 } };
+if (value.Point.X != 42) throw new Exception("Unicode external type value lost");
+Console.WriteLine("Unicode namespaces passed");
+"#,
+    );
+    assert!(dotnet_run(&runner).contains("Unicode namespaces passed"));
+}

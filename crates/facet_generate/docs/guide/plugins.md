@@ -138,6 +138,8 @@ to a local plugin type. C# plugins should report types introduced by helpers,
 C# declaration preflight receives the same prepared configuration as emitted
 code, including requalified enum names. Plugins can use the normal
 `config.is_unit_enum(csharp::requalify(config, name))` query to select helpers.
+For C#, declaration metadata uses plain CLR identifiers (including metadata
+arity for generic types), without source escapes or formatting characters.
 
 [`runtime_declarations`](crate::generation::plugin::EmitterPlugin::runtime_declarations)
 reports full CLR names of types provided by a C# plugin's `runtime_files`,
