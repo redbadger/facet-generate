@@ -489,7 +489,7 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// Extra dependency entries for the package manifest.
     ///
     /// The format of each string is language-specific — a Gradle dependency
-    /// line for Kotlin, a NuGet `<PackageReference ... />` element for C#, an
+    /// line for Kotlin, a `NuGet` `<PackageReference ... />` element for C#, an
     /// SPM `.package(...)` entry (unindented) for Swift, or a `package.json`
     /// dependency pair for TypeScript.
     ///
