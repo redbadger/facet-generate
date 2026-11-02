@@ -489,8 +489,9 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// Extra dependency entries for the package manifest.
     ///
     /// The format of each string is language-specific — a Gradle dependency
-    /// line for Kotlin, an SPM `.package(...)` entry (unindented) for Swift, or
-    /// a `package.json` dependency pair for TypeScript.
+    /// line for Kotlin, a NuGet `<PackageReference ... />` element for C#, an
+    /// SPM `.package(...)` entry (unindented) for Swift, or a `package.json`
+    /// dependency pair for TypeScript.
     ///
     /// # Examples
     ///
@@ -499,6 +500,8 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// vec![r#"implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")"#.into()]
     /// // Swift
     /// vec![".package(\n    path: \"../Shared\"\n)".into()]
+    /// // C#
+    /// vec![r#"<PackageReference Include="Acme.Contracts" Version="2.4.1" />"#.into()]
     /// // TypeScript
     /// vec![r#""shared": "file:../pkg""#.into()]
     /// ```

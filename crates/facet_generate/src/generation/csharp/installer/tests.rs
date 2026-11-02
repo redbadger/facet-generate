@@ -5,6 +5,7 @@
 //! - Basic `.csproj` manifest generation
 //! - External `NuGet` URL dependencies (`PackageReference`)
 //! - External path dependencies (`ProjectReference`)
+//! - Plugin `NuGet` dependencies (`PackageReference`)
 //! - Bincode runtime file installation (serde interfaces, serializer,
 //!   deserializer, error types)
 //! - JSON runtime installation (`JsonSerde.cs`)
@@ -52,6 +53,26 @@ fn test_make_manifest_basic() {
       </ItemGroup>
     </Project>
     "#);
+}
+
+#[derive(Debug)]
+struct NuGetDependencyPlugin;
+
+impl EmitterPlugin<CSharp> for NuGetDependencyPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![r#"<PackageReference Include="Example.Package" Version="1.2.3" />"#.into()]
+    }
+}
+
+#[test]
+fn plugin_nuget_dependency_is_included_in_csproj() {
+    let installer = Installer::new("Example.Types", "/tmp").plugin(NuGetDependencyPlugin);
+    let manifest = installer.make_manifest("Example.Types");
+
+    assert!(
+        manifest.contains(r#"<PackageReference Include="Example.Package" Version="1.2.3" />"#),
+        "generated manifest did not contain the plugin package reference:\n{manifest}"
+    );
 }
 
 #[test]

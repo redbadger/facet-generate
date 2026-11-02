@@ -20,7 +20,7 @@
 //! 3. **`.csproj` manifest** — generates an `MSBuild` project file targeting
 //!    `net10.0` with `CommunityToolkit.Mvvm` as a base package reference,
 //!    plus `NuGet` `PackageReference` (URL) or `ProjectReference` (path) for
-//!    external packages.
+//!    external packages and `PackageReference` entries from plugins.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -345,7 +345,9 @@ impl Installer {
     ///
     /// The manifest includes a base `CommunityToolkit.Mvvm` `NuGet` reference,
     /// plus any external `NuGet` `PackageReference` (URL) or `ProjectReference`
-    /// (path) entries configured via [`external_packages`](Self::external_packages).
+    /// (path) entries configured via [`external_packages`](Self::external_packages),
+    /// and any plugin dependencies returned by
+    /// [`manifest_dependencies`](crate::generation::plugin::EmitterPlugin::manifest_dependencies).
     ///
     /// A URL package's `PackageReference` is named by its
     /// [`module_name`](ExternalPackage::module_name) when it has one, and
@@ -387,6 +389,13 @@ impl Installer {
                 }
             }
         }
+
+        package_references.extend(
+            self.plugins
+                .iter()
+                .flat_map(|plugin| plugin.manifest_dependencies())
+                .map(|dependency| format!("    {dependency}")),
+        );
 
         let package_refs = package_references.join("\n");
         let mut manifest = String::new();
