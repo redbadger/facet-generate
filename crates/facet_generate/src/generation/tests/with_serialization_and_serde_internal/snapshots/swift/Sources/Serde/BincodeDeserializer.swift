@@ -3,7 +3,7 @@
 import Foundation
 
 public class BincodeDeserializer: BinaryDeserializer {
-    public let MAX_LENGTH: Int = 1 << 31 - 1
+    public let MAX_LENGTH: Int = Int(Int32.max)
 
     public init(input: [UInt8]) {
         super.init(input: input, maxContainerDepth: Int.max)
