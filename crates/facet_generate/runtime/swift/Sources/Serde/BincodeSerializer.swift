@@ -3,7 +3,7 @@
 import Foundation
 
 public class BincodeSerializer: BinarySerializer {
-    public let MAX_LENGTH: Int = 1 << 31 - 1
+    public let MAX_LENGTH: Int = Int(Int32.max)
 
     public init() {
         super.init(maxContainerDepth: Int.max)
