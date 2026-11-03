@@ -122,7 +122,7 @@ types enabled, and sets `RootNamespace` to the package name. Its one package
 reference, `CommunityToolkit.Mvvm` 8.4.0, provides the `ObservableObject` base
 class and the `[ObservableProperty]` source generator that the generated
 classes use. System.Text.Json, which `JsonPlugin`'s code uses, comes with .NET.
-External packages add references of their own.
+External packages and plugins add references of their own.
 
 ## Runtimes
 
