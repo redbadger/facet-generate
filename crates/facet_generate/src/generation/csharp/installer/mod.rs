@@ -20,7 +20,7 @@
 //! 3. **`.csproj` manifest** — generates an `MSBuild` project file targeting
 //!    `net10.0` with `CommunityToolkit.Mvvm` as a base package reference,
 //!    plus `NuGet` `PackageReference` (URL) or `ProjectReference` (path) for
-//!    external packages.
+//!    external packages and `PackageReference` entries from plugins.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -31,6 +31,7 @@ use std::{
 };
 
 use heck::ToUpperCamelCase as _;
+use indent::indent_all_with;
 use indoc::writedoc;
 
 use crate::{
@@ -345,7 +346,11 @@ impl Installer {
     ///
     /// The manifest includes a base `CommunityToolkit.Mvvm` `NuGet` reference,
     /// plus any external `NuGet` `PackageReference` (URL) or `ProjectReference`
-    /// (path) entries configured via [`external_packages`](Self::external_packages).
+    /// (path) entries configured via [`external_packages`](Self::external_packages),
+    /// and any plugin dependencies returned by
+    /// [`manifest_dependencies`](crate::generation::plugin::EmitterPlugin::manifest_dependencies).
+    /// Each line of a plugin dependency is indented. Duplicate
+    /// `PackageReference` entries are written once, in the order first seen.
     ///
     /// A URL package's `PackageReference` is named by its
     /// [`module_name`](ExternalPackage::module_name) when it has one, and
@@ -387,6 +392,17 @@ impl Installer {
                 }
             }
         }
+
+        package_references.extend(
+            self.plugins
+                .iter()
+                .flat_map(|plugin| plugin.manifest_dependencies())
+                .map(|dependency| indent_all_with("    ", dependency)),
+        );
+
+        // NuGet warns about a package that is referenced twice (NU1504).
+        let mut seen = BTreeSet::new();
+        package_references.retain(|line| seen.insert(line.clone()));
 
         let package_refs = package_references.join("\n");
         let mut manifest = String::new();

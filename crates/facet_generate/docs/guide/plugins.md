@@ -88,7 +88,7 @@ answer every time and have no side effects.
 | `enum_variant_annotations` | before an `enum class` constant | | ✓ | | |
 | `runtime_files` | installer | ✓ | ✓ | ✓ | ✓ |
 | `companion_files` | installer | ✓ | ✓ | ✓ | |
-| `manifest_dependencies` | installer | ✓ | ✓ | | ✓ |
+| `manifest_dependencies` | installer | ✓ | ✓ | ✓ | ✓ |
 | `target_dependencies` | installer | ✓ | | | |
 
 A hook a language does not call is simply ignored there, so a plugin can implement the same
@@ -219,9 +219,8 @@ runtime is external.
 
 [`manifest_dependencies`](crate::generation::plugin::EmitterPlugin::manifest_dependencies)
 returns entries for the package manifest, each in the manifest's own syntax: a Gradle
-dependency line for Kotlin, an SPM `.package(...)` entry for Swift, a `"name": "version"` pair
-for `package.json`. The C# installer does not consult it yet
-([#134](https://github.com/redbadger/facet-generate/issues/134)).
+dependency line for Kotlin, an SPM `.package(...)` entry for Swift, a `<PackageReference ... />`
+element for the C# `.csproj` file, a `"name": "version"` pair for `package.json`.
 [`target_dependencies`](crate::generation::plugin::EmitterPlugin::target_dependencies) is Swift
 only: entries for the generated module's SPM target `dependencies:` array, such as
 `.product(name: "Shared", package: "Shared")`.

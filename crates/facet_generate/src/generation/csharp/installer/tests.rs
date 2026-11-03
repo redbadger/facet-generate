@@ -5,6 +5,8 @@
 //! - Basic `.csproj` manifest generation
 //! - External `NuGet` URL dependencies (`PackageReference`)
 //! - External path dependencies (`ProjectReference`)
+//! - Plugin `NuGet` dependencies (`PackageReference`), multi-line entries
+//!   indented on every line, duplicate entries written once
 //! - Bincode runtime file installation (serde interfaces, serializer,
 //!   deserializer, error types)
 //! - JSON runtime installation (`JsonSerde.cs`)
@@ -52,6 +54,78 @@ fn test_make_manifest_basic() {
       </ItemGroup>
     </Project>
     "#);
+}
+
+#[derive(Debug)]
+struct NuGetDependencyPlugin;
+
+impl EmitterPlugin<CSharp> for NuGetDependencyPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![r#"<PackageReference Include="Example.Package" Version="1.2.3" />"#.into()]
+    }
+}
+
+#[test]
+fn plugin_nuget_dependency_is_included_in_csproj() {
+    let installer = Installer::new("Example.Types", "/tmp").plugin(NuGetDependencyPlugin);
+    let manifest = installer.make_manifest("Example.Types");
+
+    assert!(
+        manifest.contains(r#"<PackageReference Include="Example.Package" Version="1.2.3" />"#),
+        "generated manifest did not contain the plugin package reference:\n{manifest}"
+    );
+}
+
+#[derive(Debug)]
+struct MultiLineNuGetDependencyPlugin;
+
+impl EmitterPlugin<CSharp> for MultiLineNuGetDependencyPlugin {
+    fn manifest_dependencies(&self) -> Vec<String> {
+        vec![
+            "<PackageReference Include=\"Example.Analyzers\" Version=\"2.0.0\">\n  <PrivateAssets>all</PrivateAssets>\n</PackageReference>"
+                .into(),
+        ]
+    }
+}
+
+#[test]
+fn plugin_multi_line_nuget_dependency_is_indented_in_csproj() {
+    let installer = Installer::new("Example.Types", "/tmp").plugin(MultiLineNuGetDependencyPlugin);
+    let manifest = installer.make_manifest("Example.Types");
+
+    insta::assert_snapshot!(manifest, @r#"
+    <Project Sdk="Microsoft.NET.Sdk">
+      <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Example.Types</RootNamespace>
+      </PropertyGroup>
+
+      <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+        <PackageReference Include="Example.Analyzers" Version="2.0.0">
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+      </ItemGroup>
+    </Project>
+    "#);
+}
+
+#[test]
+fn duplicate_plugin_nuget_dependency_is_written_once() {
+    let installer = Installer::new("Example.Types", "/tmp")
+        .plugin(NuGetDependencyPlugin)
+        .plugin(NuGetDependencyPlugin);
+    let manifest = installer.make_manifest("Example.Types");
+
+    assert_eq!(
+        manifest
+            .matches(r#"<PackageReference Include="Example.Package" Version="1.2.3" />"#)
+            .count(),
+        1,
+        "generated manifest did not contain the plugin package reference once:\n{manifest}"
+    );
 }
 
 #[test]
