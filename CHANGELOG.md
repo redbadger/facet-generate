@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.22.3] - unreleased
+
+This release fixes a crash in the Swift runtime on 32-bit Apple targets. It is a patch release with no API change. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
+
+### 🐛 Bug Fixes
+
+- **Swift: the bincode length limit no longer crashes on 32-bit targets.** The Swift runtime that facet_generate installs declared `MAX_LENGTH` as `1 << 31 - 1` in `BincodeSerializer` and `BincodeDeserializer`. Swift applies `<<` before `-`, so the value was `(1 << 31) - 1`. On a 32-bit target, `Int` has 32 bits, and `1 << 31` overflows it. The app stopped with "arithmetic overflow" the first time it serialized or deserialized a value. This hit 32-bit Apple targets such as the `arm64_32` Apple Watch Series 4 to 8. 64-bit targets were not affected. `MAX_LENGTH` is now `Int(Int32.max)`, which is the same value and fits in `Int` on 32-bit and 64-bit targets [#264](https://github.com/redbadger/facet-generate/pull/264)
+
 ## [0.22.2] - 2026-10-24
 
 This release fixes the doc comments in generated Kotlin, TypeScript, C# and Swift code, and how the C# installer uses an external `serde` package. It also adds a public `write_doc` function to each language module, for plugins to use. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
