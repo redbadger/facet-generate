@@ -313,12 +313,17 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
         Ok(())
     }
 
-    /// The type names [`module_helpers`](Self::module_helpers) declares at
-    /// module scope, such as a `typealias`.
+    /// The type names this plugin declares at module scope, such as a
+    /// `typealias` or a class from [`module_helpers`](Self::module_helpers),
+    /// [`after_type`](Self::after_type) or [`companion_files`](Self::companion_files).
     ///
     /// The Kotlin emitter leaves out any import of one of these names, from
     /// itself or any plugin, since an explicit import would hide the
     /// declaration.
+    /// The C# installer checks these names when rejecting external CLR
+    /// mappings that would bind to a local helper instead of an imported type.
+    /// Use plain CLR identifiers, with metadata arity for generic types;
+    /// source escapes and formatting characters are not supported.
     fn module_declarations(&self, _config: &CodeGeneratorConfig) -> Vec<String> {
         vec![]
     }
@@ -464,6 +469,19 @@ pub trait EmitterPlugin<L>: std::fmt::Debug {
     /// Called by the installer after code generation. Each [`RuntimeFile`]
     /// describes a file to write into the output directory.
     fn runtime_files(&self) -> Vec<RuntimeFile> {
+        vec![]
+    }
+
+    /// Full CLR names of the types declared by [`runtime_files`](Self::runtime_files).
+    ///
+    /// C# only: the installer uses this metadata to reject external namespace
+    /// mappings that would bind to a local runtime type. Report each runtime
+    /// type, including additional types sharing a file. Generic names use CLR
+    /// metadata arity (for example, ``Vendor.Runtime.Reader`1``).
+    /// Names use plain CLR identifiers, not source escapes or formatting characters.
+    /// The installer ignores these declarations when external `serde`
+    /// suppresses runtime installation.
+    fn runtime_declarations(&self) -> Vec<String> {
         vec![]
     }
 

@@ -4,16 +4,17 @@
 //! are intentionally omitted: the generated identifiers that need escaping are
 //! method locals and parameters, where those words are valid unescaped.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::LazyLock};
 
 use heck::ToUpperCamelCase;
+use regex::Regex;
 
 use crate::{
     generation::{
         config::CodeGeneratorConfig,
         naming::{EscapeStyle, ForbiddenNames, FormatBoundNames, NamingRules, qualify},
     },
-    reflection::format::{Format, Named, Namespace, VariantFormat},
+    reflection::format::{Format, Named, Namespace, QualifiedTypeName, VariantFormat},
 };
 
 /// C# keywords, sorted.
@@ -97,6 +98,51 @@ pub(crate) const KEYWORDS: &[&str] = &[
     "while",
 ];
 
+/// The runtime type installed even when no codec plugin is active.
+pub(crate) const CORE_UNIT: &str = "Facet.Runtime.Serde.Unit";
+
+/// CLR identities of the common C# runtime types supplied by codec plugins.
+pub(crate) const SERDE_RUNTIME_TYPES: &[&str] = &[
+    "Facet.Runtime.Serde.DeserializationError",
+    "Facet.Runtime.Serde.IDeserializer",
+    "Facet.Runtime.Serde.ISerializer",
+    "Facet.Runtime.Serde.SerializationError",
+    CORE_UNIT,
+];
+
+/// Plain identifier characters from C# specification section 6.4.3, excluding
+/// source escapes and formatting characters (which change identifier identity).
+/// See the [C# identifier rules](https://learn.microsoft.com/dotnet/csharp/language-reference/language-specification/lexical-structure#643-identifiers).
+pub(crate) fn plain_identifier(name: &str) -> bool {
+    static IDENTIFIER: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"\A@?[_\p{L}\p{Nl}][\p{L}\p{Nl}\p{Mn}\p{Mc}\p{Nd}\p{Pc}]*\z")
+            .expect("valid plain C# identifier pattern")
+    });
+    IDENTIFIER.is_match(name)
+}
+
+/// A plain CLR type identifier, optionally carrying generic metadata arity.
+pub(crate) fn plain_type_identifier(name: &str) -> bool {
+    match name.split_once('`') {
+        Some((name, arity)) => {
+            plain_identifier(name)
+                && arity
+                    .parse::<u32>()
+                    .is_ok_and(|count| count > 0 && count.to_string() == arity)
+        }
+        None => plain_identifier(name),
+    }
+}
+
+/// A full CLR name, including namespace, generic arity and nested types.
+pub(crate) fn plain_clr_type_name(name: &str) -> bool {
+    let (namespace, types) = name
+        .rsplit_once('.')
+        .map_or((None, name), |(namespace, types)| (Some(namespace), types));
+    namespace.is_none_or(|namespace| namespace.split('.').all(plain_identifier))
+        && types.split('+').all(plain_type_identifier)
+}
+
 /// Types the emitter writes bare through a `using` directive, and the fully
 /// qualified form to use instead when the module declares a type of the same
 /// name. Sorted by the bare name.
@@ -164,7 +210,7 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ("Facet", "the `Facet` root namespace"),
     (
         "FacetHelpers",
-        "the runtime type `Facet.Runtime.Serde.FacetHelpers`",
+        "the runtime type `Facet.Runtime.Bincode.FacetHelpers`",
     ),
     (
         "IDeserializer",
@@ -172,11 +218,11 @@ pub(crate) const FORBIDDEN_TYPES: ForbiddenNames = &[
     ),
     (
         "IFacetDeserializable",
-        "the runtime interface `Facet.Runtime.Serde.IFacetDeserializable`",
+        "the runtime interface `Facet.Runtime.Bincode.IFacetDeserializable`",
     ),
     (
         "IFacetSerializable",
-        "the runtime interface `Facet.Runtime.Serde.IFacetSerializable`",
+        "the runtime interface `Facet.Runtime.Bincode.IFacetSerializable`",
     ),
     (
         "ISerializer",
@@ -313,6 +359,9 @@ pub(crate) fn global_name(
     namespace: &Namespace,
     config: &CodeGeneratorConfig,
 ) -> String {
+    if name.starts_with("global::") {
+        return name.to_string();
+    }
     match namespace {
         Namespace::Root => {
             let module = config
@@ -324,6 +373,27 @@ pub(crate) fn global_name(
             format!("global::{module}.{name}")
         }
         Namespace::Named(_) => format!("global::{name}"),
+    }
+}
+
+/// Render a requalified name, preserving the exact spelling of an explicit
+/// external CLR namespace. Other namespaces follow the generated casing.
+pub(crate) fn format_qualified_type_name(name: &QualifiedTypeName) -> String {
+    let type_name = name.name.to_upper_camel_case();
+    match &name.namespace {
+        Namespace::Root => type_name,
+        Namespace::Named(namespace) => {
+            let namespace = if namespace.starts_with("global::") {
+                namespace.clone()
+            } else {
+                namespace
+                    .split('.')
+                    .map(str::to_upper_camel_case)
+                    .collect::<Vec<_>>()
+                    .join(".")
+            };
+            format!("{namespace}.{type_name}")
+        }
     }
 }
 

@@ -14,6 +14,7 @@ use crate::{
     generation::{
         CodeGenerator, CodeGeneratorConfig, Container, Emitter,
         csharp::{
+            CSharpConfig,
             emitter::{CSharp, check_nested_options, write_module_header},
             naming,
         },
@@ -22,7 +23,7 @@ use crate::{
         naming::check_reserved_names,
         plugin::{self, CompanionFile, EmitterPlugin, render_companion_files},
     },
-    reflection::format::{Format, FormatHolder, Namespace, QualifiedTypeName},
+    reflection::format::{FormatHolder, Namespace, QualifiedTypeName},
 };
 
 /// Main configuration object for C# code generation.
@@ -32,6 +33,8 @@ use crate::{
 pub struct CSharpCodeGenerator<'a> {
     /// Language-independent configuration.
     pub(crate) config: &'a CodeGeneratorConfig,
+    /// C#-specific namespace settings.
+    csharp_config: CSharpConfig,
     /// Pre-built plugins to apply during code generation.
     pub(crate) plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
 }
@@ -40,6 +43,7 @@ impl<'a> CodeGenerator<'a> for CSharpCodeGenerator<'a> {
     fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
+            csharp_config: CSharpConfig::default(),
             plugins: vec![],
         }
     }
@@ -57,8 +61,16 @@ impl<'a> CSharpCodeGenerator<'a> {
     pub fn new(config: &'a CodeGeneratorConfig) -> Self {
         Self {
             config,
+            csharp_config: CSharpConfig::default(),
             plugins: vec![],
         }
+    }
+
+    /// Set C#-specific settings without changing the shared module config.
+    #[must_use]
+    pub fn with_csharp_config(mut self, config: CSharpConfig) -> Self {
+        self.csharp_config = config;
+        self
     }
 
     /// Set pre-built plugins, returning the modified generator.
@@ -80,10 +92,12 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// Returns an error if a plugin declares a reference to a type that is not
     /// in the registry.
-    fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+    pub(super) fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
         let mut config = self.config.clone();
         config.update_from(registry);
-        config.requalify_enums(registry, Self::requalify);
+        config.requalify_enums(registry, |config, name| {
+            self.csharp_config.requalify(config, name)
+        });
         plugin::referenced_types(&self.plugins, &config)?;
         Ok(config)
     }
@@ -104,7 +118,7 @@ impl<'a> CSharpCodeGenerator<'a> {
         check_reserved_names(registry, &naming::RULES)?;
         check_nested_options(registry)?;
 
-        let updated_registry = Self::update_qualified_names(&config, registry);
+        let updated_registry = self.update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
         for p in &self.plugins {
             lang = lang.with_plugin(p.clone());
@@ -141,7 +155,7 @@ impl<'a> CSharpCodeGenerator<'a> {
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let config = self.module_config(registry)?;
 
-        let updated_registry = Self::update_qualified_names(&config, registry);
+        let updated_registry = self.update_qualified_names(&config, registry);
         let mut lang = CSharp::new(&config, &updated_registry);
         for p in &self.plugins {
             lang = lang.with_plugin(p.clone());
@@ -161,7 +175,7 @@ impl<'a> CSharpCodeGenerator<'a> {
 
     /// Update [`QualifiedTypeName`] instances for C#'s dotted-namespace rules.
     ///
-    /// Every namespace is declared under the *root package* (the parent the
+    /// Unmapped namespaces are declared under the *root package* (the parent the
     /// installer nested this module under, or the module itself when it has
     /// none), so references are rooted there rather than at `module_name()`,
     /// which for a namespaced module already ends in its own namespace.
@@ -183,11 +197,19 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///    `Named("Company.Models")`, and inside `Example.Users` (parent
     ///    `Example`) becomes `Named("Example")`, so that it cannot mean a
     ///    same-named type of the module's own.
-    fn update_qualified_names(config: &CodeGeneratorConfig, registry: &Registry) -> Registry {
+    /// 5. **Explicit external namespace** — uses its full CLR namespace with
+    ///    exact casing and a `global::` qualifier, independently of this
+    ///    module's root package.
+    fn update_qualified_names(
+        &self,
+        config: &CodeGeneratorConfig,
+        registry: &Registry,
+    ) -> Registry {
         let mut updated_registry = registry.clone();
 
         for container_format in updated_registry.values_mut() {
-            Self::requalify_type_names(config, container_format);
+            self.csharp_config
+                .requalify_type_names(config, container_format);
         }
 
         updated_registry
@@ -200,17 +222,12 @@ impl<'a> CSharpCodeGenerator<'a> {
         config: &CodeGeneratorConfig,
         holder: &mut impl FormatHolder,
     ) {
-        let _ = holder.visit_mut(&mut |format| {
-            if let Format::TypeName(qualified_name) = format {
-                *qualified_name = Self::requalify(config, qualified_name);
-            }
-            Ok(())
-        });
+        CSharpConfig::default().requalify_type_names(config, holder);
     }
 
-    /// The spelling [`update_qualified_names`](Self::update_qualified_names)
-    /// gives a reference to `name`, exported to plugins as
-    /// [`csharp::requalify`](crate::generation::csharp::requalify).
+    /// Default namespace spelling without explicit external mappings, exported
+    /// to plugins as [`csharp::requalify`](crate::generation::csharp::requalify).
+    /// Mapped references use [`CSharpConfig::requalify`] instead.
     pub(crate) fn requalify(
         config: &CodeGeneratorConfig,
         name: &QualifiedTypeName,

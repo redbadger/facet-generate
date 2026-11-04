@@ -37,6 +37,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 tempfile = "3.27.0"
 url = "2.5.8"
 bytes = "1.12"
+rstest = { version = "0.28", default-features = false }
 
 [features]
 default = ["generate"]
