@@ -274,12 +274,20 @@ impl EmitterPlugin<CSharp> for BincodePlugin {
             write_record_bincode_helpers(w, ctx.name(), &variants, &scope)
         } else {
             let fields = ctx.fields();
+            let properties = naming::struct_properties(ctx.name(), &fields);
             let scope = Scope::new(ctx.config).with_members(
-                fields
+                properties
                     .iter()
-                    .map(|f| (f.name.to_upper_camel_case(), Some(&f.value))),
+                    .zip(&fields)
+                    .map(|(property, f)| (property.clone(), Some(&f.value))),
             );
-            write_class_bincode_methods(w, &ctx.name().to_upper_camel_case(), &fields, &scope)
+            write_class_bincode_methods(
+                w,
+                &ctx.name().to_upper_camel_case(),
+                &fields,
+                &properties,
+                &scope,
+            )
         }
     }
 
@@ -447,19 +455,20 @@ impl<'a> Scope<'a> {
 // ---------------------------------------------------------------------------
 
 /// Writes `Serialize`, `Deserialize`, `BincodeSerialize`, and `BincodeDeserialize`
-/// methods into the body of a `class` or `sealed record` type.
+/// methods into the body of a `class` or `sealed record` type, whose
+/// `properties` are the C# names of `fields`.
 fn write_class_bincode_methods(
     w: &mut dyn IndentWrite,
     class_name: &str,
     fields: &[Named<Format>],
+    properties: &[String],
     scope: &Scope<'_>,
 ) -> io::Result<()> {
     writeln!(w, "public void Serialize(ISerializer serializer)")?;
     with_block(w, Newlines::BOTH, |w| {
         writeln!(w, "serializer.IncreaseContainerDepth();")?;
-        for field in fields {
-            let field_name = field.name.to_upper_camel_case();
-            write_serialize_statement(w, &field_name, &field.value, scope)?;
+        for (field, property) in fields.iter().zip(properties) {
+            write_serialize_statement(w, property, &field.value, scope)?;
         }
         writeln!(w, "serializer.DecreaseContainerDepth();")?;
         Ok(())
@@ -483,8 +492,7 @@ fn write_class_bincode_methods(
         } else {
             write!(w, "return new {class_name} ")?;
             with_block(w, Newlines::OPEN, |w| {
-                for field in fields {
-                    let prop_name = field.name.to_upper_camel_case();
+                for (field, prop_name) in fields.iter().zip(properties) {
                     let lower_camel_name = field.name.to_lower_camel_case();
                     let local_name = escape_identifier(&lower_camel_name);
                     writeln!(w, "{prop_name} = {local_name},")?;

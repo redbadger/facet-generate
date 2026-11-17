@@ -39,8 +39,8 @@ pub struct ListKeys {
 
 #[derive(Facet)]
 pub struct Keys {
-    // Named `items` rather than `keys`: a C# property may not share its name
-    // with its enclosing type (CS0542), which the pre-pass rejects.
+    // Named `items` rather than `keys`: C# would rename a property named like
+    // its enclosing type to `Keys_` (CS0542).
     pub items: Vec<String>,
     pub next_cursor: u64,
 }

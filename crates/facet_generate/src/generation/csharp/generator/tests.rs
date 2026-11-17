@@ -380,24 +380,32 @@ fn field_named_get_hash_code_is_rejected() {
     );
 }
 
+/// A struct's class renames a property named like it (#268).
 #[test]
-fn field_named_after_its_enclosing_type_is_rejected() {
+fn field_named_after_its_enclosing_type_is_accepted() {
     #[derive(facet::Facet)]
     struct Keys {
         keys: Vec<String>,
     }
 
-    let registry = crate::reflect!(Keys).unwrap();
-    let cfg = CodeGeneratorConfig::new("Example".to_string());
-    let err = CSharpCodeGenerator::new(&cfg)
-        .output(&mut Vec::new(), &registry)
-        .unwrap_err();
+    #[derive(facet::Facet)]
+    struct Value(u32);
 
-    assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
-    assert_eq!(
-        err.to_string(),
-        "C#: field `keys` of `Keys` would become property `Keys`, the same name as its enclosing type (CS0542); rename it with #[facet(rename = \"...\")]"
-    );
+    #[derive(facet::Facet)]
+    struct Field0(u32, u32);
+
+    let registry = crate::reflect!(Keys, Value, Field0).unwrap();
+    let cfg = CodeGeneratorConfig::new("Example".to_string());
+    let mut out = Vec::new();
+    CSharpCodeGenerator::new(&cfg)
+        .output(&mut out, &registry)
+        .unwrap();
+
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("private ObservableCollection<string> _keys_;"));
+    assert!(out.contains("private uint _value_;"));
+    assert!(out.contains("private uint _field0_;"));
+    assert!(out.contains("private uint _field1;"));
 }
 
 /// A variant's record renames a property named like it instead (#193).

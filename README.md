@@ -750,8 +750,8 @@ A few names cannot be escaped or qualified: a type named after something the mod
 imports explicitly (`Serializer`, `Deserializer`, `Bytes`, `UUID`, the TypeScript aliases
 such as `str` and `Seq`), or a field that would become a member the language or the
 generated code already provides (`toString`, `copy` or `hashCode` on a Kotlin data class,
-`GetHashCode` or a property named like its class in C#, `serializer` and `deserializer`
-everywhere). Generation stops before writing anything and says what to rename:
+`GetHashCode` in C#, `serializer` and `deserializer` everywhere). Generation stops before
+writing anything and says what to rename:
 
 ```text
 Kotlin: field `to_string` of `Foo` would become `toString`, which Kotlin generates for every data class; rename it with #[facet(rename = "...")]
