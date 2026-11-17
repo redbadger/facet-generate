@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Bug Fixes
+
+- **Doc comments in generated code no longer contain rustdoc links.** The generators and each public `write_doc` function wrote rustdoc link syntax to the generated code as it was. A doc then showed text such as ``[`Value::None`](crate::protocol::Value::None)``, and reference definitions such as ``[`Value::None`]: crate::protocol::Value::None``. The Rust items to which these links point do not exist in Swift, Kotlin, TypeScript or C#. A link to a Rust item now becomes its text, for example `` `Value::None` ``. The generators remove each reference definition line. A link to a URL stays a link. In Swift, Kotlin and TypeScript it becomes an inline Markdown link, `[text](url)`. In C# it becomes `text (url)`, because C# doc comments do not use Markdown. Code spans, fenced code blocks and brackets that are not links, such as `[0, 1]`, do not change
+
 ## [0.22.3] - 2026-11-03
 
 This release fixes a crash in the Swift runtime on 32-bit Apple targets. It also makes the C# installer write the NuGet dependencies of plugins into the generated project file. It is a patch release with no API change. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.

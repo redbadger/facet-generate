@@ -21,13 +21,21 @@ use crate::generation::{doc_comment, indent::IndentWrite};
 /// and each `/*` becomes `/\*`. Thus the text cannot close the comment or
 /// open a new one.
 ///
+/// The function also rewrites rustdoc links, because the Rust items to which
+/// they point do not exist in the generated code. A link to a Rust item, for
+/// example ``[`Value`](crate::Value)`` or ``[`Value`]``, becomes its text,
+/// `` `Value` ``. The function removes each reference definition line, for
+/// example ``[`Value`]: crate::Value``.
+/// A link to a URL becomes an inline Markdown link, `[text](url)`.
+/// The function does not change code spans or fenced code blocks.
+///
 /// # Errors
 ///
 /// Returns an error if a write to `w` fails.
 pub fn write_doc<S: AsRef<str>>(w: &mut dyn IndentWrite, lines: &[S]) -> Result<()> {
     let escape = |line: &str| line.replace("*/", "*\\/").replace("/*", "/\\*");
 
-    match doc_comment::lines(lines).as_slice() {
+    match doc_comment::lines(lines, doc_comment::Links::Markdown).as_slice() {
         [] => Ok(()),
         [line] => writeln!(w, "/** {} */", escape(line)),
         lines => {
@@ -94,5 +102,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), "/** Text. */\n");
+    }
+
+    #[test]
+    fn doc_rewrites_links() {
+        assert_eq!(
+            doc(&[
+                "Returns [`Value::None`](crate::Value::None), see [docs].",
+                "",
+                "[docs]: https://example.com",
+            ]),
+            "    /** Returns `Value::None`, see [docs](https://example.com). */\n"
+        );
     }
 }

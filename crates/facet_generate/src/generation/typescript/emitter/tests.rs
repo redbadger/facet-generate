@@ -1356,3 +1356,60 @@ fn doc_comments_on_adjacently_tagged_enum_variants() {
     }
     "#);
 }
+
+#[test]
+fn doc_comments_with_links() {
+    /// Holds a [`Value::None`](crate::Value::None) or a [`DataResult`].
+    ///
+    /// See [the guide] and [`serde`](https://serde.rs). A `[u8; 32]` key stays.
+    ///
+    /// [`DataResult`]: crate::DataResult
+    /// [the guide]: https://example.com/guide
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Linked {
+        /// The unit variant, not [`Linked::Other`].
+        Unit,
+        Other {
+            /// [`Linked`]: crate::Linked
+            field: bool,
+            /// The [unit][`Linked::Unit`] variant.
+            other: i32,
+        },
+    }
+
+    let actual = emit!(Linked as TypeScript).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+
+    /**
+     * Holds a `Value::None` or a `DataResult`.
+     *
+     * See [the guide](https://example.com/guide) and [`serde`](https://serde.rs). A `[u8; 32]` key stays.
+     */
+    export type Linked =
+        | {
+            /** The unit variant, not `Linked::Other`. */
+            kind: "Unit";
+        }
+        | {
+            kind: "Other";
+            field: bool;
+            /** The unit variant. */
+            other: int32;
+        };
+
+    /** The unit variant, not `Linked::Other`. */
+    export const linkedUnit = (): Linked => ({ kind: "Unit" });
+
+    export const linkedOther = (field: bool, other: int32): Linked => ({ kind: "Other", field, other });
+
+    export function matchLinked<R>(value: Linked, cases: {
+        Unit: (v: Extract<Linked, { kind: "Unit" }>) => R;
+        Other: (v: Extract<Linked, { kind: "Other" }>) => R;
+    }): R {
+        return cases[value.kind as Linked["kind"]](value as never);
+    }
+    "#);
+}

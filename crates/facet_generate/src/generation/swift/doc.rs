@@ -16,11 +16,19 @@ use crate::generation::{doc_comment, indent::IndentWrite};
 /// Otherwise it starts each line of text with `/// `. A blank line becomes
 /// `///`. A line comment has no end marker, so the text needs no escapes.
 ///
+/// The function also rewrites rustdoc links, because the Rust items to which
+/// they point do not exist in the generated code. A link to a Rust item, for
+/// example ``[`Value`](crate::Value)`` or ``[`Value`]``, becomes its text,
+/// `` `Value` ``. The function removes each reference definition line, for
+/// example ``[`Value`]: crate::Value``.
+/// A link to a URL becomes an inline Markdown link, `[text](url)`.
+/// The function does not change code spans or fenced code blocks.
+///
 /// # Errors
 ///
 /// Returns an error if a write to `w` fails.
 pub fn write_doc<S: AsRef<str>>(w: &mut dyn IndentWrite, lines: &[S]) -> Result<()> {
-    for line in doc_comment::lines(lines) {
+    for line in doc_comment::lines(lines, doc_comment::Links::Markdown) {
         if line.is_empty() {
             writeln!(w, "///")?;
         } else {
@@ -53,7 +61,7 @@ pub(crate) fn write_parameters<W: Write + ?Sized>(
     }
     writeln!(w, "/// - Parameters:")?;
     for (name, comments) in params {
-        let lines = doc_comment::lines(comments);
+        let lines = doc_comment::lines(comments, doc_comment::Links::Markdown);
         let Some((first, rest)) = lines.split_first() else {
             continue;
         };
@@ -125,6 +133,18 @@ mod tests {
         ///
         ///     a > b
         "
+        );
+    }
+
+    #[test]
+    fn doc_rewrites_links() {
+        assert_eq!(
+            doc(&[
+                "Returns [`Value::None`](crate::Value::None), see [docs].",
+                "",
+                "[docs]: https://example.com",
+            ]),
+            "    /// Returns `Value::None`, see [docs](https://example.com).\n"
         );
     }
 }
