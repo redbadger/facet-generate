@@ -1121,3 +1121,47 @@ fn doc_comments_on_unit_enum_variants() {
     }
     ");
 }
+
+#[test]
+fn doc_comments_with_links() {
+    /// Holds a [`Value::None`](crate::Value::None) or a [`DataResult`].
+    ///
+    /// See [the guide] and [`serde`](https://serde.rs). A `[u8; 32]` key stays.
+    ///
+    /// [`DataResult`]: crate::DataResult
+    /// [the guide]: https://example.com/guide
+    #[derive(Facet)]
+    #[repr(C)]
+    #[allow(unused)]
+    enum Linked {
+        /// The unit variant, not [`Linked::Other`].
+        Unit,
+        Other {
+            /// [`Linked`]: crate::Linked
+            field: bool,
+            /// The [unit][`Linked::Unit`] variant.
+            other: i32,
+        },
+    }
+
+    let actual = emit!(Linked as CSharp).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    /// <summary>
+    /// Holds a `Value::None` or a `DataResult`.
+    ///
+    /// See the guide (https://example.com/guide) and `serde` (https://serde.rs). A `[u8; 32]` key stays.
+    /// </summary>
+    public abstract record Linked {
+        /// <summary>
+        /// The unit variant, not `Linked::Other`.
+        /// </summary>
+        public sealed record Unit() : Linked;
+
+        /// <param name="Field"></param>
+        /// <param name="Other_">The unit variant.</param>
+        public sealed record Other(bool Field, int Other_) : Linked;
+
+    }
+    "#);
+}

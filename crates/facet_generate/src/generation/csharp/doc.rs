@@ -17,6 +17,15 @@ use crate::generation::{doc_comment, indent::IndentWrite};
 /// blank line becomes `///`. The function escapes `&`, `<` and `>` in the
 /// text, so that the text cannot break the XML.
 ///
+/// The function also rewrites rustdoc links, because the Rust items to which
+/// they point do not exist in the generated code. A link to a Rust item, for
+/// example ``[`Value`](crate::Value)`` or ``[`Value`]``, becomes its text,
+/// `` `Value` ``. The function removes each reference definition line, for
+/// example ``[`Value`]: crate::Value``.
+/// A link to a URL becomes `text (url)`, because a C# doc comment does not
+/// use Markdown.
+/// The function does not change code spans or fenced code blocks.
+///
 /// # Errors
 ///
 /// Returns an error if a write to `w` fails.
@@ -37,7 +46,7 @@ pub(crate) fn write_doc_with_params<W: Write + ?Sized, S: AsRef<str>>(
     comments: &[S],
     params: &[(&str, &[String])],
 ) -> Result<()> {
-    let summary = doc_comment::lines(comments);
+    let summary = doc_comment::lines(comments, doc_comment::Links::Text);
     if !summary.is_empty() {
         writeln!(w, "/// <summary>")?;
         write_xml_lines(w, &summary)?;
@@ -51,7 +60,7 @@ pub(crate) fn write_doc_with_params<W: Write + ?Sized, S: AsRef<str>>(
         return Ok(());
     }
     for (name, comments) in params {
-        match doc_comment::lines(comments).as_slice() {
+        match doc_comment::lines(comments, doc_comment::Links::Text).as_slice() {
             [] => writeln!(w, r#"/// <param name="{name}"></param>"#)?,
             [line] => writeln!(
                 w,
@@ -68,7 +77,7 @@ pub(crate) fn write_doc_with_params<W: Write + ?Sized, S: AsRef<str>>(
     Ok(())
 }
 
-fn write_xml_lines<W: Write + ?Sized>(w: &mut W, lines: &[&str]) -> Result<()> {
+fn write_xml_lines<W: Write + ?Sized>(w: &mut W, lines: &[String]) -> Result<()> {
     for line in lines {
         if line.is_empty() {
             writeln!(w, "///")?;
@@ -162,5 +171,17 @@ mod tests {
     #[test]
     fn doc_with_params_and_no_summary() {
         insta::assert_snapshot!(doc_with_params(&[""], &[("One", &["Text."])]), @r#"/// <param name="One">Text.</param>"#);
+    }
+
+    #[test]
+    fn doc_rewrites_links() {
+        assert_eq!(
+            doc(&[
+                "Returns [`Value::None`](crate::Value::None), see [docs].",
+                "",
+                "[docs]: https://example.com",
+            ]),
+            "    /// <summary>\n    /// Returns `Value::None`, see docs (https://example.com).\n    /// </summary>\n"
+        );
     }
 }
