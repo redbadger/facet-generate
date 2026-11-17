@@ -54,7 +54,7 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::{builtin, global_name, variant_properties};
+use super::naming::{backing_field, builtin, global_name, variant_properties};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -263,9 +263,9 @@ fn write_field<W: IndentWrite>(
     writeln!(w, "[ObservableProperty]")?;
     writeln!(
         w,
-        "private {} _{};",
+        "private {} {};",
         csharp_type(&field.value, &lang.config),
-        field.name.to_lower_camel_case()
+        backing_field(ctx.name(), &field.name)
     )
 }
 

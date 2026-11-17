@@ -798,6 +798,78 @@ Console.WriteLine("Variants named like their own properties roundtrip: PASSED");
     dotnet_run(&dir);
 }
 
+/// Structs with a property named like the struct round trip (#268): the
+/// class renames the property with a trailing underscore.
+#[test]
+fn test_csharp_bincode_runtime_on_structs_named_like_their_own_properties() {
+    #[derive(Facet, Serialize)]
+    struct Keys {
+        keys: Vec<String>,
+        next_cursor: u64,
+    }
+
+    #[derive(Facet, Serialize)]
+    struct Value(u32);
+
+    #[derive(Facet, Serialize)]
+    struct Field1(u32, u32);
+
+    let dir = tempdir().unwrap();
+    let dir = dir.path().to_path_buf().join("testing");
+
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&reflect!(Keys, Value, Field1).unwrap())
+        .unwrap();
+
+    let keys = bincode::serialize(&Keys {
+        keys: vec!["a".to_string(), "b".to_string()],
+        next_cursor: 3,
+    })
+    .unwrap();
+    let value = bincode::serialize(&Value(4)).unwrap();
+    let field1 = bincode::serialize(&Field1(5, 6)).unwrap();
+
+    make_executable(&dir, "Example");
+    fs::write(
+        dir.join("Program.cs"),
+        format!(
+            r#"using System;
+using System.Linq;
+using Example;
+
+static void Assert(bool condition, string message)
+{{
+    if (!condition) throw new Exception("Assertion failed: " + message);
+}}
+
+byte[] keysBytes = {keys};
+var keys = Keys.BincodeDeserialize(keysBytes);
+Assert(keys.Keys_.SequenceEqual(new[] {{ "a", "b" }}) && keys.NextCursor == 3, "Keys {{ keys: [a, b], next_cursor: 3 }}");
+Assert(keysBytes.SequenceEqual(keys.BincodeSerialize()), "Keys did not roundtrip");
+
+byte[] valueBytes = {value};
+var value = Value.BincodeDeserialize(valueBytes);
+Assert(value.Value_ == 4, "Value(4)");
+Assert(valueBytes.SequenceEqual(value.BincodeSerialize()), "Value did not roundtrip");
+
+byte[] field1Bytes = {field1};
+var field1 = Field1.BincodeDeserialize(field1Bytes);
+Assert(field1.Field0 == 5 && field1.Field1_ == 6, "Field1(5, 6)");
+Assert(field1Bytes.SequenceEqual(field1.BincodeSerialize()), "Field1 did not roundtrip");
+
+Console.WriteLine("Structs named like their own properties roundtrip: PASSED");
+"#,
+            keys = quote_bytes(&keys),
+            value = quote_bytes(&value),
+            field1 = quote_bytes(&field1),
+        ),
+    )
+    .unwrap();
+
+    dotnet_run(&dir);
+}
+
 /// Tuples of eight to twelve elements round trip (#212). Past seven, a C#
 /// `ValueTuple` nests the rest of its elements in its `TRest`, which the
 /// elements are read from and written to in order.
@@ -1041,6 +1113,7 @@ mod json_fixture {
         pub adjacent: Vec<Adjacent>,
         pub events: Vec<Event>,
         pub signals: Vec<Signal>,
+        pub keys: Keys,
         pub tree: Tree,
         pub list: HashSet,
         pub renamed: Renamed,
@@ -1200,6 +1273,13 @@ mod json_fixture {
         Field0(u8, u8),
     }
 
+    /// A struct with a property named like the struct, which C# renames
+    /// `Keys_`, keeping the wire name (#268).
+    #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
+    pub struct Keys {
+        pub keys: Vec<String>,
+    }
+
     #[derive(Facet, Serialize, Deserialize, Debug, PartialEq, Eq)]
     pub struct Tree {
         pub value: u32,
@@ -1344,6 +1424,9 @@ mod json_fixture {
                 Signal::Value(8),
                 Signal::Field0(1, 2),
             ],
+            keys: Keys {
+                keys: vec!["k".to_string()],
+            },
             tree: tree(
                 1,
                 Some(tree(2, None, None)),
@@ -1461,6 +1544,7 @@ static JsonData Sample()
             new Signal.Value(8),
             new Signal.Field0(1, 2),
         },
+        Keys = new Keys { Keys_ = new ObservableCollection<string> { "k" } },
         Tree = MakeTree(1, MakeTree(2, null, null), MakeTree(3, MakeTree(4, null, null), null)),
         List = new Example.HashSet.Cons(1, new Example.HashSet.Cons(2, new Example.HashSet.Nil())),
         Renamed = new Renamed { SnakeCaseField = 1, Explicit = 2, WithDash = 3, Default = true },
@@ -1569,6 +1653,7 @@ Assert(value.Choices[4] is Choice.Struct {{ A: 1, Bee: "b" }}, "struct variant")
 Assert(value.Events[1] is Event.Seen {{ Presence: 3, Other.X: 4 }}, "variant named like a type");
 Assert(value.Signals[0] is Signal.Presence {{ Presence_: 7 }}, "property named like its variant");
 Assert(value.Signals[2] is Signal.Field0 {{ Field0_: 1, Field1: 2 }}, "element named like its variant");
+Assert(value.Keys.Keys_.Single() == "k", "property named like its struct");
 Assert(value.Maps.ByNewtype.Keys.Single().Value == "key", "newtype key");
 Assert(value.JsonSerialize() == sample.JsonSerialize(), $"decoded mismatch:\n  {{value.JsonSerialize()}}\n  {{sample.JsonSerialize()}}");
 

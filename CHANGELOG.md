@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 🐛 Bug Fixes
+
+- **C#: a struct's property named like the struct is renamed, not rejected.** C# does not allow a member named like the type that contains it (CS0542). A field named like its own struct, such as `keys` in `struct Keys { keys: Vec<String> }`, stopped generation with an error. The same occurred for a newtype struct named `Value` and a tuple struct named `Field0` or `Field1`. Such a property now gets a trailing underscore, as for a variant's property ([#202](https://github.com/redbadger/facet-generate/pull/202)). The backing field is `_keys_`, from which the MVVM toolkit makes the property `Keys_`. The bincode methods and the JSON converter use the new name. The JSON key is still the wire name (`keys`), and the output for every other struct does not change. The generator no longer rejects a field named like its type in C#. A variant named like its own enum, such as `Event` in `enum Event { Event(u32) }`, still does not build (CS0542) when the enum has data [#268](https://github.com/redbadger/facet-generate/issues/268)
+
 ## [0.22.4] - 2026-11-17
 
 This release removes rustdoc link syntax from the doc comments in generated Swift, Kotlin, TypeScript and C# code. It is a patch release with no API change. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
