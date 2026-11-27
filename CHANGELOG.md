@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.22.5] - unreleased
+
+This release lets a caller tell an installer not to write the package manifest. It adds one builder method to each installer, and the default output does not change. It also lets C# generation accept a struct field named like its struct. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
+
+### 🚀 Features
+
+- **Installers can leave out the package manifest.** The Kotlin, Swift, TypeScript and C# installers each have a new builder method, `package_manifest`. With `.package_manifest(false)`, `generate` writes the runtime and the sources, but not `build.gradle.kts`, `Package.swift`, `package.json` or the `.csproj` file. The default is `true`, so the installers write the manifest as before. If the project around the generated sources has its own manifest, use this option. For example, Crux adds the Kotlin output directory as a source root of its own Gradle project. Kotlin 2.4 then tried to compile `build.gradle.kts` in that directory as a script, and the build failed. `make_manifest` still returns the manifest text. The installers do not delete files. With `false`, an installer does not delete a manifest that an earlier run wrote, so the caller must delete it. With `false`, the Swift installer also accepts an external package at a `PackageLocation::Url` with no `version`, because only the manifest uses the version. This change does not move the Kotlin sources into `src/main/kotlin` ([#241](https://github.com/redbadger/facet-generate/issues/241))
 
 ### 🐛 Bug Fixes
 

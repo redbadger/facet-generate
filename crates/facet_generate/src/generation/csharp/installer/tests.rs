@@ -820,3 +820,68 @@ fn rejects_an_option_of_an_option() {
         .generate(&reflect!(Fine).unwrap())
         .unwrap();
 }
+
+/// The relative paths of the files under `dir`, sorted.
+fn written_files(dir: &std::path::Path) -> Vec<String> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, files: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, files);
+            } else {
+                let relative = path.strip_prefix(root).unwrap();
+                files.push(relative.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(dir, dir, &mut files);
+    files.sort();
+    files
+}
+
+/// By default the installer writes `Example.Types.csproj`. With
+/// `package_manifest(false)` it writes the same runtime and sources, and no
+/// manifest.
+#[test]
+fn package_manifest_can_be_left_out() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let with_manifest = tempfile::tempdir().unwrap();
+    Installer::new("Example.Types", with_manifest.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let without_manifest = tempfile::tempdir().unwrap();
+    Installer::new("Example.Types", without_manifest.path())
+        .plugin(BincodePlugin)
+        .package_manifest(false)
+        .generate(&registry)
+        .unwrap();
+
+    let with_manifest = written_files(with_manifest.path());
+    let without_manifest = written_files(without_manifest.path());
+
+    assert!(
+        with_manifest
+            .iter()
+            .any(|file| file == "Example.Types.csproj")
+    );
+    assert!(without_manifest.iter().any(|file| {
+        std::path::Path::new(file)
+            .extension()
+            .is_some_and(|extension| extension == "cs")
+    }));
+
+    let expected: Vec<String> = with_manifest
+        .into_iter()
+        .filter(|file| file != "Example.Types.csproj")
+        .collect();
+    assert_eq!(without_manifest, expected);
+}

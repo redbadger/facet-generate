@@ -58,6 +58,8 @@ pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
     plugins: Vec<Arc<dyn EmitterPlugin<Kotlin>>>,
+    /// Whether [`generate`](Self::generate) writes `build.gradle.kts`.
+    package_manifest: bool,
 }
 
 impl Installer {
@@ -73,6 +75,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
             plugins: vec![],
+            package_manifest: true,
         }
     }
 
@@ -96,12 +99,29 @@ impl Installer {
         self
     }
 
+    /// Set whether [`generate`](Self::generate) writes the package manifest,
+    /// `build.gradle.kts`.
+    ///
+    /// The default is `true`. If the project around the generated sources
+    /// has its own manifest, pass `false`. The installer then writes the
+    /// runtime and the sources only.
+    /// [`make_manifest`](Self::make_manifest) still returns the manifest text.
+    ///
+    /// The installer does not delete files. With `false`, it does not delete
+    /// a `build.gradle.kts` that an earlier run wrote. The caller must delete it.
+    #[must_use]
+    pub fn package_manifest(mut self, package_manifest: bool) -> Self {
+        self.package_manifest = package_manifest;
+        self
+    }
+
     /// Generate all code for the given registry.
     ///
     /// This method:
     /// 1. Installs the appropriate runtimes based on the configured encoding
     /// 2. Splits the registry by namespace and installs each module
-    /// 3. Writes the package manifest
+    /// 3. Writes the package manifest, unless
+    ///    [`package_manifest`](Self::package_manifest) is `false`
     ///
     /// # Errors
     ///
@@ -155,8 +175,10 @@ impl Installer {
         }
 
         // Write the package manifest
-        let package_name = self.package_name.clone();
-        self.install_manifest(&package_name)?;
+        if self.package_manifest {
+            let package_name = self.package_name.clone();
+            self.install_manifest(&package_name)?;
+        }
 
         Ok(())
     }

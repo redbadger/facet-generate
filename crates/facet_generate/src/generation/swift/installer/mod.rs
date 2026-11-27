@@ -141,6 +141,8 @@ pub struct Installer {
     external_packages: ExternalPackages,
     platforms: Vec<String>,
     plugins: Vec<Arc<dyn EmitterPlugin<Swift>>>,
+    /// Whether [`generate`](Self::generate) writes `Package.swift`.
+    package_manifest: bool,
     /// Which types conform to `Hashable` and `Equatable`, decided once over
     /// the whole registry by [`generate`](Self::generate) and handed to every
     /// module's generator, so that a module holding a type from another one
@@ -166,6 +168,7 @@ impl Installer {
             external_packages: ExternalPackages::new(),
             platforms: vec![],
             plugins: vec![],
+            package_manifest: true,
             conformance: None,
         }
     }
@@ -190,6 +193,27 @@ impl Installer {
         self
     }
 
+    /// Set whether [`generate`](Self::generate) writes the package manifest,
+    /// `Package.swift`.
+    ///
+    /// The default is `true`. If the project around the generated sources
+    /// has its own manifest, pass `false`. The installer then writes the
+    /// runtime and the sources only.
+    /// [`make_manifest`](Self::make_manifest) still returns the manifest text.
+    ///
+    /// The installer does not delete files. With `false`, it does not delete
+    /// a `Package.swift` that an earlier run wrote. The caller must delete it.
+    ///
+    /// With `false`, [`generate`](Self::generate) also accepts an external
+    /// package at a [`PackageLocation::Url`] with no
+    /// [`version`](ExternalPackage::version). Only the manifest uses the
+    /// version.
+    #[must_use]
+    pub fn package_manifest(mut self, package_manifest: bool) -> Self {
+        self.package_manifest = package_manifest;
+        self
+    }
+
     /// Set the deployment targets declared by the generated `Package.swift`.
     ///
     /// Each entry is a raw SPM platform expression, e.g. `".iOS(.v16)"`; they
@@ -207,7 +231,8 @@ impl Installer {
     /// This method:
     /// 1. Installs the appropriate runtimes based on the configured encoding
     /// 2. Splits the registry by namespace and installs each module
-    /// 3. Writes the package manifest
+    /// 3. Writes the package manifest, unless
+    ///    [`package_manifest`](Self::package_manifest) is `false`
     ///
     /// # Errors
     ///
@@ -223,7 +248,9 @@ impl Installer {
     /// each other in a cycle, which `SwiftPM` rejects (the error names the
     /// types along it), and when an external package at a
     /// [`PackageLocation::Url`] has no [`version`](ExternalPackage::version),
-    /// which the manifest needs to give `SwiftPM` a requirement.
+    /// which the manifest needs to give `SwiftPM` a requirement. This last
+    /// check applies only when [`package_manifest`](Self::package_manifest)
+    /// is `true`.
     ///
     /// Two packages generated with a plugin can't both be in one app, as each
     /// declares a `Serde` target; see [sharing the runtime between
@@ -231,7 +258,10 @@ impl Installer {
     pub fn generate(mut self, registry: &Registry) -> Result<(), Error> {
         let modules = module::split(&self.package_name, registry);
         self.check_namespaces(&modules)?;
-        self.check_external_packages()?;
+        // Only the manifest uses an external package's version.
+        if self.package_manifest {
+            self.check_external_packages()?;
+        }
 
         // Decide conformance over the whole registry, since a module's types
         // can hold types from other modules.
@@ -285,8 +315,10 @@ impl Installer {
         }
 
         // Write the package manifest
-        let package_name = self.package_name.clone();
-        self.install_manifest(&package_name)?;
+        if self.package_manifest {
+            let package_name = self.package_name.clone();
+            self.install_manifest(&package_name)?;
+        }
 
         Ok(())
     }

@@ -67,6 +67,7 @@ arguments to [`new`](crate::generation::typescript::Installer::new):
 | [`new(package_name, dir)`](crate::generation::typescript::Installer::new) | Names the package, which is also the root module's file name (`drawing.ts`), and the directory it is written to. |
 | [`plugin`](crate::generation::typescript::Installer::plugin) | Adds an [`EmitterPlugin`](crate::generation::plugin::EmitterPlugin), such as [`BincodePlugin`](crate::generation::bincode::BincodePlugin) or [`JsonPlugin`](crate::generation::json::JsonPlugin). Call it once per plugin; they run in the order added. Without one, only the type declarations are written. |
 | [`external_packages`](crate::generation::typescript::Installer::external_packages) | Takes namespaces from packages generated separately; see [External packages](#external-packages). |
+| [`package_manifest`](crate::generation::typescript::Installer::package_manifest) | If the project around the sources has its own manifest, pass `false` to leave out `package.json`. The default is `true`. The installer does not delete a `package.json` that an earlier run wrote, so the caller must delete it. |
 | [`generate`](crate::generation::typescript::Installer::generate) | Checks the namespaces, then writes the runtime, the modules and `package.json`. |
 
 [`make_manifest`](crate::generation::typescript::Installer::make_manifest)

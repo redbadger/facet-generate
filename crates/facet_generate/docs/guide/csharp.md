@@ -67,6 +67,7 @@ arguments to [`new`](crate::generation::csharp::Installer::new):
 | [`new(package_name, dir)`](crate::generation::csharp::Installer::new) | Names the root namespace, dot-separated (`Example.Drawing`), which also names the `.csproj` file, and the directory the project is written to. |
 | [`plugin`](crate::generation::csharp::Installer::plugin) | Adds an [`EmitterPlugin`](crate::generation::plugin::EmitterPlugin), such as [`BincodePlugin`](crate::generation::bincode::BincodePlugin) or [`JsonPlugin`](crate::generation::json::JsonPlugin). Call it once per plugin. Without one, only the type declarations are written. |
 | [`external_packages`](crate::generation::csharp::Installer::external_packages) | Takes namespaces from projects or NuGet packages generated separately; see [External packages](#external-packages). |
+| [`package_manifest`](crate::generation::csharp::Installer::package_manifest) | If the project around the sources has its own manifest, pass `false` to leave out the `.csproj` file. The default is `true`. The installer does not delete the `.csproj` file that an earlier run wrote, so the caller must delete it. |
 | [`generate`](crate::generation::csharp::Installer::generate) | Checks the namespaces, then writes the runtime, the sources and the project file. |
 
 [`make_manifest`](crate::generation::csharp::Installer::make_manifest) returns
