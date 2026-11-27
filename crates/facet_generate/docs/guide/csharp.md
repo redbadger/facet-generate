@@ -68,6 +68,7 @@ arguments to [`new`](crate::generation::csharp::Installer::new):
 | [`plugin`](crate::generation::csharp::Installer::plugin) | Adds an [`EmitterPlugin`](crate::generation::plugin::EmitterPlugin), such as [`BincodePlugin`](crate::generation::bincode::BincodePlugin) or [`JsonPlugin`](crate::generation::json::JsonPlugin). Call it once per plugin. Without one, only the type declarations are written. |
 | [`external_packages`](crate::generation::csharp::Installer::external_packages) | Takes namespaces from projects or NuGet packages generated separately; see [External packages](#external-packages). |
 | [`package_manifest`](crate::generation::csharp::Installer::package_manifest) | If the project around the sources has its own manifest, pass `false` to leave out the `.csproj` file. The default is `true`. The installer does not delete the `.csproj` file that an earlier run wrote, so the caller must delete it. |
+| [`external_namespace`](crate::generation::csharp::Installer::external_namespace) | Maps a Rust namespace to the full CLR namespace supplied by an external package. |
 | [`generate`](crate::generation::csharp::Installer::generate) | Checks the namespaces, then writes the runtime, the sources and the project file. |
 
 [`make_manifest`](crate::generation::csharp::Installer::make_manifest) returns
@@ -210,9 +211,14 @@ A type named like one the generated code declares or uses (`Enum`, `Facet`,
 An [`ExternalPackage`](crate::generation::ExternalPackage) says that a
 namespace's types come from another project, generated separately. The
 installer skips that namespace's module and adds a reference to the project
-file. The references to its types are written as if it had been generated
-here, `<RootNamespace>.<Namespace>.Type`, so generate the other project with
-the same root namespace.
+file. Use [`external_namespace`](crate::generation::csharp::Installer::external_namespace)
+to give its types their full CLR namespace, including the other project's root.
+The mapping preserves casing and writes references through `global::`, so a
+local type cannot hide the namespace. Without a mapping, references retain the
+earlier `<RootNamespace>.<Namespace>.Type` qualification.
+Mapping segments must be plain CLR identifiers. Unicode letters are supported;
+source Unicode escapes, invisible formatting characters, whitespace and comments
+are rejected. Keywords may use an `@` prefix or are escaped automatically.
 
 | [`PackageLocation`](crate::generation::PackageLocation) | Project file entry |
 |---|---|
@@ -226,12 +232,92 @@ set, and otherwise read from the URL: a `.nupkg` file name, the segment after
 segment. The version is [`version`](crate::generation::ExternalPackage::version)
 when set, then the version in the URL, then `1.0.0`.
 
-Two things stand in the way of referencing a separately generated project
-today. Both projects share a root namespace, so both project files get the same
-name, which NuGet rejects as an ambiguous project name until one is renamed.
-And each project carries its own copy of the runtime, in the same namespaces.
-Without a plugin the pair builds, but with one the compiler sees two
-`ISerializer` types and the build fails (CS1503)
+For example, map Rust namespace `geometry` to the CLR namespace
+`Example.Contracts.Geometry` in a separately generated Contracts project:
+
+```rust,no_run
+use facet_generate::{
+    Registry,
+    generation::{ExternalPackage, PackageLocation, bincode::BincodePlugin, csharp},
+};
+# let registry = Registry::new();
+# let out_dir = std::env::temp_dir().join("facet_generate_external_csharp");
+
+csharp::Installer::new("Example.App", &out_dir)
+    .plugin(BincodePlugin)
+    .external_packages(&[
+        ExternalPackage {
+            for_namespace: "geometry".into(),
+            location: PackageLocation::Path("../Contracts/Example.Contracts.csproj".into()),
+            module_name: None,
+            version: None,
+        },
+        ExternalPackage {
+            for_namespace: "serde".into(),
+            location: PackageLocation::Path("../Runtime/Runtime.csproj".into()),
+            module_name: None,
+            version: None,
+        },
+    ])
+    .external_namespace("geometry", "Example.Contracts.Geometry")
+    .generate(&registry)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+A Rust reference to `geometry::Point` is then written as
+`global::Example.Contracts.Geometry.Point`. The app project is named
+`Example.App.csproj`, so its name is distinct from `Example.Contracts.csproj`.
+The mapping changes type qualification; the project reference and NuGet package
+ID remain those of the `ExternalPackage` entry.
+
+Call `external_namespace` once for each mapping. The installer has no other
+way to set mappings.
+
+The low-level generator takes its mappings in a
+[`CSharpConfig`](crate::generation::csharp::CSharpConfig), separate from the
+shared `CodeGeneratorConfig`:
+
+**Rust**
+```rust
+use facet_generate::generation::csharp::CSharpConfig;
+
+let csharp_config = CSharpConfig::default()
+    .external_namespace("geometry", "Example.Contracts.Geometry");
+```
+
+Give it to `CSharpCodeGenerator::with_csharp_config`. A custom plugin that
+reflects its own formats needs a `CSharpConfig` with the same mappings as the
+installer or the generator. The plugin then calls
+`csharp_config.requalify(config, name)` or
+`csharp_config.requalify_format(config, format)`. The formats in emission
+contexts are already qualified, and enum metadata uses the same qualified names.
+
+The installer and the generator check each mapping before they write files.
+Each segment of the CLR namespace must be a plain CLR identifier. The
+generator also rejects a mapping for a namespace that its registry declares,
+because references to those types would go to the external namespace.
+
+The installer rejects mappings whose full CLR type names conflict with local
+types or namespaces before writing any files. `global::` prevents lexical
+shadowing, but cannot choose between two assemblies defining the same full
+type name. Choose a different app root or external mapping when those names
+would collide.
+Custom plugins report their helper and runtime type names through
+[`module_declarations`](crate::generation::plugin::EmitterPlugin::module_declarations)
+and [`runtime_declarations`](crate::generation::plugin::EmitterPlugin::runtime_declarations)
+so these checks include their declarations too.
+
+When projects use serialization plugins, configure them to take `serde` from
+one external runtime project as described in [Runtimes](#runtimes). This keeps
+their serializer and `Unit` types in the same assembly and avoids duplicate
+runtime type errors such as CS1503. Generate the runtime project with an empty
+registry and all plugins the projects need. Namespace mappings apply to reflected
+types; they do not relocate the built-in `Facet.Runtime` namespaces.
+
+If you keep the same root namespace in both projects, their generated `.csproj`
+names also match. Rename the external manifest before referencing it, or use
+distinct roots and an explicit namespace mapping, so a consuming application's
+NuGet restore has unique project names
 ([#240](https://github.com/redbadger/facet-generate/issues/240)).
 
 ## Using the generated code

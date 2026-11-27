@@ -54,7 +54,9 @@
 //! var items = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
 //! ```
 
-use super::naming::{backing_field, builtin, global_name, variant_properties};
+use super::naming::{
+    backing_field, builtin, format_qualified_type_name, global_name, variant_properties,
+};
 use std::{
     borrow::Cow,
     io::{Result, Write},
@@ -74,8 +76,7 @@ use crate::{
         plugin::{EmitContext, EmitterPlugin, any_plugin, collect_from_plugins},
     },
     reflection::format::{
-        ContainerFormat, Doc, Format, FormatHolder, Named, Namespace, QualifiedTypeName,
-        VariantFormat,
+        ContainerFormat, Doc, Format, FormatHolder, Named, QualifiedTypeName, VariantFormat,
     },
 };
 
@@ -596,6 +597,10 @@ pub fn render_type(format: &Format, config: &CodeGeneratorConfig) -> String {
 /// `Example.Shared.EventBincode.Serialize(Event, serializer);`.
 ///
 /// To requalify every type name inside a format, use [`requalify_format`].
+/// If the generator has external namespace mappings, give the plugin a
+/// [`CSharpConfig`](super::CSharpConfig) with the same mappings. Then use
+/// [`CSharpConfig::requalify`](super::CSharpConfig::requalify) instead.
+/// This helper uses the default root-package rules without external mappings.
 ///
 /// Apply it once, to a registry-spelled name: it is not idempotent. A second
 /// pass roots an already-rooted name at the root package again
@@ -795,19 +800,6 @@ fn csharp_type_in(format: &Format, config: &CodeGeneratorConfig, nested: &[Strin
             format!("({values})")
         }
         Format::TupleArray { content, size: _ } => format!("{}[]", render(content)),
-    }
-}
-
-fn format_qualified_type_name(qualified_type_name: &QualifiedTypeName) -> String {
-    match &qualified_type_name.namespace {
-        Namespace::Root => qualified_type_name.name.to_upper_camel_case(),
-        Namespace::Named(namespace) => {
-            format!(
-                "{}.{}",
-                namespace_name(namespace),
-                qualified_type_name.name.to_upper_camel_case()
-            )
-        }
     }
 }
 
