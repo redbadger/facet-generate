@@ -2,9 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.22.5] - unreleased
+## [0.22.5] - 2026-11-27
 
-This release lets a caller tell an installer not to write the package manifest. It adds one builder method to each installer, and the default output does not change. It also lets C# generation accept a struct field named like its struct. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
+This release lets a caller tell an installer not to write the package manifest. It also lets generated C# use types from the CLR namespace of a different project. C# generation now accepts a struct field named like its struct. The new API items are additions only, and the output for input that worked before does not change. `facet` stays pinned at `=0.46.5`. This release works with `facet-generate-attrs` 0.18.0 and 0.18.1.
 
 ### 🚀 Features
 
