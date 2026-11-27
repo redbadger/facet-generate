@@ -67,6 +67,9 @@ impl<'a> CSharpCodeGenerator<'a> {
     }
 
     /// Set C#-specific settings without changing the shared module config.
+    ///
+    /// The generator checks the external namespace mappings before it writes
+    /// output. See [`output`](Self::output) for the errors.
     #[must_use]
     pub fn with_csharp_config(mut self, config: CSharpConfig) -> Self {
         self.csharp_config = config;
@@ -90,9 +93,11 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if a plugin declares a reference to a type that is not
-    /// in the registry.
+    /// Returns an error if an external namespace mapping is not valid, or
+    /// maps a namespace that this module generates. It also returns an error
+    /// if a plugin declares a reference to a type that is not in the registry.
     pub(super) fn module_config(&self, registry: &Registry) -> Result<CodeGeneratorConfig> {
+        self.csharp_config.check(self.config, registry)?;
         let mut config = self.config.clone();
         config.update_from(registry);
         config.requalify_enums(registry, |config, name| {
@@ -110,7 +115,9 @@ impl<'a> CSharpCodeGenerator<'a> {
     /// [`InvalidInput`](std::io::ErrorKind::InvalidInput) one, before writing
     /// anything, if the registry has a name the generated code cannot use or
     /// an `Option<Option<T>>`, or a plugin declares a reference to a type that
-    /// is not in the registry.
+    /// is not in the registry. It also returns such an error if an external
+    /// namespace mapping is not valid, or maps a namespace that the registry
+    /// declares.
     pub fn output(&self, out: &mut impl Write, registry: &Registry) -> Result<()> {
         let w = &mut IndentedWriter::new(out, self.config.indent);
 
@@ -150,8 +157,9 @@ impl<'a> CSharpCodeGenerator<'a> {
     ///
     /// # Errors
     ///
-    /// Returns an error if rendering a header fails, or if a plugin declares a
-    /// reference to a type that is not in the registry.
+    /// Returns an error if rendering a header fails, if an external namespace
+    /// mapping is not valid or maps a namespace that the registry declares, or
+    /// if a plugin declares a reference to a type that is not in the registry.
     pub fn companion_files(&self, registry: &Registry) -> Result<Vec<CompanionFile>> {
         let config = self.module_config(registry)?;
 

@@ -229,6 +229,84 @@ fn external_namespace_mapping_preserves_casing_and_escapes_keywords() {
     }
 }
 
+/// The generator checks each mapping itself, so a caller that does not use
+/// the installer gets the same errors, before any output.
+#[rstest::rstest]
+#[case::whitespace("Foo Bar", "requires plain CLR identifiers")]
+#[case::empty_segment("Foo..Bar", "requires a nonempty dotted CLR namespace")]
+#[case::alias_qualifier(
+    "global::Foo.Bar",
+    "must name a CLR namespace without an alias qualifier"
+)]
+#[case::leading_digit("Foo.2Bar", "requires plain CLR identifiers")]
+fn generator_rejects_an_invalid_external_namespace(#[case] mapped: &str, #[case] expected: &str) {
+    let config = module_config("Example.App", None);
+    let registry = registry_with_struct_field(Format::TypeName(QualifiedTypeName::namespaced(
+        "geo".to_string(),
+        "Point".to_string(),
+    )));
+    let generator = CSharpCodeGenerator::new(&config)
+        .with_csharp_config(CSharpConfig::default().external_namespace("geo", mapped))
+        .with_plugins(vec![Arc::new(BincodePlugin), Arc::new(JsonPlugin)]);
+
+    let mut output = Vec::new();
+    let error = generator.output(&mut output, &registry).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        error.to_string().contains(&format!(
+            "external namespace mapping for \"geo\" {expected}"
+        )),
+        "{error}"
+    );
+    assert!(output.is_empty(), "{}", String::from_utf8_lossy(&output));
+
+    let error = generator.companion_files(&registry).unwrap_err();
+    assert!(error.to_string().contains(expected), "{error}");
+}
+
+/// A mapping for a namespace that the generator declares would send each
+/// reference to the external type, not to the declaration.
+#[rstest::rstest]
+#[case::root_module(None)]
+#[case::own_module(Some("geo"))]
+fn generator_rejects_a_mapping_for_a_declared_namespace(#[case] namespace: Option<&str>) {
+    let config = module_config("Example.App", namespace);
+    let point = QualifiedTypeName::namespaced("geo".to_string(), "Point".to_string());
+    let mut registry = registry_with_struct_field(Format::TypeName(point.clone()));
+    registry.insert(point, ContainerFormat::UnitStruct(Doc::new()));
+    let generator = CSharpCodeGenerator::new(&config)
+        .with_csharp_config(CSharpConfig::default().external_namespace("geo", "Vendor.Geometry"));
+
+    let mut output = Vec::new();
+    let error = generator.output(&mut output, &registry).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        error.to_string().contains(
+            "external namespace mapping for \"geo\" maps a namespace that this module generates"
+        ),
+        "{error}"
+    );
+    assert!(output.is_empty(), "{}", String::from_utf8_lossy(&output));
+    assert!(generator.companion_files(&registry).is_err());
+}
+
+/// The generator checks a module's own namespace too, also when its registry
+/// declares no type in that namespace.
+#[test]
+fn generator_rejects_a_mapping_for_its_own_namespace() {
+    let config = module_config("Example.App", Some("geo"));
+    let error = CSharpCodeGenerator::new(&config)
+        .with_csharp_config(CSharpConfig::default().external_namespace("geo", "Vendor.Geometry"))
+        .output(&mut Vec::new(), &Registry::new())
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("maps a namespace that this module generates"),
+        "{error}"
+    );
+}
+
 #[test]
 fn forbidden_bincode_names_report_the_runtime_namespace() {
     for (name, kind) in [

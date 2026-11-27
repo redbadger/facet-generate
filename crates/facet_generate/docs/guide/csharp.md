@@ -270,11 +270,14 @@ A Rust reference to `geometry::Point` is then written as
 The mapping changes type qualification; the project reference and NuGet package
 ID remain those of the `ExternalPackage` entry.
 
-Namespace mappings live in [`CSharpConfig`](crate::generation::csharp::CSharpConfig),
-separate from the shared `CodeGeneratorConfig`. The installer convenience method
-above updates those C# settings. To share them with a custom plugin or use the
-low-level generator, construct them explicitly:
+Call `external_namespace` once for each mapping. The installer has no other
+way to set mappings.
 
+The low-level generator takes its mappings in a
+[`CSharpConfig`](crate::generation::csharp::CSharpConfig), separate from the
+shared `CodeGeneratorConfig`:
+
+**Rust**
 ```rust
 use facet_generate::generation::csharp::CSharpConfig;
 
@@ -282,11 +285,17 @@ let csharp_config = CSharpConfig::default()
     .external_namespace("geometry", "Example.Contracts.Geometry");
 ```
 
-Pass them with `Installer::with_csharp_config` or
-`CSharpCodeGenerator::with_csharp_config`. Custom plugins that reflect their own
-formats should keep a clone and use `csharp_config.requalify(config, name)` or
-`requalify_format(config, format)`. Formats supplied in emission contexts are
-already qualified, and enum metadata uses those same qualified names.
+Give it to `CSharpCodeGenerator::with_csharp_config`. A custom plugin that
+reflects its own formats needs a `CSharpConfig` with the same mappings as the
+installer or the generator. The plugin then calls
+`csharp_config.requalify(config, name)` or
+`csharp_config.requalify_format(config, format)`. The formats in emission
+contexts are already qualified, and enum metadata uses the same qualified names.
+
+The installer and the generator check each mapping before they write files.
+Each segment of the CLR namespace must be a plain CLR identifier. The
+generator also rejects a mapping for a namespace that its registry declares,
+because references to those types would go to the external namespace.
 
 The installer rejects mappings whose full CLR type names conflict with local
 types or namespaces before writing any files. `global::` prevents lexical

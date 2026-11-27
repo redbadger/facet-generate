@@ -157,9 +157,7 @@ fn app_installer(
             serde.clone(),
             project("geometry", "../Contracts/Example.Contracts.csproj"),
         ])
-        .with_csharp_config(
-            csharp::CSharpConfig::default().external_namespace("geometry", clr_namespace),
-        );
+        .external_namespace("geometry", clr_namespace);
     if plugins.0 {
         installer = installer.plugin(BincodePlugin);
     }
@@ -297,7 +295,6 @@ fn external_packages_with_distinct_namespaces() {
             "Vendor.API.Geometry",
             (bincode, json),
         )
-        .with_csharp_config(csharp_config.clone())
         .plugin(ExternalEnumHelper(csharp_config))
         .generate(&reflect!(Envelope).unwrap())
         .unwrap();

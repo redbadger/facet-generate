@@ -118,28 +118,25 @@ impl Installer {
         self
     }
 
-    /// Set C#-specific settings, which can also be shared with custom plugins.
-    /// Replaces any namespace mappings previously configured on this installer.
-    #[must_use]
-    pub fn with_csharp_config(mut self, config: CSharpConfig) -> Self {
-        self.csharp_config = config;
-        self
-    }
-
     /// Set the full CLR namespace supplied by an external package.
     ///
-    /// `namespace` is the Rust namespace from `#[facet(fg::namespace = "...")]`
-    /// and must also have an [`external_packages`](Self::external_packages)
-    /// entry. `clr_namespace` names the external types' namespace exactly,
-    /// including its root, for example `Company.Contracts.Geometry`.
-    /// Its casing is preserved and C# keywords are escaped automatically.
-    /// Use plain CLR identifiers; source Unicode escapes, formatting
-    /// characters, comments and whitespace are not accepted.
+    /// `namespace` is the Rust namespace from `#[facet(fg::namespace = "...")]`.
+    /// It must also have an [`external_packages`](Self::external_packages)
+    /// entry. `clr_namespace` names the namespace of the external types
+    /// exactly, with its root, for example `Company.Contracts.Geometry`.
+    /// The generated code keeps its casing and escapes C# keywords.
+    /// Each segment must be a plain CLR identifier. The installer rejects
+    /// source Unicode escapes, formatting characters, comments and whitespace.
     ///
-    /// This does not change the `NuGet` package ID in
-    /// [`ExternalPackage::module_name`], the project reference or runtime
-    /// namespaces. Without a mapping, references keep the installer's root
-    /// namespace, as in earlier releases.
+    /// Call this method once for each mapping. A later call for the same
+    /// `namespace` replaces the earlier mapping. If a custom plugin qualifies
+    /// types that it reflects itself, give it a
+    /// [`CSharpConfig`] with the same mappings.
+    ///
+    /// This method does not change the `NuGet` package ID in
+    /// [`ExternalPackage::module_name`], the project reference or the runtime
+    /// namespaces. Without a mapping, references use the root namespace of
+    /// the installer.
     #[must_use]
     pub fn external_namespace(mut self, namespace: &str, clr_namespace: &str) -> Self {
         self.csharp_config
@@ -514,30 +511,24 @@ impl Installer {
         Ok(())
     }
 
-    /// Reject incomplete mappings before writing any project files.
+    /// Rejects mappings that are not valid before the installer writes files.
+    ///
+    /// The generator does the same checks for each module, but the installer
+    /// writes the runtime and creates source files before it calls the
+    /// generator.
     fn check_external_namespaces(&self) -> Result<(), Error> {
-        for (namespace, clr_namespace) in &self.csharp_config.external_namespaces {
-            let problem = if !self.external_packages.contains_key(namespace) {
-                Some("requires an external package entry")
-            } else if clr_namespace.split('.').any(str::is_empty) {
-                Some("requires a nonempty dotted CLR namespace")
-            } else if clr_namespace.contains("::") {
-                Some("must name a CLR namespace without an alias qualifier")
-            } else if !clr_namespace.split('.').all(naming::plain_identifier) {
-                Some(
-                    "requires plain CLR identifiers without source escapes, formatting characters or whitespace",
-                )
-            } else {
-                None
-            };
-            if let Some(problem) = problem {
+        for namespace in self.csharp_config.external_namespaces.keys() {
+            if !self.external_packages.contains_key(namespace) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("C#: external namespace mapping for \"{namespace}\" {problem}"),
+                    format!(
+                        "C#: external namespace mapping for \"{namespace}\" requires an external package entry"
+                    ),
                 )
                 .into());
             }
         }
+        self.csharp_config.check_spelling()?;
         Ok(())
     }
 
