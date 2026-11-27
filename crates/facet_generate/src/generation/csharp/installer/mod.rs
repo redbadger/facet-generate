@@ -57,6 +57,8 @@ pub struct Installer {
     install_dir: PathBuf,
     external_packages: ExternalPackages,
     plugins: Vec<Arc<dyn EmitterPlugin<CSharp>>>,
+    /// Whether [`generate`](Self::generate) writes `<package_name>.csproj`.
+    package_manifest: bool,
 }
 
 impl Installer {
@@ -72,6 +74,7 @@ impl Installer {
             install_dir: install_dir.as_ref().to_path_buf(),
             external_packages: ExternalPackages::new(),
             plugins: vec![],
+            package_manifest: true,
         }
     }
 
@@ -95,6 +98,22 @@ impl Installer {
         self
     }
 
+    /// Set whether [`generate`](Self::generate) writes the package manifest,
+    /// `<package_name>.csproj`.
+    ///
+    /// The default is `true`. If the project around the generated sources
+    /// has its own manifest, pass `false`. The installer then writes the
+    /// runtime and the sources only.
+    /// [`make_manifest`](Self::make_manifest) still returns the manifest text.
+    ///
+    /// The installer does not delete files. With `false`, it does not delete
+    /// a `.csproj` file that an earlier run wrote. The caller must delete it.
+    #[must_use]
+    pub fn package_manifest(mut self, package_manifest: bool) -> Self {
+        self.package_manifest = package_manifest;
+        self
+    }
+
     /// Generate all code for the given registry.
     ///
     /// This method:
@@ -102,7 +121,8 @@ impl Installer {
     ///    unless an external `serde` package is configured, which supplies
     ///    the whole runtime
     /// 2. Splits the registry by namespace and installs each module
-    /// 3. Writes the package manifest
+    /// 3. Writes the package manifest, unless
+    ///    [`package_manifest`](Self::package_manifest) is `false`
     ///
     /// # Errors
     ///
@@ -156,8 +176,10 @@ impl Installer {
             self.install_module(&config, module_registry)?;
         }
 
-        let package_name = self.package_name.clone();
-        self.install_manifest(&package_name)?;
+        if self.package_manifest {
+            let package_name = self.package_name.clone();
+            self.install_manifest(&package_name)?;
+        }
 
         Ok(())
     }

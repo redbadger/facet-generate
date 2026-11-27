@@ -74,6 +74,7 @@ arguments to [`new`](crate::generation::kotlin::Installer::new):
 | [`new(package_name, dir)`](crate::generation::kotlin::Installer::new) | Names the root package, dot-separated (`com.example.drawing`), and the directory the project is written to. |
 | [`plugin`](crate::generation::kotlin::Installer::plugin) | Adds an [`EmitterPlugin`](crate::generation::plugin::EmitterPlugin), such as [`BincodePlugin`](crate::generation::bincode::BincodePlugin) or [`JsonPlugin`](crate::generation::json::JsonPlugin). Call it once per plugin; they run in the order added. Without one, only the type declarations are written. |
 | [`external_packages`](crate::generation::kotlin::Installer::external_packages) | Takes namespaces from packages generated separately; see [External packages](#external-packages). |
+| [`package_manifest`](crate::generation::kotlin::Installer::package_manifest) | If the project around the sources has its own manifest, pass `false` to leave out `build.gradle.kts`. The default is `true`. The installer does not delete a `build.gradle.kts` that an earlier run wrote, so the caller must delete it. |
 | [`generate`](crate::generation::kotlin::Installer::generate) | Checks the namespaces, then writes the runtime, the sources and the build script. |
 
 [`make_manifest`](crate::generation::kotlin::Installer::make_manifest) returns
@@ -148,7 +149,9 @@ The sources are written at the project root, in package directories, but a
 Gradle Kotlin project compiles `src/main/kotlin`. Before running
 `gradle build`, move everything except `build.gradle.kts` into
 `src/main/kotlin/`, or copy the package directories into an existing source
-set, as Crux does. The script sets no
+set, as Crux does. If another project adds the output directory as a source
+root, call `package_manifest(false)`. Kotlin then has no `build.gradle.kts`
+in that source root to compile as a script. The script sets no
 JVM target either: on a JDK newer than the Kotlin compiler supports, pin one, as
 this crate's tests do
 ([#241](https://github.com/redbadger/facet-generate/issues/241)):

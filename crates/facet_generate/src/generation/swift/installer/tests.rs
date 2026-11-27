@@ -1743,3 +1743,107 @@ fn a_type_from_an_external_package_is_assumed_to_conform() {
     "#
     );
 }
+
+/// The relative paths of the files under `dir`, sorted.
+fn written_files(dir: &std::path::Path) -> Vec<String> {
+    fn walk(root: &std::path::Path, dir: &std::path::Path, files: &mut Vec<String>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, files);
+            } else {
+                let relative = path.strip_prefix(root).unwrap();
+                files.push(relative.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(dir, dir, &mut files);
+    files.sort();
+    files
+}
+
+/// By default the installer writes `Package.swift`. With
+/// `package_manifest(false)` it writes the same runtime and sources, and no
+/// manifest.
+#[test]
+fn package_manifest_can_be_left_out() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+
+    let with_manifest = tempfile::tempdir().unwrap();
+    Installer::new("Example", with_manifest.path())
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+
+    let without_manifest = tempfile::tempdir().unwrap();
+    Installer::new("Example", without_manifest.path())
+        .plugin(BincodePlugin)
+        .package_manifest(false)
+        .generate(&registry)
+        .unwrap();
+
+    let with_manifest = written_files(with_manifest.path());
+    let without_manifest = written_files(without_manifest.path());
+
+    assert!(with_manifest.iter().any(|file| file == "Package.swift"));
+    assert!(without_manifest.iter().any(|file| {
+        std::path::Path::new(file)
+            .extension()
+            .is_some_and(|extension| extension == "swift")
+    }));
+
+    let expected: Vec<String> = with_manifest
+        .into_iter()
+        .filter(|file| file != "Package.swift")
+        .collect();
+    assert_eq!(without_manifest, expected);
+}
+
+/// Only the manifest uses an external package's version. So with
+/// `package_manifest(false)`, a package at a URL with no version generates,
+/// and with the default it is still rejected.
+#[test]
+fn package_manifest_false_accepts_a_url_package_with_no_version() {
+    #[derive(Facet)]
+    struct MyStruct {
+        id: u32,
+    }
+
+    let registry = reflect!(MyStruct).unwrap();
+    let kit = ExternalPackage {
+        for_namespace: "kit".to_string(),
+        location: PackageLocation::Url("https://github.com/acme/kit".to_string()),
+        module_name: None,
+        version: None,
+    };
+
+    let without_manifest = tempfile::tempdir().unwrap();
+    Installer::new("MyPackage", without_manifest.path())
+        .external_packages(std::slice::from_ref(&kit))
+        .plugin(BincodePlugin)
+        .package_manifest(false)
+        .generate(&registry)
+        .unwrap();
+    let written = written_files(without_manifest.path());
+    assert!(!written.iter().any(|file| file == "Package.swift"));
+    assert!(written.iter().any(|file| {
+        std::path::Path::new(file)
+            .extension()
+            .is_some_and(|extension| extension == "swift")
+    }));
+
+    let with_manifest = tempfile::tempdir().unwrap();
+    let error = Installer::new("MyPackage", with_manifest.path())
+        .external_packages(&[kit])
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap_err();
+    assert!(error.to_string().contains("has no version"), "{error}");
+    assert_nothing_written(with_manifest.path());
+}

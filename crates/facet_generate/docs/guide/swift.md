@@ -69,6 +69,7 @@ arguments to [`new`](crate::generation::swift::Installer::new):
 | [`plugin`](crate::generation::swift::Installer::plugin) | Adds an [`EmitterPlugin`](crate::generation::plugin::EmitterPlugin), such as [`BincodePlugin`](crate::generation::bincode::BincodePlugin) or [`JsonPlugin`](crate::generation::json::JsonPlugin). Call it once per plugin. Without one, only the type declarations are written. |
 | [`external_packages`](crate::generation::swift::Installer::external_packages) | Takes namespaces from packages generated separately; see [External packages](#external-packages). |
 | [`platforms`](crate::generation::swift::Installer::platforms) | Sets the manifest's `platforms:` line, from raw SwiftPM expressions such as `".iOS(.v16)"`. With none, the line is left out and SwiftPM uses its defaults. |
+| [`package_manifest`](crate::generation::swift::Installer::package_manifest) | If the project around the sources has its own manifest, pass `false` to leave out `Package.swift`. The default is `true`. The installer does not delete a `Package.swift` that an earlier run wrote, so the caller must delete it. With `false`, an external package at a `Url` does not need a `version`. |
 | [`generate`](crate::generation::swift::Installer::generate) | Checks the namespaces, then writes the runtime, the sources and the manifest. |
 
 [`make_manifest`](crate::generation::swift::Installer::make_manifest) returns
@@ -280,6 +281,9 @@ installer fails before writing anything:
 ```text
 Swift: the external package for namespace `geometry` at `https://github.com/example/geometry` has no version, and SwiftPM needs one to fetch it. Set its `version`, which the manifest writes as `from: "<version>"`, or give its location as a `PackageLocation::Path`
 ```
+
+With `package_manifest(false)`, the installer writes no manifest, so it does
+not need the version and does not fail.
 
 `module_name` is not used by Swift.
 
