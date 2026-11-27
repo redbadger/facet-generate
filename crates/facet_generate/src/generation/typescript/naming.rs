@@ -250,7 +250,6 @@ pub(crate) const RULES: NamingRules = NamingRules {
     type_case,
     member_case,
     variants_are_types: false,
-    member_equals_type_forbidden: false,
     numbered_components_forbidden: false,
     leading_digit_forbidden: false,
 };

@@ -595,6 +595,60 @@ fn test_that_csharp_code_with_variants_named_like_their_own_properties_compiles(
     dotnet_build(&dir);
 }
 
+/// Structs with a property named like the struct itself
+/// (redbadger/facet-generate#268).
+///
+/// C# forbids a member named like its enclosing type (CS0542), so each such
+/// property is renamed with a trailing underscore.
+#[allow(dead_code)]
+mod structs_named_like_their_own_properties {
+    use facet::Facet;
+
+    /// The issue's repro.
+    #[derive(Facet)]
+    pub struct Keys {
+        pub keys: Vec<String>,
+        pub next_cursor: u64,
+    }
+
+    /// A newtype struct's property is `Value`.
+    #[derive(Facet)]
+    pub struct Value(pub u32);
+
+    /// A tuple struct's properties are `Field0`, `Field1` and so on.
+    #[derive(Facet)]
+    pub struct Field1(pub u32, pub u32);
+}
+
+#[test]
+fn test_that_csharp_code_with_structs_named_like_their_own_properties_compiles() {
+    use structs_named_like_their_own_properties::{Field1, Keys, Value};
+
+    let registry = reflect!(Keys, Value, Field1).unwrap();
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+
+    let dir = tempdir().unwrap();
+    csharp::Installer::new("Example", &dir)
+        .plugin(BincodePlugin)
+        .plugin(JsonPlugin)
+        .generate(&registry)
+        .unwrap();
+    dotnet_build(&dir);
+}
+
 /// A tuple nested in a tuple, two tuples in one type, and a tuple inside a
 /// list, an option, a map, a `[T; N]` and an enum variant, compile with each
 /// plugin and with both. Bincode read a tuple inside a list, an option, a map

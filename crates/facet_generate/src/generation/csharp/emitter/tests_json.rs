@@ -4290,3 +4290,174 @@ fn one_element_tuples_are_one_element_arrays() {
     }
     "#);
 }
+
+/// A property named like its struct takes a trailing underscore (CS0542,
+/// #268), and its JSON key stays the field's wire name.
+#[test]
+fn structs_with_a_property_named_like_the_struct_rename_it() {
+    #[derive(Facet)]
+    struct Keys {
+        keys: Vec<String>,
+        next_cursor: u64,
+    }
+
+    #[derive(Facet)]
+    struct Value(u32);
+
+    #[derive(Facet)]
+    struct Field1(u32, u32);
+
+    let actual = emit!(Keys, Value, Field1 as CSharp with JsonPlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    [JsonConverter(typeof(Field1JsonConverter))]
+    public partial class Field1 : ObservableObject {
+        [ObservableProperty]
+        private uint _field0;
+        [ObservableProperty]
+        private uint _field1_;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Field1 JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Field1>(input);
+        }
+    }
+
+    public sealed class Field1JsonConverter : JsonConverter<Field1> {
+        private static readonly JsonConverter<uint> _0 = FacetJson.U32;
+        private static readonly JsonConverter<uint> _1 = FacetJson.U32;
+
+        public override bool HandleNull => true;
+
+        public override Field1 Read(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            FacetJson.StartArray(ref reader, "Field1");
+            var e0 = FacetJson.Element(_0, ref reader, options, "Field1");
+            var e1 = FacetJson.Element(_1, ref reader, options, "Field1");
+            FacetJson.EndArray(ref reader, "Field1");
+            return new Field1 { Field0 = e0, Field1_ = e1 };
+        }
+
+        public override void Write(Utf8JsonWriter writer, Field1 value, JsonSerializerOptions options)
+        {
+            writer.WriteStartArray();
+            _0.Write(writer, value.Field0, options);
+            _1.Write(writer, value.Field1_, options);
+            writer.WriteEndArray();
+        }
+    }
+
+    [JsonConverter(typeof(KeysJsonConverter))]
+    public partial class Keys : ObservableObject {
+        [property: JsonPropertyName("keys")]
+        [ObservableProperty]
+        private ObservableCollection<string> _keys_;
+        [property: JsonPropertyName("next_cursor")]
+        [ObservableProperty]
+        private ulong _nextCursor;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Keys JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Keys>(input);
+        }
+    }
+
+    public sealed class KeysJsonConverter : JsonConverter<Keys> {
+        private static readonly JsonConverter<ObservableCollection<string>> _0 = FacetJson.List(FacetJson.Str);
+        private static readonly JsonConverter<ulong> _1 = FacetJson.U64;
+
+        public override bool HandleNull => true;
+
+        public override Keys Read(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            FacetJson.StartObject(ref reader, "Keys");
+            ObservableCollection<string> f0 = default!;
+            var has0 = false;
+            ulong f1 = default!;
+            var has1 = false;
+            while (FacetJson.NextField(ref reader, out var key))
+            {
+                switch (key)
+                {
+                    case "keys":
+                        f0 = FacetJson.Read(_0, ref reader, options);
+                        has0 = true;
+                        break;
+                    case "next_cursor":
+                        f1 = FacetJson.Read(_1, ref reader, options);
+                        has1 = true;
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
+            }
+            return new Keys
+            {
+                Keys_ = FacetJson.Required(has0, f0, "keys", "Keys"),
+                NextCursor = FacetJson.Required(has1, f1, "next_cursor", "Keys"),
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, Keys value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            FacetJson.WriteField(writer, "keys", _0, value.Keys_, options);
+            FacetJson.WriteField(writer, "next_cursor", _1, value.NextCursor, options);
+            writer.WriteEndObject();
+        }
+    }
+
+    [JsonConverter(typeof(ValueJsonConverter))]
+    public partial class Value : ObservableObject {
+        [ObservableProperty]
+        private uint _value_;
+
+        public string JsonSerialize()
+        {
+            return JsonSerde.Serialize(this);
+        }
+
+        public static Value JsonDeserialize(string input)
+        {
+            return JsonSerde.Deserialize<Value>(input);
+        }
+    }
+
+    public sealed class ValueJsonConverter : JsonConverter<Value> {
+        private static readonly JsonConverter<uint> _0 = FacetJson.U32;
+
+        public override bool HandleNull => true;
+
+        public override Value Read(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            return new Value { Value_ = FacetJson.Read(_0, ref reader, options) };
+        }
+
+        public override void Write(Utf8JsonWriter writer, Value value, JsonSerializerOptions options)
+        {
+            _0.Write(writer, value.Value_, options);
+        }
+
+        public override Value ReadAsPropertyName(ref Utf8JsonReader reader, global::System.Type typeToConvert, JsonSerializerOptions options)
+        {
+            return new Value { Value_ = FacetJson.ReadKey(_0, ref reader, options) };
+        }
+
+        public override void WriteAsPropertyName(Utf8JsonWriter writer, Value value, JsonSerializerOptions options)
+        {
+            _0.WriteAsPropertyName(writer, value.Value_, options);
+        }
+    }
+    "#);
+}

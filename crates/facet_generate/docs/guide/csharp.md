@@ -281,6 +281,18 @@ positional parameters of a variant's record are `UpperCamelCase` (`Centre`,
 the variant names (`DarkRed`). With `JsonPlugin`, `[JsonPropertyName]` and the
 converters keep the Rust names on the wire.
 
+C# does not allow a member named like the type that contains it (CS0542), so a
+property named like its class or variant record gets a trailing underscore. The
+field `keys` of `struct Keys` becomes `_keys_` and the property `Keys_`. The
+newtype `struct Value(u32)` has the property `Value_`, and the field `presence`
+of the variant `Presence` becomes `Presence_`. No other property changes, and
+the JSON keys keep the Rust names.
+
+A variant named like its own enum, such as `Event` in
+`enum Event { Event(u32) }`, is not renamed. When the enum has data, the
+variant becomes a record nested in a record of the same name, and the build
+fails (CS0542).
+
 A variant or field renamed to a name that starts with a digit, such as
 `#[facet(rename = "2fa")]`, cannot be written as a C# identifier, and
 generation fails:

@@ -6,7 +6,7 @@
 
 use std::borrow::Cow;
 
-use heck::ToUpperCamelCase;
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 
 use crate::{
     generation::{
@@ -282,7 +282,6 @@ pub(crate) const RULES: NamingRules = NamingRules {
     type_case,
     member_case,
     variants_are_types: true,
-    member_equals_type_forbidden: true,
     numbered_components_forbidden: false,
     leading_digit_forbidden: true,
 };
@@ -327,39 +326,67 @@ pub(crate) fn global_name(
     }
 }
 
-/// The positional properties of the record for `variant`, each with its C#
-/// name: `Value` for a newtype, `Field0`, `Field1`, … for a tuple, and the
-/// fields for a struct.
+/// The C# name of the property for the member `member` of the type `owner`,
+/// where both are Rust names: `member` in `UpperCamelCase`.
 ///
 /// C# forbids a member named like its enclosing type (CS0542), so a property
-/// named like the variant takes a trailing underscore: `Presence { presence }`
-/// becomes `Presence(uint Presence_)` (redbadger/facet-generate#193). No
-/// `UpperCamelCase` name ends in one, so it can't clash with another property.
+/// named like its type takes a trailing underscore. `struct Keys { keys }`
+/// becomes `Keys.Keys_` (redbadger/facet-generate#268), and the variant
+/// `Presence { presence }` becomes `Presence(uint Presence_)`
+/// (redbadger/facet-generate#193). No `UpperCamelCase` name ends in an
+/// underscore, so the new name can't clash with another property.
+pub(crate) fn property_name(owner: &str, member: &str) -> String {
+    let property = member_case(member);
+    if property == type_case(owner) {
+        format!("{property}_")
+    } else {
+        property
+    }
+}
+
+/// The field that backs the `[ObservableProperty]` for the member `member` of
+/// the class `owner`: `_` and `member` in `lowerCamelCase`. The MVVM toolkit
+/// names the property from it, so where [`property_name`] adds a trailing
+/// underscore, the field has one too: `_keys_` makes `Keys_`.
+pub(crate) fn backing_field(owner: &str, member: &str) -> String {
+    let field = member.to_lower_camel_case();
+    if property_name(owner, member) == member_case(member) {
+        format!("_{field}")
+    } else {
+        format!("_{field}_")
+    }
+}
+
+/// The C# properties of the class for a struct `owner` with `fields`, by
+/// [`property_name`].
+pub(crate) fn struct_properties(owner: &str, fields: &[Named<Format>]) -> Vec<String> {
+    fields
+        .iter()
+        .map(|field| property_name(owner, &field.name))
+        .collect()
+}
+
+/// The positional properties of the record for `variant`, each with its C#
+/// name by [`property_name`]: `Value` for a newtype, `Field0`, `Field1`, … for
+/// a tuple, and the fields for a struct.
 pub(crate) fn variant_properties(variant: &Named<VariantFormat>) -> Vec<(String, &Format)> {
-    let properties: Vec<(String, &Format)> = match &variant.value {
+    let members: Vec<(String, &Format)> = match &variant.value {
         VariantFormat::Variable(_) => unreachable!("placeholders should not get this far"),
         VariantFormat::Unit => vec![],
-        VariantFormat::NewType(format) => vec![("Value".to_string(), format.as_ref())],
+        VariantFormat::NewType(format) => vec![("value".to_string(), format.as_ref())],
         VariantFormat::Tuple(formats) => formats
             .iter()
             .enumerate()
-            .map(|(index, format)| (format!("Field{index}"), format))
+            .map(|(index, format)| (format!("field{index}"), format))
             .collect(),
         VariantFormat::Struct(fields) => fields
             .iter()
-            .map(|field| (member_case(&field.name), &field.value))
+            .map(|field| (field.name.clone(), &field.value))
             .collect(),
     };
-    let record = type_case(&variant.name);
-    properties
+    members
         .into_iter()
-        .map(|(name, format)| {
-            if name == record {
-                (format!("{name}_"), format)
-            } else {
-                (name, format)
-            }
-        })
+        .map(|(member, format)| (property_name(&variant.name, &member), format))
         .collect()
 }
 
@@ -460,5 +487,27 @@ mod tests {
         assert_eq!(names("Wrap", value), ["Value"]);
         let tuple = VariantFormat::Tuple(vec![Format::U32, Format::U32]);
         assert_eq!(names("Field1", tuple), ["Field0", "Field1_"]);
+    }
+
+    #[test]
+    fn renames_only_a_struct_property_named_like_the_struct() {
+        let fields = vec![
+            Named::new(&Format::Str, "keys".to_string()),
+            Named::new(&Format::U64, "next_cursor".to_string()),
+        ];
+        assert_eq!(struct_properties("Keys", &fields), ["Keys_", "NextCursor"]);
+        assert_eq!(struct_properties("Page", &fields), ["Keys", "NextCursor"]);
+        assert_eq!(property_name("next_cursor", "next_cursor"), "NextCursor_");
+        assert_eq!(property_name("Value", "value"), "Value_");
+        assert_eq!(property_name("Field1", "field1"), "Field1_");
+    }
+
+    #[test]
+    fn a_backing_field_follows_its_property() {
+        assert_eq!(backing_field("Keys", "keys"), "_keys_");
+        assert_eq!(backing_field("Keys", "next_cursor"), "_nextCursor");
+        assert_eq!(backing_field("NextCursor", "next_cursor"), "_nextCursor_");
+        assert_eq!(backing_field("Value", "value"), "_value_");
+        assert_eq!(backing_field("Wrap", "value"), "_value");
     }
 }

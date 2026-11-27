@@ -1443,3 +1443,169 @@ fn one_element_tuples_are_their_element() {
     }
     "#);
 }
+
+/// A property named like its struct would be a member named like its
+/// enclosing type (CS0542), so it takes a trailing underscore (#268): the
+/// backing field `_keys_` makes the property `Keys_`. The newtype `Value`'s
+/// `Value` and the tuple `Field1`'s `Field1` are renamed the same way, and the
+/// other properties are unchanged.
+#[test]
+fn structs_with_a_property_named_like_the_struct_rename_it() {
+    #[derive(Facet)]
+    struct Keys {
+        keys: Vec<String>,
+        next_cursor: u64,
+    }
+
+    #[derive(Facet)]
+    struct Value(u32);
+
+    #[derive(Facet)]
+    struct Field1(u32, u32);
+
+    let actual = emit!(Keys, Value, Field1 as CSharp with BincodePlugin).unwrap();
+    insta::assert_snapshot!(actual, @r#"
+
+    public partial class Field1 : ObservableObject, IFacetSerializable, IFacetDeserializable<Field1> {
+        [ObservableProperty]
+        private uint _field0;
+        [ObservableProperty]
+        private uint _field1_;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(Field0);
+            serializer.SerializeU32(Field1_);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Field1 Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var field0 = deserializer.DeserializeU32();
+            var field1 = deserializer.DeserializeU32();
+            deserializer.DecreaseContainerDepth();
+            return new Field1 {
+                Field0 = field0,
+                Field1_ = field1,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Field1 BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Keys : ObservableObject, IFacetSerializable, IFacetDeserializable<Keys> {
+        [ObservableProperty]
+        private ObservableCollection<string> _keys_;
+        [ObservableProperty]
+        private ulong _nextCursor;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            FacetHelpers.SerializeCollection(Keys_, serializer, (item, s) => s.SerializeStr(item));
+            serializer.SerializeU64(NextCursor);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Keys Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var keys = FacetHelpers.DeserializeList(deserializer, d => d.DeserializeStr());
+            var nextCursor = deserializer.DeserializeU64();
+            deserializer.DecreaseContainerDepth();
+            return new Keys {
+                Keys_ = keys,
+                NextCursor = nextCursor,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Keys BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+
+    public partial class Value : ObservableObject, IFacetSerializable, IFacetDeserializable<Value> {
+        [ObservableProperty]
+        private uint _value_;
+
+        public void Serialize(ISerializer serializer)
+        {
+            serializer.IncreaseContainerDepth();
+            serializer.SerializeU32(Value_);
+            serializer.DecreaseContainerDepth();
+        }
+
+        public static Value Deserialize(IDeserializer deserializer)
+        {
+            deserializer.IncreaseContainerDepth();
+            var value = deserializer.DeserializeU32();
+            deserializer.DecreaseContainerDepth();
+            return new Value {
+                Value_ = value,
+            };
+        }
+
+        public byte[] BincodeSerialize()
+        {
+            var serializer = new BincodeSerializer();
+            Serialize(serializer);
+            return serializer.GetBytes();
+        }
+
+        public static Value BincodeDeserialize(byte[] input)
+        {
+            if (input is null)
+            {
+                throw new DeserializationError("Cannot deserialize null array");
+            }
+            var deserializer = new BincodeDeserializer(input);
+            var value = Deserialize(deserializer);
+            if (deserializer.GetBufferOffset() < input.Length)
+            {
+                throw new DeserializationError("Some input bytes were not read");
+            }
+            return value;
+        }
+    }
+    "#);
+}

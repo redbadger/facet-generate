@@ -177,10 +177,9 @@ impl EmitterPlugin<CSharp> for JsonPlugin {
             ContainerFormat::Enum(variants, _, _) => variants
                 .values()
                 .any(|v| v.name.to_upper_camel_case() == JSON_SERDE),
-            _ => ctx
-                .fields()
+            _ => naming::struct_properties(ctx.name(), &ctx.fields())
                 .iter()
-                .any(|f| f.name.to_upper_camel_case() == JSON_SERDE),
+                .any(|property| property == JSON_SERDE),
         };
         let json_serde = if hides_json_serde {
             format!("global::Facet.Runtime.Json.{JSON_SERDE}")
@@ -546,48 +545,51 @@ impl<'a> Converter<'a> {
     fn write_newtype_struct(&self, w: &mut dyn IndentWrite) -> io::Result<()> {
         let json = self.facet_json();
         let ty = &self.type_name;
+        let value = naming::property_name(self.name, "value");
         Self::method(w, &self.read_signature("Read"), |w| {
             writeln!(
                 w,
-                "return new {ty} {{ Value = {json}.Read(_0, ref reader, options) }};"
+                "return new {ty} {{ {value} = {json}.Read(_0, ref reader, options) }};"
             )
         })?;
         writeln!(w)?;
         Self::method(w, &self.write_signature("Write"), |w| {
-            writeln!(w, "_0.Write(writer, value.Value, options);")
+            writeln!(w, "_0.Write(writer, value.{value}, options);")
         })?;
         writeln!(w)?;
         Self::method(w, &self.read_signature("ReadAsPropertyName"), |w| {
             writeln!(
                 w,
-                "return new {ty} {{ Value = {json}.ReadKey(_0, ref reader, options) }};"
+                "return new {ty} {{ {value} = {json}.ReadKey(_0, ref reader, options) }};"
             )
         })?;
         writeln!(w)?;
         Self::method(w, &self.write_signature("WriteAsPropertyName"), |w| {
-            writeln!(w, "_0.WriteAsPropertyName(writer, value.Value, options);")
+            writeln!(w, "_0.WriteAsPropertyName(writer, value.{value}, options);")
         })
     }
 
     /// Rust writes a tuple struct as an array.
     fn write_tuple_struct(&self, w: &mut dyn IndentWrite, formats: &[Format]) -> io::Result<()> {
+        let properties = (0..formats.len())
+            .map(|i| naming::property_name(self.name, &format!("field{i}")))
+            .collect::<Vec<_>>();
         Self::method(w, &self.read_signature("Read"), |w| {
             self.read_elements(w, 0, formats.len(), self.name)?;
-            let properties = (0..formats.len())
-                .map(|i| format!("Field{i} = e{i}"))
+            let assignments = properties
+                .iter()
+                .enumerate()
+                .map(|(i, property)| format!("{property} = e{i}"))
                 .collect::<Vec<_>>();
             writeln!(
                 w,
                 "return new {} {{ {} }};",
                 self.type_name,
-                properties.join(", ")
+                assignments.join(", ")
             )
         })?;
         writeln!(w)?;
         Self::method(w, &self.write_signature("Write"), |w| {
-            let properties = (0..formats.len())
-                .map(|i| format!("Field{i}"))
-                .collect::<Vec<_>>();
             write_elements(w, "writer", 0, &properties, "value")
         })
     }
@@ -595,20 +597,21 @@ impl<'a> Converter<'a> {
     /// A struct with named fields is a JSON object keyed by the fields' wire
     /// names.
     fn write_struct(&self, w: &mut dyn IndentWrite, fields: &[Named<Format>]) -> io::Result<()> {
+        let properties = naming::struct_properties(self.name, fields);
         Self::method(w, &self.read_signature("Read"), |w| {
             let values = self.read_fields(w, 0, fields, self.name)?;
-            let properties = fields
+            let assignments = properties
                 .iter()
                 .zip(values)
-                .map(|(field, value)| format!("{} = {value},", field.name.to_upper_camel_case()))
+                .map(|(property, value)| format!("{property} = {value},"))
                 .collect::<Vec<_>>();
-            if properties.is_empty() {
+            if assignments.is_empty() {
                 return writeln!(w, "return new {}();", self.type_name);
             }
             writeln!(w, "return new {}", self.type_name)?;
             with_block(w, Newlines::OPEN, |w| {
-                for property in &properties {
-                    writeln!(w, "{property}")?;
+                for assignment in &assignments {
+                    writeln!(w, "{assignment}")?;
                 }
                 Ok(())
             })?;
@@ -617,10 +620,6 @@ impl<'a> Converter<'a> {
         writeln!(w)?;
         Self::method(w, &self.write_signature("Write"), |w| {
             writeln!(w, "writer.WriteStartObject();")?;
-            let properties = fields
-                .iter()
-                .map(|field| field.name.to_upper_camel_case())
-                .collect::<Vec<_>>();
             self.write_fields(w, "writer", 0, fields, &properties, "value")?;
             writeln!(w, "writer.WriteEndObject();")
         })
